@@ -575,6 +575,7 @@ name = "cfms-client-tauri"
 version = "0.40.0"
 dependencies = [
  "async-trait",
+ "base64ct",
  "cfms-core",
  "cfms-crypto",
  "cfms-service",

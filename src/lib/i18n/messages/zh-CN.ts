@@ -130,6 +130,8 @@ export const zh_CN = {
     accountDisabledRequestTime: '请求时间',
     disconnect: '断开连接',
     login: '登录',
+    rememberMe: '记住我',
+    rememberPassword: '记住密码',
   },
   init: {
     checkingConfiguration: '正在检查配置...',

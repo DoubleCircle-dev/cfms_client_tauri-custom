@@ -130,6 +130,8 @@ export const en = {
     accountDisabledRequestTime: 'Request time',
     disconnect: 'Disconnect',
     login: 'Login',
+    rememberMe: 'Remember me',
+    rememberPassword: 'Remember password',
   },
   init: {
     checkingConfiguration: 'Checking configuration...',

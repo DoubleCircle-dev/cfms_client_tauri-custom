@@ -638,6 +638,10 @@ pub fn run() {
             commands::get_local_data_reset_status,
             commands::reset_local_data,
             commands::retry_local_data_reset,
+            commands::save_credentials,
+            commands::load_credentials,
+            commands::clear_credentials,
+            commands::has_saved_credentials,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -41,6 +41,9 @@
     checkCachedAvatar,
     validateFileShortcuts,
     clearAuthSession,
+    saveCredentials,
+    loadCredentials,
+    clearCredentials,
     serverErrorData,
     serverErrorMessage,
     serverRetryAfterSeconds,
@@ -50,6 +53,7 @@
   import { downloadStore } from "$lib/stores.svelte";
   import { appearanceStore } from "$lib/appearance.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import MdCheckbox from "$lib/components/MdCheckbox.svelte";
   import ProgressRing from "$lib/components/ProgressRing.svelte";
   import AvatarPreview from "$lib/components/AvatarPreview.svelte";
   import AuthServerContext from "$lib/components/AuthServerContext.svelte";
@@ -80,6 +84,8 @@
   let corruptedPreferenceRecoveryAvailable = $state(false);
   let corruptedPreferenceCurrentPassword = $state("");
   let fieldErrors = $state<{ username?: string; password?: string }>({});
+  let rememberMe = $state(false);
+  let rememberPassword = $state(false);
   let loadingPhase = $state("");
   let accountDisabled = $state(false);
   let disabledAccountName = $state("");
@@ -303,12 +309,15 @@
     notificationStore.error(message);
   }
 
-  async function finalizeAuthenticatedLogin(authResult: AuthStatus) {
+  async function finalizeAuthenticatedLogin(authResult: AuthStatus, passwordToSave: string) {
     const authStatus = await getAuthStatus();
     const serverState = await getServerState();
     if (!serverState.connected) {
       throw new Error("Connection closed during login setup");
     }
+
+    // Persist credentials if requested (must happen before clearing password).
+    persistCredentialsIfRequested(passwordToSave);
 
     authStore.apply(authResult);
     authStore.apply(authStatus);
@@ -378,6 +387,23 @@
       goto("/home/overview");
       return;
     }
+
+    // Load saved credentials and pre-fill the form.
+    loadCredentials()
+      .then((saved) => {
+        if (saved) {
+          username = saved.username;
+          rememberMe = true;
+          if (saved.password) {
+            password = saved.password;
+            rememberPassword = true;
+          }
+        }
+      })
+      .catch(() => {
+        /* Non-fatal: credential loading failure should not block the login page. */
+      });
+
     void focusUsernameInput();
   });
 
@@ -508,7 +534,7 @@
       ))) return;
       await info("Loading phases complete, finalizing auth state...");
 
-      await finalizeAuthenticatedLogin(authResult);
+      await finalizeAuthenticatedLogin(authResult, password);
     } catch (e) {
       const throttleError = throttledMessage(e);
       if (throttleError) {
@@ -595,7 +621,7 @@
         authResult.needs_preference_dek_setup === true,
       ))) return true;
 
-      await finalizeAuthenticatedLogin(authResult);
+      await finalizeAuthenticatedLogin(authResult, pendingPassword);
 
       return true;
     } catch (e) {
@@ -612,6 +638,16 @@
   function handle2faCancel() {
     show2faDialog = false;
     void cancelAuthenticatedSession();
+  }
+
+  /** Persist credentials to the local store based on checkbox state. */
+  function persistCredentialsIfRequested(passwordToSave: string) {
+    if (!rememberMe) {
+      // Clear any previously saved credentials.
+      clearCredentials().catch(() => {});
+      return;
+    }
+    saveCredentials(username.trim(), rememberPassword ? passwordToSave : '', rememberPassword).catch(() => {});
   }
 
   async function handleDisconnect() {
@@ -844,6 +880,29 @@
             <span>{successMessage}</span>
           </div>
         {/if}
+
+        <!-- Remember me -->
+        <div class="flex flex-col gap-1">
+          <label class="inline-flex items-center gap-1.5 text-sm text-md3-on-surface-variant cursor-pointer">
+            <MdCheckbox
+              bind:checked={rememberMe}
+              ariaLabel={$t('login.rememberMe')}
+              onChange={() => {
+                if (!rememberMe) rememberPassword = false;
+              }}
+            />
+            {$t('login.rememberMe')}
+          </label>
+          {#if rememberMe}
+            <label class="inline-flex items-center gap-1.5 text-sm text-md3-on-surface-variant ml-7 cursor-pointer">
+              <MdCheckbox
+                bind:checked={rememberPassword}
+                ariaLabel={$t('login.rememberPassword')}
+              />
+              {$t('login.rememberPassword')}
+            </label>
+          {/if}
+        </div>
 
         <!-- Actions row: Disconnect + Login -->
         <div class="flex gap-3 pt-1">
