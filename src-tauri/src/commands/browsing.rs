@@ -152,17 +152,9 @@ pub async fn get_document(
     let _end_time = task_data["end_time"].as_f64().unwrap_or(0.0);
     let supports_resume = task_data["supports_resume"].as_bool().unwrap_or(false);
 
-    // Build a local download path.  Use the Tauri download directory when
-    // available; otherwise fall back to the app data directory.
-    let download_root = app_handle
-        .path()
-        .resolve("downloads", tauri::path::BaseDirectory::Download)
-        .unwrap_or_else(|_| {
-            app_handle
-                .path()
-                .resolve("downloads", tauri::path::BaseDirectory::AppData)
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        });
+    // Build a local download path, respecting the user's external storage
+    // preference when configured.
+    let download_root = resolve_download_root(&app_handle, &state).await?;
 
     // Ensure the download directory exists.
     let _ = std::fs::create_dir_all(&download_root);
@@ -234,9 +226,10 @@ fn download_display_filename(path_or_name: &str) -> String {
 #[tauri::command]
 pub async fn ensure_download_subdirectory(
     app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
     relative_path: String,
 ) -> Result<String, String> {
-    let download_root = download_root(&app_handle)?;
+    let download_root = resolve_download_root(&app_handle, &state).await?;
     let directory_path = resolve_download_subdirectory(download_root, &relative_path)?;
     std::fs::create_dir_all(&directory_path)
         .map_err(|e| format!("Failed to create download directory: {e}"))?;

@@ -392,7 +392,7 @@ pub async fn get_revision(
     } else {
         format!("rev{revision_id}_{filename}")
     };
-    let download_root = download_root(&app_handle)?;
+    let download_root = resolve_download_root(&app_handle, &state).await?;
     std::fs::create_dir_all(&download_root)
         .map_err(|e| format!("Failed to create download directory: {e}"))?;
     let file_path = download_root.join(&local_filename);

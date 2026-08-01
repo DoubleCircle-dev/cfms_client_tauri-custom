@@ -247,6 +247,22 @@ fn resolve_cleanup_roots<R: Runtime>(
 }
 
 fn resolve_download_root<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
+    // Check for an external-storage hint written during normal operation.
+    // This is needed because the encrypted user preference cannot be read
+    // during startup (DEK is not yet available).
+    if let Ok(app_data) = app.path().app_data_dir() {
+        let hint_path = app_data.join(".cfms-download-root");
+        if let Ok(hint) = fs::read_to_string(&hint_path) {
+            let trimmed = hint.trim();
+            if !trimmed.is_empty() {
+                let path = PathBuf::from(trimmed);
+                if path.is_absolute() {
+                    return absolute_lexical(&path);
+                }
+            }
+        }
+    }
+
     app.path()
         .resolve("downloads", tauri::path::BaseDirectory::Download)
         .or_else(|_| {
