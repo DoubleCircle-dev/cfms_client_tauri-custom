@@ -51,8 +51,13 @@ export const en = {
   avatar: {
     change: 'Change avatar',
     selectTitle: 'Select Image Document',
+    selectTitleFor: 'Select Image Document for {username}',
+    targetAccessHint: 'Choose an image document that {username} is allowed to read.',
     updated: 'Avatar updated.',
+    updatedFor: 'Avatar updated for {username}.',
     setFailed: 'Failed to set avatar.',
+    accessOrPermissionDenied:
+      'The avatar could not be updated. Check your permission and confirm that {username} can read the selected image.',
   },
   nav: {
     home: 'Home',
@@ -169,6 +174,8 @@ export const en = {
     title: 'Lockdown',
     body:
       'The server is currently under lockdown. All file operations are suspended and the connection is being held. Please contact your system administrator for more information.',
+    signInIncomplete:
+      'Your credentials were accepted, but encryption and preference setup cannot finish during lockdown. You will need to sign in again after lockdown is lifted.',
     wait: 'Wait until the state is lifted or',
     quit: 'Quit',
     disconnect: 'Disconnect',
@@ -654,6 +661,8 @@ export const en = {
     auditLogs: 'Audit Logs',
     properties: 'Properties',
     changeNickname: 'Change nickname',
+    changeUserAvatar: 'Change user avatar',
+    avatarPermissionRequired: 'Changing user avatars requires super_set_user_avatar permission',
     editGroups: 'Edit groups',
     editPermissions: 'Edit permissions',
     resetPassword: 'Reset password',

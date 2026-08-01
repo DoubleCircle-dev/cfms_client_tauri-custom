@@ -51,8 +51,12 @@ export const zh_CN = {
   avatar: {
     change: '更换头像',
     selectTitle: '选择图片文档',
+    selectTitleFor: '为 {username} 选择图片文档',
+    targetAccessHint: '请选择 {username} 拥有读取权限的图片文档。',
     updated: '头像已更新。',
+    updatedFor: '{username} 的头像已更新。',
     setFailed: '设置头像失败。',
+    accessOrPermissionDenied: '无法更新头像。请检查你的权限，并确认 {username} 可以读取所选图片。',
   },
   nav: {
     home: '主页',
@@ -165,6 +169,8 @@ export const zh_CN = {
     title: '锁定',
     body:
       '服务器当前处于紧急锁定状态。所有文件操作已暂停，连接将保持占用。请联系系统管理员了解更多信息。',
+    signInIncomplete:
+      '您的登录凭据已通过验证，但锁定期间无法完成加密与偏好设置。锁定解除后，您需要重新登录。',
     wait: '请等待锁定状态解除，或',
     quit: '退出',
     disconnect: '断开连接',
@@ -648,6 +654,8 @@ export const zh_CN = {
     auditLogs: '审计日志',
     properties: '属性',
     changeNickname: '修改昵称',
+    changeUserAvatar: '更换用户头像',
+    avatarPermissionRequired: '更换用户头像需要 super_set_user_avatar 权限',
     editGroups: '编辑用户组',
     editPermissions: '编辑权限',
     resetPassword: '重置密码',
