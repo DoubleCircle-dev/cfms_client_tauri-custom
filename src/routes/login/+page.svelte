@@ -378,65 +378,6 @@
     return true;
   }
 
-
-  function lockdownReasonFromError(error: unknown): string | null | undefined {
-    const data = serverErrorData(error);
-    if (!data || !Object.hasOwn(data, 'reason')) return undefined;
-    if (typeof data.reason !== 'string') return null;
-    return data.reason.trim() || null;
-  }
-
-  async function enterLockdownAfterIncompleteLogin(
-    error?: unknown,
-    knownServerState?: ServerState,
-  ) {
-    if (knownServerState) {
-      serverStateStore.apply(knownServerState);
-    } else {
-      try {
-        serverStateStore.apply(await getServerState());
-      } catch {
-        /* Preserve the last known connection metadata. */
-      }
-    }
-
-    serverStateStore.lockdown = true;
-    const responseReason = lockdownReasonFromError(error);
-    if (responseReason !== undefined) {
-      serverStateStore.lockdownReason = responseReason;
-    }
-
-    try {
-      await clearAuthSession();
-    } catch {
-      /* Continue clearing the webview state even if native cleanup fails. */
-    }
-
-    authStore.clear();
-    password = "";
-    pendingPassword = "";
-    show2faDialog = false;
-    showCorruptedPreferenceDialog = false;
-    corruptedPreferenceResolver = null;
-    corruptedPreferenceRecoveryAvailable = false;
-    corruptedPreferenceCurrentPassword = "";
-    try {
-      await appearanceStore.load('global', true);
-    } catch {
-      /* Lockdown routing must not depend on an appearance preference read. */
-    }
-    await goto('/lockdown', { replaceState: true });
-  }
-
-  async function deferPostLoginIfLocked(authResult: AuthStatus): Promise<boolean> {
-    const serverState = await getServerState();
-    serverStateStore.apply(serverState);
-    if (!shouldDeferPostLoginForLockdown(serverState, authResult)) return false;
-
-    await enterLockdownAfterIncompleteLogin(undefined, serverState);
-    return true;
-  }
-
   
   async function finalizeAuthenticatedLogin(authResult: AuthStatus, passwordToSave: string) {
     const authStatus = await getAuthStatus();
