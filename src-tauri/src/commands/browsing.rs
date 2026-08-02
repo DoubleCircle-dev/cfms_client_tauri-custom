@@ -88,6 +88,10 @@ fn parse_listing_page_dto(raw: serde_json::Value) -> Result<ListDirectoryPageDto
 /// Sends the `get_document` action, receives a download task from the server,
 /// and adds it to the persistent download queue.
 ///
+/// If the target file already exists on disk the command returns
+/// `already_exists: true` without contacting the server, avoiding a
+/// duplicate download.
+///
 /// Mirrors [`get_document`] from the Python reference (`path.py`).
 #[tauri::command]
 pub async fn get_document(
@@ -101,6 +105,44 @@ pub async fn get_document(
     batch_created_at: Option<i64>,
     batch_estimated_total: Option<u32>,
 ) -> Result<serde_json::Value, String> {
+    // Build the target path early so we can check whether the file already
+    // exists before contacting the server.
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let _ = std::fs::create_dir_all(&download_root);
+    let file_path = download_root.join(&filename);
+
+    // Ensure parent directories exist (needed when filename includes a
+    // relative path from single-file downloads in nested folders).
+    if let Some(parent) = file_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    if file_path.exists() {
+        let display_filename = download_display_filename(&filename);
+        return Ok(serde_json::json!({
+            "already_exists": true,
+            "file_path": file_path.to_string_lossy(),
+            "filename": display_filename,
+        }));
+    }
+
+    // Also skip when a non-terminal task for the same document is already
+    // in the queue (pending, downloading, decrypting, verifying, etc.).
+    {
+        let tasks = state.tasks.list(None);
+        let already_queued = tasks
+            .iter()
+            .any(|t| t.file_id == document_id && !t.status.is_terminal());
+        if already_queued {
+            let display_filename = download_display_filename(&filename);
+            return Ok(serde_json::json!({
+                "already_exists": true,
+                "file_path": file_path.to_string_lossy(),
+                "filename": display_filename,
+            }));
+        }
+    }
+
     let conn = {
         let c = state.inner.conn.read().await;
         c.clone()
@@ -152,14 +194,14 @@ pub async fn get_document(
     let _end_time = task_data["end_time"].as_f64().unwrap_or(0.0);
     let supports_resume = task_data["supports_resume"].as_bool().unwrap_or(false);
 
-    // Build a local download path, respecting the user's external storage
-    // preference when configured.
+    // Re-resolve download root after the server round-trip in case the user
+    // preference changed (unlikely but safe).
     let download_root = resolve_download_root(&app_handle, &state).await?;
-
-    // Ensure the download directory exists.
     let _ = std::fs::create_dir_all(&download_root);
-
     let file_path = download_root.join(&filename);
+    if let Some(parent) = file_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let display_filename = download_display_filename(&filename);
     let now = unix_now();
 

@@ -1074,7 +1074,12 @@
 
   async function handleDownload(doc: ServerDocumentEntry) {
     try {
-      await getDocument(doc.id, doc.title);
+      const pathParts = breadcrumbSegments.map(s => s.label);
+      const downloadPath = pathParts.length > 0 ? makeDownloadPath([...pathParts, doc.title]) : doc.title;
+      const result = await getDocument(doc.id, downloadPath);
+      if (result.already_exists) {
+        status = $t('files.downloadAlreadyExists');
+      }
       await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
     } catch (e) {
       if (isAccessDeniedError(e)) {
@@ -2132,11 +2137,12 @@
     const controller = beginDownloadBatch(batch);
     let queued = 0;
     let failed = 0;
+    let skipped = 0;
 
     try {
       const items: DownloadQueueItem[] = selectedDocuments.map((document) => ({
         document,
-        pathParts: [],
+        pathParts: breadcrumbSegments.map(s => s.label),
       }));
       addDiscoveredDownloadBatchItems(batch.batchId, items.length);
 
@@ -2157,10 +2163,12 @@
       const result = await queueCollectedDownloads(items, controller.signal, batch);
       queued += result.queued;
       failed += result.failed;
+      skipped += result.skipped;
 
-      if (queued > 0) {
-        status = $t('files.batchDownloadQueued', { values: { count: queued } });
-      }
+      const parts: string[] = [];
+      if (queued > 0) parts.push($t('files.batchDownloadQueued', { values: { count: queued } }));
+      if (skipped > 0) parts.push($t('files.batchDownloadSkippedExists', { values: { count: skipped } }));
+      if (parts.length > 0) status = parts.join('  ');
       if (failed > 0) {
         error = $t('files.batchDownloadPartialFailed', { values: { count: failed } });
       }
@@ -2190,9 +2198,11 @@
       const queuedResult = await queueCollectedDownloads(collected.items, controller.signal, batch);
       const queued = queuedResult.queued;
       const failed = collected.failed + queuedResult.failed;
-      if (queued > 0) {
-        status = $t('files.batchDownloadQueued', { values: { count: queued } });
-      }
+      const skipped = queuedResult.skipped;
+      const parts: string[] = [];
+      if (queued > 0) parts.push($t('files.batchDownloadQueued', { values: { count: queued } }));
+      if (skipped > 0) parts.push($t('files.batchDownloadSkippedExists', { values: { count: skipped } }));
+      if (parts.length > 0) status = parts.join('  ');
       if (failed > 0) {
         error = $t('files.batchDownloadPartialFailed', { values: { count: failed } });
       }
@@ -2213,10 +2223,11 @@
     pathParts: string[],
     signal: AbortSignal,
     batch?: DownloadBatchMetadata,
-  ) {
+  ): Promise<'queued' | 'skipped'> {
     await waitForDownloadBatchResume(signal);
-    await getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]), batch);
+    const result = await getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]), batch);
     await waitForDownloadBatchResume(signal);
+    return result.already_exists ? 'skipped' : 'queued';
   }
 
   async function collectDirectoryDownloadItems(
@@ -2287,9 +2298,10 @@
     items: DownloadQueueItem[],
     signal: AbortSignal,
     batch: DownloadBatchMetadata,
-  ): Promise<{ queued: number; failed: number }> {
+  ): Promise<{ queued: number; failed: number; skipped: number }> {
     let queued = 0;
     let failed = 0;
+    let skipped = 0;
     const queuedBatch = {
       ...batch,
       batchEstimatedTotal: items.length,
@@ -2298,9 +2310,13 @@
     for (const item of items) {
       await waitForDownloadBatchResume(signal);
       try {
-        await queueDocumentDownload(item.document, item.pathParts, signal, queuedBatch);
-        queued += 1;
-        markDownloadBatchQueued(batch.batchId);
+        const result = await queueDocumentDownload(item.document, item.pathParts, signal, queuedBatch);
+        if (result === 'skipped') {
+          skipped += 1;
+        } else {
+          queued += 1;
+          markDownloadBatchQueued(batch.batchId);
+        }
       } catch (e) {
         if (isDownloadBatchStop(e)) throw e;
         failed += 1;
@@ -2308,7 +2324,7 @@
       }
     }
 
-    return { queued, failed };
+    return { queued, failed, skipped };
   }
 
   function createDownloadBatchMetadata(name: string, rootId: string | null): DownloadBatchMetadata {

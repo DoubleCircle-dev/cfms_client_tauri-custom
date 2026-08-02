@@ -33,16 +33,20 @@ export async function listDirectoryPage(
  *
  * Sends the `get_document` action, which creates a download task on the
  * server and adds it to the persistent local download queue.
+ *
+ * When the target file already exists on disk the backend returns
+ * `already_exists: true` without contacting the server.
  */
 export async function getDocument(
   documentId: string,
   filename: string,
   batch?: DownloadBatchMetadata,
 ): Promise<{
-  task_id: string;
-  file_id: string;
+  task_id?: string;
+  file_id?: string;
   filename: string;
   file_path: string;
+  already_exists?: boolean;
 }> {
   return invoke("get_document", {
     documentId,
