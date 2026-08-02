@@ -534,6 +534,11 @@ export const zh_CN = {
     documentAccessDeniedDescription: '您当前没有权限访问此文档。如有疑问，请联系您的系统管理员。',
     accessDeniedAt: '访问时间',
     parentDirectory: '返回上一级',
+    recentlyUpdated: '最近更新',
+    fileUpdatedNotification: '"{name}" 已更新。',
+    fileUploadedNotification: '"{name}" 已上传。',
+    revisionUploadedNotification: '"{name}" 的新版本已上传。',
+    folderContainsUpdates: '此文件夹包含最近更新的文件',
   },
   tasks: {
     title: '任务',

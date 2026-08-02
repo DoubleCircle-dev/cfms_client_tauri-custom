@@ -540,6 +540,11 @@ export const en = {
     documentAccessDeniedDescription: 'You do not currently have permission to access this document. If you have any questions, please contact your system administrator.',
     accessDeniedAt: 'Access time',
     parentDirectory: 'Up one level',
+    recentlyUpdated: 'Recently updated',
+    fileUpdatedNotification: '"{name}" has been updated.',
+    fileUploadedNotification: '"{name}" has been uploaded.',
+    revisionUploadedNotification: 'A new revision of "{name}" has been uploaded.',
+    folderContainsUpdates: 'This folder contains recently updated files',
   },
   tasks: {
     title: 'Tasks',

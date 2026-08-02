@@ -160,6 +160,7 @@
   } from '$lib/explorer/file-selection';
   import { isMobilePlatform } from '$lib/platform';
   import { authStore, floatingProgressStore, notificationStore, serverStateStore, uploadStore } from '$lib/stores.svelte';
+  import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
 
   type SearchResultRow =
     | { kind: 'directory'; directory: SearchDirectoryEntry }
@@ -978,6 +979,9 @@
           ? $t('workspace.loadingMoreItems')
           : '',
   );
+  const recentlyUpdatedDocIds = $derived(fileUpdateTracker.recentlyUpdatedDocumentIds);
+  const recentlyUpdatedFldIds = $derived(fileUpdateTracker.recentlyUpdatedFolderIds);
+  const recentlyUpdatedTooltip = $derived($t('files.recentlyUpdated'));
   const fileCommandActions = $derived.by<CommandAction[]>(() => [
     { id: 'new-folder', label: $t('files.createFolder'), icon: 'createNewFolder', run: handleCreateFolder },
     { id: 'upload-files', label: $t('files.uploadFiles'), icon: 'uploadFile', run: handleUploadFiles },
@@ -1634,6 +1638,8 @@
     if (next === null || !next.trim() || next.trim() === doc.title) return;
     await runFileAction(async () => {
       await renameDocument(doc.id, next.trim());
+      fileUpdateTracker.markUpdated(doc.id, 'document', currentFolderId);
+      if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
       status = $t('files.renamed');
       await loadDirectory(currentFolderId);
     });
@@ -1650,6 +1656,8 @@
     if (next === null || !next.trim() || next.trim() === folder.name) return;
     await runFileAction(async () => {
       await renameDirectory(folder.id, next.trim());
+      fileUpdateTracker.markUpdated(folder.id, 'folder', currentFolderId);
+      if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
       status = $t('files.renamed');
       await loadDirectory(currentFolderId);
     });
@@ -1699,6 +1707,8 @@
       }, target);
       moveTargetDialog = null;
       status = $t('files.moved');
+      if (target) fileUpdateTracker.markFolderHasUpdates(target);
+      if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
       await loadDirectory(currentFolderId);
     } catch (err) {
       error = formatError(err);
@@ -1725,6 +1735,8 @@
       batchMoveDialog = null;
       clearSelection();
       status = $t('files.batchMoved', { values: { count: selectedDocuments.length + selectedFolders.length } });
+      if (target) fileUpdateTracker.markFolderHasUpdates(target);
+      if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
       await loadDirectory(currentFolderId);
     } catch (err) {
       error = formatError(err);
@@ -1754,6 +1766,8 @@
       status = movedCount === 1
         ? $t('files.moved')
         : $t('files.batchMoved', { values: { count: movedCount } });
+      fileUpdateTracker.markFolderHasUpdates(targetFolderId);
+      if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
       await loadDirectory(currentFolderId);
     } catch (err) {
       const accessDenied = isAccessDeniedError(err);
@@ -1984,6 +1998,9 @@
       try {
         notificationStore.info($t('files.uploadRevisionStarted'), 2500);
         await uploadNewRevision(doc.id, selected);
+        fileUpdateTracker.markUpdated(doc.id, 'document', currentFolderId);
+        if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
+        notificationStore.success($t('files.revisionUploadedNotification', { values: { name: doc.title } }), 3000);
         await loadDirectory(currentFolderId);
         if (revisionsDialog?.documentId === doc.id) {
           revisionsDialog = {
@@ -2033,6 +2050,8 @@
     if (!revisionsDialog || revision.is_current) return;
     await runFileAction(async () => {
       await setCurrentRevision(revisionsDialog!.documentId, revision.id);
+      fileUpdateTracker.markUpdated(revisionsDialog!.documentId, 'document', currentFolderId);
+      if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
       await refreshRevisionsDialog();
       await loadDirectory(currentFolderId);
       status = $t('files.setCurrentRevisionSuccess');
@@ -2074,7 +2093,10 @@
     });
     if (!name || !name.trim()) return;
     try {
-      await createDirectory(currentFolderId, name.trim(), true);
+      const newFolderId = await createDirectory(currentFolderId, name.trim(), true);
+      fileUpdateTracker.markUpdated(newFolderId, 'folder', currentFolderId);
+      if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
+      notificationStore.success($t('files.fileUploadedNotification', { values: { name: name.trim() } }), 3000);
       await loadDirectory(currentFolderId);
     } catch (e) {
       error = String(e);
@@ -2693,6 +2715,8 @@
       sourcePath,
       (id) => action(id, uploadName),
       async () => {
+        if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
+        notificationStore.success($t('files.fileUploadedNotification', { values: { name: uploadName } }), 3000);
         await loadDirectory(currentFolderId);
       },
     );
@@ -3778,6 +3802,9 @@
       onDragSelection={handleDragSelection}
       onMoveItems={handleDropMove}
       emptyContent={directoryAccessDenied ? deniedDirectoryContent : undefined}
+      recentlyUpdatedDocumentIds={recentlyUpdatedDocIds}
+      recentlyUpdatedFolderIds={recentlyUpdatedFldIds}
+      recentlyUpdatedTooltip={recentlyUpdatedTooltip}
     />
     <ExplorerDetailsPane
       open={detailsOpen}

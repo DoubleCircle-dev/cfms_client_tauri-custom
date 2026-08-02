@@ -58,6 +58,9 @@ function renderTable(
       canMoveItems: options.canMoveItems ?? true,
       onDragSelection,
       onMoveItems,
+      recentlyUpdatedDocumentIds: new Set<string>(),
+      recentlyUpdatedFolderIds: new Set<string>(),
+      recentlyUpdatedTooltip: 'Recently updated',
     },
   });
 
