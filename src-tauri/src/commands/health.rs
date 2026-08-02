@@ -28,6 +28,19 @@ pub fn crypto_info() -> serde_json::Value {
 }
 
 // ---------------------------------------------------------------------------
+// Local network diagnostics
+// ---------------------------------------------------------------------------
+
+/// Return the local host IP addresses (IPv4 and IPv6) for diagnostic use.
+#[tauri::command]
+pub fn local_ip_addresses() -> Vec<String> {
+    crate::local_ip_addresses()
+        .into_iter()
+        .map(|ip| ip.to_string())
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Service status
 // ---------------------------------------------------------------------------
 

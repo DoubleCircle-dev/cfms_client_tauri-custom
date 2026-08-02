@@ -9,7 +9,7 @@ mod commands;
 mod local_data_reset;
 mod localization;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex,
@@ -285,6 +285,48 @@ pub struct AndroidUpdateNotification<R: Runtime> {
 }
 
 // ---------------------------------------------------------------------------
+// Local IP diagnostics
+// ---------------------------------------------------------------------------
+
+/// Best-effort detection of the local host addresses that would be used to
+/// reach an external peer (the "egress" addresses), for IPv4 and IPv6.
+///
+/// Uses the well-known UDP socket trick: binding a UDP socket to the
+/// unspecified address and "connecting" it to a public address makes the
+/// kernel pick a source address without sending any packet. This is
+/// dependency-free, works on every target platform (desktop and mobile), and
+/// performs no actual network I/O. Returns a de-duplicated list of local IPs.
+pub(crate) fn local_ip_addresses() -> Vec<std::net::IpAddr> {
+    // Probe addresses (Google DNS / Cloudflare DNS / 114 DNS). Only the
+    // routing decision matters; no packet is ever transmitted.
+    const PROBES: &[&str] = &[
+        "8.8.8.8:80",
+        "1.1.1.1:80",
+        "114.114.114.114:80",
+        "[2001:4860:4860::8888]:80",
+    ];
+
+    let mut seen = HashSet::new();
+    let mut addresses = Vec::new();
+    for probe in PROBES {
+        let bind_addr = if probe.starts_with('[') { "[::]:0" } else { "0.0.0.0:0" };
+        let Ok(socket) = std::net::UdpSocket::bind(bind_addr) else {
+            continue;
+        };
+        if socket.connect(probe).is_err() {
+            continue;
+        }
+        if let Ok(local) = socket.local_addr() {
+            let ip = local.ip();
+            if !ip.is_loopback() && seen.insert(ip) {
+                addresses.push(ip);
+            }
+        }
+    }
+    addresses
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
@@ -489,6 +531,20 @@ pub fn run() {
             tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?.build()?;
 
             tracing::info!("CFMS Client initialized successfully");
+
+            // Diagnostic: log the local host IP addresses once at startup.
+            let local_ips = local_ip_addresses();
+            if local_ips.is_empty() {
+                tracing::warn!("Unable to determine local IP address(es)");
+            } else {
+                let joined = local_ips
+                    .iter()
+                    .map(std::net::IpAddr::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                tracing::info!("Local IP address(es): {joined}");
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -496,6 +552,7 @@ pub fn run() {
             commands::ping,
             commands::protocol_version,
             commands::crypto_info,
+            commands::local_ip_addresses,
             commands::get_service_status,
             commands::validate_file_shortcuts,
             commands::android_passkey_availability,

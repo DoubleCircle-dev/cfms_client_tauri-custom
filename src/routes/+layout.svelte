@@ -42,7 +42,7 @@
   import { appLockStore } from "$lib/app-lock.svelte";
   import { extensionsStore } from "$lib/extensions.svelte";
   import { USER_EXTENSIONS_ENABLED } from "$lib/feature-flags";
-  import { clearAuthSession, getLocalDataResetStatus, getServiceStatus, getAuthStatus, getServerState } from "$lib/api";
+  import { clearAuthSession, getLocalDataResetStatus, getServiceStatus, getAuthStatus, getServerState, getLocalIpAddresses } from "$lib/api";
   import AppLockOverlay from "$lib/components/AppLockOverlay.svelte";
   import LockdownBanner from "$lib/components/LockdownBanner.svelte";
   import DialogHost from "$lib/components/DialogHost.svelte";
@@ -247,6 +247,18 @@
 
     // Start listening for backend events.
     await initEventListeners();
+
+    // Diagnostic: log the local host IP addresses to the DevTools console.
+    try {
+      const localIps = await getLocalIpAddresses();
+      if (localIps.length > 0) {
+        console.info(`[cfms] Local IP address(es): ${localIps.join(", ")}`);
+      } else {
+        console.warn("[cfms] Unable to determine local IP address(es)");
+      }
+    } catch (err) {
+      console.warn("[cfms] Failed to query local IP address(es)", err);
+    }
 
     // Kick off one non-blocking update check for this client session.
     void appUpdateState.check();

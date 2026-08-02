@@ -23,6 +23,11 @@ export async function cryptoInfo(): Promise<{
   return invoke("crypto_info");
 }
 
+/** Get the local host IP addresses (IPv4 and IPv6) for diagnostics. */
+export async function getLocalIpAddresses(): Promise<string[]> {
+  return invoke("local_ip_addresses");
+}
+
 /** Get the running status of all background services. */
 export async function getServiceStatus(): Promise<ServiceStatusInfo[]> {
   return invoke("get_service_status");
