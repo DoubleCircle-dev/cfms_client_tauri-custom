@@ -6,7 +6,7 @@
   //
   // Reference: get_directory / get_document in reference/src/include/ui/util/path.py
 
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -126,8 +126,12 @@
     type ProgressiveSortSnapshot,
   } from '$lib/files/sort-worker-client';
   import { DIRECTORY_PAGE_SIZE } from '$lib/files/progressive-listing';
-  import { DirectoryLoadController } from '$lib/files/directory-load-controller';
-  import { isAccessDeniedError } from '$lib/api/server-errors';
+  import {
+    DirectoryLoadController,
+    DirectoryRequestTimeoutError,
+  } from '$lib/files/directory-load-controller';
+  import { canSearchFiles } from '$lib/files/search-permissions';
+  import { isAccessDeniedError, serverErrorStatus } from '$lib/api/server-errors';
   import {
     fileManagerShortcutFor,
     isFindShortcut,
@@ -309,6 +313,8 @@
   let searchPreviewActiveIndex = $state(-1);
   let searchPreviewDebounce: ReturnType<typeof setTimeout> | null = null;
   let searchPreviewPositionFrame: number | null = null;
+  let searchDeniedByServer = $state(false);
+  let previousPermissionSnapshotRevision = -1;
   let uploadProgress = $state<{
     documentId: string;
     taskId: string;
@@ -443,8 +449,12 @@
     return buildSearchResultRows(searchPreview.results);
   });
   const searchPreviewHasQuery = $derived(searchQuery.trim().length > 0);
+  const hasSearchPermission = $derived(canSearchFiles(authStore.permissions));
+  const canUseServerSearch = $derived(hasSearchPermission && !searchDeniedByServer);
   const searchPreviewCanSearch = $derived(
-    searchPreviewHasQuery && (searchPreview.searchDocuments || searchPreview.searchDirectories),
+    canUseServerSearch
+      && searchPreviewHasQuery
+      && (searchPreview.searchDocuments || searchPreview.searchDirectories),
   );
   const searchPreviewResetKey = $derived(
     `${searchPreview.query}:${searchPreview.sortBy}:${searchPreview.sortOrder}:${searchPreview.searchDocuments}:${searchPreview.searchDirectories}`,
@@ -494,6 +504,34 @@
     if (!error) return;
     notificationStore.error(error);
     error = null;
+  });
+
+  $effect(() => {
+    const allowedBySnapshot = hasSearchPermission;
+    const snapshotRevision = authStore.permissionSnapshotRevision;
+    const deniedByServer = searchDeniedByServer;
+
+    untrack(() => {
+      if (allowedBySnapshot && snapshotRevision !== previousPermissionSnapshotRevision) {
+        searchDeniedByServer = false;
+      }
+      previousPermissionSnapshotRevision = snapshotRevision;
+
+      if (allowedBySnapshot && !deniedByServer) return;
+      clearSearchPreviewDebounce();
+      clearSearchPreviewPanelPosition();
+      searchPreviewRunId += 1;
+      searchRunId += 1;
+      searchPreview = {
+        ...searchPreview,
+        open: false,
+        loading: false,
+        loadingMore: false,
+        results: null,
+      };
+      searchDialog = { ...searchDialog, open: false, loading: false };
+      searchPreviewActiveIndex = -1;
+    });
   });
 
   $effect(() => {
@@ -580,8 +618,8 @@
   }
 
   function handleDirectorySorterError(sortError: unknown) {
-    directoryLoadError = formatError(sortError);
-    directoryLoadPhase = directoryLoadedCount > 0 ? 'partial-error' : 'idle';
+    directoryLoadError = formatDirectoryLoadError(sortError);
+    directoryLoadPhase = 'partial-error';
     loading = false;
     resolveFirstDirectorySnapshot?.(false);
     resolveFirstDirectorySnapshot = null;
@@ -623,9 +661,23 @@
   }
 
   function retryDirectoryLoad() {
-    if (directoryLoadPhase !== 'partial-error' || !directoryNextCursor) return;
+    if (directoryLoadPhase !== 'partial-error') return;
     directoryLoadError = null;
-    void continueDirectoryLoad(directoryGeneration, directoryNextCursor);
+    if (directoryNextCursor && directoryLoadedCount > 0) {
+      void continueDirectoryLoad(directoryGeneration, directoryNextCursor);
+      return;
+    }
+    void loadDirectory(
+      currentFolderId,
+      true,
+      activeDirectoryReturnNavigation ?? undefined,
+    );
+  }
+
+  function formatDirectoryLoadError(loadError: unknown) {
+    return loadError instanceof DirectoryRequestTimeoutError
+      ? $t('workspace.directoryRequestTimedOut')
+      : formatError(loadError);
   }
 
   function showDirectoryAccessDenied(
@@ -689,12 +741,12 @@
       return true;
     } catch (e) {
       if (generation !== directoryGeneration) return false;
-      directoryLoadError = formatError(e);
-      directoryLoadPhase = 'idle';
+      directoryLoadError = formatDirectoryLoadError(e);
+      directoryLoadPhase = 'partial-error';
       if (isAccessDeniedError(e)) {
         showDirectoryAccessDenied(normalizedFolderId, deniedReturnNavigation);
       } else {
-        error = String(e);
+        error = directoryLoadError;
       }
       if (!preserveOnError && !directoryAccessDenied) {
         folders = [];
@@ -703,7 +755,7 @@
       }
       return false;
     } finally {
-      if (generation === directoryGeneration && directoryLoadPhase === 'idle') loading = false;
+      if (generation === directoryGeneration && directoryLoadPhase !== 'initial-loading') loading = false;
     }
   }
 
@@ -2712,12 +2764,14 @@
   }
 
   function openSearchPreview() {
+    if (!canUseServerSearch) return;
     searchPreview.open = true;
     queueSearchPreviewPanelPosition();
     scheduleSearchPreview();
   }
 
   function focusFilesSearchInput() {
+    if (!canUseServerSearch) return;
     const target = searchDialog.open ? searchDialogInput : searchInput;
     target?.focus({ preventScroll: true });
     target?.select();
@@ -2742,12 +2796,13 @@
   function handleFindShortcut(event: KeyboardEvent) {
     if (!isFindShortcut(event)) return;
 
+    if (!canUseServerSearch || hasBlockingFilesDialog()) return;
     event.preventDefault();
-    if (hasBlockingFilesDialog()) return;
     focusFilesSearchInput();
   }
 
   function handleSearchInput(event?: Event) {
+    if (!canUseServerSearch) return;
     if (event?.currentTarget instanceof HTMLInputElement) {
       searchQuery = event.currentTarget.value;
     }
@@ -2763,6 +2818,7 @@
   }
 
   function handleSearchKeydown(event: KeyboardEvent) {
+    if (!canUseServerSearch) return;
     if (event.key === 'Escape') {
       closeSearchPreview();
       return;
@@ -2798,6 +2854,10 @@
   }
 
   function scheduleSearchPreview(immediate = false) {
+    if (!canUseServerSearch) {
+      closeSearchPreview();
+      return;
+    }
     const hadSettledResults = searchPreview.results !== null;
     const hadPendingPreview =
       searchPreview.loading || searchPreview.loadingMore || searchPreviewDebounce !== null;
@@ -2845,6 +2905,7 @@
     reset: boolean;
     runId: number;
   }) {
+    if (!canUseServerSearch) return;
     const query = searchQuery.trim();
     if (!query || (!searchPreview.searchDocuments && !searchPreview.searchDirectories)) {
       searchPreview.loading = false;
@@ -2886,11 +2947,13 @@
       if (runId !== searchPreviewRunId) return;
       searchPreview.loading = false;
       searchPreview.loadingMore = false;
+      if (handleSearchPermissionError(e)) return;
       searchPreview.error = formatError(e);
     }
   }
 
   function loadMoreSearchPreview() {
+    if (!canUseServerSearch) return;
     const results = searchPreview.results;
     if (
       !results?.has_more
@@ -2915,6 +2978,7 @@
   }
 
   function updateSearchPreviewOptions() {
+    if (!canUseServerSearch) return;
     if (!searchPreview.open && searchPreviewHasQuery) {
       searchPreview.open = true;
     }
@@ -2975,6 +3039,7 @@
   }
 
   function openSearchDialog(runImmediately = false) {
+    if (!canUseServerSearch) return;
     const query = searchQuery.trim() ? searchQuery : searchPreview.query;
     closeSearchPreview();
     searchDialog.open = true;
@@ -3016,6 +3081,7 @@
   }
 
   async function runServerSearch() {
+    if (!canUseServerSearch) return;
     const query = searchDialog.query.trim();
     if (!query) {
       error = $t('files.searchQueryRequired');
@@ -3061,8 +3127,18 @@
     } catch (e) {
       if (runId !== searchRunId) return;
       searchDialog = { ...searchDialog, loading: false };
+      if (handleSearchPermissionError(e)) return;
       error = formatError(e);
     }
+  }
+
+  function handleSearchPermissionError(searchError: unknown): boolean {
+    if (serverErrorStatus(searchError) !== 403) return false;
+    searchDeniedByServer = true;
+    closeSearchPreview();
+    closeSearchDialog();
+    notificationStore.warning($t('files.searchPermissionRequired'), 5000);
+    return true;
   }
 
   function closeSearchDialog() {
@@ -3190,7 +3266,7 @@
         group: () => $t('files.title'),
         shortcuts: [{ key: 'f', primary: true }],
         scope: 'page',
-        enabled: () => !hasBlockingFilesDialog(),
+        enabled: () => canUseServerSearch && !hasBlockingFilesDialog(),
         allowInEditable: true,
         handler: handleFindShortcut,
       },
@@ -3395,7 +3471,8 @@
     <span class="files-navigation-spacer" aria-hidden="true"></span>
 
     <!-- Search -->
-    <div bind:this={searchPreviewRoot} class="files-search relative">
+    {#if canUseServerSearch}
+      <div bind:this={searchPreviewRoot} class="files-search relative">
       <form
         class="flex gap-2"
         onsubmit={(e) => { e.preventDefault(); openSearchDialog(true); }}
@@ -3606,7 +3683,8 @@
           </div>
         </div>
       {/if}
-    </div>
+      </div>
+    {/if}
 
     <IconButton icon="refresh" label={$t('common.refresh')} onclick={() => loadDirectory(currentFolderId)} />
   </div>
@@ -3699,7 +3777,7 @@
     primary={statusBarPrimary}
     secondary={statusBarSecondary}
     tone={directoryLoadPhase === 'partial-error' ? 'danger' : 'default'}
-    actionLabel={directoryLoadPhase === 'partial-error' && directoryNextCursor ? $t('workspace.continueLoading') : ''}
+    actionLabel={directoryLoadPhase === 'partial-error' ? $t('workspace.retryLoading') : ''}
     onAction={retryDirectoryLoad}
   />
 </div>

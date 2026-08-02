@@ -34,6 +34,8 @@
   import { extensionsStore } from '$lib/extensions.svelte';
   import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
   import { isIconName } from '$lib/icons';
+  import { transitionOutOfSession } from '$lib/session-exit';
+  import { formatUserFacingError } from '$lib/user-facing-errors';
 
   let { children }: { children: Snippet } = $props();
 
@@ -224,7 +226,7 @@
       await getDocument(record.id, record.name);
       notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
     } catch (error) {
-      notificationStore.error(error instanceof Error ? error.message : String(error));
+      notificationStore.error(formatUserFacingError(error));
     }
   }
 
@@ -236,7 +238,7 @@
       serverStateStore.lockdown = nextStatus;
       serverStateStore.lockdownReason = nextStatus ? reason ?? null : null;
     } catch (error) {
-      notificationStore.error(error instanceof Error ? error.message : String(error));
+      notificationStore.error(formatUserFacingError(error));
     } finally {
       lockdownBusy = false;
     }
@@ -331,11 +333,13 @@
     if (accountActionBusy) return;
     accountActionBusy = true;
     try {
-      await clearAuthSession();
-      authStore.clear();
-      await goto('/login', { replaceState: true });
+      await transitionOutOfSession({
+        clearLocalState: () => authStore.clear(),
+        clearBackendState: clearAuthSession,
+        navigate: () => goto('/login', { replaceState: true }),
+      });
     } catch (error) {
-      notificationStore.error(error instanceof Error ? error.message : String(error));
+      notificationStore.error(formatUserFacingError(error));
     } finally {
       accountActionBusy = false;
       accountMenuOpen = false;
@@ -346,13 +350,16 @@
     if (accountActionBusy) return;
     accountActionBusy = true;
     try {
-      await disconnect();
-      await clearAuthSession();
-      authStore.clear();
-      serverStateStore.clear();
-      await goto('/connect', { replaceState: true });
+      await transitionOutOfSession({
+        clearLocalState: () => {
+          authStore.clear();
+          serverStateStore.clear();
+        },
+        clearBackendState: disconnect,
+        navigate: () => goto('/connect', { replaceState: true }),
+      });
     } catch (error) {
-      notificationStore.error(error instanceof Error ? error.message : String(error));
+      notificationStore.error(formatUserFacingError(error));
     } finally {
       accountActionBusy = false;
       accountMenuOpen = false;
@@ -569,7 +576,7 @@
       data-programmatic-focus="true"
       tabindex="-1"
     >
-      {#key `${$page.url.pathname}:${routeReloadToken}`}
+      {#key routeReloadToken}
         <div class="explorer-route-view">
           {@render children()}
         </div>
