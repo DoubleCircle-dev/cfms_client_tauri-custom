@@ -1005,6 +1005,84 @@
   const notUpdatedDocIds = $derived(fileUpdateTracker.notUpdatedDocumentIds);
   const notUpdatedFldIds = $derived(fileUpdateTracker.notUpdatedFolderIds);
   const notUpdatedTooltip = $derived($t('files.notUpdatedTooltip'));
+
+  // --- Poll countdown ---
+  let pollCountdown = $state('');
+  let pollBusy = $state(false);
+
+  async function triggerManualPoll() {
+    if (pollBusy || loading || directoryAccessDenied) return;
+    pollBusy = true;
+    const MAX_DEPTH = 5;
+    const DELAY_MS = 200;
+    let changedDirs = 0;
+    let totalSubDirs = 0;
+    let totalSubDocs = 0;
+
+    async function walk(dirId: string | null, depth: number) {
+      if (depth > MAX_DEPTH) return;
+      await new Promise((r) => setTimeout(r, DELAY_MS));
+      let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
+      try {
+        resp = await listDirectory(dirId);
+      } catch {
+        return; // skip inaccessible directories silently
+      }
+      const result = fileUpdateTracker.compareSnapshot(dirId, resp.folders, resp.documents);
+      if (result.summary) changedDirs++;
+      totalSubDirs += resp.folders.length;
+      totalSubDocs += resp.documents.length;
+      // Check staleness for each child folder
+      for (const f of resp.folders) {
+        void fileUpdateTracker.checkFolderStaleness(f.id, (id) => listDirectory(id));
+      }
+      // Recurse
+      for (const f of resp.folders) {
+        await walk(f.id, depth + 1);
+      }
+    }
+
+    try {
+      await walk(currentFolderId, 0);
+      fileUpdateTracker.lastCheckTime = Date.now();
+      fileUpdateTracker.nextCheckTime = fileUpdateTracker.lastCheckTime + 60 * 60 * 1000;
+      if (changedDirs > 0) {
+        notificationStore.info(
+          $t('files.serverChangesDetected', {
+            values: { changes: `${changedDirs} director${changedDirs === 1 ? 'y' : 'ies'} changed (${totalSubDirs} sub-dirs, ${totalSubDocs} docs)` },
+          }),
+          5000,
+        );
+      } else {
+        notificationStore.success(
+          $t('files.noChangesDetectedInTree', { values: { dirs: totalSubDirs, docs: totalSubDocs } }),
+          3000,
+        );
+      }
+    } catch (err) {
+      notificationStore.error(String(err), 4000);
+    } finally {
+      pollBusy = false;
+    }
+  }
+
+  $effect(() => {
+    const update = () => {
+      const next = fileUpdateTracker.nextCheckTime;
+      if (!next || !fileUpdateTracker.isPolling) {
+        pollCountdown = '';
+        return;
+      }
+      const remaining = Math.max(0, next - Date.now());
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      pollCountdown = `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  });
+
   const fileCommandActions = $derived.by<CommandAction[]>(() => [
     { id: 'new-folder', label: $t('files.createFolder'), icon: 'createNewFolder', run: handleCreateFolder },
     { id: 'upload-files', label: $t('files.uploadFiles'), icon: 'uploadFile', run: handleUploadFiles },
@@ -4161,6 +4239,25 @@
     />
   </div>
 
+  {#if pollCountdown}
+    <div class="poll-countdown">
+      <span class="poll-countdown-label">下次检查:</span>
+      <span class="poll-countdown-value">{pollCountdown}</span>
+      <button
+        type="button"
+        class="poll-check-now"
+        disabled={pollBusy}
+        onclick={triggerManualPoll}
+        title="立即检查更新"
+      >
+        {#if pollBusy}
+          <ProgressRing size={12} strokeWidth={2} label="检查中..." />
+        {:else}
+          <Icon name="refresh" size="14px" />
+        {/if}
+      </button>
+    </div>
+  {/if}
   <ExplorerStatusBar
     primary={statusBarPrimary}
     secondary={statusBarSecondary}
@@ -4397,6 +4494,53 @@
       min-height: 44px;
       padding-inline: 0.4rem;
     }
+  }
+
+  .poll-countdown {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.7rem;
+    background: var(--explorer-surface);
+    border-top: 1px solid var(--explorer-border);
+    font-size: 0.7rem;
+    color: var(--explorer-text-muted);
+  }
+
+  .poll-countdown-label {
+    opacity: 0.7;
+  }
+
+  .poll-countdown-value {
+    font-variant-numeric: tabular-nums;
+    color: var(--explorer-accent);
+    font-weight: 500;
+  }
+
+  .poll-check-now {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: auto;
+    border: none;
+    border-radius: 50%;
+    padding: 0;
+    background: transparent;
+    color: var(--explorer-text-muted);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .poll-check-now:hover {
+    background: var(--explorer-surface-hover);
+    color: var(--explorer-accent);
+  }
+
+  .poll-check-now:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>
 

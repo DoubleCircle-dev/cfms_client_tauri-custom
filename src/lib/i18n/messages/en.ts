@@ -546,6 +546,8 @@ export const en = {
     revisionUploadedNotification: 'A new revision of "{name}" has been uploaded.',
     folderContainsUpdates: 'This folder contains recently updated files',
     serverChangesDetected: 'Server changes detected: {changes}',
+    noChangesDetected: 'No server changes detected.',
+    noChangesDetectedInTree: 'No changes detected (checked {dirs} sub-dirs, {docs} docs).',
     notUpdated: 'Not recently updated',
     notUpdatedTooltip: 'This item has not been updated for over 7 days',
     folderContainsNotUpdated: 'This folder contains items that have not been updated recently',

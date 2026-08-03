@@ -540,6 +540,8 @@ export const zh_CN = {
     revisionUploadedNotification: '"{name}" 的新版本已上传。',
     folderContainsUpdates: '此文件夹包含最近更新的文件',
     serverChangesDetected: '服务器内容有变化：{changes}',
+    noChangesDetected: '未检测到服务器内容变化。',
+    noChangesDetectedInTree: '未检测到变化（已检查 {dirs} 个子目录、{docs} 个文档）。',
     notUpdated: '长时间未更新',
     notUpdatedTooltip: '此项目已超过 7 天未更新',
     folderContainsNotUpdated: '此文件夹包含长时间未更新的项目',

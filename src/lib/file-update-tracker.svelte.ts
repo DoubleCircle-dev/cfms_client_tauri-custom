@@ -68,6 +68,9 @@ class FileUpdateTracker {
   // --- polling state ---
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private pollCallback: (() => Promise<void>) | null = null;
+  private pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
+  lastCheckTime = $state<number>(0);       // timestamp of last completed poll
+  nextCheckTime = $state<number>(0);       // timestamp of next scheduled poll
 
   // =========================================================================
   // Snapshot & polling
@@ -80,20 +83,34 @@ class FileUpdateTracker {
   startPolling(pollFn: () => Promise<void>, intervalMs = DEFAULT_POLL_INTERVAL_MS) {
     this.stopPolling();
     this.pollCallback = pollFn;
+    this.pollIntervalMs = intervalMs;
     // Fire immediately on start
-    void pollFn();
-    this.pollTimer = setInterval(() => {
-      void this.pollCallback?.();
-    }, intervalMs);
+    void pollFn().then(() => {
+      this.lastCheckTime = Date.now();
+      this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
+      this.scheduleNext();
+    });
+    // Set up recurring via setTimeout chain (so we can update nextCheckTime each cycle)
+  }
+
+  private scheduleNext() {
+    this.pollTimer = setTimeout(() => {
+      void this.pollCallback?.().then(() => {
+        this.lastCheckTime = Date.now();
+        this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
+        this.scheduleNext();
+      });
+    }, this.pollIntervalMs);
   }
 
   /** Stop periodic polling. */
   stopPolling() {
     if (this.pollTimer !== null) {
-      clearInterval(this.pollTimer);
+      clearTimeout(this.pollTimer);
       this.pollTimer = null;
     }
     this.pollCallback = null;
+    this.nextCheckTime = 0;
   }
 
   /** Whether polling is active. */
