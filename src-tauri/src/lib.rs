@@ -700,6 +700,8 @@ pub fn run() {
             commands::retry_local_data_reset,
             commands::save_credentials,
             commands::load_credentials,
+            commands::list_credentials,
+            commands::delete_credential,
             commands::clear_credentials,
             commands::has_saved_credentials,
         ])

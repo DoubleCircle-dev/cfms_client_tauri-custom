@@ -1,7 +1,8 @@
-// CFMS Client - Credential persistence API.
+// CFMS Client - Credential persistence API (multi-account).
 //
 // Provides typed wrappers for saving and loading login credentials
 // (username + optionally password) across application restarts.
+// Supports multiple accounts so users can switch without re-typing.
 // The password is encrypted at rest on the Rust side.
 
 import { invoke } from '@tauri-apps/api/core';
@@ -11,10 +12,18 @@ export interface SavedCredentials {
   password: string;
 }
 
-/** Persist login credentials.
+/** Lightweight summary returned when listing saved accounts. */
+export interface CredentialSummary {
+  username: string;
+  hasPassword: boolean;
+  lastUsedAt: number;
+}
+
+/** Persist (or update) login credentials for a given username.
  *
  * When `rememberPassword` is true, the password is encrypted before storage.
- * When false, only the username is saved. */
+ * When false, only the username is saved.
+ * If an entry for this username already exists it is updated. */
 export async function saveCredentials(
   username: string,
   password: string,
@@ -25,10 +34,25 @@ export async function saveCredentials(
 
 /** Load previously saved credentials.
  *
- * Returns `null` if no credentials have been saved.  The `password` field is
- * only populated when it was originally saved with `rememberPassword: true`. */
-export async function loadCredentials(): Promise<SavedCredentials | null> {
-  return invoke('load_credentials');
+ * When `username` is provided, returns that specific account.
+ * When omitted, returns the most recently used account.
+ * Returns `null` if no credentials have been saved.
+ * The `password` field is only populated when it was originally saved
+ * with `rememberPassword: true`. */
+export async function loadCredentials(
+  username?: string,
+): Promise<SavedCredentials | null> {
+  return invoke('load_credentials', { username: username ?? null });
+}
+
+/** List all saved credential summaries (usernames only, no passwords). */
+export async function listCredentials(): Promise<CredentialSummary[]> {
+  return invoke('list_credentials');
+}
+
+/** Delete a single saved credential entry by username. */
+export async function deleteCredential(username: string): Promise<void> {
+  return invoke('delete_credential', { username });
 }
 
 /** Remove all saved credentials. */

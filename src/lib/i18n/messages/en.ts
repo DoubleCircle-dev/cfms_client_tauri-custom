@@ -142,6 +142,11 @@ export const en = {
     login: 'Login',
     rememberMe: 'Remember me',
     rememberPassword: 'Remember password',
+    savedAccounts: 'Saved accounts',
+    savedAccountWithPassword: '{username} (password saved)',
+    passwordSaved: 'Password saved',
+    removeSavedAccount: 'Remove saved account',
+    removeSavedAccountAria: 'Remove saved account {username}',
   },
   init: {
     checkingConfiguration: 'Checking configuration...',

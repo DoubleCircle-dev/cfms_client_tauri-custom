@@ -141,6 +141,11 @@ export const zh_CN = {
     login: '登录',
     rememberMe: '记住我',
     rememberPassword: '记住密码',
+    savedAccounts: '已保存的账户',
+    savedAccountWithPassword: '{username}（已保存密码）',
+    passwordSaved: '已保存密码',
+    removeSavedAccount: '移除已保存的账户',
+    removeSavedAccountAria: '移除已保存的账户 {username}',
   },
   init: {
     checkingConfiguration: '正在检查配置...',

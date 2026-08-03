@@ -43,6 +43,8 @@
     clearAuthSession,
     saveCredentials,
     loadCredentials,
+    listCredentials,
+    deleteCredential,
     clearCredentials,
     serverErrorData,
     isLockdownError,
@@ -51,6 +53,7 @@
     serverErrorStatus,
     type AuthStatus,
     type ServerState,
+    type CredentialSummary,
   } from "$lib/api";
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import { downloadStore } from "$lib/stores.svelte";
@@ -98,6 +101,12 @@
   let returningFromAccountDisabled = $state(false);
   let usernameInput: HTMLInputElement | null = $state(null);
   let passwordInput: HTMLInputElement | null = $state(null);
+
+  // Multi-account state
+  let savedAccounts = $state<CredentialSummary[]>([]);
+  let selectedAccount = $state<string | null>(null);
+  let showAccountDropdown = $state(false);
+  let accountDropdownEl: HTMLDivElement | null = $state(null);
   let playConnectTransition = $state(browser ? consumeConnectToLoginTransition() : false);
 
   // Cached avatar path — populated reactively as the user types a username.
@@ -461,11 +470,15 @@
       return;
     }
 
-    // Load saved credentials and pre-fill the form.
+    // Load saved accounts list for the account switcher.
+    refreshSavedAccounts();
+
+    // Load the most recently used credential and pre-fill the form.
     loadCredentials()
       .then((saved) => {
         if (saved) {
           username = saved.username;
+          selectedAccount = saved.username;
           rememberMe = true;
           if (saved.password) {
             password = saved.password;
@@ -479,6 +492,84 @@
 
     void focusUsernameInput();
   });
+
+  /** Refresh the saved accounts list from storage. */
+  async function refreshSavedAccounts() {
+    try {
+      savedAccounts = await listCredentials();
+      // Sort by most recently used first.
+      savedAccounts.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+    } catch {
+      savedAccounts = [];
+    }
+  }
+
+  /** Select a saved account and pre-fill the form. */
+  async function selectSavedAccount(accountUsername: string) {
+    selectedAccount = accountUsername;
+    showAccountDropdown = false;
+    try {
+      const cred = await loadCredentials(accountUsername);
+      if (cred) {
+        username = cred.username;
+        if (cred.password) {
+          password = cred.password;
+          rememberPassword = true;
+        } else {
+          password = "";
+          rememberPassword = false;
+        }
+        rememberMe = true;
+      }
+    } catch {
+      // Fall back to just setting the username.
+      username = accountUsername;
+      password = "";
+      rememberPassword = false;
+      rememberMe = true;
+    }
+    // Focus the password field if username is already filled.
+    if (password) {
+      passwordInput?.focus();
+    } else {
+      passwordInput?.focus();
+    }
+  }
+
+  /** Remove a saved account from the list. */
+  async function removeSavedAccount(accountUsername: string, event: MouseEvent) {
+    event.stopPropagation();
+    try {
+      await deleteCredential(accountUsername);
+      await refreshSavedAccounts();
+      if (selectedAccount === accountUsername) {
+        selectedAccount = null;
+        username = "";
+        password = "";
+        rememberMe = false;
+        rememberPassword = false;
+        usernameInput?.focus();
+      }
+    } catch {
+      /* Non-fatal */
+    }
+  }
+
+  /** Handle clicks outside the account dropdown to close it. */
+  function handleAccountDropdownClick(event: MouseEvent) {
+    if (accountDropdownEl && !accountDropdownEl.contains(event.target as Node)) {
+      showAccountDropdown = false;
+    }
+  }
+
+  /** Called when the user manually types a username — deselect any saved account. */
+  function onUsernameInput() {
+    if (selectedAccount !== null && username.trim() !== selectedAccount) {
+      selectedAccount = null;
+      password = "";
+      rememberPassword = false;
+    }
+  }
 
   async function focusUsernameInput() {
     await tick();
@@ -720,13 +811,22 @@
   }
 
   /** Persist credentials to the local store based on checkbox state. */
-  function persistCredentialsIfRequested(passwordToSave: string) {
+  async function persistCredentialsIfRequested(passwordToSave: string) {
     if (!rememberMe) {
-      // Clear any previously saved credentials.
-      clearCredentials().catch(() => {});
+      // Clear the current entry if it was previously saved.
+      const trimmed = username.trim();
+      if (trimmed) {
+        deleteCredential(trimmed).catch(() => {});
+      }
+      await refreshSavedAccounts();
       return;
     }
-    saveCredentials(username.trim(), rememberPassword ? passwordToSave : '', rememberPassword).catch(() => {});
+    try {
+      await saveCredentials(username.trim(), rememberPassword ? passwordToSave : '', rememberPassword);
+      await refreshSavedAccounts();
+    } catch {
+      /* Non-fatal */
+    }
   }
 
   async function handleDisconnect() {
@@ -837,6 +937,52 @@
           handleLogin();
         }}
       >
+        <!-- Multi-account selector -->
+        {#if savedAccounts.length > 0}
+          <div class="saved-accounts-section">
+            <div class="saved-accounts-label">{$t('login.savedAccounts')}</div>
+            <div class="saved-accounts-chips">
+              {#each savedAccounts as account (account.username)}
+                <button
+                  type="button"
+                  class="saved-account-chip"
+                  class:saved-account-chip--selected={selectedAccount === account.username}
+                  onclick={() => selectSavedAccount(account.username)}
+                  title={account.hasPassword
+                    ? $t('login.savedAccountWithPassword', { values: { username: account.username } })
+                    : account.username}
+                >
+                  <span class="saved-account-chip__icon">
+                    <Icon name="accountCircle" size="14px" />
+                  </span>
+                  <span class="saved-account-chip__name">{account.username}</span>
+                  {#if account.hasPassword}
+                    <span class="saved-account-chip__lock" title={$t('login.passwordSaved')}>
+                      <Icon name="lock" size="11px" />
+                    </span>
+                  {/if}
+                  <span
+                    class="saved-account-chip__remove"
+                    onclick={(e) => removeSavedAccount(account.username, e)}
+                    title={$t('login.removeSavedAccount')}
+                    role="button"
+                    tabindex="0"
+                    aria-label={$t('login.removeSavedAccountAria', { values: { username: account.username } })}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        removeSavedAccount(account.username, e as unknown as MouseEvent);
+                      }
+                    }}
+                  >
+                    <Icon name="close" size="12px" />
+                  </span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         <!-- Username -->
         <div>
           <MdOutlinedField
@@ -859,6 +1005,7 @@
               autocomplete="off"
               autocapitalize="none"
               spellcheck="false"
+              oninput={onUsernameInput}
               onkeydown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
@@ -1149,6 +1296,126 @@
 
   .login-text-field__input::placeholder {
     color: var(--explorer-text-muted);
+  }
+
+  /* Multi-account selector chips */
+  .saved-accounts-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .saved-accounts-label {
+    font-family: var(--font-md3-sans);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--explorer-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .saved-accounts-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .saved-account-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.375rem 0.25rem 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid var(--explorer-outline-variant);
+    background: var(--explorer-surface-container-low);
+    color: var(--explorer-text);
+    font-family: var(--font-md3-sans);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition:
+      background var(--motion-duration-short4) var(--motion-easing-standard),
+      border-color var(--motion-duration-short4) var(--motion-easing-standard),
+      box-shadow var(--motion-duration-short4) var(--motion-easing-standard);
+    max-width: 100%;
+  }
+
+  .saved-account-chip:hover {
+    background: var(--explorer-surface-container-high);
+    border-color: var(--explorer-outline);
+  }
+
+  .saved-account-chip:focus-visible {
+    outline: 2px solid var(--explorer-accent);
+    outline-offset: 2px;
+  }
+
+  .saved-account-chip--selected {
+    background: var(--explorer-secondary-container);
+    border-color: var(--explorer-secondary);
+    color: var(--explorer-on-secondary-container);
+  }
+
+  .saved-account-chip__icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--explorer-text-muted);
+  }
+
+  .saved-account-chip--selected .saved-account-chip__icon {
+    color: var(--explorer-on-secondary-container);
+    opacity: 0.8;
+  }
+
+  .saved-account-chip__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 140px;
+  }
+
+  .saved-account-chip__lock {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--explorer-tertiary);
+    margin-left: 0.125rem;
+  }
+
+  .saved-account-chip--selected .saved-account-chip__lock {
+    color: var(--explorer-on-secondary-container);
+    opacity: 0.7;
+  }
+
+  .saved-account-chip__remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    margin-left: 0.125rem;
+    color: var(--explorer-text-muted);
+    transition:
+      background var(--motion-duration-short4) var(--motion-easing-standard),
+      color var(--motion-duration-short4) var(--motion-easing-standard);
+  }
+
+  .saved-account-chip__remove:hover {
+    background: var(--explorer-error-container);
+    color: var(--explorer-on-error-container);
+  }
+
+  .saved-account-chip--selected .saved-account-chip__remove {
+    color: var(--explorer-on-secondary-container);
+    opacity: 0.6;
+  }
+
+  .saved-account-chip--selected .saved-account-chip__remove:hover {
+    background: rgb(0 0 0 / 0.15);
+    color: var(--explorer-on-secondary-container);
+    opacity: 1;
   }
 
   .login-text-field__input:disabled {
