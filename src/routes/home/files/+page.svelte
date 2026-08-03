@@ -1010,52 +1010,77 @@
   let pollCountdown = $state('');
   let pollBusy = $state(false);
 
-  async function triggerManualPoll() {
-    if (pollBusy || loading || directoryAccessDenied) return;
-    pollBusy = true;
-    const MAX_DEPTH = 5;
-    const DELAY_MS = 200;
-    let changedDirs = 0;
-    let totalSubDirs = 0;
-    let totalSubDocs = 0;
+  const RECURSIVE_MAX_DEPTH = 20;
+  const RECURSIVE_DELAY_MS = 200;
+  const checkHistory: Array<{ time: number; changed: number; dirs: number; docs: number; summary: string }> = [];
 
-    async function walk(dirId: string | null, depth: number) {
-      if (depth > MAX_DEPTH) return;
-      await new Promise((r) => setTimeout(r, DELAY_MS));
+  function logCheckHistory(changed: number, dirs: number, docs: number) {
+    const entry = {
+      time: Date.now(),
+      changed,
+      dirs,
+      docs,
+      summary: changed > 0 ? `${changed} dir(s) changed` : 'no changes',
+    };
+    checkHistory.push(entry);
+    if (checkHistory.length > 50) checkHistory.shift();
+
+    const timeStr = new Date(entry.time).toLocaleTimeString();
+    const icon = changed > 0 ? '🔔' : '✅';
+    console.log(
+      `%c[cfms:check] %c${icon} %s %c— %s %c(%d sub-dirs, %d docs)`,
+      'color:#888', '', timeStr, 'color:#888', entry.summary, 'color:#666', dirs, docs,
+    );
+  }
+
+  async function doRecursiveCheck(
+    dirId: string | null,
+  ): Promise<{ changed: number; dirs: number; docs: number }> {
+    let changedDirs = 0;
+    let checkedDirs = 0;
+    let checkedDocs = 0;
+
+    async function walk(id: string | null, depth: number) {
+      if (depth > RECURSIVE_MAX_DEPTH) return;
+      await new Promise((r) => setTimeout(r, RECURSIVE_DELAY_MS));
       let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
       try {
-        resp = await listDirectory(dirId);
+        resp = await listDirectory(id);
       } catch {
-        return; // skip inaccessible directories silently
+        return;
       }
-      const result = fileUpdateTracker.compareSnapshot(dirId, resp.folders, resp.documents);
+      const result = fileUpdateTracker.compareSnapshot(id, resp.folders, resp.documents);
       if (result.summary) changedDirs++;
-      totalSubDirs += resp.folders.length;
-      totalSubDocs += resp.documents.length;
-      // Check staleness for each child folder
+      checkedDirs += resp.folders.length;
+      checkedDocs += resp.documents.length;
       for (const f of resp.folders) {
-        void fileUpdateTracker.checkFolderStaleness(f.id, (id) => listDirectory(id));
-      }
-      // Recurse
-      for (const f of resp.folders) {
+        void fileUpdateTracker.checkFolderStaleness(f.id, (innerId) => listDirectory(innerId));
         await walk(f.id, depth + 1);
       }
     }
 
+    await walk(dirId, 0);
+    logCheckHistory(changedDirs, checkedDirs, checkedDocs);
+    return { changed: changedDirs, dirs: checkedDirs, docs: checkedDocs };
+  }
+
+  async function triggerManualPoll() {
+    if (pollBusy || loading || directoryAccessDenied) return;
+    pollBusy = true;
     try {
-      await walk(currentFolderId, 0);
+      const result = await doRecursiveCheck(currentFolderId);
       fileUpdateTracker.lastCheckTime = Date.now();
       fileUpdateTracker.nextCheckTime = fileUpdateTracker.lastCheckTime + 60 * 60 * 1000;
-      if (changedDirs > 0) {
+      if (result.changed > 0) {
         notificationStore.info(
           $t('files.serverChangesDetected', {
-            values: { changes: `${changedDirs} director${changedDirs === 1 ? 'y' : 'ies'} changed (${totalSubDirs} sub-dirs, ${totalSubDocs} docs)` },
+            values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed (${result.dirs} sub-dirs, ${result.docs} docs)` },
           }),
           5000,
         );
       } else {
         notificationStore.success(
-          $t('files.noChangesDetectedInTree', { values: { dirs: totalSubDirs, docs: totalSubDocs } }),
+          $t('files.noChangesDetectedInTree', { values: { dirs: result.dirs, docs: result.docs } }),
           3000,
         );
       }
@@ -3553,25 +3578,44 @@
     loadDirectory(initialNavigation.folderId, false, initialReturnNavigation);
     reloadUserPreference();
 
-    // Start hourly polling for server-side changes
+    // Start hourly polling for server-side changes (recursive)
     const pollFn = async () => {
       if (disposed || loading || directoryAccessDenied) return;
       try {
-        const resp = await listDirectory(currentFolderId);
-        if (disposed) return;
-        const result = fileUpdateTracker.compareSnapshot(currentFolderId, resp.folders, resp.documents);
-        if (result.summary) {
-          console.log('[cfms:update-check]', result.summary);
+        const result = await doRecursiveCheck(currentFolderId);
+        if (!result || disposed) return;
+        if (result.changed > 0) {
           notificationStore.info(
-            $t('files.serverChangesDetected', { values: { changes: result.summary } }),
+            $t('files.serverChangesDetected', {
+              values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
+            }),
             5000,
           );
         }
       } catch (err) {
-        console.warn('[cfms:update-check] Poll failed:', err);
+        console.warn('[cfms:check] Poll failed:', err);
       }
     };
     fileUpdateTracker.startPolling(pollFn);
+
+    // Trigger initial check after first directory load completes (post-login)
+    let initialCheckDone = false;
+    $effect(() => {
+      if (initialCheckDone || directoryLoadPhase !== 'complete' || loading) return;
+      initialCheckDone = true;
+      console.log('%c[cfms:check] Initial update check after login…', 'color:#4fc3f7');
+      void doRecursiveCheck(currentFolderId).then((result) => {
+        if (!result || disposed) return;
+        if (result.changed > 0) {
+          notificationStore.info(
+            $t('files.serverChangesDetected', {
+              values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
+            }),
+            5000,
+          );
+        }
+      });
+    });
 
     // Devtool hook: run `__cfms_check_updates__()` in the browser console
     // to recursively walk the directory tree, compare snapshots at every
@@ -3579,7 +3623,7 @@
     // Hidden / access-denied folders are detected and shown with a 🔒 marker.
     // Requests are throttled to avoid server 503 rate-limiting.
     (window as any).__cfms_check_updates__ = async () => {
-      const MAX_DEPTH = 5;
+      const MAX_DEPTH = 20;
       const REQUEST_DELAY_MS = 300; // ms between sequential listDirectory calls
       const MAX_RETRIES = 2;
       let totalChanges = 0;
