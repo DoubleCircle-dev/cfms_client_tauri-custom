@@ -47,6 +47,14 @@ interface UpdateEntry {
   timestamp: number;
 }
 
+export interface CheckHistoryEntry {
+  time: number;
+  changed: number;
+  dirs: number;
+  docs: number;
+  summary: string;
+}
+
 // ---------------------------------------------------------------------------
 // Tracker
 // ---------------------------------------------------------------------------
@@ -69,8 +77,12 @@ class FileUpdateTracker {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private pollCallback: (() => Promise<void>) | null = null;
   private pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
-  lastCheckTime = $state<number>(0);       // timestamp of last completed poll
-  nextCheckTime = $state<number>(0);       // timestamp of next scheduled poll
+  lastCheckTime = $state<number>(0);
+  nextCheckTime = $state<number>(0);
+  initialScanDone = false; // ensures post-login scan runs only once per session
+
+  // --- check history ---
+  checkHistory = $state<CheckHistoryEntry[]>([]);
 
   // =========================================================================
   // Snapshot & polling
@@ -84,13 +96,10 @@ class FileUpdateTracker {
     this.stopPolling();
     this.pollCallback = pollFn;
     this.pollIntervalMs = intervalMs;
-    // Fire immediately on start
-    void pollFn().then(() => {
-      this.lastCheckTime = Date.now();
-      this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
-      this.scheduleNext();
-    });
-    // Set up recurring via setTimeout chain (so we can update nextCheckTime each cycle)
+    // Show countdown immediately — first poll fires after intervalMs
+    this.lastCheckTime = Date.now();
+    this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
+    this.scheduleNext();
   }
 
   private scheduleNext() {
@@ -115,7 +124,142 @@ class FileUpdateTracker {
 
   /** Whether polling is active. */
   get isPolling(): boolean {
-    return this.pollTimer !== null;
+    return this.pollCallback !== null;
+  }
+
+  // =========================================================================
+  // Shared recursive check (used by auto-poll, manual button, devtool)
+  // =========================================================================
+
+  /**
+   * Recursively walk the directory tree starting from `dirId` (null = root),
+   * calling `compareSnapshot` at every level.
+   *
+   * `listFn` should be the `listDirectory` API function.
+   * `maxDepth` controls recursion depth (default 20).
+   * `delayMs` throttles between requests (default 200).
+   */
+  async recursiveCheck(
+    listFn: (id: string | null) => Promise<{ folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] }>,
+    dirId: string | null = null,
+    maxDepth = 20,
+    delayMs = 200,
+  ): Promise<{ changed: number; dirs: number; docs: number }> {
+    let changedDirs = 0;
+    let checkedDirs = 0;
+    let checkedDocs = 0;
+
+    const walk = async (id: string | null, depth: number): Promise<void> => {
+      if (depth > maxDepth) return;
+      await new Promise((r) => setTimeout(r, delayMs));
+      let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
+      try {
+        resp = await listFn(id);
+      } catch {
+        return;
+      }
+      const result = this.compareSnapshot(id, resp.folders, resp.documents);
+      if (result.summary) changedDirs++;
+      checkedDirs += resp.folders.length;
+      checkedDocs += resp.documents.length;
+      for (const f of resp.folders) {
+        await walk(f.id, depth + 1);
+      }
+    };
+
+    await walk(dirId, 0);
+    this.addCheckHistory(changedDirs, checkedDirs, checkedDocs);
+    return { changed: changedDirs, dirs: checkedDirs, docs: checkedDocs };
+  }
+
+  /**
+   * Register a devtool hook on `window.__cfms_check_updates__` that runs
+   * a recursive check and prints the full file tree to the console.
+   *
+   * `listFn` should be the `listDirectory` API function.
+   * `getCurrentDirId` returns the folder ID currently being viewed (or null).
+   */
+  registerDevtoolHook(
+    listFn: (id: string | null) => Promise<{ folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] }>,
+    getCurrentDirId: () => string | null,
+  ) {
+    const tracker = this;
+    (window as any).__cfms_check_updates__ = async () => {
+      const MAX_DEPTH = 20;
+      const DELAY_MS = 300;
+      let totalChanges = 0;
+      let totalDirs = 0;
+      let totalDocs = 0;
+      let totalHidden = 0;
+      let totalErrors = 0;
+      const startTime = performance.now();
+
+      console.group('%c📁 CFMS Update Check %c(devtools — recursive)', 'font-weight:bold', 'color:#888');
+
+      async function walkDir(dirId: string | null, dirLabel: string, depth: number) {
+        if (depth > MAX_DEPTH) return;
+        const prefix = '  '.repeat(depth);
+        await new Promise((r) => setTimeout(r, DELAY_MS));
+
+        let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
+        try {
+          resp = await listFn(dirId);
+        } catch (err: any) {
+          const msg = String(err);
+          if (/403|404|access denied/i.test(msg)) {
+            totalHidden++;
+            console.log(`%c%s🔒 %s %c(hidden)`, 'color:#ef9a9a', prefix, dirLabel, 'color:#888');
+          } else {
+            totalErrors++;
+            console.log(`%c%s❌ %s %c— %s`, 'color:#f44336', prefix, dirLabel, 'color:#888', msg);
+          }
+          return;
+        }
+
+        const result = tracker.compareSnapshot(dirId, resp.folders, resp.documents);
+        if (result.summary) {
+          totalChanges++;
+          console.log(`%c🔔 [%s] %s`, 'color:#ffb74d', dirLabel, result.summary);
+        }
+        totalDirs += resp.folders.length;
+        totalDocs += resp.documents.length;
+
+        const staleCount =
+          resp.folders.filter((f) => tracker.notUpdatedFolderIds.has(f.id)).length +
+          resp.documents.filter((d) => tracker.notUpdatedDocumentIds.has(d.id)).length;
+
+        console.group(`%c%s📂 %s %c(%d f, %d d%c%s%c)`,
+          'font-weight:bold;color:#4fc3f7', prefix, dirLabel, 'color:#888',
+          resp.folders.length, resp.documents.length,
+          staleCount > 0 ? ';color:#ffb74d' : '', staleCount > 0 ? `, ${staleCount} stale` : '', ';color:#888');
+
+        for (const d of resp.documents) {
+          const stale = tracker.notUpdatedDocumentIds.has(d.id);
+          const updated = tracker.recentlyUpdatedDocumentIds.has(d.id);
+          const flags = [stale ? '⚠' : '', updated ? '🆕' : ''].filter(Boolean).join(' ');
+          console.log(`%c%s📄 %s %c${flags}%c  %s  %s`,
+            stale ? 'color:#ffb74d' : 'color:#c8e6c9', prefix, d.title, '',
+            'color:#888', d.size != null ? `${(d.size / 1024).toFixed(1)} KB` : '—',
+            d.last_modified ? new Date(d.last_modified * 1000).toLocaleString() : '—');
+        }
+
+        for (const f of resp.folders) {
+          const isDot = f.name.startsWith('.');
+          await walkDir(f.id, `${isDot ? '👻' : ''}${f.name}`, depth + 1);
+        }
+        console.groupEnd();
+      }
+
+      try {
+        await walkDir(getCurrentDirId(), getCurrentDirId() ?? '/ (root)', 0);
+        console.log('%c✅ Scan complete: %d dir(s), %d doc(s), %d change(s) in %sms',
+          'color:#4caf50;font-weight:bold', totalDirs, totalDocs, totalChanges,
+          (performance.now() - startTime).toFixed(0));
+      } catch (err) {
+        console.error('%c❌ Scan failed:', 'color:#f44336', err);
+      }
+      console.groupEnd();
+    };
   }
 
   /**
@@ -285,7 +429,26 @@ class FileUpdateTracker {
   // Clear
   // =========================================================================
 
-  /** Clear all entries, snapshots, and stop polling. */
+  // =========================================================================
+  // Check history
+  // =========================================================================
+
+  /** Record a completed update check in the history log. */
+  addCheckHistory(changed: number, dirs: number, docs: number) {
+    const entry: CheckHistoryEntry = {
+      time: Date.now(),
+      changed,
+      dirs,
+      docs,
+      summary: changed > 0 ? `${changed} dir(s) changed` : 'no changes',
+    };
+    this.checkHistory = [...this.checkHistory, entry];
+    if (this.checkHistory.length > 50) {
+      this.checkHistory = this.checkHistory.slice(-50);
+    }
+  }
+
+  /** Clear all entries, snapshots, stop polling, and reset history. */
   clear() {
     this.entries = new Map();
     this.parentMap = new Map();

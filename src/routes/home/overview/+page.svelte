@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
-  import { getDirectoryInfo, getDocument, loadUserPreference } from '$lib/api';
+  import { getDirectoryInfo, getDocument, loadUserPreference, listDirectory } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import HomeRecordPanel from '$lib/components/HomeRecordPanel.svelte';
   import {
@@ -25,6 +25,7 @@
     notificationStore,
     serverStateStore,
   } from '$lib/stores.svelte';
+  import { fileUpdateTracker, type CheckHistoryEntry } from '$lib/file-update-tracker.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   let recent = $state<RecentFileRecord[]>([]);
@@ -48,6 +49,51 @@
     } finally {
       loadingRecent = false;
       loadingFavorites = false;
+    }
+
+    // Trigger initial full scan once per login session
+    if (!fileUpdateTracker.initialScanDone && !sessionStorage.getItem('cfms:initial-scan-done')) {
+      fileUpdateTracker.initialScanDone = true;
+      sessionStorage.setItem('cfms:initial-scan-done', '1');
+      console.log('%c[cfms:check] Initial full scan after login…', 'color:#4fc3f7');
+      try {
+        const result = await fileUpdateTracker.recursiveCheck(
+          (id) => listDirectory(id),
+          null,
+        );
+        if (result.changed > 0) {
+          notificationStore.info(
+            $t('files.serverChangesDetected', {
+              values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
+            }),
+            5000,
+          );
+        }
+      } catch (err) {
+        console.warn('[cfms:check] Initial scan failed:', err);
+      }
+    }
+
+    // Start persistent hourly polling (survives page navigation)
+    if (!fileUpdateTracker.isPolling) {
+      fileUpdateTracker.startPolling(async () => {
+        try {
+          const result = await fileUpdateTracker.recursiveCheck(
+            (id) => listDirectory(id),
+            null,
+          );
+          if (result.changed > 0) {
+            notificationStore.info(
+              $t('files.serverChangesDetected', {
+                values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
+              }),
+              5000,
+            );
+          }
+        } catch (err) {
+          console.warn('[cfms:check] Poll failed:', err);
+        }
+      });
     }
   });
 
@@ -123,6 +169,67 @@
       username: authStore.username,
     };
   }
+
+  const checkHistory = $derived([...fileUpdateTracker.checkHistory].reverse());
+  const lastCheckResult = $derived(checkHistory[0] ?? null);
+
+  function formatCheckTime(ts: number) {
+    return new Date(ts).toLocaleString();
+  }
+
+  let checkBusy = $state(false);
+
+  // Poll countdown (mirrors files page)
+  let pollCountdown = $state('');
+  $effect(() => {
+    const update = () => {
+      const next = fileUpdateTracker.nextCheckTime;
+      if (!next || !fileUpdateTracker.isPolling) { pollCountdown = ''; return; }
+      const remaining = Math.max(0, next - Date.now());
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      pollCountdown = `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  });
+
+  async function triggerCheck() {
+    if (checkBusy) return;
+    checkBusy = true;
+    try {
+      const result = await fileUpdateTracker.recursiveCheck(
+        (id) => listDirectory(id),
+        null,
+      );
+      if (result.changed > 0) {
+        notificationStore.info(
+          $t('files.serverChangesDetected', {
+            values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
+          }),
+          5000,
+        );
+      } else {
+        notificationStore.success($t('files.noChangesDetected'), 2500);
+      }
+    } catch (err) {
+      notificationStore.error(String(err), 4000);
+    } finally {
+      checkBusy = false;
+    }
+  }
+
+  onMount(() => {
+    fileUpdateTracker.registerDevtoolHook(
+      (id) => listDirectory(id),
+      () => null,
+    );
+  });
+
+  onDestroy(() => {
+    delete (window as any).__cfms_check_updates__;
+  });
 </script>
 
 <div class="workspace-page blueprint-home mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 sm:p-5">
@@ -153,6 +260,20 @@
           <Icon name="star" size="18px" />
           <span>{favorites.length} {$t('home.favorites')}</span>
         </div>
+        <button
+          type="button"
+          class="blueprint-check-btn"
+          disabled={checkBusy}
+          onclick={triggerCheck}
+          title="检查全部文件更新"
+        >
+          {#if checkBusy}
+            <span class="check-btn-spinner"></span>
+          {:else}
+            <Icon name="refresh" size="16px" />
+          {/if}
+          <span>检查更新</span>
+        </button>
       </div>
     </div>
   </section>
@@ -196,6 +317,33 @@
       onClear={clearFavorites}
     />
   </div>
+
+  {#if checkHistory.length > 0}
+    <section class="check-history-section">
+      <div class="check-history-header">
+        <Icon name="history" size="18px" />
+        <h2 class="text-sm font-medium text-md3-on-surface">文件更新检查记录</h2>
+        {#if pollCountdown}
+          <span class="check-countdown">下次: {pollCountdown}</span>
+        {/if}
+        {#if lastCheckResult}
+          <span class="check-history-badge" class:has-changes={lastCheckResult.changed > 0}>
+            {lastCheckResult.changed > 0 ? `🔔 ${lastCheckResult.changed} 处变化` : '✅ 无变化'}
+          </span>
+        {/if}
+      </div>
+      <div class="check-history-list">
+        {#each checkHistory.slice(0, 10) as entry (entry.time)}
+          <div class="check-history-row">
+            <span class="check-history-icon">{entry.changed > 0 ? '🔔' : '✅'}</span>
+            <span class="check-history-time">{formatCheckTime(entry.time)}</span>
+            <span class="check-history-summary">{entry.summary}</span>
+            <span class="check-history-meta">{entry.dirs} 子目录, {entry.docs} 文档</span>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
 </div>
 
 <style>
@@ -228,5 +376,127 @@
 
   .blueprint-status-chip-muted {
     color: var(--color-md3-on-surface-variant);
+  }
+
+  .blueprint-check-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid var(--explorer-border);
+    border-radius: var(--explorer-radius-small);
+    background: var(--explorer-surface);
+    color: var(--explorer-accent);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  .blueprint-check-btn:hover {
+    background: var(--explorer-surface-hover);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  .blueprint-check-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .check-btn-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--explorer-border);
+    border-top-color: var(--explorer-accent);
+    border-radius: 50%;
+    animation: check-spin 0.6s linear infinite;
+  }
+
+  @keyframes check-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .check-history-section {
+    border: 1px solid var(--explorer-border);
+    border-radius: var(--explorer-radius-small);
+    padding: 1rem;
+    background: var(--explorer-surface);
+  }
+
+  .check-history-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--explorer-border);
+  }
+
+  .check-history-badge {
+    margin-left: auto;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--explorer-surface-hover);
+    color: var(--explorer-text-muted);
+  }
+
+  .check-history-badge.has-changes {
+    background: color-mix(in srgb, var(--color-md3-warning, #f09d00) 18%, transparent);
+    color: var(--color-md3-warning, #f09d00);
+  }
+
+  .check-countdown {
+    margin-left: auto;
+    margin-right: 0.5rem;
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--explorer-accent);
+    font-weight: 500;
+  }
+
+  .check-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .check-history-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    color: var(--explorer-text-muted);
+  }
+
+  .check-history-row:hover {
+    background: var(--explorer-surface-hover);
+  }
+
+  .check-history-icon {
+    flex: none;
+    width: 1.2rem;
+    text-align: center;
+  }
+
+  .check-history-time {
+    flex: none;
+    min-width: 8rem;
+    color: var(--explorer-text);
+  }
+
+  .check-history-summary {
+    flex: 1;
+  }
+
+  .check-history-meta {
+    flex: none;
+    font-size: 0.7rem;
+    opacity: 0.7;
   }
 </style>
