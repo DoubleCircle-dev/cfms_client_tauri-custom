@@ -62,3 +62,4 @@ include!("commands/transfer_helpers.rs");
 include!("commands/shared_helpers.rs");
 include!("commands/local_data_reset.rs");
 include!("commands/credentials.rs");
+include!("commands/dev_raw.rs");

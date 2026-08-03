@@ -72,6 +72,8 @@
 
   // Routes that don't require any connection/auth.
   const PUBLIC_ROUTES = ["/connect", "/connect/disclaimer", "/init", "/reset"];
+  // Dev tools — bypass all auth guards in debug builds.
+  const DEV_PREFIX = "/dev";
   // Routes that require WebSocket connection but not login.
   const CONNECTION_ROUTES = ["/login"];
   // Lockdown override route.
@@ -106,6 +108,9 @@
   // ---------------------------------------------------------------------------
   $effect(() => {
     const path = page.url.pathname;
+
+    // Dev tools — bypass all auth guards unconditionally.
+    if (path.startsWith(DEV_PREFIX)) return;
 
     // Extension routes remain compiled for ongoing development, but must not
     // be user-reachable until the release gate in feature-flags.ts is enabled.

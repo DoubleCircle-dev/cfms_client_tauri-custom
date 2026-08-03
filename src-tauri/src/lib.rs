@@ -533,6 +533,22 @@ pub fn run() {
                 .ok_or_else(|| std::io::Error::other("Main window configuration is missing"))?;
             tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?.build()?;
 
+            // Dev mode: auto-open the vulnerability testing tool in a separate window.
+            #[cfg(debug_assertions)]
+            {
+                let _ = tauri::WebviewWindowBuilder::new(
+                    app.handle(),
+                    "dev-tools",
+                    tauri::WebviewUrl::App("/dev/server-vuln-test".into()),
+                )
+                .title("CFMS 漏洞测试工具")
+                .inner_size(960.0, 720.0)
+                .min_inner_size(640.0, 480.0)
+                .resizable(true)
+                .center()
+                .build();
+            }
+
             tracing::info!("CFMS Client initialized successfully");
 
             // Diagnostic: log the local host IP addresses once at startup.
@@ -704,6 +720,8 @@ pub fn run() {
             commands::delete_credential,
             commands::clear_credentials,
             commands::has_saved_credentials,
+            commands::send_raw_request,
+            commands::open_dev_tools_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
