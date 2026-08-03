@@ -254,6 +254,10 @@
   let detailRequestId = 0;
   let documentAccessDenied = $state<{ name: string; id: string; accessedAt: number } | null>(null);
 
+  // IDs of items discovered via search (hidden from directory listing)
+  let hiddenItemIds = $state<Set<string>>(new Set());
+  let hiddenItemCount = $state(0);
+
   // Context menu state
   let contextMenu = $state<{
     open: boolean;
@@ -3666,6 +3670,7 @@
         // --- Search for dot-prefixed files / folders ---
         // Use the same search API as the search bar to discover items whose
         // names start with '.' — these may be hidden from directory listings.
+        // Matching items are merged into the current directory display.
         if (canSearchFiles(authStore.permissions)) {
           console.group('%c🔍 Searching for dot-prefixed (hidden) items…', 'color:#ce93d8;font-weight:bold');
           try {
@@ -3679,43 +3684,73 @@
             const dotDirs = dotResults.directories.filter((d) => d.name?.startsWith('.'));
             const dotDocs = dotResults.documents.filter((d) => (d.name ?? d.title ?? '').startsWith('.'));
 
-            if (dotDirs.length === 0 && dotDocs.length === 0) {
-              console.log('%cNo dot-prefixed items found via search.', 'color:#888');
+            // Filter to items belonging to the current directory
+            const currentDirDirs = dotDirs.filter(
+              (d) => normalizeDirectoryId(d.parent_id) === normalizeDirectoryId(currentFolderId),
+            );
+            const currentDirDocs = dotDocs.filter(
+              (d) => normalizeDirectoryId(d.parent_id) === normalizeDirectoryId(currentFolderId),
+            );
+
+            // Exclude items already in the directory listing
+            const existingFolderIds = new Set(folders.map((f) => f.id));
+            const existingDocIds = new Set(documents.map((d) => d.id));
+            const newDirs = currentDirDirs.filter((d) => !existingFolderIds.has(d.id));
+            const newDocs = currentDirDocs.filter((d) => !existingDocIds.has(d.id));
+
+            if (newDirs.length === 0 && newDocs.length === 0) {
+              console.log(
+                '%cNo new hidden items to merge (found %d total dot-items via search).',
+                'color:#888',
+                dotDirs.length + dotDocs.length,
+              );
             } else {
               console.log(
-                '%cFound %d hidden folder(s) and %d hidden file(s) via search:',
-                'color:#ce93d8',
-                dotDirs.length,
-                dotDocs.length,
+                '%cMerging %d hidden folder(s) and %d hidden file(s) into current view:',
+                'color:#ce93d8;font-weight:bold',
+                newDirs.length,
+                newDocs.length,
               );
-              for (const d of dotDirs) {
-                console.log(
-                  `%c  👻📂 %s %c(id: %s)`,
-                  'color:#ce93d8',
-                  d.name ?? '(unnamed)',
-                  'color:#888',
-                  d.id,
-                );
+
+              const newHiddenIds = new Set(hiddenItemIds);
+
+              // Convert search entries to listing entries and merge
+              const extraFolders: ServerDirectoryEntry[] = [];
+              for (const d of newDirs) {
+                console.log(`%c  + 👻📂 %s %c(id: %s)`, 'color:#ce93d8', d.name ?? '(unnamed)', 'color:#888', d.id);
+                extraFolders.push({ id: d.id, name: d.name ?? '(unnamed)', created_time: d.created_time });
+                newHiddenIds.add(d.id);
               }
-              for (const d of dotDocs) {
+
+              const extraDocs: ServerDocumentEntry[] = [];
+              for (const d of newDocs) {
+                const name = d.name ?? d.title ?? '(unnamed)';
                 const sizeStr = d.size != null ? `${(d.size / 1024).toFixed(1)} KB` : '?';
-                console.log(
-                  `%c  👻📄 %s %c%s %c%s`,
-                  'color:#ce93d8',
-                  d.name ?? d.title ?? '(unnamed)',
-                  '',
-                  sizeStr,
-                  'color:#888',
-                  d.last_modified ? new Date(d.last_modified * 1000).toLocaleString() : '',
-                );
+                console.log(`%c  + 👻📄 %s %c%s`, 'color:#ce93d8', name, 'color:#888', sizeStr);
+                extraDocs.push({
+                  id: d.id,
+                  title: name,
+                  size: d.size ?? null,
+                  last_modified: d.last_modified ?? null,
+                });
+                newHiddenIds.add(d.id);
               }
-              // Also compare with snapshots where possible
-              for (const d of dotDirs) {
-                try {
-                  const resp = await listDirectory(d.id);
-                  fileUpdateTracker.compareSnapshot(d.id, resp.folders, resp.documents);
-                } catch { /* hidden — can't list */ }
+
+              // Merge into current display state
+              if (extraFolders.length > 0) {
+                folders = [...folders, ...extraFolders];
               }
+              if (extraDocs.length > 0) {
+                documents = [...documents, ...extraDocs];
+              }
+              hiddenItemIds = newHiddenIds;
+              hiddenItemCount = newHiddenIds.size;
+              fileListIndex = createFileListIndex(folders, documents);
+
+              console.log(
+                '%cHidden items now visible in file table (👻 icon).',
+                'color:#ce93d8',
+              );
             }
           } catch (err) {
             console.log('%cSearch unavailable: %s', 'color:#888', String(err));
@@ -4114,6 +4149,7 @@
       notUpdatedDocumentIds={notUpdatedDocIds}
       notUpdatedFolderIds={notUpdatedFldIds}
       notUpdatedTooltip={notUpdatedTooltip}
+      hiddenItemIds={hiddenItemIds}
     />
     <ExplorerDetailsPane
       open={detailsOpen}

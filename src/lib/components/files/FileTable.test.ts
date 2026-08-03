@@ -64,6 +64,7 @@ function renderTable(
       notUpdatedDocumentIds: new Set<string>(),
       notUpdatedFolderIds: new Set<string>(),
       notUpdatedTooltip: 'Not updated',
+      hiddenItemIds: new Set<string>(),
     },
   });
 

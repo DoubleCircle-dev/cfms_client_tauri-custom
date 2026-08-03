@@ -53,6 +53,7 @@
     notUpdatedDocumentIds,
     notUpdatedFolderIds,
     notUpdatedTooltip,
+    hiddenItemIds,
     loading,
     folders,
     documents,
@@ -85,6 +86,7 @@
     notUpdatedDocumentIds: Set<string>;
     notUpdatedFolderIds: Set<string>;
     notUpdatedTooltip: string;
+    hiddenItemIds: Set<string>;
     loading: boolean;
     folders: ServerDirectoryEntry[];
     documents: ServerDocumentEntry[];
@@ -857,7 +859,7 @@
                   onfocus={() => (activeRowKey = rowKey(row))}
                   oncontextmenu={(event) => onFolderContextMenu(event, row.folder)}
                 >
-                  <span class="file-table-icon" class:file-table-icon--selected={isSelected(row)}>
+                  <span class="file-table-icon" class:file-table-icon--selected={isSelected(row)} class:file-table-icon--hidden={hiddenItemIds.has(row.folder.id)}>
                     <Icon name={selectMode ? (isSelected(row) ? 'checkBox' : 'checkBoxBlank') : 'folder'} size="20px" />
                   </span>
                   <span
@@ -891,7 +893,7 @@
                   onfocus={() => (activeRowKey = rowKey(row))}
                   oncontextmenu={(event) => onDocumentContextMenu(event, row.document)}
                 >
-                  <span class="file-table-icon" class:file-table-icon--selected={isSelected(row)}>
+                  <span class="file-table-icon" class:file-table-icon--selected={isSelected(row)} class:file-table-icon--hidden={hiddenItemIds.has(row.document.id)}>
                     <Icon name={selectMode ? (isSelected(row) ? 'checkBox' : 'checkBoxBlank') : 'filePresent'} size="20px" />
                   </span>
                   <span
@@ -970,6 +972,8 @@
   .file-table-icon { display: inline-flex; color: var(--explorer-text-muted); }
   .file-table-folder-name, .file-table-row--folder .file-table-icon { color: var(--explorer-folder); }
   .file-table-icon--selected { color: var(--explorer-accent) !important; }
+  .file-table-icon--hidden { opacity: 0.5; position: relative; }
+  .file-table-icon--hidden::after { position: absolute; top: -2px; right: -4px; content: '👻'; font-size: 9px; line-height: 1; }
   .file-table-name { max-width: 100%; justify-self: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.81rem; }
   .file-table-drag-handle { cursor: default; user-select: none; }
   .file-table-modified, .file-table-type, .file-table-size { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text-muted); font-size: 0.74rem; }
