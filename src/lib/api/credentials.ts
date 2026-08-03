@@ -1,19 +1,23 @@
-// CFMS Client - Credential persistence API (multi-account).
+// CFMS Client - Credential persistence API (multi-account, scoped by server).
 //
 // Provides typed wrappers for saving and loading login credentials
-// (username + optionally password) across application restarts.
+// (server_hash + username + optionally password) across application restarts.
+// Credentials are keyed by `(server_hash, username)` to avoid collisions
+// when the same username exists on different servers.
 // Supports multiple accounts so users can switch without re-typing.
 // The password is encrypted at rest on the Rust side.
 
 import { invoke } from '@tauri-apps/api/core';
 
 export interface SavedCredentials {
+  serverHash: string;
   username: string;
   password: string;
 }
 
 /** Lightweight summary returned when listing saved accounts. */
 export interface CredentialSummary {
+  serverHash: string;
   username: string;
   hasPassword: boolean;
   lastUsedAt: number;
@@ -45,9 +49,12 @@ export async function loadCredentials(
   return invoke('load_credentials', { username: username ?? null });
 }
 
-/** List all saved credential summaries (usernames only, no passwords). */
-export async function listCredentials(): Promise<CredentialSummary[]> {
-  return invoke('list_credentials');
+/** List all saved credential summaries for the current server.
+ *
+ * Pass `serverHash` to filter by a specific server instead.
+ * Passwords are never included. */
+export async function listCredentials(serverHash?: string): Promise<CredentialSummary[]> {
+  return invoke('list_credentials', { serverHash: serverHash ?? null });
 }
 
 /** Delete a single saved credential entry by username. */

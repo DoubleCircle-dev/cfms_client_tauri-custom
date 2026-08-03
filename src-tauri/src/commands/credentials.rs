@@ -1,19 +1,21 @@
-// Credential persistence — multi-account support
+// Credential persistence — multi-account support (scoped by server)
 // ---------------------------------------------------------------------------
 //
-// Provides at-rest storage for login credentials (username + optionally
-// password) across multiple accounts so the user can switch between them
-// without re-typing.
+// Provides at-rest storage for login credentials (server_hash + username +
+// optionally password) across multiple accounts so the user can switch
+// between them without re-typing.
 //
-// Credentials are stored as a JSON array under the `saved_credentials`
-// settings key.  Each entry may optionally hold an encrypted password.
-// Passwords are encrypted with AES-256-GCM before being written to the
-// SQLite settings store.  The encryption key is randomly generated on first
-// use and itself persisted in settings — this provides protection against
-// trivial plaintext extraction from the database file.
+// Credentials are keyed by `(server_hash, username)` to avoid collisions
+// when the same username exists on different servers.  Each entry may
+// optionally hold an encrypted password.  Passwords are encrypted with
+// AES-256-GCM before being written to the SQLite settings store.  The
+// encryption key is randomly generated on first use and itself persisted
+// in settings — this provides protection against trivial plaintext
+// extraction from the database file.
 //
-// Migration: the previous single-entry format (`{ username, … }`) is
-// auto-migrated to the array format on first read.
+// Migration: legacy entries without `server_hash` are assigned a default
+// hash on load so they continue to work.  The legacy single-entry format
+// (`{ username, … }`) is also auto-migrated to the array format.
 //
 // Security note: the encryption key is stored alongside the ciphertext, so
 // this is NOT a hardware-backed secure enclave.  It raises the bar for
@@ -28,11 +30,17 @@ use rand::Rng;
 const CREDENTIALS_KEY: &str = "saved_credentials";
 const CREDENTIAL_ENCRYPTION_KEY: &str = "credential_encryption_key";
 
+/// Default server_hash used when migrating legacy entries that lack one.
+const LEGACY_DEFAULT_SERVER_HASH: &str = "__legacy__";
+
 /// Maximum number of saved credential entries to prevent unbounded growth.
 const MAX_CREDENTIAL_ENTRIES: usize = 50;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SavedCredentialEntry {
+    /// SHA-256 hash of the server address, scoping credentials per server.
+    #[serde(default)]
+    server_hash: String,
     username: String,
     /// If present, the ciphertext of the password (Base64-encoded).
     /// Format: nonce (12 bytes) || tag (16 bytes) || ciphertext
@@ -43,6 +51,7 @@ struct SavedCredentialEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CredentialsDto {
+    pub server_hash: String,
     pub username: String,
     pub password: String,
 }
@@ -50,6 +59,7 @@ pub struct CredentialsDto {
 /// Lightweight summary returned by list_credentials (no passwords).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CredentialSummary {
+    pub server_hash: String,
     pub username: String,
     pub has_password: bool,
     pub last_used_at: u64,
@@ -59,11 +69,14 @@ pub struct CredentialSummary {
 // Commands
 // ---------------------------------------------------------------------------
 
-/// Persist (or update) login credentials for a given username.
+/// Persist (or update) login credentials scoped to the current server.
 ///
+/// The `server_hash` is derived automatically from the active connection.
 /// When `remember_password` is true, the password is encrypted with a
 /// randomly-generated device-local key before storage.  When false, only
-/// the username is saved.  If an entry for this username already exists it
+/// the username is saved.
+///
+/// Upsert: if an entry for this `(server_hash, username)` already exists it
 /// is updated in-place; otherwise a new entry is appended.  Entries are
 /// capped at `MAX_CREDENTIAL_ENTRIES` — the oldest entry is evicted when
 /// the limit is reached.
@@ -74,6 +87,12 @@ pub async fn save_credentials(
     password: String,
     remember_password: bool,
 ) -> Result<(), String> {
+    let server_hash = {
+        let addr = state.inner.server_address.read().await;
+        let addr = addr.as_ref().ok_or_else(|| "No active server connection".to_string())?;
+        cfms_core::get_server_hash(addr)
+    };
+
     let encrypted_password = if remember_password {
         let key = get_or_create_credential_key(&state).map_err(|e| e.to_string())?;
         let nonce = aead::generate_nonce();
@@ -93,14 +112,18 @@ pub async fn save_credentials(
     let now = current_timestamp();
     let mut entries = load_all_entries(&state)?;
 
-    // Upsert: replace existing entry for this username or append a new one.
-    if let Some(existing) = entries.iter_mut().find(|e| e.username == username) {
+    tracing::info!(
+        "Saving credential for server={server_hash} user={username} remember_password={remember_password} (existing entries: {})",
+        entries.len()
+    );
+
+    // Upsert: replace existing entry for this (server_hash, username) or append.
+    if let Some(existing) = entries.iter_mut().find(|e| e.server_hash == server_hash && e.username == username) {
         existing.encrypted_password = encrypted_password;
         existing.last_used_at = now;
     } else {
         // Enforce the cap before inserting.
         while entries.len() >= MAX_CREDENTIAL_ENTRIES {
-            // Evict the least-recently-used entry.
             if let Some(oldest_idx) = entries
                 .iter()
                 .enumerate()
@@ -113,6 +136,7 @@ pub async fn save_credentials(
             }
         }
         entries.push(SavedCredentialEntry {
+            server_hash,
             username,
             encrypted_password,
             last_used_at: now,
@@ -122,27 +146,45 @@ pub async fn save_credentials(
     persist_entries(&state, &entries)
 }
 
-/// Load saved credentials.
+/// Load saved credentials scoped to the current server.
 ///
-/// When `username` is provided, returns that specific entry.  When omitted,
-/// returns the most recently used entry.  Returns `None` if no credentials
-/// have been saved.  The `password` field is only populated when it was
-/// originally saved with `remember_password: true`.
+/// When `username` is provided, returns that specific entry for the current
+/// server.  When omitted, returns the most recently used entry for the
+/// current server.  Returns `None` if no matching credentials exist.
+///
+/// The `password` field is only populated when it was originally saved with
+/// `remember_password: true`.
 #[tauri::command]
 pub async fn load_credentials(
     state: tauri::State<'_, AppHandleState>,
     username: Option<String>,
 ) -> Result<Option<CredentialsDto>, String> {
+    let server_hash = {
+        let addr = state.inner.server_address.read().await;
+        let addr = addr.as_ref().ok_or_else(|| "No active server connection".to_string())?;
+        cfms_core::get_server_hash(addr)
+    };
     let entries = load_all_entries(&state)?;
+
+    tracing::info!(
+        "Loading credentials for server={server_hash} user={} (total entries: {})",
+        username.as_deref().unwrap_or("(latest)"),
+        entries.len()
+    );
+
     if entries.is_empty() {
         return Ok(None);
     }
 
     let entry = if let Some(ref name) = username {
-        entries.iter().find(|e| e.username == *name).cloned()
+        entries.iter().find(|e| e.server_hash == server_hash && e.username == *name).cloned()
     } else {
-        // Return the most recently used entry.
-        entries.iter().max_by_key(|e| e.last_used_at).cloned()
+        // Return the most recently used entry for this server.
+        entries
+            .iter()
+            .filter(|e| e.server_hash == server_hash)
+            .max_by_key(|e| e.last_used_at)
+            .cloned()
     };
 
     let Some(entry) = entry else {
@@ -152,20 +194,35 @@ pub async fn load_credentials(
     let password = decrypt_password(&state, &entry)?;
 
     Ok(Some(CredentialsDto {
+        server_hash: entry.server_hash,
         username: entry.username,
         password: password.unwrap_or_default(),
     }))
 }
 
-/// List all saved credential summaries (usernames only, no passwords).
+/// List all saved credential summaries for the current server.
+///
+/// When `server_hash` is provided, filters to that server instead.
+/// Passwords are never included.
 #[tauri::command]
 pub async fn list_credentials(
     state: tauri::State<'_, AppHandleState>,
+    server_hash: Option<String>,
 ) -> Result<Vec<CredentialSummary>, String> {
+    let filter_hash = match server_hash {
+        Some(h) => h,
+        None => {
+            let addr = state.inner.server_address.read().await;
+            let addr = addr.as_ref().ok_or_else(|| "No active server connection".to_string())?;
+            cfms_core::get_server_hash(addr)
+        }
+    };
     let entries = load_all_entries(&state)?;
     Ok(entries
         .into_iter()
+        .filter(|e| e.server_hash == filter_hash)
         .map(|e| CredentialSummary {
+            server_hash: e.server_hash,
             username: e.username,
             has_password: e.encrypted_password.is_some(),
             last_used_at: e.last_used_at,
@@ -173,14 +230,19 @@ pub async fn list_credentials(
         .collect())
 }
 
-/// Delete a single saved credential entry by username.
+/// Delete a single saved credential entry by server and username.
 #[tauri::command]
 pub async fn delete_credential(
     state: tauri::State<'_, AppHandleState>,
     username: String,
 ) -> Result<(), String> {
+    let server_hash = {
+        let addr = state.inner.server_address.read().await;
+        let addr = addr.as_ref().ok_or_else(|| "No active server connection".to_string())?;
+        cfms_core::get_server_hash(addr)
+    };
     let mut entries = load_all_entries(&state)?;
-    entries.retain(|e| e.username != username);
+    entries.retain(|e| !(e.server_hash == server_hash && e.username == username));
     persist_entries(&state, &entries)
 }
 
@@ -192,13 +254,18 @@ pub async fn clear_credentials(
     clear_credentials_inner(&state)
 }
 
-/// Check whether any credentials (at minimum a username) are saved.
+/// Check whether any credentials are saved for the current server.
 #[tauri::command]
 pub async fn has_saved_credentials(
     state: tauri::State<'_, AppHandleState>,
 ) -> Result<bool, String> {
+    let server_hash = {
+        let addr = state.inner.server_address.read().await;
+        let addr = addr.as_ref().ok_or_else(|| "No active server connection".to_string())?;
+        cfms_core::get_server_hash(addr)
+    };
     let entries = load_all_entries(&state)?;
-    Ok(!entries.is_empty())
+    Ok(entries.iter().any(|e| e.server_hash == server_hash))
 }
 
 // ---------------------------------------------------------------------------
@@ -212,8 +279,11 @@ fn clear_credentials_inner(state: &AppHandleState) -> Result<(), String> {
         .map_err(|e| format!("Failed to clear credentials: {e}"))
 }
 
-/// Load all credential entries from storage, migrating from the legacy
-/// single-entry format if necessary.
+/// Load all credential entries from storage, migrating legacy formats.
+///
+/// Legacy entries without `server_hash` are assigned a default hash so they
+/// continue to work after the schema change.  The legacy single-entry format
+/// (`{ username, … }`) is also auto-migrated to the array format.
 fn load_all_entries(
     state: &AppHandleState,
 ) -> Result<Vec<SavedCredentialEntry>, String> {
@@ -231,18 +301,28 @@ fn load_all_entries(
     }
 
     // Try the new array format first.
-    if let Ok(entries) = serde_json::from_str::<Vec<SavedCredentialEntry>>(trimmed) {
+    if let Ok(mut entries) = serde_json::from_str::<Vec<SavedCredentialEntry>>(trimmed) {
+        let mut migrated = false;
+        for entry in &mut entries {
+            if entry.server_hash.is_empty() {
+                entry.server_hash = LEGACY_DEFAULT_SERVER_HASH.to_string();
+                migrated = true;
+            }
+        }
+        if migrated {
+            persist_entries(state, &entries)?;
+        }
         return Ok(entries);
     }
 
     // Fall back to legacy single-entry format and migrate.
     if let Ok(legacy) = serde_json::from_str::<LegacySavedCredentials>(trimmed) {
         let migrated = vec![SavedCredentialEntry {
+            server_hash: LEGACY_DEFAULT_SERVER_HASH.to_string(),
             username: legacy.username,
             encrypted_password: legacy.encrypted_password,
             last_used_at: current_timestamp(),
         }];
-        // Persist the migration so future reads use the array format.
         persist_entries(state, &migrated)?;
         return Ok(migrated);
     }

@@ -397,7 +397,7 @@
     }
 
     // Persist credentials if requested (must happen before clearing password).
-    persistCredentialsIfRequested(passwordToSave);
+    await persistCredentialsIfRequested(passwordToSave);
 
     authStore.apply(authResult);
     authStore.apply(authStatus);
@@ -486,8 +486,8 @@
           }
         }
       })
-      .catch(() => {
-        /* Non-fatal: credential loading failure should not block the login page. */
+      .catch((err) => {
+        console.error('[credentials] Failed to load:', err);
       });
 
     void focusUsernameInput();
@@ -499,7 +499,8 @@
       savedAccounts = await listCredentials();
       // Sort by most recently used first.
       savedAccounts.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-    } catch {
+    } catch (err) {
+      console.error('[credentials] Failed to list:', err);
       savedAccounts = [];
     }
   }
@@ -824,8 +825,8 @@
     try {
       await saveCredentials(username.trim(), rememberPassword ? passwordToSave : '', rememberPassword);
       await refreshSavedAccounts();
-    } catch {
-      /* Non-fatal */
+    } catch (err) {
+      console.error('[credentials] Failed to save:', err);
     }
   }
 
