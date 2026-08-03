@@ -7,7 +7,141 @@
         if (!import.meta.env.DEV) {
             goto("/home/overview", { replaceState: true });
         }
+        loadSavedTemplates();
     });
+
+    // ---- Hardcoded command definitions (from server_commands.json) ----
+    interface CmdEntry { action: string; desc: string; requireAuth: boolean; data: Record<string, unknown>; }
+    const COMMAND_CATEGORIES: { label: string; cmds: CmdEntry[] }[] = [
+        { label: "🔐 认证", cmds: [
+            { action: "login", desc: "用户登录", requireAuth: false, data: { username: "PLACEHOLDER", password: "PLACEHOLDER" } },
+            { action: "refresh_token", desc: "刷新访问令牌", requireAuth: true, data: {} },
+        ]},
+        { label: "🔑 双因素认证", cmds: [
+            { action: "setup_2fa", desc: "设置双因素认证(TOTP)", requireAuth: true, data: { method: "totp" } },
+            { action: "cancel_2fa_setup", desc: "取消2FA设置", requireAuth: true, data: {} },
+            { action: "validate_2fa", desc: "验证并启用2FA", requireAuth: true, data: { token: "PLACEHOLDER" } },
+            { action: "disable_2fa", desc: "禁用双因素认证", requireAuth: true, data: { username: "PLACEHOLDER" } },
+            { action: "get_2fa_status", desc: "获取2FA状态", requireAuth: true, data: {} },
+        ]},
+        { label: "🛡️ 安全管理", cmds: [
+            { action: "list_banned_subnets", desc: "列出被封禁的子网", requireAuth: true, data: {} },
+            { action: "create_banned_subnet", desc: "创建封禁子网规则", requireAuth: true, data: { subnet: "PLACEHOLDER" } },
+            { action: "update_banned_subnet", desc: "更新封禁子网规则", requireAuth: true, data: { subnet: "PLACEHOLDER" } },
+            { action: "delete_banned_subnet", desc: "删除封禁子网规则", requireAuth: true, data: { subnet: "PLACEHOLDER" } },
+            { action: "list_auth_lockouts", desc: "列出认证锁定记录", requireAuth: true, data: {} },
+            { action: "unlock_auth_lockouts", desc: "解锁认证锁定", requireAuth: true, data: { target: "PLACEHOLDER", scope: "PLACEHOLDER" } },
+        ]},
+        { label: "📄 文档", cmds: [
+            { action: "get_document", desc: "获取文档(触发下载任务)", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "get_document_info", desc: "获取文档信息", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "get_document_access_rules", desc: "获取文档访问规则", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "create_document", desc: "创建文档", requireAuth: true, data: { title: "PLACEHOLDER" } },
+            { action: "upload_document", desc: "上传文档(新版本)", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "delete_document", desc: "删除文档(标记删除)", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "restore_document", desc: "恢复已删除文档", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "purge_document", desc: "永久清除文档", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "rename_document", desc: "重命名文档", requireAuth: true, data: { document_id: "PLACEHOLDER", new_title: "PLACEHOLDER" } },
+            { action: "move_document", desc: "移动文档", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "set_document_rules", desc: "设置文档访问规则", requireAuth: true, data: { document_id: "PLACEHOLDER", access_rules: {} } },
+            { action: "set_document_tags", desc: "设置文档标签", requireAuth: true, data: { document_id: "PLACEHOLDER", tags: [] } },
+        ]},
+        { label: "📝 修订版本", cmds: [
+            { action: "list_revisions", desc: "列出文档版本历史", requireAuth: true, data: { document_id: "PLACEHOLDER" } },
+            { action: "get_revision", desc: "获取指定版本", requireAuth: true, data: { id: "PLACEHOLDER" } },
+            { action: "set_current_revision", desc: "设置当前版本", requireAuth: true, data: { document_id: "PLACEHOLDER", revision_id: "PLACEHOLDER" } },
+            { action: "delete_revision", desc: "删除版本", requireAuth: true, data: { id: "PLACEHOLDER" } },
+        ]},
+        { label: "📁 文件", cmds: [
+            { action: "download_file", desc: "下载文件(分块传输)", requireAuth: false, data: { task_id: "PLACEHOLDER", max_chunk_size: 65536 } },
+            { action: "upload_file", desc: "上传文件(分块传输)", requireAuth: false, data: { task_id: "PLACEHOLDER", file_size: 0, sha256: null, max_chunk_size: 65536 } },
+        ]},
+        { label: "📂 目录", cmds: [
+            { action: "list_directory", desc: "列出目录内容", requireAuth: true, data: { folder_id: null } },
+            { action: "get_directory_info", desc: "获取目录信息", requireAuth: true, data: { directory_id: "PLACEHOLDER" } },
+            { action: "get_directory_access_rules", desc: "获取目录访问规则", requireAuth: true, data: { directory_id: "PLACEHOLDER" } },
+            { action: "create_directory", desc: "创建目录", requireAuth: true, data: { name: "PLACEHOLDER" } },
+            { action: "delete_directory", desc: "删除目录(标记删除)", requireAuth: true, data: { folder_id: "PLACEHOLDER" } },
+            { action: "restore_directory", desc: "恢复已删除目录", requireAuth: true, data: { folder_id: "PLACEHOLDER" } },
+            { action: "purge_directory", desc: "永久清除目录", requireAuth: true, data: { folder_id: "PLACEHOLDER" } },
+            { action: "rename_directory", desc: "重命名目录", requireAuth: true, data: { folder_id: "PLACEHOLDER", new_name: "PLACEHOLDER" } },
+            { action: "move_directory", desc: "移动目录", requireAuth: true, data: { folder_id: "PLACEHOLDER", target_folder_id: null } },
+            { action: "set_directory_rules", desc: "设置目录访问规则", requireAuth: true, data: { directory_id: "PLACEHOLDER", access_rules: {} } },
+            { action: "list_deleted_items", desc: "列出已删除项目", requireAuth: true, data: { folder_id: "PLACEHOLDER" } },
+        ]},
+        { label: "🔍 搜索", cmds: [
+            { action: "search", desc: "搜索文档和目录", requireAuth: true, data: { query: "PLACEHOLDER" } },
+        ]},
+        { label: "👤 用户管理", cmds: [
+            { action: "list_users", desc: "列出用户", requireAuth: true, data: {} },
+            { action: "create_user", desc: "创建用户", requireAuth: true, data: { username: "PLACEHOLDER", password: "PLACEHOLDER" } },
+            { action: "delete_user", desc: "删除用户", requireAuth: true, data: { username: "PLACEHOLDER" } },
+            { action: "rename_user", desc: "重命名用户(昵称)", requireAuth: false, data: { username: "PLACEHOLDER" } },
+            { action: "get_user_info", desc: "获取用户信息", requireAuth: true, data: { username: "PLACEHOLDER" } },
+            { action: "get_user_avatar", desc: "获取用户头像", requireAuth: true, data: { username: "PLACEHOLDER" } },
+            { action: "set_user_avatar", desc: "设置用户头像", requireAuth: true, data: { username: "PLACEHOLDER", document_id: "PLACEHOLDER" } },
+            { action: "change_user_groups", desc: "修改用户所属组", requireAuth: true, data: { username: "PLACEHOLDER" } },
+            { action: "change_user_permissions", desc: "修改用户权限", requireAuth: true, data: { username: "PLACEHOLDER", permissions: [] } },
+            { action: "set_passwd", desc: "设置密码", requireAuth: false, data: { username: "PLACEHOLDER", new_passwd: "PLACEHOLDER" } },
+            { action: "manage_user_status", desc: "管理用户状态(启用/禁用)", requireAuth: true, data: { username: "PLACEHOLDER", status: "PLACEHOLDER" } },
+            { action: "block_user", desc: "封禁用户", requireAuth: true, data: { username: "PLACEHOLDER", block_types: [], target: { type: "all" } } },
+            { action: "unblock_user", desc: "解封用户", requireAuth: true, data: { block_id: "PLACEHOLDER" } },
+            { action: "list_user_blocks", desc: "列出用户封禁记录", requireAuth: true, data: { username: "PLACEHOLDER" } },
+        ]},
+        { label: "👥 组管理", cmds: [
+            { action: "list_groups", desc: "列出组", requireAuth: true, data: {} },
+            { action: "create_group", desc: "创建组", requireAuth: true, data: { group_name: "PLACEHOLDER" } },
+            { action: "delete_group", desc: "删除组", requireAuth: true, data: { group_name: "PLACEHOLDER" } },
+            { action: "rename_group", desc: "重命名组", requireAuth: true, data: { group_name: "PLACEHOLDER", display_name: null } },
+            { action: "get_group_info", desc: "获取组信息", requireAuth: true, data: { group_name: "PLACEHOLDER" } },
+            { action: "change_group_permissions", desc: "修改组权限", requireAuth: true, data: { group_name: "PLACEHOLDER", permissions: [] } },
+        ]},
+        { label: "🔗 访问控制", cmds: [
+            { action: "grant_access", desc: "授予访问权限", requireAuth: true, data: { entity_type: "user", entity_identifier: "PLACEHOLDER", target_type: "document", target_identifier: "PLACEHOLDER", access_types: [], start_time: 0 } },
+            { action: "revoke_access", desc: "撤销访问权限", requireAuth: true, data: { entry_id: "PLACEHOLDER" } },
+            { action: "view_access_entries", desc: "查看访问条目", requireAuth: true, data: { object_type: "user", object_identifier: "PLACEHOLDER" } },
+        ]},
+        { label: "⚙️ 系统", cmds: [
+            { action: "lockdown", desc: "锁定/解锁服务器", requireAuth: true, data: { status: true } },
+            { action: "view_audit_logs", desc: "查看审计日志", requireAuth: true, data: {} },
+        ]},
+        { label: "🔐 密钥环", cmds: [
+            { action: "upload_user_key", desc: "上传用户密钥", requireAuth: true, data: { content: "PLACEHOLDER" } },
+            { action: "get_user_key", desc: "获取用户密钥", requireAuth: true, data: { id: "PLACEHOLDER" } },
+            { action: "delete_user_key", desc: "删除用户密钥", requireAuth: true, data: { id: "PLACEHOLDER" } },
+            { action: "set_user_preference_dek", desc: "设置首选DEK", requireAuth: true, data: { id: "PLACEHOLDER" } },
+            { action: "list_user_keys", desc: "列出用户密钥", requireAuth: true, data: {} },
+        ]},
+        { label: "🧩 内置扩展", cmds: [
+            { action: "server_info", desc: "获取服务器信息", requireAuth: false, data: {} },
+            { action: "shutdown", desc: "关闭服务器(需要SHUTDOWN权限)", requireAuth: true, data: {} },
+        ]},
+        { label: "🧩 OIDC SSO", cmds: [
+            { action: "sso_oidc_start", desc: "启动OIDC SSO登录流程", requireAuth: false, data: {} },
+            { action: "sso_oidc_callback", desc: "OIDC SSO回调处理", requireAuth: false, data: { code: "PLACEHOLDER", state: "PLACEHOLDER" } },
+        ]},
+    ];
+
+    // Build a flat lookup map for validation
+    const CMD_LOOKUP: Record<string, { desc: string; requireAuth: boolean }> = {};
+    for (const cat of COMMAND_CATEGORIES) {
+        for (const c of cat.cmds) {
+            CMD_LOOKUP[c.action] = { desc: c.desc, requireAuth: c.requireAuth };
+        }
+    }
+
+    // ---- Types ----
+    interface SavedTemplate {
+        name: string;
+        payload: Record<string, unknown>;
+        noauth: boolean;
+        savedAt: number;
+    }
+    interface LogEntry {
+        type: "sent" | "recv" | "error" | "info" | "warn";
+        text: string;
+        time: string;
+    }
 
     // ---- State ----
     let authenticated = $state(true);
@@ -17,136 +151,41 @@
     let statusInfo = $state("就绪");
     let statusColor = $state("");
     let logRef = $state<HTMLDivElement | null>(null);
+    let validationMsg = $state("");
+    let validationOk = $state(true);
+    let savedTemplates = $state<SavedTemplate[]>([]);
+    let saveName = $state("");
+    let showSaveDialog = $state(false);
+    let activeTab = $state<"commands" | "saved">("commands");
+    let selectedSavedIdx = $state(-1);
 
-    interface VulnTemplate {
-        id: string;
-        grp: string;
-        tag: string;
-        name: string;
-        desc: string;
-        payload: Record<string, unknown>;
-        noauth?: boolean;
+    function loadCmdTemplate(cmd: CmdEntry) {
+        payloadText = JSON.stringify({ action: cmd.action, data: cmd.data }, null, 2);
+        payloadLabel = `${cmd.action} — ${cmd.desc}`;
+        authenticated = true;
+        runValidation();
     }
 
-    interface LogEntry {
-        type: "sent" | "recv" | "error" | "info" | "warn";
-        text: string;
-        time: string;
-    }
+    // ---- Validation ----
+    function validatePayload(): { ok: boolean; msg: string } {
+        if (!payloadText.trim()) return { ok: true, msg: "" };
+        let json: Record<string, unknown>;
+        try { json = JSON.parse(payloadText); } catch (e) {
+            return { ok: false, msg: `JSON 语法错误: ${(e as Error).message}` };
+        }
+        const action = json.action;
+        if (typeof action !== "string") return { ok: false, msg: "缺少 action 字段 (string)" };
 
-    // ---- Vulnerability templates ----
-    const vulnerabilities: VulnTemplate[] = [
-        {
-            id: "v01",
-            grp: "🔴 严重",
-            tag: "tag-critical",
-            name: "V01: download_file 无需认证",
-            desc: "直接调用下载 — 未设置 require_auth=True",
-            payload: {
-                action: "download_file",
-                data: { task_id: "PLACEHOLDER_TASK_ID" },
-            },
-            noauth: true,
-        },
-        {
-            id: "v02",
-            grp: "🔴 严重",
-            tag: "tag-critical",
-            name: "V02: upload_file 无需认证",
-            desc: "直接调用上传 — 未设置 require_auth=True",
-            payload: {
-                action: "upload_file",
-                data: {
-                    task_id: "PLACEHOLDER_TASK_ID",
-                    file_size: 1024,
-                    sha256: null,
-                    file_name: "probe.txt",
-                },
-            },
-            noauth: true,
-        },
-        {
-            id: "v03",
-            grp: "🔴 严重",
-            tag: "tag-critical",
-            name: "V03: claim_file_task 无身份验证",
-            desc: "Task ID 即凭证 — 不校验请求者身份",
-            payload: {
-                action: "claim_file_task",
-                data: { task_id: "PLACEHOLDER_TASK_ID" },
-            },
-            noauth: true,
-        },
-        {
-            id: "v04",
-            grp: "🟠 高危",
-            tag: "tag-high",
-            name: "V04: server_info 信息泄露",
-            desc: "无需认证获取版本/扩展/锁定状态",
-            payload: { action: "server_info" },
-            noauth: true,
-        },
-        {
-            id: "v05",
-            grp: "🟠 高危",
-            tag: "tag-high",
-            name: "V05: 未认证请求重放",
-            desc: "未认证请求无 nonce 保护, 可无限重放",
-            payload: { action: "server_info" },
-            noauth: true,
-        },
-        {
-            id: "v06",
-            grp: "🟠 高危",
-            tag: "tag-high",
-            name: "V06: 速率限制观察模式",
-            desc: "rate_limit.mode=observe, 不拒绝",
-            payload: { action: "server_info" },
-            noauth: true,
-        },
-        {
-            id: "v07",
-            grp: "🟡 中危",
-            tag: "tag-medium",
-            name: "V07: 锁定白名单 bypass",
-            desc: "download_file/upload_file 锁定模式仍可用",
-            payload: {
-                action: "download_file",
-                data: { task_id: "PLACEHOLDER_TASK_ID" },
-            },
-            noauth: true,
-        },
-        {
-            id: "v08",
-            grp: "🟡 中危",
-            tag: "tag-medium",
-            name: "V08: DB 重置风险",
-            desc: "init 文件删除后重建 DB",
-            payload: { action: "server_info" },
-            noauth: true,
-        },
-        {
-            id: "v09",
-            grp: "🟢 低危",
-            tag: "tag-low",
-            name: "V09: Debug 异常接口",
-            desc: "探测 debug_raise_exception",
-            payload: {
-                action: "debug_raise_exception",
-                data: { message: "security-probe" },
-            },
-            noauth: true,
-        },
-        {
-            id: "v10",
-            grp: "🟢 低危",
-            tag: "tag-low",
-            name: "V10: 未公开接口探测",
-            desc: "自定义 action 探测隐藏接口",
-            payload: { action: "list_users" },
-            noauth: false,
-        },
-    ];
+        // Check against known commands
+        const def = CMD_LOOKUP[action];
+        if (!def) {
+            return { ok: true, msg: `⚠ action "${action}" 不在已知命令列表中` };
+        }
+        if (typeof json.data !== "object" || json.data === null) {
+            return { ok: false, msg: "缺少 data 字段 (必须是对象)" };
+        }
+        return { ok: true, msg: `✅ ${def.desc}${def.requireAuth ? " (需认证)" : " (无需认证)"}` };
+    }
 
     // ---- Helpers ----
     function ts(): string {
@@ -154,90 +193,122 @@
         const p = (x: number, l = 2) => String(x).padStart(l, "0");
         return `${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())}.${p(n.getMilliseconds(), 3)}`;
     }
-
     function addLog(type: LogEntry["type"], text: string) {
         logEntries = [...logEntries, { type, text, time: ts() }];
-        tick().then(() => {
-            if (logRef) logRef.scrollTop = logRef.scrollHeight;
-        });
+        tick().then(() => { if (logRef) logRef.scrollTop = logRef.scrollHeight; });
+    }
+    function clearLog() { logEntries = []; }
+
+    function loadSavedTemplate(t: SavedTemplate, idx: number) {
+        payloadText = JSON.stringify(t.payload, null, 2);
+        payloadLabel = t.name;
+        authenticated = !t.noauth;
+        selectedSavedIdx = idx;
+        runValidation();
     }
 
-    function clearLog() {
-        logEntries = [];
+    // ---- Validation on input ----
+    function runValidation() {
+        const result = validatePayload();
+        validationOk = result.ok;
+        validationMsg = result.msg;
     }
 
-    function loadTemplate(v: VulnTemplate) {
-        payloadText = JSON.stringify(v.payload, null, 2);
-        payloadLabel = v.name;
-        if (v.noauth !== undefined) {
-            authenticated = !v.noauth;
-        }
+    // ---- Saved templates (localStorage) ----
+    const STORAGE_KEY = "cfms-dev-saved-templates";
+    function loadSavedTemplates() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            savedTemplates = raw ? JSON.parse(raw) : [];
+        } catch { savedTemplates = []; }
+    }
+    function persistSavedTemplates() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedTemplates));
+    }
+    function saveAsNewTemplate() {
+        saveName = payloadLabel !== "—" ? payloadLabel : "";
+        showSaveDialog = true;
+        setTimeout(() => {
+            const input = document.getElementById("saveNameInput") as HTMLInputElement;
+            input?.focus();
+        }, 50);
+    }
+    function confirmSaveNew() {
+        const name = saveName.trim();
+        if (!name) return;
+        let json: Record<string, unknown>;
+        try { json = JSON.parse(payloadText); } catch { addLog("error", "JSON 无效，无法保存"); return; }
+        savedTemplates = [...savedTemplates, { name, payload: json, noauth: !authenticated, savedAt: Date.now() }];
+        persistSavedTemplates();
+        addLog("info", `💾 已保存模板: ${name}`);
+        saveName = "";
+        showSaveDialog = false;
+        selectedSavedIdx = savedTemplates.length - 1;
+        payloadLabel = name;
+    }
+    function cancelSave() {
+        saveName = "";
+        showSaveDialog = false;
+    }
+    function overwriteSaved(idx: number) {
+        if (idx < 0 || idx >= savedTemplates.length) return;
+        const name = savedTemplates[idx].name;
+        let json: Record<string, unknown>;
+        try { json = JSON.parse(payloadText); } catch { addLog("error", "JSON 无效，无法覆盖"); return; }
+        savedTemplates[idx] = { name, payload: json, noauth: !authenticated, savedAt: Date.now() };
+        persistSavedTemplates();
+        addLog("info", `📝 已覆盖模板: ${name}`);
+    }
+    function deleteSaved(idx: number) {
+        if (idx < 0 || idx >= savedTemplates.length) return;
+        const name = savedTemplates[idx].name;
+        savedTemplates = savedTemplates.filter((_, i) => i !== idx);
+        persistSavedTemplates();
+        addLog("info", `🗑 已删除模板: ${name}`);
+        if (selectedSavedIdx === idx) selectedSavedIdx = -1;
     }
 
     // ---- Send via Tauri IPC ----
     async function doSend() {
-        const txt = payloadText.trim();
-        if (!txt) {
-            addLog("warn", "Payload 为空");
+        if (!validationOk && validationMsg.includes("语法错误")) {
+            addLog("error", validationMsg);
             return;
         }
-
+        const txt = payloadText.trim();
+        if (!txt) { addLog("warn", "Payload 为空"); return; }
         let json: unknown;
-        try {
-            json = JSON.parse(txt);
-        } catch (e) {
+        try { json = JSON.parse(txt); } catch (e) {
             addLog("error", `JSON 解析错误: ${(e as Error).message}`);
             return;
         }
-
         const jsonStr = JSON.stringify(json);
-        const prefix = authenticated ? "[AUTH] " : "[NOAUTH] ";
-        addLog("sent", `\u2192 ${prefix}${jsonStr}`);
-
-        statusInfo = "发送中...";
-        statusColor = "#58a6ff";
-
+        addLog("sent", `\u2192 ${authenticated ? "[AUTH]" : "[NOAUTH]"} ${jsonStr}`);
+        statusInfo = "发送中..."; statusColor = "#58a6ff";
         try {
-            const response = await invoke<string>("send_raw_request", {
-                payload: jsonStr,
-                authenticated,
-            });
+            const response = await invoke<string>("send_raw_request", { payload: jsonStr, authenticated });
             addLog("recv", `\u2190 ${response}`);
-            statusInfo = "就绪";
-            statusColor = "";
+            statusInfo = "就绪"; statusColor = "";
         } catch (err) {
-            const msg =
-                typeof err === "string"
-                    ? err
-                    : ((err as Error).message ?? JSON.stringify(err));
+            const msg = typeof err === "string" ? err : ((err as Error).message ?? JSON.stringify(err));
             addLog("error", `\u2716 ${msg}`);
-            statusInfo = "错误";
-            statusColor = "#f85149";
-            setTimeout(() => {
-                statusInfo = "就绪";
-                statusColor = "";
-            }, 2000);
+            statusInfo = "错误"; statusColor = "#f85149";
+            setTimeout(() => { statusInfo = "就绪"; statusColor = ""; }, 2000);
         }
     }
-
     function sendReplay(count: number) {
         addLog("info", `\u23F3 批量发送 ${count} 次...`);
-        statusInfo = "批量发送中...";
-        for (let i = 0; i < count; i++) {
-            setTimeout(() => doSend(), i * 100);
-        }
+        for (let i = 0; i < count; i++) setTimeout(() => doSend(), i * 100);
+    }
+    function onKeydown(e: KeyboardEvent) {
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); doSend(); }
     }
 
-    function onKeydown(e: KeyboardEvent) {
-        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-            e.preventDefault();
-            doSend();
-        }
-    }
+    // Auto-validate on input change
+    $effect(() => { void payloadText; runValidation(); });
 </script>
 
 <svelte:head>
-    <title>CFMS 服务器漏洞测试</title>
+    <title>CFMS 命令测试工具</title>
 </svelte:head>
 
 {#if import.meta.env.DEV}
@@ -248,57 +319,78 @@
                 <input type="checkbox" bind:checked={authenticated} />
                 <span>附带认证</span>
             </label>
-            <span
-                class="status"
-                style="color: {statusColor || 'var(--text-muted)'}"
-                >{statusInfo}</span
-            >
+            <span class="status" style="color: {statusColor || 'var(--text-muted)'}">{statusInfo}</span>
+            <span class="validation {validationOk ? 'val-ok' : 'val-err'}">{validationMsg || "输入 JSON"}</span>
+            <button class="btn btn-save" onclick={saveAsNewTemplate}>💾 保存模板</button>
+            {#if selectedSavedIdx >= 0}
+                <button class="btn btn-save" onclick={() => overwriteSaved(selectedSavedIdx)}>📝 覆盖当前</button>
+            {/if}
             <button class="btn btn-send" onclick={doSend}>📤 发送</button>
-            <button class="btn btn-replay" onclick={() => sendReplay(5)}
-                >🔄 重放×5</button
-            >
-            <button class="btn btn-replay" onclick={() => sendReplay(10)}
-                >🔥 洪泛×10</button
-            >
+            <button class="btn btn-replay" onclick={() => sendReplay(5)}>🔄 ×5</button>
+            <button class="btn btn-replay" onclick={() => sendReplay(10)}>🔥 ×10</button>
             <button class="btn btn-clear" onclick={clearLog}>🗑 清空</button>
         </div>
 
         <div class="main-content">
             <!-- Left: Templates -->
-            <div class="vuln-panel">
-                <div class="panel-header">
-                    <span class="panel-title">🎯 漏洞测试模板</span>
-                    <span class="panel-count">10 项</span>
+            <div class="left-panel">
+                <!-- Tab bar -->
+                <div class="tab-bar">
+                    <button class="tab-btn" class:active={activeTab === "commands"} onclick={() => activeTab = "commands"}>📋 命令模板</button>
+                    <button class="tab-btn" class:active={activeTab === "saved"} onclick={() => activeTab = "saved"}>💾 已保存 ({savedTemplates.length})</button>
                 </div>
-                <div class="vuln-list">
-                    {#each vulnerabilities as v}
-                        {@const showGroup =
-                            v === vulnerabilities[0] ||
-                            v.grp !==
-                                vulnerabilities[vulnerabilities.indexOf(v) - 1]
-                                    ?.grp}
-                        {#if showGroup}
-                            <div class="vuln-group-header">{v.grp}</div>
+
+                {#if activeTab === "commands"}
+                    <div class="cmd-list">
+                        {#each COMMAND_CATEGORIES as cat}
+                            <div class="cmd-group-header">{cat.label}</div>
+                            {#each cat.cmds as cmd}
+                                <button class="cmd-item" onclick={() => loadCmdTemplate(cmd)}>
+                                    <span class="cmd-name">{cmd.action}</span>
+                                    <span class="cmd-desc">{cmd.desc}</span>
+                                    {#if !cmd.requireAuth}
+                                        <span class="cmd-badge noauth">无需认证</span>
+                                    {/if}
+                                </button>
+                            {/each}
+                        {/each}
+                    </div>
+                {:else}
+                    <div class="saved-list">
+                        {#if savedTemplates.length === 0}
+                            <div class="saved-empty">暂无已保存模板<br/>编辑 JSON 后点击 💾 保存模板</div>
+                        {:else}
+                            {#each savedTemplates as t, i}
+                                <div
+                                    class="saved-item"
+                                    class:selected={i === selectedSavedIdx}
+                                    onclick={() => loadSavedTemplate(t, i)}
+                                    onkeydown={(e) => e.key === "Enter" && loadSavedTemplate(t, i)}
+                                    role="button"
+                                    tabindex="0"
+                                >
+                                    <span class="saved-name">{t.name}</span>
+                                    <span class="saved-meta">{t.noauth ? "无认证" : "带认证"} · {new Date(t.savedAt).toLocaleString()}</span>
+                                    <button class="saved-del" onclick={(e) => { e.stopPropagation(); deleteSaved(i); }} title="删除">✕</button>
+                                </div>
+                            {/each}
                         {/if}
-                        <button
-                            class="vuln-item"
-                            onclick={() => loadTemplate(v)}
-                        >
-                            <span class="vuln-name">{v.name}</span>
-                            <span class="vuln-desc">{v.desc}</span>
-                            <span class="vuln-tag {v.tag}"
-                                >{v.grp.charAt(0)}</span
-                            >
-                        </button>
-                    {/each}
-                </div>
+                    </div>
+                {/if}
             </div>
 
             <!-- Top-Right: Payload Editor -->
             <div class="payload-panel">
                 <div class="panel-header">
-                    <span class="panel-title">📝 请求 Payload (JSON)</span>
+                    <span class="panel-title">📝 Payload</span>
                     <span class="panel-label">{payloadLabel}</span>
+                    {#if showSaveDialog}
+                        <div class="save-dialog">
+                            <input id="saveNameInput" type="text" bind:value={saveName} placeholder="模板名称..." onkeydown={(e) => e.key === "Enter" && confirmSaveNew()} />
+                            <button class="btn btn-send" style="padding:2px 8px;font-size:11px;" onclick={confirmSaveNew}>保存</button>
+                            <button class="btn btn-clear" style="padding:2px 8px;font-size:11px;" onclick={cancelSave}>取消</button>
+                        </div>
+                    {/if}
                 </div>
                 <textarea
                     class="payload-editor"
@@ -312,14 +404,12 @@
             <!-- Bottom-Right: Log -->
             <div class="log-panel">
                 <div class="panel-header">
-                    <span class="panel-title">📋 通信日志</span>
+                    <span class="panel-title">📋 日志</span>
                     <span class="panel-count">{logEntries.length} 条</span>
                 </div>
                 <div class="log-console" bind:this={logRef}>
                     {#if logEntries.length === 0}
-                        <div class="log-placeholder">
-                            通过 Tauri IPC 发送请求，响应将显示在此处
-                        </div>
+                        <div class="log-placeholder">通过 Tauri IPC 发送请求，响应将显示在此处</div>
                     {:else}
                         {#each logEntries as entry}
                             <div class="log-entry {entry.type}">
@@ -392,27 +482,46 @@
         white-space: nowrap;
         transition: all 0.15s;
     }
-    .btn-send {
-        background: var(--blue);
-        color: #000;
-    }
-    .btn-send:hover {
-        background: #4c9aff;
-    }
-    .btn-replay {
-        background: #5533aa;
+    .btn-save {
+        background: #1a5c2a;
         color: #ccc;
     }
-    .btn-replay:hover {
-        background: #6644bb;
+    .btn-save:hover {
+        background: #22753a;
     }
-    .btn-clear {
-        background: #333;
-        color: #ccc;
+
+    .validation {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 3px;
+        margin-left: auto;
+        margin-right: 8px;
+        max-width: 320px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
-    .btn-clear:hover {
-        background: #444;
+    .val-ok { color: #3fb950; background: #1a2a1a; }
+    .val-err { color: #f85149; background: #2a1a1a; }
+
+    .save-dialog {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 8px;
     }
+    .save-dialog input {
+        width: 140px;
+        padding: 2px 6px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 11px;
+        outline: none;
+    }
+    .save-dialog input:focus { border-color: var(--blue); }
 
     /* ===== Main Layout ===== */
     .main-content {
@@ -425,14 +534,135 @@
         background: var(--border);
     }
 
-    /* ===== Vuln Panel ===== */
-    .vuln-panel {
+    /* ===== Left Panel ===== */
+    .left-panel {
         grid-row: 1 / 3;
         display: flex;
         flex-direction: column;
         background: var(--bg-tertiary);
         overflow: hidden;
     }
+    .tab-bar {
+        display: flex;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+    .tab-btn {
+        flex: 1;
+        padding: 6px 8px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+        border-bottom: 2px solid transparent;
+    }
+    .tab-btn.active {
+        color: var(--blue);
+        border-bottom-color: var(--blue);
+    }
+    .tab-btn:hover:not(.active) { color: var(--text-primary); }
+
+    /* Command list */
+    .cmd-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 4px;
+    }
+    .cmd-group-header {
+        padding: 8px 8px 4px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-secondary);
+    }
+    .cmd-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 6px 10px;
+        margin: 1px 0;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.1s;
+        line-height: 1.4;
+    }
+    .cmd-item:hover {
+        border-color: var(--blue);
+        background: #1a2035;
+    }
+    .cmd-name {
+        font-weight: 600;
+        display: block;
+        font-size: 12px;
+    }
+    .cmd-desc {
+        font-size: 10px;
+        color: var(--text-secondary);
+        display: block;
+        margin-top: 1px;
+    }
+    .cmd-badge {
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        display: inline-block;
+        margin-top: 2px;
+    }
+    .cmd-badge.noauth { background: #3a2020; color: #f85149; }
+
+    /* Saved list */
+    .saved-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 4px;
+    }
+    .saved-empty {
+        color: var(--text-muted);
+        text-align: center;
+        padding: 30px 10px;
+        font-size: 12px;
+    }
+    .saved-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        text-align: left;
+        padding: 6px 10px;
+        margin: 1px 0;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.1s;
+    }
+    .saved-item:hover { border-color: var(--blue); }
+    .saved-item.selected { border-color: var(--green); background: #1a2a1a; }
+    .saved-name { font-weight: 600; flex: 1; }
+    .saved-meta { font-size: 10px; color: var(--text-muted); }
+    .saved-del {
+        font-size: 14px;
+        color: #555;
+        cursor: pointer;
+        padding: 0 4px;
+        background: none;
+        border: none;
+        font-family: inherit;
+        line-height: 1;
+    }
+    .saved-del:hover { color: var(--red); }
+
     .panel-header {
         display: flex;
         align-items: center;
@@ -449,79 +679,8 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
-    .panel-count {
-        font-size: 10px;
-        color: var(--text-muted);
-    }
-    .panel-label {
-        font-size: 11px;
-        color: var(--text-muted);
-    }
-
-    .vuln-list {
-        flex: 1;
-        overflow-y: auto;
-        padding: 4px;
-    }
-    .vuln-group-header {
-        padding: 8px 8px 4px;
-        font-size: 11px;
-        font-weight: 700;
-        color: var(--text-secondary);
-    }
-    .vuln-item {
-        display: block;
-        width: 100%;
-        text-align: left;
-        padding: 8px 10px;
-        margin: 2px 0;
-        border: 1px solid var(--border);
-        border-radius: 5px;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        font-family: inherit;
-        font-size: 12px;
-        cursor: pointer;
-        transition: all 0.15s;
-        line-height: 1.4;
-    }
-    .vuln-item:hover {
-        border-color: var(--blue);
-        background: #1a2035;
-    }
-    .vuln-name {
-        font-weight: 600;
-        display: block;
-    }
-    .vuln-desc {
-        font-size: 11px;
-        color: var(--text-secondary);
-        display: block;
-        margin-top: 2px;
-    }
-    .vuln-tag {
-        font-size: 10px;
-        padding: 1px 6px;
-        border-radius: 3px;
-        display: inline-block;
-        margin-top: 4px;
-    }
-    .tag-critical {
-        background: #3a1520;
-        color: #e94560;
-    }
-    .tag-high {
-        background: #3a2a10;
-        color: #ff8c00;
-    }
-    .tag-medium {
-        background: #2a2a10;
-        color: #ffc107;
-    }
-    .tag-low {
-        background: #152030;
-        color: #58a6ff;
-    }
+    .panel-count { font-size: 10px; color: var(--text-muted); }
+    .panel-label { font-size: 11px; color: var(--text-muted); }
 
     /* ===== Payload Panel ===== */
     .payload-panel {
@@ -543,12 +702,8 @@
         outline: none;
         tab-size: 2;
     }
-    .payload-editor:focus {
-        box-shadow: inset 0 0 0 1px var(--blue);
-    }
-    .payload-editor::placeholder {
-        color: var(--text-muted);
-    }
+    .payload-editor:focus { box-shadow: inset 0 0 0 1px var(--blue); }
+    .payload-editor::placeholder { color: var(--text-muted); }
 
     /* ===== Log Panel ===== */
     .log-panel {
@@ -565,49 +720,17 @@
         font-size: 11px;
         line-height: 1.5;
     }
-    .log-placeholder {
-        color: var(--text-muted);
-        text-align: center;
-        padding-top: 30px;
-    }
-    .log-entry {
-        padding: 2px 0;
-        white-space: pre-wrap;
-        word-break: break-all;
-        border-bottom: 1px solid #ffffff05;
-    }
-    .log-entry .ts {
-        color: var(--text-muted);
-        margin-right: 6px;
-    }
-    .log-entry.sent {
-        color: #7ee787;
-    }
-    .log-entry.recv {
-        color: var(--blue);
-    }
-    .log-entry.error {
-        color: var(--red);
-    }
-    .log-entry.info {
-        color: var(--text-secondary);
-    }
-    .log-entry.warn {
-        color: var(--orange);
-    }
+    .log-placeholder { color: var(--text-muted); text-align: center; padding-top: 30px; }
+    .log-entry { padding: 2px 0; white-space: pre-wrap; word-break: break-all; border-bottom: 1px solid #ffffff05; }
+    .log-entry .ts { color: var(--text-muted); margin-right: 6px; }
+    .log-entry.sent { color: #7ee787; }
+    .log-entry.recv { color: var(--blue); }
+    .log-entry.error { color: var(--red); }
+    .log-entry.info { color: var(--text-secondary); }
+    .log-entry.warn { color: var(--orange); }
 
-    ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-        background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: #30363d;
-        border-radius: 3px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: #484f58;
-    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #484f58; }
 </style>
