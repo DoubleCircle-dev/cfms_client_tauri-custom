@@ -599,6 +599,22 @@
       directoryLoadPhase = 'complete';
       directoryNextCursor = null;
       markFilePerformance('files:list-complete');
+      // Compare with previous server snapshot to detect changes
+      const changeResult = fileUpdateTracker.compareSnapshot(
+        currentFolderId,
+        snapshot.folders,
+        snapshot.documents,
+      );
+      if (changeResult.summary) {
+        notificationStore.info(
+          $t('files.serverChangesDetected', { values: { changes: changeResult.summary } }),
+          5000,
+        );
+      }
+      // Check subfolder staleness in background (folders don't have last_modified)
+      for (const folder of snapshot.folders) {
+        void fileUpdateTracker.checkFolderStaleness(folder.id, (id) => listDirectory(id));
+      }
     } else if (directoryLoadPhase !== 'partial-error') {
       directoryLoadPhase = 'loading-more';
     }
@@ -982,6 +998,9 @@
   const recentlyUpdatedDocIds = $derived(fileUpdateTracker.recentlyUpdatedDocumentIds);
   const recentlyUpdatedFldIds = $derived(fileUpdateTracker.recentlyUpdatedFolderIds);
   const recentlyUpdatedTooltip = $derived($t('files.recentlyUpdated'));
+  const notUpdatedDocIds = $derived(fileUpdateTracker.notUpdatedDocumentIds);
+  const notUpdatedFldIds = $derived(fileUpdateTracker.notUpdatedFolderIds);
+  const notUpdatedTooltip = $derived($t('files.notUpdatedTooltip'));
   const fileCommandActions = $derived.by<CommandAction[]>(() => [
     { id: 'new-folder', label: $t('files.createFolder'), icon: 'createNewFolder', run: handleCreateFolder },
     { id: 'upload-files', label: $t('files.uploadFiles'), icon: 'uploadFile', run: handleUploadFiles },
@@ -3451,6 +3470,291 @@
     navigationStateReady = true;
     loadDirectory(initialNavigation.folderId, false, initialReturnNavigation);
     reloadUserPreference();
+
+    // Start hourly polling for server-side changes
+    const pollFn = async () => {
+      if (disposed || loading || directoryAccessDenied) return;
+      try {
+        const resp = await listDirectory(currentFolderId);
+        if (disposed) return;
+        const result = fileUpdateTracker.compareSnapshot(currentFolderId, resp.folders, resp.documents);
+        if (result.summary) {
+          console.log('[cfms:update-check]', result.summary);
+          notificationStore.info(
+            $t('files.serverChangesDetected', { values: { changes: result.summary } }),
+            5000,
+          );
+        }
+      } catch (err) {
+        console.warn('[cfms:update-check] Poll failed:', err);
+      }
+    };
+    fileUpdateTracker.startPolling(pollFn);
+
+    // Devtool hook: run `__cfms_check_updates__()` in the browser console
+    // to recursively walk the directory tree, compare snapshots at every
+    // level, and print the full file structure including sub-directories.
+    // Hidden / access-denied folders are detected and shown with a 🔒 marker.
+    // Requests are throttled to avoid server 503 rate-limiting.
+    (window as any).__cfms_check_updates__ = async () => {
+      const MAX_DEPTH = 5;
+      const REQUEST_DELAY_MS = 300; // ms between sequential listDirectory calls
+      const MAX_RETRIES = 2;
+      let totalChanges = 0;
+      let totalDirs = 0;
+      let totalDocs = 0;
+      let totalHidden = 0;
+      let totalDotDirs = 0;
+      let totalErrors = 0;
+      let totalThrottled = 0;
+      const startTime = performance.now();
+
+      console.group('%c📁 CFMS Update Check %c(devtools — recursive)', 'font-weight:bold', 'color:#888');
+
+      /** Parse retry_after_seconds from a CFMS 503 error string. */
+      function parseRetryAfter(err: unknown): number {
+        const msg = String(err);
+        const match = msg.match(/retry_after_seconds["']?\s*:\s*(\d+)/);
+        return match ? parseInt(match[1], 10) : 1;
+      }
+
+      /** listDirectory with 503 retry + backoff. */
+      async function listWithRetry(
+        dirId: string | null,
+      ): Promise<{ folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] }> {
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            return await listDirectory(dirId);
+          } catch (err) {
+            const msg = String(err);
+            const is503 = msg.includes('503') || msg.includes('Server is busy');
+            if (is503 && attempt < MAX_RETRIES) {
+              const waitSec = parseRetryAfter(err);
+              totalThrottled++;
+              console.log(
+                `%c⏳ Server busy, retrying in ${waitSec}s (attempt ${attempt + 1}/${MAX_RETRIES})…`,
+                'color:#ffb74d',
+              );
+              await new Promise((r) => setTimeout(r, waitSec * 1000 + 200));
+              continue;
+            }
+            throw err;
+          }
+        }
+        throw new Error('unreachable');
+      }
+
+      /** Throttled sequential staleness check for child folders. */
+      async function checkChildStalenessSequential(
+        folders: ServerDirectoryEntry[],
+      ) {
+        for (const f of folders) {
+          await new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
+          void fileUpdateTracker.checkFolderStaleness(f.id, (id) => listDirectory(id));
+        }
+      }
+
+      async function walkDir(dirId: string | null, dirLabel: string, depth: number) {
+        if (depth > MAX_DEPTH) {
+          console.log('%c  ⛔ Max depth reached', 'color:#888');
+          return;
+        }
+
+        const prefix = '  '.repeat(depth);
+
+        // Throttle before each request
+        await new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
+
+        let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
+        try {
+          resp = await listWithRetry(dirId);
+        } catch (err) {
+          if (isAccessDeniedError(err)) {
+            totalHidden++;
+            console.log(
+              `%c%s🔒 %s %c(hidden — access denied)`,
+              'color:#ef9a9a',
+              prefix,
+              dirLabel,
+              'color:#888',
+            );
+          } else {
+            totalErrors++;
+            console.log(
+              `%c%s❌ %s %c— %s`,
+              'color:#f44336',
+              prefix,
+              dirLabel,
+              'color:#888',
+              String(err),
+            );
+          }
+          return;
+        }
+
+        // Compare snapshot for this directory
+        const result = fileUpdateTracker.compareSnapshot(dirId, resp.folders, resp.documents);
+        if (result.summary) {
+          totalChanges++;
+          console.log(`%c🔔 [%s] %s`, 'color:#ffb74d;font-weight:bold', dirLabel, result.summary);
+        }
+
+        // Stagger staleness checks (don't fire all at once)
+        void checkChildStalenessSequential(resp.folders);
+
+        totalDirs += resp.folders.length;
+        totalDocs += resp.documents.length;
+
+        const staleCount =
+          resp.folders.filter((f) => fileUpdateTracker.notUpdatedFolderIds.has(f.id)).length +
+          resp.documents.filter((d) => fileUpdateTracker.notUpdatedDocumentIds.has(d.id)).length;
+
+        console.group(
+          `%c%s📂 %s %c(%d folders, %d docs%c%s%c)`,
+          'font-weight:bold;color:#4fc3f7',
+          prefix,
+          dirLabel,
+          'color:#888;font-weight:normal',
+          resp.folders.length,
+          resp.documents.length,
+          staleCount > 0 ? ';color:#ffb74d' : '',
+          staleCount > 0 ? `, ${staleCount} stale` : '',
+          ';color:#888;font-weight:normal',
+        );
+
+        // Documents at this level
+        for (const d of resp.documents) {
+          const stale = fileUpdateTracker.notUpdatedDocumentIds.has(d.id);
+          const updated = fileUpdateTracker.recentlyUpdatedDocumentIds.has(d.id);
+          const flags = [stale ? '⚠' : '', updated ? '🆕' : ''].filter(Boolean).join(' ');
+          const sizeStr = d.size != null ? `${(d.size / 1024).toFixed(1)} KB` : '—';
+          const modStr = d.last_modified
+            ? new Date(d.last_modified * 1000).toLocaleString()
+            : '—';
+          console.log(
+            `%c%s📄 %s %c${flags}%c  %s  %s`,
+            stale ? 'color:#ffb74d' : 'color:#c8e6c9',
+            prefix,
+            d.title,
+            '',
+            'color:#888',
+            sizeStr,
+            modStr,
+          );
+        }
+
+        // Recurse into each subfolder — dot-prefixed (hidden) folders are included
+        for (const f of resp.folders) {
+          const isDot = f.name.startsWith('.');
+          if (isDot) totalDotDirs++;
+          const icon = isDot ? '👻' : '';
+          const labelStyle = isDot ? 'color:#ce93d8' : 'font-weight:bold;color:#4fc3f7';
+          await walkDir(f.id, `${icon}${f.name}`, depth + 1);
+        }
+
+        console.groupEnd();
+      }
+
+      try {
+        console.log(
+          'Recursively scanning directory tree (max depth %d, delay %dms)…',
+          MAX_DEPTH,
+          REQUEST_DELAY_MS,
+        );
+        await walkDir(currentFolderId, currentFolderId ?? '/ (root)', 0);
+
+        // --- Search for dot-prefixed files / folders ---
+        // Use the same search API as the search bar to discover items whose
+        // names start with '.' — these may be hidden from directory listings.
+        if (canSearchFiles(authStore.permissions)) {
+          console.group('%c🔍 Searching for dot-prefixed (hidden) items…', 'color:#ce93d8;font-weight:bold');
+          try {
+            const dotResults = await searchFiles('.', {
+              pageSize: 256,
+              sortBy: 'name',
+              sortOrder: 'asc',
+              searchDocuments: true,
+              searchDirectories: true,
+            });
+            const dotDirs = dotResults.directories.filter((d) => d.name?.startsWith('.'));
+            const dotDocs = dotResults.documents.filter((d) => (d.name ?? d.title ?? '').startsWith('.'));
+
+            if (dotDirs.length === 0 && dotDocs.length === 0) {
+              console.log('%cNo dot-prefixed items found via search.', 'color:#888');
+            } else {
+              console.log(
+                '%cFound %d hidden folder(s) and %d hidden file(s) via search:',
+                'color:#ce93d8',
+                dotDirs.length,
+                dotDocs.length,
+              );
+              for (const d of dotDirs) {
+                console.log(
+                  `%c  👻📂 %s %c(id: %s)`,
+                  'color:#ce93d8',
+                  d.name ?? '(unnamed)',
+                  'color:#888',
+                  d.id,
+                );
+              }
+              for (const d of dotDocs) {
+                const sizeStr = d.size != null ? `${(d.size / 1024).toFixed(1)} KB` : '?';
+                console.log(
+                  `%c  👻📄 %s %c%s %c%s`,
+                  'color:#ce93d8',
+                  d.name ?? d.title ?? '(unnamed)',
+                  '',
+                  sizeStr,
+                  'color:#888',
+                  d.last_modified ? new Date(d.last_modified * 1000).toLocaleString() : '',
+                );
+              }
+              // Also compare with snapshots where possible
+              for (const d of dotDirs) {
+                try {
+                  const resp = await listDirectory(d.id);
+                  fileUpdateTracker.compareSnapshot(d.id, resp.folders, resp.documents);
+                } catch { /* hidden — can't list */ }
+              }
+            }
+          } catch (err) {
+            console.log('%cSearch unavailable: %s', 'color:#888', String(err));
+          }
+          console.groupEnd();
+        }
+
+        const elapsed = (performance.now() - startTime).toFixed(0);
+        const parts: string[] = [
+          `${totalDirs} dir(s)`,
+          `${totalDocs} doc(s)`,
+          `${totalChanges} change(s)`,
+        ];
+        if (totalDotDirs > 0) parts.push(`${totalDotDirs} dot-hidden`);
+        if (totalHidden > 0) parts.push(`${totalHidden} denied`);
+        if (totalThrottled > 0) parts.push(`${totalThrottled} throttled`);
+        if (totalErrors > 0) parts.push(`${totalErrors} error(s)`);
+        console.log(
+          '%c✅ Scan complete: %s in %sms',
+          'color:#4caf50;font-weight:bold',
+          parts.join(', '),
+          elapsed,
+        );
+
+        if (totalChanges > 0) {
+          notificationStore.info(
+            $t('files.serverChangesDetected', {
+              values: { changes: `${totalChanges} director${totalChanges === 1 ? 'y' : 'ies'} changed` },
+            }),
+            5000,
+          );
+        }
+      } catch (err) {
+        console.error('%c❌ Scan failed:', 'color:#f44336', err);
+      }
+
+      console.groupEnd();
+    };
+
     return () => {
       disposed = true;
       directoryGeneration = directoryLoader.invalidate();
@@ -3467,6 +3771,8 @@
       clearSearchPreviewPanelPosition();
       if (unlisten) unlisten();
       if (unlistenDragDrop) unlistenDragDrop();
+      fileUpdateTracker.stopPolling();
+      delete (window as any).__cfms_check_updates__;
     };
   });
 
@@ -3805,6 +4111,9 @@
       recentlyUpdatedDocumentIds={recentlyUpdatedDocIds}
       recentlyUpdatedFolderIds={recentlyUpdatedFldIds}
       recentlyUpdatedTooltip={recentlyUpdatedTooltip}
+      notUpdatedDocumentIds={notUpdatedDocIds}
+      notUpdatedFolderIds={notUpdatedFldIds}
+      notUpdatedTooltip={notUpdatedTooltip}
     />
     <ExplorerDetailsPane
       open={detailsOpen}

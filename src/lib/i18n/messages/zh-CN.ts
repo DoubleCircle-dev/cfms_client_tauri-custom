@@ -539,6 +539,10 @@ export const zh_CN = {
     fileUploadedNotification: '"{name}" 已上传。',
     revisionUploadedNotification: '"{name}" 的新版本已上传。',
     folderContainsUpdates: '此文件夹包含最近更新的文件',
+    serverChangesDetected: '服务器内容有变化：{changes}',
+    notUpdated: '长时间未更新',
+    notUpdatedTooltip: '此项目已超过 7 天未更新',
+    folderContainsNotUpdated: '此文件夹包含长时间未更新的项目',
   },
   tasks: {
     title: '任务',

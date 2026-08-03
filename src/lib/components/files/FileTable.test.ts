@@ -61,6 +61,9 @@ function renderTable(
       recentlyUpdatedDocumentIds: new Set<string>(),
       recentlyUpdatedFolderIds: new Set<string>(),
       recentlyUpdatedTooltip: 'Recently updated',
+      notUpdatedDocumentIds: new Set<string>(),
+      notUpdatedFolderIds: new Set<string>(),
+      notUpdatedTooltip: 'Not updated',
     },
   });
 

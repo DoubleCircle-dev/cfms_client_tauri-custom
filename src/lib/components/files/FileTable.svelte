@@ -50,6 +50,9 @@
     recentlyUpdatedDocumentIds,
     recentlyUpdatedFolderIds,
     recentlyUpdatedTooltip,
+    notUpdatedDocumentIds,
+    notUpdatedFolderIds,
+    notUpdatedTooltip,
     loading,
     folders,
     documents,
@@ -79,6 +82,9 @@
     recentlyUpdatedDocumentIds: Set<string>;
     recentlyUpdatedFolderIds: Set<string>;
     recentlyUpdatedTooltip: string;
+    notUpdatedDocumentIds: Set<string>;
+    notUpdatedFolderIds: Set<string>;
+    notUpdatedTooltip: string;
     loading: boolean;
     folders: ServerDirectoryEntry[];
     documents: ServerDocumentEntry[];
@@ -841,6 +847,7 @@
                   class:file-table-row--drop-target={dropTarget?.folderId === row.folder.id && dropTarget.allowed}
                   class:file-table-row--drop-forbidden={dropTarget?.folderId === row.folder.id && !dropTarget.allowed}
                   class:file-table-row--recently-updated={recentlyUpdatedFolderIds.has(row.folder.id)}
+                  class:file-table-row--not-updated={notUpdatedFolderIds.has(row.folder.id)}
                   aria-pressed={isSelected(row)}
                   tabindex={activeRowKey === rowKey(row) ? 0 : -1}
                   style={rowStyle(rendered.virtualItem)}
@@ -857,7 +864,8 @@
                     class="file-table-name file-table-folder-name file-table-drag-handle"
                     data-file-drag-handle
                     data-recently-updated={recentlyUpdatedFolderIds.has(row.folder.id) ? '' : undefined}
-                    title={recentlyUpdatedFolderIds.has(row.folder.id) ? recentlyUpdatedTooltip : undefined}
+                    data-not-updated={notUpdatedFolderIds.has(row.folder.id) ? '' : undefined}
+                    title={recentlyUpdatedFolderIds.has(row.folder.id) ? recentlyUpdatedTooltip : notUpdatedFolderIds.has(row.folder.id) ? notUpdatedTooltip : undefined}
                   >{row.folder.name}</span>
                   <span class="file-table-modified">{formatDate(row.folder.created_time)}</span>
                   <span class="file-table-type">{$t('files.directory')}</span>
@@ -873,6 +881,7 @@
                   class:file-table-row--selected={isSelected(row)}
                   class:file-table-row--dragged={isDragged(row)}
                   class:file-table-row--recently-updated={recentlyUpdatedDocumentIds.has(row.document.id)}
+                  class:file-table-row--not-updated={notUpdatedDocumentIds.has(row.document.id)}
                   aria-pressed={isSelected(row)}
                   tabindex={activeRowKey === rowKey(row) ? 0 : -1}
                   style={rowStyle(rendered.virtualItem)}
@@ -889,7 +898,8 @@
                     class="file-table-name file-table-drag-handle"
                     data-file-drag-handle
                     data-recently-updated={recentlyUpdatedDocumentIds.has(row.document.id) ? '' : undefined}
-                    title={recentlyUpdatedDocumentIds.has(row.document.id) ? recentlyUpdatedTooltip : undefined}
+                    data-not-updated={notUpdatedDocumentIds.has(row.document.id) ? '' : undefined}
+                    title={recentlyUpdatedDocumentIds.has(row.document.id) ? recentlyUpdatedTooltip : notUpdatedDocumentIds.has(row.document.id) ? notUpdatedTooltip : undefined}
                   >{row.document.title}</span>
                   <span class="file-table-modified">{formatDate(row.document.last_modified)}</span>
                   <span class="file-table-type">{documentTypeLabel(row.document.title)}</span>
@@ -951,7 +961,10 @@
   .file-table-row--drop-forbidden { box-shadow: inset 0 0 0 2px var(--color-md3-error); }
   .file-table-row--recently-updated { position: relative; }
   .file-table-row--recently-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--explorer-accent); content: ''; opacity: 0.7; }
+  .file-table-row--not-updated { position: relative; }
+  .file-table-row--not-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--color-md3-warning, #f09d00); content: ''; opacity: 0.6; }
   .file-table-name[data-recently-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--explorer-accent); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.85; }
+  .file-table-name[data-not-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--color-md3-warning, #f09d00); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.7; }
   .file-table-scroll-viewport.is-item-dragging, .file-table-scroll-viewport.is-item-dragging .file-table-row, .file-table-scroll-viewport.is-item-dragging .file-table-drag-handle { cursor: grabbing; }
   .file-table-scroll-viewport.is-item-drop-forbidden, .file-table-scroll-viewport.is-item-drop-forbidden .file-table-row, .file-table-scroll-viewport.is-item-drop-forbidden .file-table-drag-handle { cursor: not-allowed; }
   .file-table-icon { display: inline-flex; color: var(--explorer-text-muted); }
