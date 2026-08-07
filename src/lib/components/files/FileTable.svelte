@@ -54,6 +54,7 @@
     notUpdatedFolderIds,
     notUpdatedTooltip,
     hiddenItemIds,
+    undownloadedDocumentIds,
     loading,
     folders,
     documents,
@@ -87,6 +88,7 @@
     notUpdatedFolderIds: Set<string>;
     notUpdatedTooltip: string;
     hiddenItemIds: Set<string>;
+    undownloadedDocumentIds: Set<string>;
     loading: boolean;
     folders: ServerDirectoryEntry[];
     documents: ServerDocumentEntry[];
@@ -929,7 +931,8 @@
                     data-file-drag-handle
                     data-recently-updated={recentlyUpdatedDocumentIds.has(row.document.id) ? '' : undefined}
                     data-not-updated={notUpdatedDocumentIds.has(row.document.id) ? '' : undefined}
-                    title={recentlyUpdatedDocumentIds.has(row.document.id) ? recentlyUpdatedTooltip : notUpdatedDocumentIds.has(row.document.id) ? notUpdatedTooltip : undefined}
+                    data-not-downloaded={undownloadedDocumentIds.has(row.document.id) ? '' : undefined}
+                    title={recentlyUpdatedDocumentIds.has(row.document.id) ? recentlyUpdatedTooltip : notUpdatedDocumentIds.has(row.document.id) ? notUpdatedTooltip : undownloadedDocumentIds.has(row.document.id) ? '未下载到本地' : undefined}
                   >{row.document.title}</span>
                   <span class="file-table-modified">{formatDate(row.document.last_modified)}</span>
                   <span class="file-table-type">{documentTypeLabel(row.document.title)}</span>
@@ -995,6 +998,8 @@
   .file-table-row--not-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--color-md3-warning, #f09d00); content: ''; opacity: 0.6; }
   .file-table-name[data-recently-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--explorer-accent); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.85; }
   .file-table-name[data-not-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--color-md3-warning, #f09d00); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.7; }
+  .file-table-name[data-not-downloaded] { opacity: 0.65; font-style: italic; }
+  .file-table-name[data-not-downloaded]::after { display: inline-block; flex-shrink: 0; width: 14px; height: 14px; margin-left: 4px; vertical-align: middle; content: '⬇'; font-size: 10px; font-style: normal; opacity: 0.7; }
   .file-table-scroll-viewport.is-item-dragging, .file-table-scroll-viewport.is-item-dragging .file-table-row, .file-table-scroll-viewport.is-item-dragging .file-table-drag-handle { cursor: grabbing; }
   .file-table-scroll-viewport.is-item-drop-forbidden, .file-table-scroll-viewport.is-item-drop-forbidden .file-table-row, .file-table-scroll-viewport.is-item-drop-forbidden .file-table-drag-handle { cursor: not-allowed; }
   .file-table-icon { display: inline-flex; color: var(--explorer-text-muted); }

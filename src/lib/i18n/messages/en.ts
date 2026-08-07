@@ -556,6 +556,10 @@ export const en = {
     notUpdated: 'Not recently updated',
     notUpdatedTooltip: 'This item has not been updated for over 7 days',
     folderContainsNotUpdated: 'This folder contains items that have not been updated recently',
+    notDownloaded: 'Not downloaded',
+    syncAll: 'Sync all files',
+    syncQueued: '{count} download(s) queued.',
+    syncAllDownloaded: 'All files in this directory are already downloaded.',
   },
   tasks: {
     title: 'Tasks',

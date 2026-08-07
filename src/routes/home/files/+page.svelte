@@ -159,7 +159,7 @@
     selectFileRangeByIndex,
   } from '$lib/explorer/file-selection';
   import { isMobilePlatform } from '$lib/platform';
-  import { authStore, floatingProgressStore, notificationStore, serverStateStore, uploadStore } from '$lib/stores.svelte';
+  import { authStore, downloadStore, floatingProgressStore, notificationStore, serverStateStore, uploadStore } from '$lib/stores.svelte';
   import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
 
   type SearchResultRow =
@@ -1006,6 +1006,54 @@
   const notUpdatedFldIds = $derived(fileUpdateTracker.notUpdatedFolderIds);
   const notUpdatedTooltip = $derived($t('files.notUpdatedTooltip'));
 
+  // --- Undownloaded file tracking ---
+  const downloadedFileIds = $derived.by(() => {
+    const ids = new Set<string>();
+    for (const task of downloadStore.tasks.values()) {
+      if (task.status === 'completed' && task.file_id) ids.add(task.file_id);
+    }
+    return ids;
+  });
+  const undownloadedDocIds = $derived.by(() => {
+    const ids = new Set<string>();
+    for (const doc of documents) {
+      if (!downloadedFileIds.has(doc.id)) ids.add(doc.id);
+    }
+    return ids;
+  });
+  const undownloadedCount = $derived(undownloadedDocIds.size);
+  const undownloadedTooltip = $derived($t('files.notDownloaded'));
+
+  async function syncAllFiles() {
+    if (batchBusy || undownloadedCount === 0) return;
+    batchBusy = true;
+    let queued = 0;
+    let skipped = 0;
+    try {
+      const pathParts = breadcrumbSegments.map(s => s.label);
+      for (const doc of documents) {
+        if (downloadedFileIds.has(doc.id)) { skipped++; continue; }
+        const downloadPath = pathParts.length > 0
+          ? makeDownloadPath([...pathParts, doc.title])
+          : doc.title;
+        try {
+          await getDocument(doc.id, downloadPath);
+          queued++;
+        } catch { /* skip failed */ }
+      }
+      if (queued > 0) {
+        status = $t('files.syncQueued', { values: { count: queued } });
+      }
+      if (skipped > 0 && queued === 0) {
+        status = $t('files.syncAllDownloaded');
+      }
+    } catch (err) {
+      error = formatError(err);
+    } finally {
+      batchBusy = false;
+    }
+  }
+
   // --- Poll countdown ---
   let pollCountdown = $state('');
   let pollBusy = $state(false);
@@ -1061,6 +1109,15 @@
     { id: 'new-folder', label: $t('files.createFolder'), icon: 'createNewFolder', run: handleCreateFolder },
     { id: 'upload-files', label: $t('files.uploadFiles'), icon: 'uploadFile', run: handleUploadFiles },
     { id: 'upload-folder', label: $t('files.uploadFolder'), icon: 'folderUpload', run: handleUploadFolder },
+    {
+      id: 'sync-all',
+      label: $t('files.syncAll'),
+      icon: 'download',
+      visible: undownloadedCount > 0,
+      disabled: batchBusy,
+      dividerBefore: true,
+      run: syncAllFiles,
+    },
     {
       id: 'download-selected',
       label: $t('files.downloadSelected'),
@@ -3892,6 +3949,7 @@
       notUpdatedFolderIds={notUpdatedFldIds}
       notUpdatedTooltip={notUpdatedTooltip}
       hiddenItemIds={hiddenItemIds}
+      undownloadedDocumentIds={undownloadedDocIds}
     />
     <ExplorerDetailsPane
       open={detailsOpen}

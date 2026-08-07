@@ -550,6 +550,10 @@ export const zh_CN = {
     notUpdated: '长时间未更新',
     notUpdatedTooltip: '此项目已超过 7 天未更新',
     folderContainsNotUpdated: '此文件夹包含长时间未更新的项目',
+    notDownloaded: '未下载到本地',
+    syncAll: '同步全部文件',
+    syncQueued: '已加入 {count} 个下载任务。',
+    syncAllDownloaded: '当前目录所有文件均已下载。',
   },
   tasks: {
     title: '任务',
