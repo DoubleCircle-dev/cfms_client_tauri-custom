@@ -156,8 +156,15 @@
     let savedTemplates = $state<SavedTemplate[]>([]);
     let saveName = $state("");
     let showSaveDialog = $state(false);
-    let activeTab = $state<"commands" | "saved">("commands");
+    let activeTab = $state<"commands" | "saved" | "http">("commands");
     let selectedSavedIdx = $state(-1);
+
+    // ---- HTTP request state ----
+    let httpPath = $state("/");
+    let httpMethod = $state("GET");
+    let httpHeaders = $state('{"Accept": "text/html,application/json"}');
+    let httpBody = $state("");
+    let httpSending = $state(false);
 
     function loadCmdTemplate(cmd: CmdEntry) {
         payloadText = JSON.stringify({ action: cmd.action, data: cmd.data }, null, 2);
@@ -299,6 +306,41 @@
         addLog("info", `\u23F3 批量发送 ${count} 次...`);
         for (let i = 0; i < count; i++) setTimeout(() => doSend(), i * 100);
     }
+
+    // ---- HTTP request ----
+    async function doHttpRequest() {
+        if (!httpPath.trim()) { addLog("warn", "URL 路径不能为空"); return; }
+        httpSending = true;
+        const method = httpMethod.toUpperCase();
+        addLog("sent", `\u2192 HTTP ${method} ${httpPath.trim()}`);
+        statusInfo = "发送中..."; statusColor = "#58a6ff";
+        try {
+            const response = await invoke<string>("fetch_server_page", {
+                path: httpPath.trim(),
+                method,
+                headers: httpHeaders.trim() || null,
+                body: (method === "POST" || method === "PUT" || method === "PATCH") ? (httpBody.trim() || null) : null,
+            });
+            const parsed = JSON.parse(response);
+            const status = parsed.status;
+            const statusEmoji = status < 300 ? "\u2705" : status < 400 ? "\u2139" : "\u274C";
+            addLog("recv", `\u2190 HTTP ${status} ${parsed.url}`);
+            // Log headers summary
+            const headerKeys = Object.keys(parsed.headers || {}).join(", ");
+            if (headerKeys) addLog("info", `   Headers: ${headerKeys}`);
+            // Log body preview (first 2000 chars)
+            const bodyPreview = (parsed.body || "").substring(0, 2000);
+            addLog("info", `   Body (${(parsed.body || "").length} bytes):\n${bodyPreview}${(parsed.body || "").length > 2000 ? "\n... (truncated)" : ""}`);
+            statusInfo = `${statusEmoji} HTTP ${status}`; statusColor = status < 300 ? "#3fb950" : status < 400 ? "#d2991d" : "#f85149";
+        } catch (err) {
+            const msg = typeof err === "string" ? err : ((err as Error).message ?? JSON.stringify(err));
+            addLog("error", `\u2716 ${msg}`);
+            statusInfo = "错误"; statusColor = "#f85149";
+        } finally {
+            httpSending = false;
+            setTimeout(() => { statusInfo = "就绪"; statusColor = ""; }, 3000);
+        }
+    }
     function onKeydown(e: KeyboardEvent) {
         if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); doSend(); }
     }
@@ -338,6 +380,7 @@
                 <div class="tab-bar">
                     <button class="tab-btn" class:active={activeTab === "commands"} onclick={() => activeTab = "commands"}>📋 命令模板</button>
                     <button class="tab-btn" class:active={activeTab === "saved"} onclick={() => activeTab = "saved"}>💾 已保存 ({savedTemplates.length})</button>
+                    <button class="tab-btn" class:active={activeTab === "http"} onclick={() => activeTab = "http"}>🌐 HTTP 请求</button>
                 </div>
 
                 {#if activeTab === "commands"}
@@ -355,7 +398,7 @@
                             {/each}
                         {/each}
                     </div>
-                {:else}
+                {:else if activeTab === "saved"}
                     <div class="saved-list">
                         {#if savedTemplates.length === 0}
                             <div class="saved-empty">暂无已保存模板<br/>编辑 JSON 后点击 💾 保存模板</div>
@@ -375,6 +418,55 @@
                                 </div>
                             {/each}
                         {/if}
+                    </div>
+                {:else}
+                    <!-- HTTP Request Form -->
+                    <div class="http-form">
+                        <div class="http-row">
+                            <select class="http-method" bind:value={httpMethod}>
+                                <option>GET</option>
+                                <option>POST</option>
+                                <option>PUT</option>
+                                <option>DELETE</option>
+                                <option>PATCH</option>
+                                <option>HEAD</option>
+                            </select>
+                            <input
+                                class="http-path"
+                                type="text"
+                                bind:value={httpPath}
+                                placeholder="/path/to/page"
+                                onkeydown={(e) => e.key === "Enter" && doHttpRequest()}
+                            />
+                        </div>
+                        <div class="http-section-label">Headers (JSON)</div>
+                        <textarea
+                            class="http-textarea"
+                            bind:value={httpHeaders}
+                            placeholder={'{"Accept": "text/html"}'}
+                            spellcheck="false"
+                            rows="3"
+                        ></textarea>
+                        {#if httpMethod === "POST" || httpMethod === "PUT" || httpMethod === "PATCH"}
+                            <div class="http-section-label">Body</div>
+                            <textarea
+                                class="http-textarea"
+                                bind:value={httpBody}
+                                placeholder="Request body..."
+                                spellcheck="false"
+                                rows="4"
+                            ></textarea>
+                        {/if}
+                        <button
+                            class="btn btn-send http-send-btn"
+                            onclick={doHttpRequest}
+                            disabled={httpSending}
+                        >
+                            {httpSending ? "⏳ 发送中..." : `📤 发送 ${httpMethod}`}
+                        </button>
+                        <div class="http-hint">
+                            使用当前连接的服务器地址，通过 HTTPS 请求自定义页面/API。
+                        </div>
                     </div>
                 {/if}
             </div>
@@ -728,6 +820,82 @@
     .log-entry.error { color: var(--red); }
     .log-entry.info { color: var(--text-secondary); }
     .log-entry.warn { color: var(--orange); }
+
+    /* ===== HTTP Request Form ===== */
+    .http-form {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .http-row {
+        display: flex;
+        gap: 6px;
+    }
+    .http-method {
+        width: 90px;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg-secondary);
+        color: var(--blue);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        outline: none;
+    }
+    .http-method:focus { border-color: var(--blue); }
+    .http-path {
+        flex: 1;
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 12px;
+        outline: none;
+    }
+    .http-path:focus { border-color: var(--blue); }
+    .http-path::placeholder { color: var(--text-muted); }
+    .http-section-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 4px;
+    }
+    .http-textarea {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        line-height: 1.4;
+        resize: vertical;
+        outline: none;
+        tab-size: 2;
+        box-sizing: border-box;
+    }
+    .http-textarea:focus { border-color: var(--blue); }
+    .http-textarea::placeholder { color: var(--text-muted); }
+    .http-send-btn {
+        align-self: flex-start;
+        margin-top: 4px;
+    }
+    .http-hint {
+        font-size: 10px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        margin-top: 4px;
+    }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }

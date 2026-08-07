@@ -721,6 +721,7 @@ pub fn run() {
             commands::clear_credentials,
             commands::has_saved_credentials,
             commands::send_raw_request,
+            commands::fetch_server_page,
             commands::open_dev_tools_window,
         ])
         .run(tauri::generate_context!())

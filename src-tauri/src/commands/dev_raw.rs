@@ -96,6 +96,113 @@ pub async fn send_raw_request(
     String::from_utf8(response_bytes).map_err(|e| format!("Invalid UTF-8 response: {e}"))
 }
 
+/// Fetch a custom page/endpoint from the server via HTTP.
+///
+/// Derives the base HTTP URL from the stored server address and sends
+/// an HTTP request to the given path.  Supports GET and POST methods.
+///
+/// Returns a JSON string with `status`, `headers`, and `body` fields
+/// so the frontend can display the full response.
+#[tauri::command]
+#[allow(unused)]
+pub async fn fetch_server_page(
+    state: tauri::State<'_, AppHandleState>,
+    path: String,
+    method: String,
+    headers: Option<String>,
+    body: Option<String>,
+) -> Result<String, String> {
+    // --- Derive the HTTP base URL from the stored server address ---
+    let server_addr = {
+        let addr = state.inner.server_address.read().await;
+        addr.clone()
+    }
+    .ok_or_else(|| "Not connected to a server — no server address available".to_string())?;
+
+    // The stored address may be:
+    //   - "wss://host:port/path" (WebSocket URL — convert to HTTPS)
+    //   - "ws://host:port/path"  (plain WebSocket — convert to HTTP)
+    //   - "https://host:port"    (already an HTTP URL)
+    //   - "host:port"            (bare host:port)
+    let base_url = {
+        let trimmed = server_addr.trim_end_matches('/');
+        if let Some(rest) = trimmed.strip_prefix("wss://") {
+            format!("https://{rest}")
+        } else if let Some(rest) = trimmed.strip_prefix("ws://") {
+            format!("http://{rest}")
+        } else if trimmed.starts_with("http") {
+            trimmed.to_string()
+        } else {
+            format!("https://{trimmed}")
+        }
+    };
+
+    let url = format!("{base_url}/{path}", path = path.trim_start_matches('/'));
+
+    // --- Build the HTTP request ---
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true) // Dev tool: allow self-signed certs
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let mut request = match method.to_uppercase().as_str() {
+        "GET" => client.get(&url),
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        "DELETE" => client.delete(&url),
+        "PATCH" => client.patch(&url),
+        "HEAD" => client.head(&url),
+        other => return Err(format!("Unsupported HTTP method: {other}")),
+    };
+
+    // Add custom headers
+    if let Some(ref hdrs) = headers {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(hdrs) {
+            if let Some(obj) = parsed.as_object() {
+                for (key, val) in obj {
+                    if let Some(v) = val.as_str() {
+                        request = request.header(key.as_str(), v);
+                    }
+                }
+            }
+        }
+    }
+
+    // Add body for methods that support it
+    if let Some(ref b) = body {
+        request = request.body(b.clone());
+    }
+
+    // --- Execute the request ---
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+    let status = response.status().as_u16();
+    let resp_headers: std::collections::HashMap<String, String> = response
+        .headers()
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
+        .collect();
+
+    let resp_body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+    let result = serde_json::json!({
+        "url": url,
+        "method": method.to_uppercase(),
+        "status": status,
+        "headers": resp_headers,
+        "body": resp_body,
+    });
+
+    serde_json::to_string(&result).map_err(|e| format!("Failed to encode response: {e}"))
+}
+
 /// Open the dev tools in a separate window (like DevTools).
 ///
 /// Creates a new webview window that loads the vulnerability testing page.
