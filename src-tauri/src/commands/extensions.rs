@@ -354,6 +354,7 @@ pub async fn execute_extension_host_call(
                 None,
                 None,
                 None,
+                None,
             ).await
         }
         "events.subscribe" => Ok(serde_json::json!({ "supportedEvents": ["connection.changed", "tasks.changed"] })),

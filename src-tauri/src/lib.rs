@@ -596,6 +596,8 @@ pub fn run() {
             commands::list_directory,
             commands::list_directory_page,
             commands::get_document,
+            commands::check_downloads_exist,
+            commands::compute_local_sha256,
             commands::ensure_download_subdirectory,
             commands::get_setting,
             commands::set_setting,

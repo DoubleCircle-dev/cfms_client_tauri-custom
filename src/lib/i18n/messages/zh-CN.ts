@@ -554,6 +554,8 @@ export const zh_CN = {
     syncAll: '同步全部文件',
     syncQueued: '已加入 {count} 个下载任务。',
     syncAllDownloaded: '当前目录所有文件均已下载。',
+    syncCompleted: '同步完成：{downloaded} 个下载, {updated} 个更新。',
+    syncAllUpToDate: '所有文件已是最新。',
   },
   tasks: {
     title: '任务',

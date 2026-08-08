@@ -19,6 +19,9 @@
     loadUserPreference,
     classifyUploadPath,
     getDocument,
+    getDownloadTasks,
+    checkDownloadsExist,
+    computeLocalSha256,
     getRevision,
     inspectUploadDirectoryConflicts,
     createDirectory,
@@ -1006,14 +1009,66 @@
   const notUpdatedFldIds = $derived(fileUpdateTracker.notUpdatedFolderIds);
   const notUpdatedTooltip = $derived($t('files.notUpdatedTooltip'));
 
-  // --- Undownloaded file tracking ---
-  const downloadedFileIds = $derived.by(() => {
+  // Auto-refresh download status when directory content changes (navigation or scan)
+  $effect(() => {
+    // Track documents array reference to trigger on change
+    documents;
+    void refreshDownloadedFileIds();
+  });
+
+  // --- File sync tracking (SHA-256 based, does NOT rely on download task DB) ---
+  let persistedDownloadedIds = $state<Set<string>>(new Set());
+  let overwriteLocal = $state(false);
+  let syncBusy = $state(false);
+
+  /** Verify which documents are already downloaded by comparing SHA-256 hashes. */
+  async function refreshDownloadedFileIds() {
     const ids = new Set<string>();
+    try {
+      const completed = await getDownloadTasks('completed');
+      for (const task of completed) {
+        if (task.file_id) ids.add(task.file_id);
+      }
+    } catch { /* ignore */ }
+
+    if (documents.length > 0) {
+      try {
+        // Build full relative paths (matching how downloads are stored)
+        const pathParts = breadcrumbSegments.map(s => s.label);
+        const docPaths = documents.map(d =>
+          pathParts.length > 0 ? makeDownloadPath([...pathParts, d.title]) : d.title
+        );
+        const docByPath = new Map(docPaths.map((p, i) => [p, documents[i]]));
+
+        // Try SHA-256 first, fall back to file existence
+        const hashes = await computeLocalSha256(docPaths);
+        const existing = await checkDownloadsExist(docPaths);
+
+        for (const [filepath, doc] of docByPath) {
+          const localHash = hashes[filepath];
+          const serverHash = doc.sha256;
+          if (localHash && serverHash && localHash === serverHash) {
+            ids.add(doc.id);
+          } else if (existing.includes(filepath) && !serverHash) {
+            // Exists locally but server has no hash — assume downloaded
+            ids.add(doc.id);
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    persistedDownloadedIds = ids;
+  }
+
+  const downloadedFileIds = $derived.by(() => {
+    const ids = new Set(persistedDownloadedIds);
     for (const task of downloadStore.tasks.values()) {
       if (task.status === 'completed' && task.file_id) ids.add(task.file_id);
     }
     return ids;
   });
+
+  /** Files never downloaded locally */
   const undownloadedDocIds = $derived.by(() => {
     const ids = new Set<string>();
     for (const doc of documents) {
@@ -1021,36 +1076,126 @@
     }
     return ids;
   });
-  const undownloadedCount = $derived(undownloadedDocIds.size);
-  const undownloadedTooltip = $derived($t('files.notDownloaded'));
 
+  /** Files where server version may differ from local (no SHA-256 match available) */
+  const outdatedDocIds = $derived.by(() => {
+    const ids = new Set<string>();
+    for (const doc of documents) {
+      if (!downloadedFileIds.has(doc.id)) continue;
+      // Mark as outdated if server doesn't provide SHA-256 for comparison
+      if (!doc.sha256) ids.add(doc.id);
+    }
+    return ids;
+  });
+
+  /** Files that need syncing (undownloaded or outdated) */
+  const needsSyncDocIds = $derived.by(() => {
+    return new Set([...undownloadedDocIds, ...outdatedDocIds]);
+  });
+  const needsSyncCount = $derived(needsSyncDocIds.size);
+
+  /** Recursively sync all files from root — download missing + overwrite outdated */
   async function syncAllFiles() {
-    if (batchBusy || undownloadedCount === 0) return;
-    batchBusy = true;
+    if (syncBusy) return;
+    syncBusy = true;
+    // Refresh download records before syncing
+    await refreshDownloadedFileIds();
     let queued = 0;
     let skipped = 0;
-    try {
-      const pathParts = breadcrumbSegments.map(s => s.label);
-      for (const doc of documents) {
-        if (downloadedFileIds.has(doc.id)) { skipped++; continue; }
-        const downloadPath = pathParts.length > 0
-          ? makeDownloadPath([...pathParts, doc.title])
-          : doc.title;
+    let updated = 0;
+    let requestCount = 0;
+    const DOWNLOAD_BATCH_SIZE = 25;
+    const DOWNLOAD_BATCH_DELAY_MS = 2500;
+    const startTime = performance.now();
+    console.log('%c[cfms:sync] Full recursive sync starting (throttled: %d per %ds)…', 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
+
+    async function throttleDownload() {
+      requestCount++;
+      if (requestCount > 0 && requestCount % DOWNLOAD_BATCH_SIZE === 0) {
+        console.log(`%c[cfms:sync] Throttling — %d requests sent, pausing %ds…`, 'color:#ffb74d', requestCount, DOWNLOAD_BATCH_DELAY_MS / 1000);
+        await new Promise(r => setTimeout(r, DOWNLOAD_BATCH_DELAY_MS));
+      }
+    }
+
+    async function downloadWithRetry(docId: string, path: string, overwrite: boolean): Promise<{ already_exists?: boolean } | null> {
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          await getDocument(doc.id, downloadPath);
-          queued++;
-        } catch { /* skip failed */ }
+          await throttleDownload();
+          return await getDocument(docId, path, undefined, overwrite);
+        } catch (err) {
+          const msg = String(err);
+          if (msg.includes('429') && attempt === 0) {
+            const match = msg.match(/retry_after_seconds["']?\s*:\s*(\d+)/);
+            const waitSec = match ? parseInt(match[1], 10) : 3;
+            console.log(`%c[cfms:sync] Rate limited, retrying in ${waitSec}s…`, 'color:#ffb74d');
+            await new Promise(r => setTimeout(r, waitSec * 1000 + 500));
+            continue;
+          }
+          throw err;
+        }
       }
-      if (queued > 0) {
-        status = $t('files.syncQueued', { values: { count: queued } });
+      return null;
+    }
+
+    async function walk(dirId: string | null, pathParts: string[]) {
+      let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
+      try {
+        resp = await listDirectory(dirId);
+      } catch {
+        return;
       }
-      if (skipped > 0 && queued === 0) {
-        status = $t('files.syncAllDownloaded');
+      // Compute local SHA-256 for all files in this directory
+      const filenames = resp.documents.map(d => makeDownloadPath([...pathParts, d.title]));
+      let localHashes: Record<string, string> = {};
+      try {
+        localHashes = await computeLocalSha256(filenames);
+      } catch { /* ignore */ }
+
+      for (const doc of resp.documents) {
+        const downloadPath = makeDownloadPath([...pathParts, doc.title]);
+        const localHash = localHashes[downloadPath];
+        const serverHash = doc.sha256;
+        // File is "downloaded" if SHA-256 matches
+        const isDownloaded = localHash != null && serverHash != null && localHash === serverHash;
+        // If server has no hash, fall back to file existence
+        const existsLocally = !!localHash;
+        const needsDownload = !isDownloaded && (!existsLocally || overwriteLocal);
+
+        if (needsDownload) {
+          try {
+            await downloadWithRetry(doc.id, downloadPath, overwriteLocal && existsLocally);
+            if (existsLocally) updated++; else queued++;
+          } catch { /* skip */ }
+        } else if (isDownloaded) {
+          skipped++;
+        } else if (existsLocally && !isDownloaded && !overwriteLocal) {
+          // File exists but hash doesn't match (or server lacks hash) and overwrite is off
+          skipped++;
+        }
       }
+      for (const f of resp.folders) {
+        await walk(f.id, [...pathParts, f.name]);
+      }
+    }
+
+    try {
+      await walk(null, []);
+      const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+      const parts: string[] = [];
+      if (queued > 0) parts.push(`${queued} downloaded`);
+      if (updated > 0) parts.push(`${updated} updated`);
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      console.log(`%c[cfms:sync] Done in ${elapsed}s: ${parts.join(', ')}`, 'color:#4caf50');
+      if (queued + updated > 0) {
+        status = $t('files.syncCompleted', { values: { downloaded: queued, updated } });
+      } else {
+        status = $t('files.syncAllUpToDate');
+      }
+      refreshDownloadedFileIds();
     } catch (err) {
       error = formatError(err);
     } finally {
-      batchBusy = false;
+      syncBusy = false;
     }
   }
 
@@ -1113,8 +1258,8 @@
       id: 'sync-all',
       label: $t('files.syncAll'),
       icon: 'download',
-      visible: undownloadedCount > 0,
-      disabled: batchBusy,
+      visible: needsSyncCount > 0,
+      disabled: syncBusy,
       dividerBefore: true,
       run: syncAllFiles,
     },
@@ -3583,12 +3728,48 @@
     navigationStateReady = true;
     loadDirectory(initialNavigation.folderId, false, initialReturnNavigation);
     reloadUserPreference();
+    void refreshDownloadedFileIds();
 
     // Devtool hook: `await __cfms_check_updates__()` in browser console
     fileUpdateTracker.registerDevtoolHook(
       (id) => listDirectory(id),
       () => currentFolderId,
     );
+
+    // Debug hook: `await __cfms_debug_sync__()` — inspect SHA-256 sync state
+    (window as any).__cfms_debug_sync__ = async () => {
+      console.group('%c🔧 Sync Debug (SHA-256)', 'font-weight:bold;color:#4fc3f7');
+      try {
+        const completed = await getDownloadTasks('completed');
+        console.log('getDownloadTasks("completed") returned %d tasks (DB fallback only):', completed.length);
+
+        console.log('persistedDownloadedIds size:', persistedDownloadedIds.size);
+
+        // Compute local SHA-256 for current directory
+        const filenames = documents.map(d => d.title);
+        console.log('Computing local SHA-256 for %d files…', filenames.length);
+        const localHashes = await computeLocalSha256(filenames);
+        console.log('Local hashes computed:', Object.keys(localHashes).length);
+
+        console.log('Current directory documents:');
+        for (const doc of documents) {
+          const localHash = localHashes[doc.title];
+          const serverHash = doc.sha256;
+          const match = localHash && serverHash && localHash === serverHash;
+          console.log(
+            `  %c${match ? '✅' : localHash ? '🔄' : '⬇'} %c%s %cserver:%s local:%s`,
+            match ? 'color:#4caf50' : localHash ? 'color:#ffb74d' : 'color:#f44336',
+            '', doc.title,
+            'color:#888',
+            serverHash ? serverHash.slice(0, 12) + '…' : 'NULL',
+            localHash ? localHash.slice(0, 12) + '…' : 'NULL',
+          );
+        }
+      } catch (err) {
+        console.error('Debug failed:', err);
+      }
+      console.groupEnd();
+    };
 
     return () => {
       disposed = true;
@@ -3872,6 +4053,12 @@
   <div class="files-command-row">
     <div class="files-primary-actions">
       <ExplorerCommandBar actions={fileCommandActions} ariaLabel={$t('workspace.commandBar')} />
+      {#if needsSyncCount > 0}
+        <label class="overwrite-toggle" title="覆盖服务器版本更新的本地文件">
+          <input type="checkbox" bind:checked={overwriteLocal} />
+          <span>覆盖更新</span>
+        </label>
+      {/if}
     </div>
     <div
       class="files-sort-actions"
@@ -3950,6 +4137,7 @@
       notUpdatedTooltip={notUpdatedTooltip}
       hiddenItemIds={hiddenItemIds}
       undownloadedDocumentIds={undownloadedDocIds}
+      outdatedDocumentIds={outdatedDocIds}
     />
     <ExplorerDetailsPane
       open={detailsOpen}
@@ -4067,6 +4255,18 @@
     flex: 1;
     overflow: hidden;
   }
+
+  .overwrite-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0 0.5rem;
+    font-size: 0.72rem;
+    color: var(--explorer-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .overwrite-toggle input { cursor: pointer; }
 
   .files-sort-actions {
     display: flex;

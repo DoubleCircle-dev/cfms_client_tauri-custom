@@ -82,6 +82,8 @@ export interface ServerDocumentEntry {
   title: string;
   size: number | null;
   last_modified: number | null;
+  /** SHA-256 hex digest of file content (protocol v15+). */
+  sha256?: string | null;
 }
 
 export type DirectoryListingItem =

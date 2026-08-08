@@ -41,6 +41,7 @@ export async function getDocument(
   documentId: string,
   filename: string,
   batch?: DownloadBatchMetadata,
+  overwrite?: boolean,
 ): Promise<{
   task_id?: string;
   file_id?: string;
@@ -51,12 +52,23 @@ export async function getDocument(
   return invoke("get_document", {
     documentId,
     filename,
+    overwrite: overwrite ?? false,
     batchId: batch?.batchId ?? null,
     batchName: batch?.batchName ?? null,
     batchRootId: batch?.batchRootId ?? null,
     batchCreatedAt: batch?.batchCreatedAt ?? null,
     batchEstimatedTotal: batch?.batchEstimatedTotal ?? null,
   });
+}
+
+/** Check which files from a list of filenames exist in the local download root. */
+export async function checkDownloadsExist(filenames: string[]): Promise<string[]> {
+  return invoke("check_downloads_exist", { filenames });
+}
+
+/** Compute SHA-256 hashes of local files. Returns map of filename → hex digest. */
+export async function computeLocalSha256(filenames: string[]): Promise<Record<string, string>> {
+  return invoke("compute_local_sha256", { filenames });
 }
 
 /** Ensure a relative subdirectory exists under the local download root. */

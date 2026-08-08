@@ -99,6 +99,7 @@ pub async fn get_document(
     state: tauri::State<'_, AppHandleState>,
     document_id: String,
     filename: String,
+    overwrite: Option<bool>,
     batch_id: Option<String>,
     batch_name: Option<String>,
     batch_root_id: Option<String>,
@@ -117,13 +118,18 @@ pub async fn get_document(
         let _ = std::fs::create_dir_all(parent);
     }
 
-    if file_path.exists() {
+    if file_path.exists() && !overwrite.unwrap_or(false) {
         let display_filename = download_display_filename(&filename);
         return Ok(serde_json::json!({
             "already_exists": true,
             "file_path": file_path.to_string_lossy(),
             "filename": display_filename,
         }));
+    }
+
+    // Overwrite: remove the existing file so it can be re-downloaded
+    if file_path.exists() && overwrite.unwrap_or(false) {
+        let _ = std::fs::remove_file(&file_path);
     }
 
     // Also skip when a non-terminal task for the same document is already
@@ -261,6 +267,46 @@ fn download_display_filename(path_or_name: &str) -> String {
         .rfind(|part| !part.is_empty())
         .unwrap_or(path_or_name)
         .to_string()
+}
+
+/// Check which files from a list of filenames exist in the local download root.
+/// Returns a list of filenames that exist on disk.
+#[tauri::command]
+pub async fn check_downloads_exist(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    filenames: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let mut existing = Vec::new();
+    for name in filenames {
+        if download_root.join(&name).exists() {
+            existing.push(name);
+        }
+    }
+    Ok(existing)
+}
+
+/// Compute SHA-256 hex digests of files in the local download root.
+/// Returns a map of filename → sha256 hex string (empty if file missing or error).
+#[tauri::command]
+pub async fn compute_local_sha256(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    filenames: Vec<String>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let mut result = std::collections::HashMap::new();
+    for name in filenames {
+        let path = download_root.join(&name);
+        if path.exists() {
+            match cfms_transfer::compute_sha256(&path) {
+                Ok(hash) => { result.insert(name, hex::encode(hash)); }
+                Err(_) => { /* skip */ }
+            }
+        }
+    }
+    Ok(result)
 }
 
 /// Create a subdirectory under the local download root.

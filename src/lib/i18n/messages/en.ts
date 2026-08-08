@@ -560,6 +560,8 @@ export const en = {
     syncAll: 'Sync all files',
     syncQueued: '{count} download(s) queued.',
     syncAllDownloaded: 'All files in this directory are already downloaded.',
+    syncCompleted: 'Sync complete: {downloaded} downloaded, {updated} updated.',
+    syncAllUpToDate: 'All files are up to date.',
   },
   tasks: {
     title: 'Tasks',
