@@ -1258,7 +1258,7 @@
       id: 'sync-all',
       label: $t('files.syncAll'),
       icon: 'download',
-      visible: needsSyncCount > 0,
+      visible: true,
       disabled: syncBusy,
       dividerBefore: true,
       run: syncAllFiles,
@@ -1357,9 +1357,36 @@
     try {
       const pathParts = breadcrumbSegments.map(s => s.label);
       const downloadPath = pathParts.length > 0 ? makeDownloadPath([...pathParts, doc.title]) : doc.title;
-      const result = await getDocument(doc.id, downloadPath);
-      if (result.already_exists) {
-        status = $t('files.downloadAlreadyExists');
+
+      // Get server SHA-256 — from doc if available, otherwise fetch via listDirectory
+      let serverHash = doc.sha256 ?? null;
+      if (!serverHash) {
+        try {
+          const resp = await listDirectory(currentFolderId);
+          const refreshed = resp.documents.find(d => d.id === doc.id);
+          serverHash = refreshed?.sha256 ?? null;
+        } catch { /* proceed without hash */ }
+      }
+
+      let localHash: string | null = null;
+      if (serverHash) {
+        try {
+          const hashes = await computeLocalSha256([downloadPath]);
+          localHash = hashes[downloadPath] ?? null;
+        } catch { /* proceed */ }
+      }
+
+      // Decide whether to skip, download, or overwrite
+      if (serverHash && localHash && localHash === serverHash) {
+        // Content matches — skip
+        status = $t('files.fileAlreadyUpToDate');
+      } else {
+        // Content differs or can't verify — download/overwrite
+        const needsOverwrite = overwriteLocal || (serverHash != null && localHash != null);
+        const result = await getDocument(doc.id, downloadPath, undefined, needsOverwrite);
+        if (result.already_exists && !needsOverwrite) {
+          status = $t('files.downloadAlreadyExists');
+        }
       }
       await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
     } catch (e) {
@@ -2524,7 +2551,7 @@
     batch?: DownloadBatchMetadata,
   ): Promise<'queued' | 'skipped'> {
     await waitForDownloadBatchResume(signal);
-    const result = await getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]), batch);
+    const result = await getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]), batch, overwriteLocal);
     await waitForDownloadBatchResume(signal);
     return result.already_exists ? 'skipped' : 'queued';
   }

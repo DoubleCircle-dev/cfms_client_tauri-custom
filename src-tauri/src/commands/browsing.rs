@@ -133,19 +133,31 @@ pub async fn get_document(
     }
 
     // Also skip when a non-terminal task for the same document is already
-    // in the queue (pending, downloading, decrypting, verifying, etc.).
+    // in the queue — unless overwrite is requested, in which case cancel
+    // the old task and proceed.
     {
         let tasks = state.tasks.list(None);
         let already_queued = tasks
             .iter()
             .any(|t| t.file_id == document_id && !t.status.is_terminal());
         if already_queued {
-            let display_filename = download_display_filename(&filename);
-            return Ok(serde_json::json!({
-                "already_exists": true,
-                "file_path": file_path.to_string_lossy(),
-                "filename": display_filename,
-            }));
+            if overwrite.unwrap_or(false) {
+                // Cancel existing non-terminal tasks for this document
+                for task in tasks.iter().filter(|t| t.file_id == document_id && !t.status.is_terminal()) {
+                    let _ = cfms_service::services::download_queue::cancel_task(
+                        &state.tasks,
+                        &state.active_downloads,
+                        &task.task_id,
+                    );
+                }
+            } else {
+                let display_filename = download_display_filename(&filename);
+                return Ok(serde_json::json!({
+                    "already_exists": true,
+                    "file_path": file_path.to_string_lossy(),
+                    "filename": display_filename,
+                }));
+            }
         }
     }
 

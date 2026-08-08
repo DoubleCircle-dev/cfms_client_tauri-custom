@@ -338,6 +338,7 @@ export const zh_CN = {
     batchDownloadPartialFailed: '{count} 个项目未能加入队列。',
     batchDownloadStopped: '已停止继续添加下载任务。',
     downloadAlreadyExists: '此文件已经下载过。',
+    fileAlreadyUpToDate: '文件已是最新，无需下载。',
     batchMoved: '已移动 {count} 个项目。',
     batchDeleting: '正在删除所选项目',
     batchProgress: '{current}/{total}（{percent}%）',

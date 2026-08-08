@@ -344,6 +344,7 @@ export const en = {
     batchDownloadPartialFailed: '{count} item(s) could not be queued.',
     batchDownloadStopped: 'Stopped adding more download tasks.',
     downloadAlreadyExists: 'This file has already been downloaded.',
+    fileAlreadyUpToDate: 'File is already up to date.',
     batchMoved: 'Moved {count} item(s).',
     batchDeleting: 'Deleting selected items',
     batchProgress: '{current}/{total} ({percent}%)',
