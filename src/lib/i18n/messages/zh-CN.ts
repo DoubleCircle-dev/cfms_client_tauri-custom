@@ -557,6 +557,8 @@ export const zh_CN = {
     syncAllDownloaded: '当前目录所有文件均已下载。',
     syncCompleted: '同步完成：{downloaded} 个下载, {updated} 个更新。',
     syncAllUpToDate: '所有文件已是最新。',
+    syncDeleteTitle: '确认删除',
+    syncDeleteMessage: '以下 {count} 个文件在服务器上已不存在，是否删除本地副本？',
   },
   tasks: {
     title: '任务',

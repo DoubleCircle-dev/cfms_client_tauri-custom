@@ -563,6 +563,8 @@ export const en = {
     syncAllDownloaded: 'All files in this directory are already downloaded.',
     syncCompleted: 'Sync complete: {downloaded} downloaded, {updated} updated.',
     syncAllUpToDate: 'All files are up to date.',
+    syncDeleteTitle: 'Confirm Deletion',
+    syncDeleteMessage: 'The following {count} file(s) no longer exist on the server. Delete local copies?',
   },
   tasks: {
     title: 'Tasks',

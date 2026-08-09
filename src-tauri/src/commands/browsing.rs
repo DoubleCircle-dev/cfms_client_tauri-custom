@@ -321,6 +321,50 @@ pub async fn compute_local_sha256(
     Ok(result)
 }
 
+/// Delete a file from the local download root by relative path.
+#[tauri::command]
+pub async fn delete_download_file(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    relative_path: String,
+) -> Result<bool, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let target = download_root.join(&relative_path);
+    if !target.starts_with(&download_root) {
+        return Err("Path is outside download root".to_string());
+    }
+    if target.exists() {
+        std::fs::remove_file(&target).map_err(|e| format!("Failed to delete: {e}"))?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Recursively list all file paths (relative to download root) under the download directory.
+#[tauri::command]
+pub async fn list_download_files(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+) -> Result<Vec<String>, String> {
+    use std::path::Path;
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let entries = cfms_service::scan::scan_directory(&download_root, None)
+        .map_err(|e| format!("Scan failed: {e}"))?;
+    let paths: Vec<String> = entries
+        .into_iter()
+        .filter(|e| !e.is_dir)
+        .filter_map(|e| {
+            let entry_path = Path::new(&e.path);
+            entry_path
+                .strip_prefix(&download_root)
+                .ok()
+                .and_then(|p| p.to_str().map(|s| s.replace('\\', "/")))
+        })
+        .collect();
+    Ok(paths)
+}
+
 /// Create a subdirectory under the local download root.
 #[tauri::command]
 pub async fn ensure_download_subdirectory(
@@ -357,3 +401,88 @@ fn resolve_download_subdirectory(
 }
 
 // ---------------------------------------------------------------------------
+// Git version tracking for local download directory
+// ---------------------------------------------------------------------------
+
+/// Ensure the download root is a git repository (git init if not already).
+/// Also writes a .gitignore to exclude system files.
+#[tauri::command]
+pub async fn download_git_init(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+) -> Result<bool, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let git_dir = download_root.join(".git");
+    if git_dir.exists() {
+        return Ok(false); // already initialized
+    }
+    // git init
+    let output = std::process::Command::new("git")
+        .arg("init")
+        .arg("-q")
+        .current_dir(&download_root)
+        .output()
+        .map_err(|e| format!("Failed to run git init: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git init failed: {stderr}"));
+    }
+    // Write a basic .gitignore
+    let gitignore = download_root.join(".gitignore");
+    if !gitignore.exists() {
+        std::fs::write(&gitignore, "# CFMS download gitignore\n.cfms-download-root\nThumbs.db\n.DS_Store\n")
+            .ok();
+    }
+    Ok(true)
+}
+
+/// Stage all changes and commit in the download root git repository.
+/// Returns the commit hash, or empty string if nothing to commit.
+#[tauri::command]
+pub async fn download_git_commit(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    message: String,
+) -> Result<String, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let git_dir = download_root.join(".git");
+    if !git_dir.exists() {
+        return Err("Download directory is not a git repository".to_string());
+    }
+    // git add -A
+    let add_output = std::process::Command::new("git")
+        .arg("add")
+        .arg("-A")
+        .current_dir(&download_root)
+        .output()
+        .map_err(|e| format!("Failed to run git add: {e}"))?;
+    if !add_output.status.success() {
+        let stderr = String::from_utf8_lossy(&add_output.stderr);
+        return Err(format!("git add failed: {stderr}"));
+    }
+    // git commit --allow-empty
+    let commit_output = std::process::Command::new("git")
+        .arg("commit")
+        .arg("--allow-empty")
+        .arg("-m")
+        .arg(&message)
+        .current_dir(&download_root)
+        .output()
+        .map_err(|e| format!("Failed to run git commit: {e}"))?;
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        return Err(format!("git commit failed: {stderr}"));
+    }
+    // Extract commit hash from stdout
+    let stdout = String::from_utf8_lossy(&commit_output.stdout);
+    // git commit output format: "[main abc1234] message"
+    let hash = stdout
+        .lines()
+        .find_map(|line| {
+            line.split_whitespace()
+                .nth(1)
+                .filter(|s| s.len() >= 7 && s.chars().all(|c| c.is_ascii_hexdigit()))
+        })
+        .unwrap_or("");
+    Ok(hash.to_string())
+}

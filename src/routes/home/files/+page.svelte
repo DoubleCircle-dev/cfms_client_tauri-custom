@@ -22,6 +22,10 @@
     getDownloadTasks,
     checkDownloadsExist,
     computeLocalSha256,
+    deleteDownloadFile,
+    listDownloadFiles,
+    downloadGitInit,
+    downloadGitCommit,
     getRevision,
     inspectUploadDirectoryConflicts,
     createDirectory,
@@ -1103,7 +1107,11 @@
     let queued = 0;
     let skipped = 0;
     let updated = 0;
+    let deleted = 0;
+    let moved = 0;
     let requestCount = 0;
+    const serverPaths = new Set<string>();          // all server file paths
+    const localByPath = new Map<string, string>();  // local path → sha256
     const DOWNLOAD_BATCH_SIZE = 25;
     const DOWNLOAD_BATCH_DELAY_MS = 2500;
     const startTime = performance.now();
@@ -1153,7 +1161,9 @@
 
       for (const doc of resp.documents) {
         const downloadPath = makeDownloadPath([...pathParts, doc.title]);
+        serverPaths.add(downloadPath);
         const localHash = localHashes[downloadPath];
+        if (localHash) localByPath.set(downloadPath, localHash);
         const serverHash = doc.sha256;
         // File is "downloaded" if SHA-256 matches
         const isDownloaded = localHash != null && serverHash != null && localHash === serverHash;
@@ -1180,18 +1190,74 @@
 
     try {
       await walk(null, []);
+
+      // --- Sync deletions: remove local files no longer on server ---
+      try {
+        const allLocalFiles = await listDownloadFiles();
+        const toDelete: string[] = [];
+        for (const localPath of allLocalFiles) {
+          if (serverPaths.has(localPath)) continue;
+          // Preserve hidden folders/files (e.g. .debugging) — only reachable via search,
+          // not the regular directory tree, so they naturally won't be in serverPaths.
+          if (localPath.split('/').some(seg => seg.startsWith('.'))) continue;
+          toDelete.push(localPath);
+        }
+        if (toDelete.length > 0) {
+          const fileList = toDelete.slice(0, 8).join('\n')
+            + (toDelete.length > 8 ? `\n… +${toDelete.length - 8} more` : '');
+          const confirmed = await dialogStore.confirm({
+            title: $t('files.syncDeleteTitle'),
+            message: `${$t('files.syncDeleteMessage', { values: { count: toDelete.length } })}\n\n${fileList}`,
+            confirmLabel: $t('common.delete'),
+            cancelLabel: $t('common.cancel'),
+            danger: true,
+          });
+          if (confirmed) {
+            for (const localPath of toDelete) {
+              try {
+                await deleteDownloadFile(localPath);
+                console.log(`%c[cfms:sync] Removed: ${localPath}`, 'color:#ef9a9a');
+                deleted++;
+              } catch { /* ignore */ }
+            }
+          }
+        }
+      } catch { /* ignore scan errors */ }
+
       const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
       const parts: string[] = [];
       if (queued > 0) parts.push(`${queued} downloaded`);
       if (updated > 0) parts.push(`${updated} updated`);
+      if (deleted > 0) parts.push(`${deleted} deleted`);
+      if (moved > 0) parts.push(`${moved} moved`);
       if (skipped > 0) parts.push(`${skipped} skipped`);
       console.log(`%c[cfms:sync] Done in ${elapsed}s: ${parts.join(', ')}`, 'color:#4caf50');
-      if (queued + updated > 0) {
+      if (queued + updated + deleted + moved > 0) {
         status = $t('files.syncCompleted', { values: { downloaded: queued, updated } });
       } else {
         status = $t('files.syncAllUpToDate');
       }
       refreshDownloadedFileIds();
+
+      // --- Git version tracking ---
+      if (queued + updated + deleted + moved > 0) {
+        try {
+          await downloadGitInit();
+          const msgParts: string[] = [];
+          if (queued > 0) msgParts.push(`+${queued}`);
+          if (updated > 0) msgParts.push(`~${updated}`);
+          if (deleted > 0) msgParts.push(`-${deleted}`);
+          if (moved > 0) msgParts.push(`→${moved}`);
+          const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+          const commitMsg = `sync ${timestamp}: ${msgParts.join(' ')}`;
+          const hash = await downloadGitCommit(commitMsg);
+          if (hash) {
+            console.log(`%c[cfms:sync] Git commit: ${hash.slice(0, 7)} — ${commitMsg}`, 'color:#a5d6a7');
+          }
+        } catch (gitErr) {
+          console.warn('%c[cfms:sync] Git tracking skipped:', 'color:#ffb74d', gitErr);
+        }
+      }
     } catch (err) {
       error = formatError(err);
     } finally {

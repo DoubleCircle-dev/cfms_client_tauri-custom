@@ -71,6 +71,16 @@ export async function computeLocalSha256(filenames: string[]): Promise<Record<st
   return invoke("compute_local_sha256", { filenames });
 }
 
+/** Delete a file from the local download root by relative path. */
+export async function deleteDownloadFile(relativePath: string): Promise<boolean> {
+  return invoke("delete_download_file", { relativePath });
+}
+
+/** Recursively list all file paths (relative) in the download root. */
+export async function listDownloadFiles(): Promise<string[]> {
+  return invoke("list_download_files");
+}
+
 /** Ensure a relative subdirectory exists under the local download root. */
 export async function ensureDownloadSubdirectory(
   relativePath: string,
@@ -81,6 +91,17 @@ export async function ensureDownloadSubdirectory(
 /** Delete a download task from the database and remove its file from disk. */
 export async function deleteDownload(taskId: string): Promise<boolean> {
   return invoke("delete_download", { taskId });
+}
+
+/** Initialize a git repository in the download root (no-op if already exists). */
+export async function downloadGitInit(): Promise<boolean> {
+  return invoke("download_git_init");
+}
+
+/** Stage all changes and commit in the download root git repo.
+ *  Returns the commit hash, or empty string if nothing to commit. */
+export async function downloadGitCommit(message: string): Promise<string> {
+  return invoke("download_git_commit", { message });
 }
 
 /** Open a completed download with the platform's default application. */
