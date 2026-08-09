@@ -565,6 +565,8 @@ export const en = {
     syncAllUpToDate: 'All files are up to date.',
     syncDeleteTitle: 'Confirm Deletion',
     syncDeleteMessage: 'The following {count} file(s) no longer exist on the server. Delete local copies?',
+    autoSyncStarted: 'Server changes detected, auto-syncing all files…',
+    autoSyncCompleted: 'Auto-sync complete: {downloaded} downloaded, {updated} updated, {deleted} deleted.',
   },
   tasks: {
     title: 'Tasks',

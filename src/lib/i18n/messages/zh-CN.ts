@@ -559,6 +559,8 @@ export const zh_CN = {
     syncAllUpToDate: '所有文件已是最新。',
     syncDeleteTitle: '确认删除',
     syncDeleteMessage: '以下 {count} 个文件在服务器上已不存在，是否删除本地副本？',
+    autoSyncStarted: '检测到服务器变化，正在自动同步所有文件…',
+    autoSyncCompleted: '自动同步完成：{downloaded} 个下载, {updated} 个更新, {deleted} 个删除。',
   },
   tasks: {
     title: '任务',

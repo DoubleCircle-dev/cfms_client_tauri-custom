@@ -1,10 +1,12 @@
-# CFMS Client
+# CFMS Client Custom
 
 [![CI](https://github.com/cfms-dev/cfms_client_tauri/actions/workflows/ci.yml/badge.svg)](https://github.com/cfms-dev/cfms_client_tauri/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/cfms-dev/cfms_client_tauri?display_name=tag)](https://github.com/cfms-dev/cfms_client_tauri/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **CFMS Client** is the cross-platform client for the [Confidential File Management System (CFMS)](https://github.com/cfms-dev). It securely connects to CFMS servers, provides controlled access to confidential documents, and manages file transfers. The application targets a native desktop experience and also supports Android.
+
+This version is customized by DoubleCircle.
 
 > [!IMPORTANT]
 > This client is intended only for deployed CFMS servers that you are authorized to access. It is not a general-purpose cloud-drive or file-server client.

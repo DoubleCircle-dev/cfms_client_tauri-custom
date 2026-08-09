@@ -26,6 +26,7 @@
     serverStateStore,
   } from '$lib/stores.svelte';
   import { fileUpdateTracker, type CheckHistoryEntry } from '$lib/file-update-tracker.svelte';
+  import { syncAllFiles as runSyncAll } from '$lib/sync-all.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   let recent = $state<RecentFileRecord[]>([]);
@@ -89,6 +90,8 @@
               }),
               5000,
             );
+            // Auto-sync detected changes (fire-and-forget, throttled internally)
+            void autoSyncAfterChanges();
           }
         } catch (err) {
           console.warn('[cfms:check] Poll failed:', err);
@@ -96,6 +99,29 @@
       });
     }
   });
+
+  /** Run a full "sync all files" automatically after server changes are detected. */
+  async function autoSyncAfterChanges() {
+    try {
+      notificationStore.info($t('files.autoSyncStarted'), 5000);
+      const result = await runSyncAll({
+        overwriteLocal: false,
+        confirmDeletes: true,
+        onStatus: (msg) => notificationStore.info(msg, 5000),
+      });
+      if (result.changed) {
+        notificationStore.success(
+          $t('files.autoSyncCompleted', {
+            values: { downloaded: result.queued, updated: result.updated, deleted: result.deleted },
+          }),
+          5000,
+        );
+      }
+    } catch (err) {
+      console.warn('[cfms:check] Auto sync failed:', err);
+      notificationStore.error(String(err), 5000);
+    }
+  }
 
   async function openRecord(record: FileRecord) {
     openingId = `${record.type}:${record.id}`;
