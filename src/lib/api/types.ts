@@ -2,6 +2,16 @@
 // Enums (matching Rust repr)
 // ---------------------------------------------------------------------------
 
+export type JsonPrimitive = null | boolean | number | string;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+export interface ServerResponse<T = JsonValue> {
+  code: number;
+  message: string;
+  data: T;
+  timestamp: number;
+}
+
 export type DownloadTaskStatus =
   | "pending"
   | "downloading"
@@ -18,6 +28,7 @@ export type UploadTaskStatus =
   | "pending"
   | "uploading"
   | "paused"
+  | "interrupted"
   | "completed"
   | "failed"
   | "cancelled"
@@ -365,6 +376,8 @@ export interface UploadTaskDto {
   task_id: string | null;
   file_name: string;
   source_path: string;
+  kind: "file" | "directory";
+  target_parent_id: string | null;
   status: UploadTaskStatus;
   progress: number;
   current_bytes: number;
@@ -372,8 +385,31 @@ export interface UploadTaskDto {
   message: string | null;
   error: string | null;
   created_at: number;
+  updated_at: number;
   completed_at: number | null;
+  retry_count: number;
+  max_retries: number;
+  source_available: boolean;
 }
+
+export interface UploadEnqueueRequest {
+  uploadId: string;
+  fileName: string;
+  sourcePath: string;
+  kind: "file" | "directory";
+  targetParentId: string | null;
+  conflictStrategy: UploadConflictStrategy;
+  conflictResolutions: DirectoryFileConflictResolution[];
+  uploadName: string | null;
+}
+
+export interface BatchActionResult {
+  succeeded: string[];
+  failed: Array<{ id: string; error: string }>;
+}
+
+export type TransferDirection = "download" | "upload";
+export type TransferControlAction = "pause" | "resume" | "cancel";
 
 export interface SelectedUploadDirectory {
   uri: string;

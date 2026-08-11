@@ -160,6 +160,71 @@ pub async fn delete_download(
     Ok(true)
 }
 
+/// Remove terminal task records while preserving downloaded files.
+#[tauri::command]
+pub async fn remove_download_records(
+    state: tauri::State<'_, AppHandleState>,
+    ids: Vec<String>,
+) -> Result<BatchActionResult, String> {
+    let (succeeded, failed) = state.tasks.remove_terminal(&ids);
+    Ok(BatchActionResult {
+        succeeded,
+        failed: failed.into_iter()
+            .map(|(id, error)| BatchActionFailure { id, error }).collect(),
+    })
+}
+
+/// Delete completed output files while retaining their task records.
+#[tauri::command]
+pub async fn delete_downloaded_files(
+    state: tauri::State<'_, AppHandleState>,
+    ids: Vec<String>,
+) -> Result<BatchActionResult, String> {
+    let mut failed = Vec::new();
+    let tasks = state.tasks.get_many(&ids);
+    let mut candidates = Vec::with_capacity(ids.len());
+    for (id, task) in ids.into_iter().zip(tasks) {
+        let Some(task) = task else {
+            failed.push(BatchActionFailure { id, error: "Task not found".into() });
+            continue;
+        };
+        if task.status != DownloadTaskStatus::Completed {
+            failed.push(BatchActionFailure { id, error: "Only completed downloads have an output file".into() });
+            continue;
+        }
+        candidates.push((id, std::path::PathBuf::from(task.file_path)));
+    }
+
+    // Filesystem metadata operations are blocking. Keep them off the async
+    // command executor, then persist all successful state changes in one pass.
+    let delete_results = tokio::task::spawn_blocking(move || {
+        candidates
+            .into_iter()
+            .map(|(id, path)| match std::fs::remove_file(path) {
+                Ok(()) => Ok(id),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(id),
+                Err(error) => Err(BatchActionFailure { id, error: error.to_string() }),
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|error| format!("Downloaded file deletion worker failed: {error}"))?;
+
+    let mut succeeded = Vec::new();
+    for result in delete_results {
+        match result {
+            Ok(id) => succeeded.push(id),
+            Err(error) => failed.push(error),
+        }
+    }
+    if let Err(error) = state.tasks.mark_files_deleted(&succeeded) {
+        for id in succeeded.drain(..) {
+            failed.push(BatchActionFailure { id, error: error.to_string() });
+        }
+    }
+    Ok(BatchActionResult { succeeded, failed })
+}
+
 // ---------------------------------------------------------------------------
 
 fn cleanup_resume_state(file_path: &str, task_id: &str) {

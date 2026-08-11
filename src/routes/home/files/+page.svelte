@@ -1552,6 +1552,7 @@
 
   function showCurrentDirectoryContextMenu(e: MouseEvent) {
     e.preventDefault();
+    deselectAll();
     contextMenu = { open: true, ...keyboardMenuAnchor(e), kind: 'current-directory', item: null };
   }
 
@@ -2905,27 +2906,47 @@
           uploadName,
         );
 
-    scheduleUpload(candidate.sourcePath, action, candidate.name);
+    scheduleUpload(candidate.sourcePath, action, candidate.name, {
+      kind: candidate.kind,
+      targetParentId: targetFolderId,
+      conflictStrategy,
+      conflictResolutions,
+    });
   }
 
   function scheduleUpload(
     sourcePath: string,
     action: (uploadId: string, uploadName: string) => Promise<unknown>,
     displayName?: string,
+    metadata?: {
+      kind: 'file' | 'directory';
+      targetParentId: string | null;
+      conflictStrategy: UploadConflictStrategy;
+      conflictResolutions: DirectoryFileConflictResolution[];
+    },
   ) {
     const uploadId = createUploadId();
     const uploadName = displayName?.trim() || uploadDisplayName(sourcePath);
-    uploadStore.addQueued(
-      uploadId,
-      uploadName,
-      sourcePath,
+    void uploadStore.addQueued(
+      {
+        uploadId,
+        fileName: uploadName,
+        sourcePath,
+        kind: metadata?.kind ?? 'file',
+        targetParentId: metadata?.targetParentId ?? null,
+        conflictStrategy: metadata?.conflictStrategy ?? 'fail',
+        conflictResolutions: metadata?.conflictResolutions ?? [],
+        uploadName,
+      },
       (id) => action(id, uploadName),
       async () => {
         if (currentFolderId) fileUpdateTracker.markFolderHasUpdates(currentFolderId);
         notificationStore.success($t('files.fileUploadedNotification', { values: { name: uploadName } }), 3000);
         await loadDirectory(currentFolderId);
       },
-    );
+    ).catch((err) => {
+      error = formatError(err);
+    });
   }
 
   function createUploadId() {
@@ -4254,9 +4275,16 @@
   }
 
   :global(.server-search-list-viewport) {
+    min-height: 0;
+    flex: 1 1 auto;
     max-height: calc(52vh - 2.25rem);
     overflow-y: auto;
     overscroll-behavior: contain;
+  }
+
+  :global(.modal-positioner--sized .server-search-list-viewport),
+  :global(.modal-positioner--maximized .server-search-list-viewport) {
+    max-height: none;
   }
 
   :global(.search-preview-virtual-viewport) {
@@ -4418,10 +4446,14 @@
   <ModalFrame
     title={$t('files.searchTitle')}
     maxWidth="max-w-3xl"
+    resizable
+    maximizable
+    minWidth={520}
+    minHeight={360}
     closeLabel={$t('common.close')}
     onClose={closeSearchDialog}
   >
-    <form class="space-y-4 p-5" onsubmit={(e) => { e.preventDefault(); runServerSearch(); }}>
+    <form class="flex h-full min-h-0 flex-col gap-4 p-5" onsubmit={(e) => { e.preventDefault(); runServerSearch(); }}>
       <div class="grid gap-3 md:grid-cols-[1fr_auto]">
         <input
           class="rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/25"
@@ -4490,7 +4522,7 @@
       </div>
 
       {#if searchDialog.results}
-        <div class="max-h-[52vh] overflow-auto rounded-lg border border-md3-outline">
+        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-md3-outline">
           <div class="flex items-center justify-between gap-3 border-b border-md3-outline bg-md3-surface-container-high/50 px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
             <span>
               {searchDialog.results.total_count === 0 && !searchDialog.loading
@@ -4568,7 +4600,16 @@
 {/if}
 
 {#if authorizeDialog}
-  <ModalFrame title={authorizeDialog.title} maxWidth="max-w-2xl" closeLabel={$t('common.close')} onClose={() => (authorizeDialog = null)}>
+  <ModalFrame
+    title={authorizeDialog.title}
+    maxWidth="max-w-2xl"
+    resizable
+    maximizable
+    minWidth={520}
+    minHeight={480}
+    closeLabel={$t('common.close')}
+    onClose={() => (authorizeDialog = null)}
+  >
     <AuthorizeAccessDialog
       targetName={authorizeDialog.targetName}
       targetType={authorizeDialog.targetType}
@@ -4612,8 +4653,17 @@
 {/if}
 
 {#if accessEntriesDialog}
-  <ModalFrame title={accessEntriesDialog.title} maxWidth="max-w-5xl" closeLabel={$t('common.close')} onClose={() => (accessEntriesDialog = null)}>
-      <div class="p-5 overflow-auto max-h-[70vh]">
+  <ModalFrame
+    title={accessEntriesDialog.title}
+    maxWidth="max-w-5xl"
+    resizable
+    maximizable
+    minWidth={720}
+    minHeight={360}
+    closeLabel={$t('common.close')}
+    onClose={() => (accessEntriesDialog = null)}
+  >
+      <div class="h-full max-h-[70vh] overflow-auto p-5">
         {#if accessEntriesDialog.entries.length === 0}
           <p class="text-sm text-md3-on-surface-variant text-center py-8">
             {$t('files.noAccessEntries')}
@@ -4661,7 +4711,16 @@
 {/if}
 
 {#if accessRulesDialog}
-  <ModalFrame title={accessRulesDialog.title} maxWidth="max-w-6xl" closeLabel={$t('common.close')} onClose={() => (accessRulesDialog = null)}>
+  <ModalFrame
+    title={accessRulesDialog.title}
+    maxWidth="max-w-6xl"
+    resizable
+    maximizable
+    minWidth={680}
+    minHeight={480}
+    closeLabel={$t('common.close')}
+    onClose={() => (accessRulesDialog = null)}
+  >
     <AccessRulesManager
       rules={accessRulesDialog.rules}
       inheritParent={accessRulesDialog.inheritParent}
@@ -4689,8 +4748,17 @@
 {/if}
 
 {#if revisionsDialog}
-  <ModalFrame title={revisionsDialog.title} maxWidth="max-w-2xl" closeLabel={$t('common.close')} onClose={() => (revisionsDialog = null)}>
-      <div class="p-5 max-h-[72vh] overflow-auto">
+  <ModalFrame
+    title={revisionsDialog.title}
+    maxWidth="max-w-2xl"
+    resizable
+    maximizable
+    minWidth={520}
+    minHeight={420}
+    closeLabel={$t('common.close')}
+    onClose={() => (revisionsDialog = null)}
+  >
+      <div class="h-full max-h-[72vh] overflow-auto p-5">
         {#if uploadProgress && uploadProgress.documentId === revisionsDialog.documentId}
           <div class="mb-4 rounded-lg border border-md3-primary/25 bg-md3-primary-container/30 p-3">
             <div class="mb-2 flex items-center justify-between gap-3 text-xs text-md3-on-primary-container">
