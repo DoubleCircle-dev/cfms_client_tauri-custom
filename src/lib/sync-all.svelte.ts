@@ -18,7 +18,7 @@ import {
 } from '$lib/api/files';
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api/types';
 import { dialogStore } from '$lib/dialogs.svelte';
-import { notificationStore } from '$lib/stores.svelte';
+import { downloadStore, notificationStore } from '$lib/stores.svelte';
 
 // ---------------------------------------------------------------------------
 // Path helpers
@@ -90,6 +90,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   let moved = 0;
   let requestCount = 0;
   const serverPaths = new Set<string>();          // all server file paths
+  const walkedDirs = new Set<string>();           // relative dir paths that were listed successfully
   const startTime = performance.now();
   console.log('%c[cfms:sync] Full recursive sync starting (throttled: %d per %ds)…', 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
 
@@ -121,13 +122,39 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     return null;
   }
 
+  async function listWithRetry(dirId: string | null): Promise<{ folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] }> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await throttleDownload();
+        return await listDirectory(dirId);
+      } catch (err) {
+        const msg = String(err);
+        if ((msg.includes('429') || msg.includes('503')) && attempt === 0) {
+          const match = msg.match(/retry_after_seconds["']?\s*:\s*(\d+)/);
+          const waitSec = match ? parseInt(match[1], 10) : 3;
+          console.log(`%c[cfms:sync] Rate limited (list), retrying in ${waitSec}s…`, 'color:#ffb74d');
+          await new Promise(r => setTimeout(r, waitSec * 1000 + 500));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error('listDirectory failed after retries');
+  }
+
   async function walk(dirId: string | null, pathParts: string[]) {
     let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
     try {
-      resp = await listDirectory(dirId);
+      resp = await listWithRetry(dirId);
     } catch {
+      // Never delete anything under a directory we could not list — otherwise
+      // a transient failure would make the deletion step treat its files as gone.
+      console.warn(`%c[cfms:sync] Skipping unreachable directory (files preserved): ${makeDownloadPath(pathParts) || '/'}`, 'color:#ffb74d');
       return;
     }
+    // Record that this directory was successfully enumerated, so the deletion
+    // step only removes files whose parent directory we actually inspected.
+    walkedDirs.add(makeDownloadPath(pathParts));
     // Compute local SHA-256 for all files in this directory
     const filenames = resp.documents.map(d => makeDownloadPath([...pathParts, d.title]));
     let localHashes: Record<string, string> = {};
@@ -144,17 +171,20 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
       const isDownloaded = localHash != null && serverHash != null && localHash === serverHash;
       // If server has no hash, fall back to file existence
       const existsLocally = !!localHash;
-      const needsDownload = !isDownloaded && (!existsLocally || overwriteLocal);
+      const hasServerHash = serverHash != null;
+      // Server version differs from local copy — always re-download (server is authoritative)
+      const mismatch = existsLocally && hasServerHash && localHash !== serverHash;
+      const needsDownload = !isDownloaded && (!existsLocally || mismatch || overwriteLocal);
 
       if (needsDownload) {
         try {
-          await downloadWithRetry(doc.id, downloadPath, overwriteLocal && existsLocally);
+          await downloadWithRetry(doc.id, downloadPath, existsLocally);
           if (existsLocally) updated++; else queued++;
         } catch { /* skip */ }
       } else if (isDownloaded) {
         skipped++;
-      } else if (existsLocally && !isDownloaded && !overwriteLocal) {
-        // File exists but hash doesn't match (or server lacks hash) and overwrite is off
+      } else if (existsLocally && !isDownloaded && !mismatch && !overwriteLocal) {
+        // File exists, server provides no hash to compare, and overwrite is off — skip
         skipped++;
       }
     }
@@ -170,11 +200,22 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     try {
       const allLocalFiles = await listDownloadFiles();
       const toDelete: string[] = [];
-      for (const localPath of allLocalFiles) {
+      for (const rawPath of allLocalFiles) {
+        // Normalize separators — the backend may return '\' on Windows while
+        // serverPaths always uses '/'. Normalize here so the comparison is
+        // robust regardless of backend behavior.
+        const localPath = rawPath.replace(/\\/g, '/');
         if (serverPaths.has(localPath)) continue;
         // Preserve hidden folders/files (e.g. .debugging) — only reachable via search,
         // not the regular directory tree, so they naturally won't be in serverPaths.
         if (localPath.split('/').some(seg => seg.startsWith('.'))) continue;
+        // Only delete files whose parent directory was successfully listed during the
+        // walk. If a directory was unreachable (rate limit, transient error, access
+        // denied), its files are NOT in serverPaths — deleting them would be wrong.
+        const parentDir = localPath.includes('/')
+          ? localPath.slice(0, localPath.lastIndexOf('/'))
+          : 'download';
+        if (!walkedDirs.has(parentDir)) continue;
         toDelete.push(localPath);
       }
       if (toDelete.length > 0) {
@@ -222,6 +263,16 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     await onRefresh?.();
 
     // --- Git version tracking ---
+    if (changed && (queued + updated > 0)) {
+      // Wait for async download tasks to finish writing files to disk.
+      // getDocument returns immediately — the actual download runs in the
+      // background. Without waiting, git would snapshot incomplete files.
+      const activeCount = downloadStore.activeTasks.length;
+      if (activeCount > 0) {
+        console.log('%c[cfms:sync] Waiting for %d active download(s) to finish before git commit…', 'color:#4fc3f7', activeCount);
+        await waitForActiveDownloads();
+      }
+    }
     if (changed) {
       try {
         await downloadGitInit();
@@ -230,7 +281,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
         if (updated > 0) msgParts.push(`~${updated}`);
         if (deleted > 0) msgParts.push(`-${deleted}`);
         if (moved > 0) msgParts.push(`→${moved}`);
-        const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        const timestamp = localTimestamp();
         const commitMsg = `sync ${timestamp}: ${msgParts.join(' ')}`;
         const hash = await downloadGitCommit(commitMsg);
         if (hash) {
@@ -254,4 +305,32 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
 
 function emptyResult(): SyncAllResult {
   return { queued: 0, updated: 0, deleted: 0, moved: 0, skipped: 0, changed: false };
+}
+
+/** Format the current local time as `YYYY-MM-DD HH:mm:ss` (local timezone). */
+function localTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/** Wait until no active (pending/downloading/verifying) download tasks remain. */
+function waitForActiveDownloads(maxWaitMs = 300_000): Promise<void> {
+  const deadline = Date.now() + maxWaitMs;
+  return new Promise<void>((resolve) => {
+    const check = () => {
+      const active = downloadStore.activeTasks.length;
+      if (active === 0) {
+        resolve();
+        return;
+      }
+      if (Date.now() >= deadline) {
+        console.warn('%c[cfms:sync] Timed out waiting for %d active download(s) to finish', 'color:#ffb74d', active);
+        resolve();
+        return;
+      }
+      setTimeout(check, 2000);
+    };
+    check();
+  });
 }

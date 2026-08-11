@@ -103,7 +103,7 @@ fn clear_download_root_hint(app_data: &std::path::Path) -> Result<(), String> {
 
 async fn create_transfer_connection(
     state: &cfms_service::state::AppState,
-) -> cfms_core::Result<cfms_transport::Connection> {
+) -> Result<cfms_transport::Connection, String> {
     let (url, ca_dir, disable_ssl, proxy_addr, force_ipv4, client_cert_path, client_key_path) = {
         let addr = state.server_address.read().await;
         let ca = state.ca_dir.read().await;
@@ -123,18 +123,20 @@ async fn create_transfer_connection(
         )
     };
 
-    let url = url.ok_or_else(|| cfms_core::Error::Other("No server address configured".into()))?;
-    let ca_dir = ca_dir.ok_or_else(|| cfms_core::Error::Other("No CA directory configured".into()))?;
+    let url = url.ok_or_else(|| "No server address configured".to_string())?;
+    let ca_dir = ca_dir.ok_or_else(|| "No CA directory configured".to_string())?;
 
     let tls_config = cfms_transport::tls::build_config_with_identity(
         &ca_dir,
         disable_ssl,
         client_cert_path.as_deref(),
         client_key_path.as_deref(),
-    )?;
+    )
+    .map_err(|e| format!("TLS config error: {e}"))?;
 
     cfms_transport::Connection::connect(&url, tls_config, proxy_addr.as_deref(), force_ipv4)
         .await
+        .map_err(|e| format!("Transfer connection failed: {e}"))
 }
 
 struct UploadTransferSession {
@@ -149,7 +151,7 @@ impl UploadTransferSession {
     async fn get(
         &mut self,
         state: &cfms_service::state::AppState,
-    ) -> cfms_core::Result<cfms_transport::Connection> {
+    ) -> Result<cfms_transport::Connection, String> {
         if self
             .conn
             .as_ref()
@@ -181,20 +183,27 @@ impl UploadTransferSession {
     }
 }
 
-const MAX_UPLOAD_RETRIES: u32 = cfms_service::services::retry::MAX_BACKGROUND_RETRIES as u32;
+const MAX_UPLOAD_RETRIES: u32 = 3;
 
 fn upload_retry_delay(error: &cfms_core::Error, attempt: u32) -> Option<std::time::Duration> {
     if attempt >= MAX_UPLOAD_RETRIES {
         return None;
     }
 
-    if !cfms_service::services::retry::is_transient_error(error) {
-        return None;
-    }
-    Some(cfms_service::services::retry::retry_delay(
-        attempt as usize + 1,
-        cfms_service::services::retry::error_retry_after_seconds(error),
-    ))
+    let fallback_seconds = 1u64 << attempt.min(3);
+    let seconds = match error {
+        cfms_core::Error::Connection(_) => fallback_seconds,
+        cfms_core::Error::Server {
+            code: 429,
+            retry_after_seconds,
+            ..
+        } => retry_after_seconds.unwrap_or(fallback_seconds),
+        cfms_core::Error::Server { code, .. } if matches!(*code, 500 | 502 | 503 | 504) => {
+            fallback_seconds
+        }
+        _ => return None,
+    };
+    Some(std::time::Duration::from_secs(seconds))
 }
 
 async fn wait_for_upload_resume(
@@ -247,7 +256,7 @@ async fn create_server_directory(
     }
 
     if resp.code != 200 {
-        return Err(format_server_response_error(&resp));
+        return Err(format!("Server returned {}: {}", resp.code, resp.message));
     }
 
     let id = resp
@@ -526,7 +535,10 @@ async fn upload_local_file<R: Runtime>(
 
                 if upload_resp.code != 200 {
                     state.active_uploads.unregister(&upload_id);
-                    return Err(format_server_response_error(&upload_resp));
+                    return Err(format!(
+                        "Server returned {}: {}",
+                        upload_resp.code, upload_resp.message
+                    ));
                 }
 
                 overwritten = true;
@@ -541,12 +553,18 @@ async fn upload_local_file<R: Runtime>(
             }
             _ => {
                 state.active_uploads.unregister(&upload_id);
-                return Err(format_server_response_error(&create_resp));
+                return Err(format!(
+                    "Server returned {}: {}",
+                    create_resp.code, create_resp.message
+                ));
             }
         }
     } else if create_resp.code != 200 {
         state.active_uploads.unregister(&upload_id);
-        return Err(format_server_response_error(&create_resp));
+        return Err(format!(
+            "Server returned {}: {}",
+            create_resp.code, create_resp.message
+        ));
     } else {
         let task_id = match extract_task_id(&create_resp.data) {
             Ok(id) => id,
@@ -617,41 +635,9 @@ async fn upload_local_file<R: Runtime>(
 
         let transfer_conn = match transfer_session.get(&state.inner).await {
             Ok(conn) => conn,
-            Err(error) => {
-                let Some(delay) = upload_retry_delay(&error, retry_attempt) else {
-                    let message = format_transport_error(&error);
-                    emit_upload_progress(
-                        app_handle,
-                        &upload_id,
-                        Some(&task_id),
-                        &file_name,
-                        0,
-                        0,
-                        "failed",
-                        Some(message.clone()),
-                    );
-                    state.active_uploads.unregister(&upload_id);
-                    return Err(message);
-                };
-
-                retry_attempt += 1;
-                emit_upload_progress(
-                    app_handle,
-                    &upload_id,
-                    Some(&task_id),
-                    &file_name,
-                    0,
-                    0,
-                    "uploading",
-                    Some(format!(
-                        "Server temporarily unavailable; retrying upload (attempt {retry_attempt}/{MAX_UPLOAD_RETRIES})"
-                    )),
-                );
-                tokio::select! {
-                    _ = tokio::time::sleep(delay) => {}
-                    _ = upload_control.changed() => {}
-                }
-                continue;
+            Err(err) => {
+                state.active_uploads.unregister(&upload_id);
+                return Err(err);
             }
         };
         state
@@ -683,7 +669,7 @@ async fn upload_local_file<R: Runtime>(
                     continue;
                 }
                 let Some(delay) = upload_retry_delay(&error, retry_attempt) else {
-                    let message = format_transport_error(&error);
+                    let message = format!("Upload failed: {error}");
                     emit_upload_progress(
                         app_handle,
                         &upload_id,
@@ -849,7 +835,14 @@ async fn server_action_json(
         match send_action_request(&conn, action, data.clone(), &username, &token).await {
             Ok(resp) => {
                 if resp.code != 200 {
-                    return Err(format_server_response_error(&resp));
+                    let error_data = serde_json::to_string(&resp.data)
+                        .unwrap_or_else(|_| "{}".to_string());
+                    let mut error = format!("Server returned {}: {}", resp.code, resp.message);
+                    if error_data != "{}" && error_data != "null" {
+                        error.push_str("\nCFMS_ERROR_DATA:");
+                        error.push_str(&error_data);
+                    }
+                    return Err(error);
                 }
 
                 return Ok(resp.data);

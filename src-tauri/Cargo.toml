@@ -37,6 +37,7 @@ rand.workspace = true
 zeroize.workspace = true
 base64ct.workspace = true
 hex = "0.4.3"
+sha2.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
 semver.workspace = true

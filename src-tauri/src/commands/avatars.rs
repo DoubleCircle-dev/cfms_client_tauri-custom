@@ -92,8 +92,7 @@ pub async fn download_avatar(
     }
 
     let conn = create_transfer_connection(&state.inner)
-        .await
-        .map_err(|error| format_transport_error(&error))?;
+        .await?;
 
     // Download using the transfer protocol.
     // Progress is silently consumed (avatars are small; the reference does the same).

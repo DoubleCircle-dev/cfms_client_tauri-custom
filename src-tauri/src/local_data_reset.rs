@@ -177,14 +177,15 @@ pub fn complete_pending_reset<R: Runtime>(
         );
     }
 
-    if failures.is_empty()
-        && let Err(e) = fs::remove_file(marker_path)
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        failures.push(LocalDataResetFailure {
-            target: "reset-marker".into(),
-            message: format!("Failed to finalize the reset request: {e}"),
-        });
+    if failures.is_empty() {
+        if let Err(e) = fs::remove_file(marker_path)
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            failures.push(LocalDataResetFailure {
+                target: "reset-marker".into(),
+                message: format!("Failed to finalize the reset request: {e}"),
+            });
+        }
     }
 
     LocalDataResetStatus {
@@ -456,7 +457,7 @@ mod tests {
         let raw = fs::read_to_string(&marker_path).unwrap();
         assert!(raw.contains("delete_downloads"));
         assert!(!raw.contains(temp.path().to_string_lossy().as_ref()));
-        assert!(read_marker(&marker_path).unwrap().delete_downloads);
+        assert_eq!(read_marker(&marker_path).unwrap().delete_downloads, true);
     }
 
     #[test]

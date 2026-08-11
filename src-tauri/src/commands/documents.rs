@@ -23,7 +23,7 @@ pub async fn create_directory(
     .await?;
 
     if resp.code != 200 {
-        return Err(format_server_response_error(&resp));
+        return Err(format!("Server returned {}: {}", resp.code, resp.message));
     }
 
     let id = resp.data["id"]
@@ -54,7 +54,7 @@ pub async fn delete_directory(
     .await?;
 
     if resp.code != 200 {
-        return Err(format_server_response_error(&resp));
+        return Err(format!("Server returned {}: {}", resp.code, resp.message));
     }
 
     Ok(true)
@@ -80,7 +80,7 @@ pub async fn delete_document(
     .await?;
 
     if resp.code != 200 {
-        return Err(format_server_response_error(&resp));
+        return Err(format!("Server returned {}: {}", resp.code, resp.message));
     }
 
     Ok(true)
@@ -374,7 +374,7 @@ pub async fn get_revision(
     .await?;
 
     if resp.code != 200 {
-        return Err(format_server_response_error(&resp));
+        return Err(format!("Server returned {}: {}", resp.code, resp.message));
     }
 
     let task_data = resp
@@ -485,7 +485,7 @@ pub async fn upload_new_revision<R: Runtime>(
     .await?;
 
     if resp.code != 200 {
-        return Err(format_server_response_error(&resp));
+        return Err(format!("Server returned {}: {}", resp.code, resp.message));
     }
 
     let task_data = resp
@@ -497,9 +497,7 @@ pub async fn upload_new_revision<R: Runtime>(
         .ok_or_else(|| "Server response missing task_id".to_string())?
         .to_string();
 
-    let mut transfer_conn = create_transfer_connection(&state.inner)
-        .await
-        .map_err(|error| format_transport_error(&error))?;
+    let mut transfer_conn = create_transfer_connection(&state.inner).await?;
     let emit_handle = app_handle.clone();
     let progress_document_id = document_id.clone();
     let progress_task_id = task_id.clone();
@@ -536,14 +534,12 @@ pub async fn upload_new_revision<R: Runtime>(
             Err(error) => {
                 let Some(delay) = upload_retry_delay(&error, attempt) else {
                     transfer_conn.close().await;
-                    return Err(format_transport_error(&error));
+                    return Err(format!("Upload failed: {error}"));
                 };
                 attempt += 1;
                 transfer_conn.close().await;
                 tokio::time::sleep(delay).await;
-                transfer_conn = create_transfer_connection(&state.inner)
-                    .await
-                    .map_err(|error| format_transport_error(&error))?;
+                transfer_conn = create_transfer_connection(&state.inner).await?;
                 // Keep the same server task ID: protocol 20 returns its
                 // authoritative upload checkpoint on the next request.
             }
