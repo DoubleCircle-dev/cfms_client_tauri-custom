@@ -76,6 +76,11 @@ export async function deleteDownloadFile(relativePath: string): Promise<boolean>
   return invoke("delete_download_file", { relativePath });
 }
 
+/** Move (rename) a file within the local download root by relative paths. */
+export async function moveDownloadFile(fromPath: string, toPath: string): Promise<boolean> {
+  return invoke("move_download_file", { fromPath, toPath });
+}
+
 /** Recursively list all file paths (relative) in the download root. */
 export async function listDownloadFiles(): Promise<string[]> {
   return invoke("list_download_files");

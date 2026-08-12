@@ -112,7 +112,7 @@
       if (result.changed) {
         notificationStore.success(
           $t('files.autoSyncCompleted', {
-            values: { downloaded: result.queued, updated: result.updated, deleted: result.deleted },
+            values: { downloaded: result.queued, updated: result.updated, moved: result.moved, deleted: result.deleted },
           }),
           5000,
         );

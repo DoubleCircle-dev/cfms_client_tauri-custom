@@ -320,6 +320,30 @@ pub async fn delete_download_file(
     Ok(true)
 }
 
+/// Move (rename) a file within the local download root by relative paths.
+/// Creates the destination directory if needed.
+#[tauri::command]
+pub async fn move_download_file(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    from_path: String,
+    to_path: String,
+) -> Result<bool, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let src = resolve_download_subdirectory(download_root.clone(), &from_path)?;
+    let dst = resolve_download_subdirectory(download_root, &to_path)?;
+    if !src.exists() {
+        return Ok(false);
+    }
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create destination directory: {e}"))?;
+    }
+    std::fs::rename(&src, &dst)
+        .map_err(|e| format!("Failed to move download file: {e}"))?;
+    Ok(true)
+}
+
 /// Recursively list all file paths (relative to the download root) in the download root.
 #[tauri::command]
 pub async fn list_download_files(

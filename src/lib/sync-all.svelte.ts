@@ -15,6 +15,7 @@ import {
   getDocument,
   listDirectory,
   listDownloadFiles,
+  moveDownloadFile,
 } from '$lib/api/files';
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api/types';
 import { dialogStore } from '$lib/dialogs.svelte';
@@ -91,6 +92,9 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   let requestCount = 0;
   const serverPaths = new Set<string>();          // all server file paths
   const walkedDirs = new Set<string>();           // relative dir paths that were listed successfully
+  // Downloads are deferred until after the walk so we can detect server-side
+  // moves/renames (same content at a different path) and avoid re-downloading.
+  const pendingDownloads: { docId: string; path: string; serverHash: string | null | undefined; existsLocally: boolean }[] = [];
   const startTime = performance.now();
   console.log('%c[cfms:sync] Full recursive sync starting (throttled: %d per %ds)…', 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
 
@@ -177,14 +181,8 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
       const needsDownload = !isDownloaded && (!existsLocally || mismatch || overwriteLocal);
 
       if (needsDownload) {
-        try {
-          await downloadWithRetry(doc.id, downloadPath, existsLocally);
-          if (existsLocally) updated++; else queued++;
-        } catch { /* skip */ }
-      } else if (isDownloaded) {
-        skipped++;
-      } else if (existsLocally && !isDownloaded && !mismatch && !overwriteLocal) {
-        // File exists, server provides no hash to compare, and overwrite is off — skip
+        pendingDownloads.push({ docId: doc.id, path: downloadPath, serverHash, existsLocally });
+      } else {
         skipped++;
       }
     }
@@ -196,52 +194,113 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   try {
     await walk(null, []);
 
-    // --- Sync deletions: remove local files no longer on server ---
-    try {
-      const allLocalFiles = await listDownloadFiles();
-      const toDelete: string[] = [];
-      for (const rawPath of allLocalFiles) {
-        // Normalize separators — the backend may return '\' on Windows while
-        // serverPaths always uses '/'. Normalize here so the comparison is
-        // robust regardless of backend behavior.
-        const localPath = rawPath.replace(/\\/g, '/');
-        if (serverPaths.has(localPath)) continue;
-        // Preserve hidden folders/files (e.g. .debugging) — only reachable via search,
-        // not the regular directory tree, so they naturally won't be in serverPaths.
-        if (localPath.split('/').some(seg => seg.startsWith('.'))) continue;
-        // Only delete files whose parent directory was successfully listed during the
-        // walk. If a directory was unreachable (rate limit, transient error, access
-        // denied), its files are NOT in serverPaths — deleting them would be wrong.
-        const parentDir = localPath.includes('/')
-          ? localPath.slice(0, localPath.lastIndexOf('/'))
-          : 'download';
-        if (!walkedDirs.has(parentDir)) continue;
-        toDelete.push(localPath);
-      }
-      if (toDelete.length > 0) {
-        const fileList = toDelete.slice(0, 8).join('\n')
-          + (toDelete.length > 8 ? `\n… +${toDelete.length - 8} more` : '');
-        let confirmed = !confirmDeletes;
-        if (confirmDeletes) {
-          confirmed = await dialogStore.confirm({
-            title: get(t)('files.syncDeleteTitle'),
-            message: `${get(t)('files.syncDeleteMessage', { values: { count: toDelete.length } })}\n\n${fileList}`,
-            confirmLabel: get(t)('common.delete'),
-            cancelLabel: get(t)('common.cancel'),
-            danger: true,
-          });
+    // --- Collect local files no longer on server ---
+    const allLocalFiles = await listDownloadFiles();
+    const deleteCandidates: string[] = [];
+    for (const rawPath of allLocalFiles) {
+      // Normalize separators — the backend may return '\' on Windows while
+      // serverPaths always uses '/'. Normalize here so the comparison is
+      // robust regardless of backend behavior.
+      const localPath = rawPath.replace(/\\/g, '/');
+      if (serverPaths.has(localPath)) continue;
+      // Only consider files whose parent directory was successfully listed during the
+      // walk. This single guard covers both concerns:
+      //  - unreachable directories (rate limit, transient error, access denied) are
+      //    NOT in walkedDirs, so their files are preserved even though they're absent
+      //    from serverPaths;
+      //  - search-only hidden folders (e.g. .debugging) are never walked, so they are
+      //    preserved too. Regular hidden folders like `.runtime` ARE walked, so their
+      //    removed files get deleted just like any other directory.
+      const parentDir = localPath.includes('/')
+        ? localPath.slice(0, localPath.lastIndexOf('/'))
+        : 'download';
+      if (!walkedDirs.has(parentDir)) continue;
+      deleteCandidates.push(localPath);
+    }
+
+    // Compute SHA-256 of deletion candidates so we can detect server-side moves
+    // (same content at a different path) and avoid delete + re-download.
+    let deleteHashes: Record<string, string> = {};
+    if (deleteCandidates.length > 0) {
+      try {
+        deleteHashes = await computeLocalSha256(deleteCandidates);
+      } catch { /* ignore */ }
+    }
+
+    // Match deletion candidates against brand-new server files by content hash.
+    const toMove: { from: string; to: string; download: { docId: string; path: string; serverHash: string | null | undefined; existsLocally: boolean } }[] = [];
+    const toDelete: string[] = [];
+    const newDownloads = pendingDownloads.filter(d => !d.existsLocally);
+    for (const candidate of deleteCandidates) {
+      const hash = deleteHashes[candidate];
+      if (hash) {
+        const idx = newDownloads.findIndex(d => d.serverHash != null && d.serverHash === hash);
+        if (idx >= 0) {
+          const download = newDownloads.splice(idx, 1)[0];
+          toMove.push({ from: candidate, to: download.path, download });
+          continue;
         }
-        if (confirmed) {
-          for (const localPath of toDelete) {
-            try {
-              await deleteDownloadFile(localPath);
-              console.log(`%c[cfms:sync] Removed: ${localPath}`, 'color:#ef9a9a');
-              deleted++;
-            } catch { /* ignore */ }
-          }
+      }
+      toDelete.push(candidate);
+    }
+
+    // Remaining downloads: unmatched new files + local files that need overwriting.
+    const toDownload = [
+      ...newDownloads,
+      ...pendingDownloads.filter(d => d.existsLocally),
+    ];
+
+    // Execute moves first (non-destructive, no confirmation needed).
+    for (const plan of toMove) {
+      try {
+        const ok = await moveDownloadFile(plan.from, plan.to);
+        if (ok) {
+          moved++;
+          console.log(`%c[cfms:sync] Moved: ${plan.from} → ${plan.to}`, 'color:#4fc3f7');
+        } else {
+          // Source file vanished — fall back to delete + download.
+          toDelete.push(plan.from);
+          toDownload.push(plan.download);
+        }
+      } catch {
+        // Move failed — fall back to delete + download.
+        toDelete.push(plan.from);
+        toDownload.push(plan.download);
+      }
+    }
+
+    // Confirm and execute deletions.
+    if (toDelete.length > 0) {
+      const fileList = toDelete.slice(0, 8).join('\n')
+        + (toDelete.length > 8 ? `\n… +${toDelete.length - 8} more` : '');
+      let confirmed = !confirmDeletes;
+      if (confirmDeletes) {
+        confirmed = await dialogStore.confirm({
+          title: get(t)('files.syncDeleteTitle'),
+          message: `${get(t)('files.syncDeleteMessage', { values: { count: toDelete.length } })}\n\n${fileList}`,
+          confirmLabel: get(t)('common.delete'),
+          cancelLabel: get(t)('common.cancel'),
+          danger: true,
+        });
+      }
+      if (confirmed) {
+        for (const localPath of toDelete) {
+          try {
+            await deleteDownloadFile(localPath);
+            console.log(`%c[cfms:sync] Removed: ${localPath}`, 'color:#ef9a9a');
+            deleted++;
+          } catch { /* ignore */ }
         }
       }
-    } catch { /* ignore scan errors */ }
+    }
+
+    // Execute downloads.
+    for (const d of toDownload) {
+      try {
+        await downloadWithRetry(d.docId, d.path, d.existsLocally);
+        if (d.existsLocally) updated++; else queued++;
+      } catch { /* skip */ }
+    }
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
     const parts: string[] = [];
@@ -255,7 +314,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     const changed = queued + updated + deleted + moved > 0;
     if (changed) {
       onStatus?.(
-        get(t)('files.syncCompleted', { values: { downloaded: queued, updated } }),
+        get(t)('files.syncCompleted', { values: { downloaded: queued, updated, moved, deleted } }),
       );
     } else {
       onStatus?.(get(t)('files.syncAllUpToDate'));
