@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createBannedSubnet,
   disableManagedTwoFactor,
+  getServerDiagnostics,
   getUserInfo,
   listAuthLockouts,
   listBannedSubnets,
+  manageUserStatus,
   renameUser,
+  setLockdown,
   unlockAuthLockouts,
+  updateUserBlock,
 } from './admin';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
@@ -69,6 +73,46 @@ describe('admin API', () => {
     expect(invokeMock).toHaveBeenLastCalledWith('unlock_auth_lockouts', {
       locks,
       reason: 'Reviewed by administrator',
+    });
+  });
+
+  it('maps protocol v22 server diagnostics to its dedicated Tauri command', async () => {
+    const diagnostics = {
+      schema_version: 1,
+      server: {
+        server_name: 'CFMS',
+        core_version: '0.5.0',
+        protocol_version: 23,
+        debug_configured: false,
+      },
+    };
+    invokeMock.mockResolvedValue(diagnostics);
+
+    await expect(getServerDiagnostics()).resolves.toBe(diagnostics);
+    expect(invokeMock).toHaveBeenCalledWith('server_diagnostics');
+  });
+
+  it('maps protocol v23 operation-reason updates to dedicated Tauri commands', async () => {
+    invokeMock.mockResolvedValueOnce({ username: 'alice', status: 'disabled', reason: null });
+    await manageUserStatus('alice', 'disabled', null);
+    expect(invokeMock).toHaveBeenLastCalledWith('manage_user_status', {
+      username: 'alice',
+      status: 'disabled',
+      reason: null,
+    });
+
+    invokeMock.mockResolvedValueOnce({ status: true, reason: '  incident  ' });
+    await setLockdown(true, '  incident  ');
+    expect(invokeMock).toHaveBeenLastCalledWith('set_lockdown', {
+      status: true,
+      reason: '  incident  ',
+    });
+
+    invokeMock.mockResolvedValueOnce({ block_id: 'block-1', reason: null });
+    await updateUserBlock('block-1', null);
+    expect(invokeMock).toHaveBeenLastCalledWith('update_user_block', {
+      blockId: 'block-1',
+      reason: null,
     });
   });
 

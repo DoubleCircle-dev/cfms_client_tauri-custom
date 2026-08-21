@@ -3,14 +3,16 @@
   import { _ as t } from 'svelte-i18n';
   import { protocolVersion } from '$lib/api';
   import { loadAppVersion } from '$lib/app-info';
+  import { releaseHighlightsState } from '$lib/release-highlights/state.svelte';
+  import { authStore } from '$lib/stores.svelte';
   import AppUpdateChecker from '$lib/components/AppUpdateChecker.svelte';
   import ChangelogPanel from '$lib/components/ChangelogPanel.svelte';
-  import Icon from '$lib/components/Icon.svelte';
 
   let protoVer = $state(0);
   let appVersion = $state('');
 
   onMount(async () => {
+    void releaseHighlightsState.initialize();
     appVersion = await loadAppVersion();
     try {
       protoVer = await protocolVersion();
@@ -18,6 +20,11 @@
       // Non-fatal on the about page.
     }
   });
+
+  async function replayReleaseHighlights() {
+    await releaseHighlightsState.initialize();
+    releaseHighlightsState.openManually(authStore.permissions);
+  }
 
 </script>
 
@@ -48,7 +55,9 @@
     </dl>
   </section>
 
-  <AppUpdateChecker />
+  <AppUpdateChecker
+    onOpenFeatureTour={releaseHighlightsState.currentTour ? replayReleaseHighlights : undefined}
+  />
 
   <ChangelogPanel />
 </div>
@@ -123,5 +132,6 @@
       grid-template-columns: 1fr;
       gap: 0.9rem;
     }
+
   }
 </style>

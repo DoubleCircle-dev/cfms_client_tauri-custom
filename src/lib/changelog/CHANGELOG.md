@@ -4,6 +4,77 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.45.0
+**Released on:** 2026-08-21
+
+**Title:** Introduce a full-screen feature tour
+
+### Added
+- Add a paired light and dark animation that shows the feature tour expanding from a window into a full-screen experience
+
+### Changed
+- Present release highlights edge to edge across desktop and touch layouts, with dedicated narrow-screen and landscape adaptations
+- Reuse the existing 0.43 release-highlight animations in the 0.45 feature tour
+
+### Fixed
+- Adjust focus styles for release highlights screen to improve accessibility
+
+---
+
+## v0.44.0
+**Released on:** 2026-08-20
+
+**Title:** Add node path resolution feature and related UI components
+
+### Added
+- Add node path resolution feature and related UI components
+- Add a project-specific skill for lottie
+- Ship animated highlight scenes
+- Present permission-aware highlights
+- Add highlight tour foundation
+
+### Improved
+- Enhance UI structure and improve accessibility features
+- Remove release highlights section from About page and update AppUpdateChecker component
+
+### Fixed
+- Add finish_directory method to complete directory uploads
+- Adjust Lottie's animation details to make it more elegant and beautiful
+- Rewrite server diagnostics animation for version 0.43
+
+### Maintenance
+- Set timeout for various jobs to 25 minutes
+- Add thread configuration to rustflags
+- Update deps
+
+### Changed
+- Update dependabot.yml to include cargo and npm
+
+--- 
+
+## v0.43.0
+**Released on:** 2026-08-19
+
+**Title:** Protocol Version 23
+
+### Added
+- Add a permission-aware release highlights guide with local Lottie animations and replay from the About page
+- Add diagnostics page with server diagnostics functionality and localization support
+- Update protocol version to 23 and enhance user management features with reason handling
+- Implement resizable details pane with keyboard support and add tests
+- Add Document ID download functionality with UI and tests
+- Implement server diagnostics feature with protocol 22 support and related UI components
+- Add admin_password_reset_data function and related tests for password reset functionality
+- Enhance ModalFrame with resizable and maximizable features
+- Add hidden developer request console with API integration
+
+### Fixed
+- Enhance ModalFrame with improved window state transition handling and related tests
+- Add functionality to restore pre-maximize size after viewport changes in ModalFrame
+- Adjust layout and sizing for DeveloperRequestConsole
+
+--- 
+
 ## v0.42.0
 **Released on:** 2026-08-11
 

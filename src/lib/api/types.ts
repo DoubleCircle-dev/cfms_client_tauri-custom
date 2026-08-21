@@ -227,6 +227,12 @@ export interface ManagedUser {
 
 export type ManagedUserStatus = "active" | "disabled";
 
+export interface ManagedUserStatusUpdate {
+  username: string;
+  status: ManagedUserStatus;
+  reason: string | null;
+}
+
 /** Detailed account data returned by get_user_info. */
 export interface ManagedUserInfo extends ManagedUser {
   status: ManagedUserStatus;
@@ -252,6 +258,12 @@ export interface UserBlock {
   timestamp?: number | null;
   not_before?: number | null;
   not_after?: number | null;
+  reason: string | null;
+}
+
+export interface LockdownState {
+  status: boolean;
+  reason: string | null;
 }
 
 export type BannedSubnetStatus = "scheduled" | "active" | "expired";
@@ -477,6 +489,7 @@ export interface ServerState {
   protocol_version: number | null;
   lockdown: boolean;
   lockdown_reason: string | null;
+  extension_flags: string[];
 }
 
 export interface TwoFactorStatus {
@@ -498,6 +511,51 @@ export interface ServerInfo {
   protocol_version: number;
   lockdown: boolean;
   lockdown_reason: string | null;
+  extension_flags: string[];
+}
+
+export interface NodeLookupResponse {
+  node_ids: string[];
+}
+
+/** Permission-protected static server diagnostics introduced in protocol 22. */
+export interface ServerDiagnostics {
+  schema_version: 1;
+  server: {
+    server_name: string;
+    core_version: string;
+    protocol_version: number;
+    debug_configured: boolean;
+  };
+  runtime: {
+    python_implementation: string;
+    python_version: string;
+    openssl_version: string;
+    operating_system: string;
+    operating_system_release: string;
+    architecture: string;
+  };
+  component_versions: Record<string, string>;
+  database: {
+    dialect: string;
+    driver: string;
+  };
+  providers: {
+    storage: string;
+    caching: string;
+    event_bus: string;
+    rate_limit: string;
+  };
+  extensions: Array<{
+    identifier: string;
+    name: string;
+    version: string;
+  }>;
+  extension_flags: string[];
+  lockdown: {
+    enabled: boolean;
+    reason: string | null;
+  };
 }
 
 export interface ConnectionSettings {

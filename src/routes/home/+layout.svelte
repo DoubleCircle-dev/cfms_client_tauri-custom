@@ -73,6 +73,11 @@
   const canChangeOwnAvatar = $derived(
     authStore.isLoggedIn && canSetOwnAvatar(authStore.permissions),
   );
+  const canViewDiagnostics = $derived(
+    serverStateStore.connected
+      && authStore.isLoggedIn
+      && authStore.permissions.includes('diagnostics'),
+  );
   const isSettingsRoute = $derived(
     $page.url.pathname === '/home/settings' || $page.url.pathname.startsWith('/home/settings/'),
   );
@@ -112,6 +117,9 @@
       ? [{ id: 'manage', label: $t('workspace.administration'), href: '/home/manage', icon: 'adminPanelSettings' as const }]
       : []),
     { id: 'settings', label: $t('workspace.settings'), href: '/home/settings', icon: 'settings' },
+    ...(canViewDiagnostics
+      ? [{ id: 'diagnostics', label: $t('workspace.diagnostics'), href: '/home/diagnostics', icon: 'bugReport' as const, exact: true }]
+      : []),
     { id: 'about', label: $t('workspace.about'), href: '/home/about', icon: 'info' },
   ]);
   const navigationHasActiveItem = $derived(
@@ -134,6 +142,7 @@
     if (path === '/home/trash') return $t('workspace.recycleBin');
     if (path === '/home/manage') return $t('workspace.administration');
     if (path === '/home/more') return $t('workspace.account');
+    if (path === '/home/diagnostics') return $t('workspace.diagnostics');
     if (path === '/home/about') return $t('workspace.about');
     if (path.startsWith('/home/settings')) return $t('workspace.settings');
     return $t('nav.home');
@@ -234,15 +243,17 @@
     }
   }
 
-  async function applyLockdown(nextStatus: boolean, reason?: string) {
+  async function applyLockdown(nextStatus: boolean, reason?: string | null) {
     if (lockdownBusy) return;
     lockdownBusy = true;
     try {
-      await setLockdown(nextStatus, reason);
-      serverStateStore.lockdown = nextStatus;
-      serverStateStore.lockdownReason = nextStatus ? reason ?? null : null;
+      const state = await setLockdown(nextStatus, reason);
+      serverStateStore.lockdown = state.status;
+      serverStateStore.lockdownReason = state.reason;
+      return true;
     } catch (error) {
       notificationStore.error(formatUserFacingError(error));
+      return false;
     } finally {
       lockdownBusy = false;
     }
@@ -405,11 +416,13 @@
       {#if canApplyLockdown}
         <LockdownControl
           active={serverStateStore.lockdown}
+          currentReason={serverStateStore.lockdownReason}
           busy={lockdownBusy}
           enableLabel={$t('lockdown.enableAction')}
           disableLabel={$t('lockdown.disableAction')}
           confirmLabel={$t('lockdown.confirmEnableAction')}
           cancelLabel={$t('common.cancel')}
+          editLabel={$t('lockdown.editReasonAction')}
           reasonLabel={$t('lockdown.reasonLabel')}
           reasonPlaceholder={$t('lockdown.enableReasonPlaceholder')}
           remainingLabel={(count) => $t('lockdown.reasonCharactersRemaining', { values: { count } })}
