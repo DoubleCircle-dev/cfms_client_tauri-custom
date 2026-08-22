@@ -908,6 +908,7 @@ export const zh_CN = {
     permissionEndInvalid: '请选择有效的结束时间，或关闭到期设置。',
     permissionEndModeHelp: '让规则持续有效，或在精确的本地时间停止。',
     permissionIntervalInvalid: '结束时间不能早于开始时间。',
+    permissionDataInvalid: '服务端返回的权限数据不符合当前协议。编辑已禁用，但你仍可安全地刷新或关闭此窗口。',
     permissionEditorAutosaveHint: '编辑会暂存在本地，只有保存全部更改时才会发送到服务器。',
     permissionPendingDeletion: '规则等待移除',
     permissionPendingDeletionDescription: '保存全部更改后将移除“{permission}”。',

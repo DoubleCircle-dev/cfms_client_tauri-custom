@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
-  import type { PermissionEntry } from '$lib/api';
+  import { InvalidAdminResponseError, type PermissionEntry } from '$lib/api';
   import { dialogStore } from '$lib/dialogs.svelte';
   import {
     countPermissionEntryChanges,
@@ -45,9 +45,9 @@
   }: {
     title: string;
     description: string;
-    entries?: PermissionEntry[];
-    effectivePermissions?: string[];
-    inheritedPermissions?: string[];
+    entries?: PermissionEntry[] | null;
+    effectivePermissions?: string[] | null;
+    inheritedPermissions?: string[] | null;
     onRefresh?: () => Promise<PermissionEntriesEditorData>;
     onSave: (entries: PermissionEntry[]) => Promise<void>;
     onClose: () => void;
@@ -55,8 +55,8 @@
 
   let nextKey = 0;
 
-  function trackedEntries(source: PermissionEntry[]): EditableEntry[] {
-    return source.map((entry) => {
+  function trackedEntries(source: PermissionEntry[] | null | undefined): EditableEntry[] {
+    return (Array.isArray(source) ? source : []).map((entry) => {
       const snapshot = { ...entry };
       return {
         key: `permission-entry-${nextKey++}`,
@@ -69,18 +69,45 @@
     });
   }
 
-  const initialEntries = untrack(() => trackedEntries(entries));
+  function invalidEditorDataMessage(
+    sourceEntries: unknown,
+    sourceEffectivePermissions: unknown,
+    sourceInheritedPermissions: unknown,
+  ): string | null {
+    if (!Array.isArray(sourceEntries)) {
+      return 'Invalid permission data: entries must be an array.';
+    }
+    if (!Array.isArray(sourceEffectivePermissions)) {
+      return 'Invalid permission data: effectivePermissions must be an array.';
+    }
+    if (sourceInheritedPermissions !== undefined && !Array.isArray(sourceInheritedPermissions)) {
+      return 'Invalid permission data: inheritedPermissions must be an array when provided.';
+    }
+    return null;
+  }
+
+  const initialDataError = untrack(() => invalidEditorDataMessage(
+    entries,
+    effectivePermissions,
+    inheritedPermissions,
+  ));
+  const initialEntries = untrack(() => trackedEntries(initialDataError ? [] : entries));
   let localEntries = $state<EditableEntry[]>(initialEntries);
-  let localEffectivePermissions = $state<string[]>(untrack(() => [...effectivePermissions]));
+  let localEffectivePermissions = $state<string[]>(
+    untrack(() => Array.isArray(effectivePermissions) ? [...effectivePermissions] : []),
+  );
   let localInheritedPermissions = $state<string[] | undefined>(
-    untrack(() => inheritedPermissions ? [...inheritedPermissions] : undefined),
+    untrack(() => Array.isArray(inheritedPermissions) ? [...inheritedPermissions] : undefined),
   );
   let selectedKey = $state<string | null>(initialEntries[0]?.key ?? null);
   let query = $state('');
   let filter = $state<PermissionEntryFilter>('all');
   let loading = $state(false);
   let saving = $state(false);
-  let error = $state<string | null>(null);
+  let dataInvalid = $state(initialDataError !== null);
+  let error = $state<string | null>(
+    initialDataError ? $t('manage.permissionDataInvalid') : null,
+  );
   let nowSeconds = $state(Date.now() / 1000);
   let editorComponent: {
     focusPermissionName: () => void;
@@ -137,6 +164,13 @@
   });
 
   function replaceEditorData(data: PermissionEntriesEditorData) {
+    const invalidData = invalidEditorDataMessage(
+      data?.entries,
+      data?.effectivePermissions,
+      data?.inheritedPermissions,
+    );
+    if (invalidData) throw new InvalidAdminResponseError(invalidData);
+
     const nextEntries = trackedEntries(data.entries);
     localEntries = nextEntries;
     localEffectivePermissions = [...data.effectivePermissions];
@@ -149,6 +183,7 @@
   }
 
   async function startCreating() {
+    if (dataInvalid || saving) return;
     const entry = createImmediatePermissionEntry('', Date.now() / 1000);
     const row: EditableEntry = {
       key: `permission-entry-${nextKey++}`,
@@ -188,14 +223,14 @@
   }
 
   function patchSelected(patch: Partial<PermissionEntry>) {
-    if (!selectedKey || saving) return;
+    if (!selectedKey || dataInvalid || saving) return;
     localEntries = localEntries.map((row) => row.key === selectedKey
       ? { ...row, entry: { ...row.entry, ...patch } }
       : row);
   }
 
   function setStartMode(mode: StartMode) {
-    if (!selectedKey || saving) return;
+    if (!selectedKey || dataInvalid || saving) return;
     localEntries = localEntries.map((row) => {
       if (row.key !== selectedKey) return row;
       const startTime = mode === 'immediate'
@@ -212,7 +247,7 @@
   }
 
   function setEndMode(mode: EndMode) {
-    if (!selectedKey || saving) return;
+    if (!selectedKey || dataInvalid || saving) return;
     localEntries = localEntries.map((row) => {
       if (row.key !== selectedKey) return row;
       const endTime = mode === 'never'
@@ -229,6 +264,7 @@
   }
 
   async function deleteEntry(key: string) {
+    if (dataInvalid || saving) return;
     const index = localEntries.findIndex((row) => row.key === key);
     if (index < 0) return;
     const row = localEntries[index];
@@ -251,6 +287,7 @@
   }
 
   async function undoEntryChange(key: string) {
+    if (dataInvalid || saving) return;
     localEntries = localEntries.map((row) => {
       if (row.key !== key) return row;
       if (row.deleted) return { ...row, deleted: false };
@@ -293,15 +330,19 @@
     error = null;
     try {
       replaceEditorData(await onRefresh());
+      dataInvalid = false;
     } catch (refreshError) {
-      error = formatUserFacingError(refreshError);
+      if (refreshError instanceof InvalidAdminResponseError) dataInvalid = true;
+      error = refreshError instanceof InvalidAdminResponseError
+        ? $t('manage.permissionDataInvalid')
+        : formatUserFacingError(refreshError);
     } finally {
       loading = false;
     }
   }
 
   async function save() {
-    if (!dirty || hasInvalidEntries || loading || saving) return;
+    if (!dirty || hasInvalidEntries || dataInvalid || loading || saving) return;
     saving = true;
     error = null;
     try {
@@ -373,7 +414,7 @@
         {query}
         {filter}
         {filterCounts}
-        disabled={saving || loading}
+        disabled={saving || loading || dataInvalid}
         onQueryChange={(value) => (query = value)}
         onFilterChange={(value) => (filter = value)}
         onSelect={selectEntry}
@@ -387,7 +428,7 @@
         row={selectedEditorRow}
         validation={selectedValidation}
         {suggestions}
-        disabled={saving || loading}
+        disabled={saving || loading || dataInvalid}
         onPatch={patchSelected}
         onStartModeChange={setStartMode}
         onEndModeChange={setEndMode}
@@ -431,7 +472,7 @@
         </DialogActionButton>
         <DialogActionButton
           variant="primary"
-          disabled={!dirty || hasInvalidEntries || loading || saving}
+          disabled={!dirty || hasInvalidEntries || dataInvalid || loading || saving}
           onclick={save}
         >
           {#if saving}

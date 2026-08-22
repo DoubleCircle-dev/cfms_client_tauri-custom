@@ -916,6 +916,7 @@ export const en = {
     permissionEndInvalid: 'Choose a valid end time or turn off expiry.',
     permissionEndModeHelp: 'Keep the rule active indefinitely or stop it at an exact local time.',
     permissionIntervalInvalid: 'The end time cannot be earlier than the start time.',
+    permissionDataInvalid: 'The server returned permission data that does not match the current protocol. Editing has been disabled, but you can refresh or close this window safely.',
     permissionEditorAutosaveHint: 'Edits are staged locally and are sent only when you save all changes.',
     permissionPendingDeletion: 'Rule pending removal',
     permissionPendingDeletionDescription: '“{permission}” will be removed when all changes are saved.',

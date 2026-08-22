@@ -3,9 +3,31 @@ import { invoke } from '@tauri-apps/api/core';
 import type { AuditLogsResponse, AuthLockout, AuthLockoutSelector, BannedSubnet, BannedSubnetStatus, LockdownState, ManagedGroup, ManagedUser, ManagedUserInfo, ManagedUserStatus, ManagedUserStatusUpdate, PermissionEntry, ServerDiagnostics, TwoFactorStatus, UnlockAuthLockoutsResult, UserBlock, UserBlockTarget, UserKeyDetails, UserKeyMetadata } from './types';
 
 /** Raw status is the integer value of the server's UserStatus enum. */
-type ManagedUserInfoResponse = Omit<ManagedUserInfo, 'status'> & {
+type ManagedUserResponse = Omit<
+  ManagedUser,
+  'permissions' | 'effective_permissions' | 'effective_own_permissions' | 'effective_inherited_permissions'
+> & {
+  permissions: unknown;
+  effective_permissions: unknown;
+  effective_own_permissions: unknown;
+  effective_inherited_permissions: unknown;
+};
+
+type ManagedUserInfoResponse = ManagedUserResponse & {
   status: ManagedUserStatus | 0 | 1;
 };
+
+type ManagedGroupResponse = Omit<ManagedGroup, 'permissions' | 'effective_permissions'> & {
+  permissions: unknown;
+  effective_permissions: unknown;
+};
+
+export class InvalidAdminResponseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidAdminResponseError';
+  }
+}
 
 function normalizeManagedUserStatus(status: unknown): ManagedUserStatus {
   if (status === 'active' || status === 0) return 'active';
@@ -13,9 +35,81 @@ function normalizeManagedUserStatus(status: unknown): ManagedUserStatus {
   throw new Error(`Invalid managed user status: ${String(status)}`);
 }
 
+function invalidAdminResponse(context: string, field: string, expected: string): never {
+  throw new InvalidAdminResponseError(
+    `Invalid ${context} response: ${field} must be ${expected}`,
+  );
+}
+
+function parsePermissionNames(value: unknown, context: string, field: string): string[] {
+  if (!Array.isArray(value) || value.some((permission) => typeof permission !== 'string')) {
+    return invalidAdminResponse(context, field, 'an array of permission names');
+  }
+  return [...value];
+}
+
+function parsePermissionEntries(value: unknown, context: string): PermissionEntry[] {
+  if (!Array.isArray(value)) {
+    return invalidAdminResponse(context, 'permissions', 'an array of structured permission entries');
+  }
+
+  return value.map((entry, index) => {
+    if (
+      typeof entry !== 'object'
+      || entry === null
+      || Array.isArray(entry)
+      || typeof entry.permission !== 'string'
+      || typeof entry.granted !== 'boolean'
+      || typeof entry.start_time !== 'number'
+      || !Number.isFinite(entry.start_time)
+      || !(
+        entry.end_time === null
+        || (typeof entry.end_time === 'number' && Number.isFinite(entry.end_time))
+      )
+    ) {
+      return invalidAdminResponse(
+        context,
+        `permissions[${index}]`,
+        'a structured permission entry',
+      );
+    }
+
+    return {
+      permission: entry.permission,
+      granted: entry.granted,
+      start_time: entry.start_time,
+      end_time: entry.end_time,
+    };
+  });
+}
+
+function normalizeManagedUser(user: ManagedUserResponse, context: string): ManagedUser {
+  return {
+    ...user,
+    permissions: parsePermissionEntries(user.permissions, context),
+    effective_permissions: parsePermissionNames(user.effective_permissions, context, 'effective_permissions'),
+    effective_own_permissions: parsePermissionNames(user.effective_own_permissions, context, 'effective_own_permissions'),
+    effective_inherited_permissions: parsePermissionNames(
+      user.effective_inherited_permissions,
+      context,
+      'effective_inherited_permissions',
+    ),
+  };
+}
+
+function normalizeManagedGroup(group: ManagedGroupResponse, context: string): ManagedGroup {
+  return {
+    ...group,
+    permissions: parsePermissionEntries(group.permissions, context),
+    effective_permissions: parsePermissionNames(group.effective_permissions, context, 'effective_permissions'),
+  };
+}
+
 export async function listUsers(): Promise<ManagedUser[]> {
-  const data = await invoke<{ users?: ManagedUser[] }>("list_users");
-  return data.users ?? [];
+  const data = await invoke<{ users?: ManagedUserResponse[] }>("list_users");
+  return Array.isArray(data.users)
+    ? data.users.map((user, index) => normalizeManagedUser(user, `list_users.users[${index}]`))
+    : [];
 }
 
 export async function createUser(
@@ -40,7 +134,7 @@ export async function deleteUser(username: string): Promise<boolean> {
 export async function getUserInfo(username: string): Promise<ManagedUserInfo> {
   const info = await invoke<ManagedUserInfoResponse>("get_user_info", { username });
   return {
-    ...info,
+    ...normalizeManagedUser(info, 'get_user_info'),
     status: normalizeManagedUserStatus(info.status),
   };
 }
@@ -180,8 +274,10 @@ export async function unlockAuthLockouts(
 }
 
 export async function listGroups(): Promise<ManagedGroup[]> {
-  const data = await invoke<{ groups?: ManagedGroup[] }>("list_groups");
-  return data.groups ?? [];
+  const data = await invoke<{ groups?: ManagedGroupResponse[] }>("list_groups");
+  return Array.isArray(data.groups)
+    ? data.groups.map((group, index) => normalizeManagedGroup(group, `list_groups.groups[${index}]`))
+    : [];
 }
 
 export async function createGroup(
@@ -203,7 +299,8 @@ export async function deleteGroup(groupName: string): Promise<boolean> {
 }
 
 export async function getGroupInfo(groupName: string): Promise<ManagedGroup> {
-  return invoke("get_group_info", { groupName });
+  const group = await invoke<ManagedGroupResponse>("get_group_info", { groupName });
+  return normalizeManagedGroup(group, 'get_group_info');
 }
 
 export async function changeGroupPermissions(
