@@ -2,7 +2,13 @@
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
-  import { getDirectoryInfo, getDocument, loadUserPreference, listDirectory } from '$lib/api';
+  import {
+    getDirectoryInfo,
+    getDocument,
+    getFileAutoUpdateSettings,
+    loadUserPreference,
+    listDirectory,
+  } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import HomeRecordPanel from '$lib/components/HomeRecordPanel.svelte';
   import {
@@ -25,7 +31,7 @@
     notificationStore,
     serverStateStore,
   } from '$lib/stores.svelte';
-  import { fileUpdateTracker, type CheckHistoryEntry } from '$lib/file-update-tracker.svelte';
+  import { fileUpdateTracker, type CheckHistoryEntry, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
   import { syncAllFiles as runSyncAll } from '$lib/sync-all.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
@@ -35,6 +41,9 @@
   let loadingFavorites = $state(true);
   let openingId = $state<string | null>(null);
   let recordRecentVisits = $state(true);
+  let autoFileUpdateEnabled = $state(true);
+  let autoFileUpdateIntervalMinutes = $state(60);
+  let queueBusy = $state(false);
 
   onMount(async () => {
     const scope = currentFilePreferenceScope();
@@ -43,10 +52,15 @@
       recordRecentVisits = shouldRecordRecentVisits(preferences);
       recent = await loadRecentVisits(scope);
       favorites = await loadFavoriteRecords(scope);
+      const autoSettings = await getFileAutoUpdateSettings();
+      autoFileUpdateEnabled = autoSettings.enabled;
+      autoFileUpdateIntervalMinutes = autoSettings.intervalMinutes;
     } catch {
       recent = [];
       favorites = [];
       recordRecentVisits = true;
+      autoFileUpdateEnabled = true;
+      autoFileUpdateIntervalMinutes = 60;
     } finally {
       loadingRecent = false;
       loadingFavorites = false;
@@ -75,53 +89,19 @@
       }
     }
 
-    // Start persistent hourly polling (survives page navigation)
-    if (!fileUpdateTracker.isPolling) {
+    // Start/stop persistent polling (survives page navigation) using user settings.
+    if (autoFileUpdateEnabled) {
       fileUpdateTracker.startPolling(async () => {
         try {
-          const result = await fileUpdateTracker.recursiveCheck(
-            (id) => listDirectory(id),
-            null,
-          );
-          if (result.changed > 0) {
-            notificationStore.info(
-              $t('files.serverChangesDetected', {
-                values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
-              }),
-              5000,
-            );
-            // Auto-sync detected changes (fire-and-forget, throttled internally)
-            void autoSyncAfterChanges();
-          }
+          await detectAndQueueServerChanges();
         } catch (err) {
           console.warn('[cfms:check] Poll failed:', err);
         }
-      });
+      }, autoFileUpdateIntervalMinutes * 60 * 1000);
+    } else {
+      fileUpdateTracker.stopPolling();
     }
   });
-
-  /** Run a full "sync all files" automatically after server changes are detected. */
-  async function autoSyncAfterChanges() {
-    try {
-      notificationStore.info($t('files.autoSyncStarted'), 5000);
-      const result = await runSyncAll({
-        overwriteLocal: false,
-        confirmDeletes: true,
-        onStatus: (msg) => notificationStore.info(msg, 5000),
-      });
-      if (result.changed) {
-        notificationStore.success(
-          $t('files.autoSyncCompleted', {
-            values: { downloaded: result.queued, updated: result.updated, moved: result.moved, deleted: result.deleted },
-          }),
-          5000,
-        );
-      }
-    } catch (err) {
-      console.warn('[cfms:check] Auto sync failed:', err);
-      notificationStore.error(String(err), 5000);
-    }
-  }
 
   async function openRecord(record: FileRecord) {
     openingId = `${record.type}:${record.id}`;
@@ -198,6 +178,7 @@
 
   const checkHistory = $derived([...fileUpdateTracker.checkHistory].reverse());
   const lastCheckResult = $derived(checkHistory[0] ?? null);
+  const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
 
   function formatCheckTime(ts: number) {
     return new Date(ts).toLocaleString();
@@ -225,24 +206,66 @@
     if (checkBusy) return;
     checkBusy = true;
     try {
-      const result = await fileUpdateTracker.recursiveCheck(
-        (id) => listDirectory(id),
-        null,
-      );
-      if (result.changed > 0) {
-        notificationStore.info(
-          $t('files.serverChangesDetected', {
-            values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
-          }),
-          5000,
-        );
-      } else {
-        notificationStore.success($t('files.noChangesDetected'), 2500);
-      }
+      await detectAndQueueServerChanges();
+      fileUpdateTracker.resetPollingCountdown();
     } catch (err) {
       notificationStore.error(String(err), 4000);
     } finally {
       checkBusy = false;
+    }
+  }
+
+  async function detectAndQueueServerChanges() {
+    const changedMap = new Map<string, PendingUpdateItem>();
+    const result = await fileUpdateTracker.recursiveCheck(
+      (id) => listDirectory(id),
+      null,
+      20,
+      200,
+      ({ pathParts, documents, diff }) => {
+        if (diff.newDocuments.length === 0 && diff.modifiedDocuments.length === 0) return;
+        const changedIds = new Set([...diff.newDocuments, ...diff.modifiedDocuments]);
+        for (const doc of documents) {
+          if (!changedIds.has(doc.id)) continue;
+          changedMap.set(doc.id, {
+            id: doc.id,
+            title: doc.title,
+            path: [...pathParts, doc.title].join('/'),
+            sha256: doc.sha256,
+          });
+        }
+      },
+    );
+    if (changedMap.size > 0) {
+      fileUpdateTracker.enqueuePendingUpdates([...changedMap.values()]);
+    }
+    if (result.changed > 0) {
+      notificationStore.info(
+        $t('files.serverChangesDetected', {
+          values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
+        }),
+        5000,
+      );
+    } else {
+      notificationStore.success($t('files.noChangesDetected'), 2500);
+    }
+    return result.changed;
+  }
+
+  async function confirmQueuedUpdates() {
+    if (queueBusy || pendingUpdates.length === 0) return;
+    queueBusy = true;
+    try {
+      await runSyncAll({
+        overwriteLocal: false,
+        confirmDeletes: true,
+        onStatus: (msg) => notificationStore.info(msg, 5000),
+      });
+      fileUpdateTracker.clearPendingUpdates();
+    } catch (err) {
+      notificationStore.error(String(err), 4000);
+    } finally {
+      queueBusy = false;
     }
   }
 
@@ -291,14 +314,28 @@
           class="blueprint-check-btn"
           disabled={checkBusy}
           onclick={triggerCheck}
-          title="检查全部文件更新"
+          title={$t('files.checkFileUpdates')}
         >
           {#if checkBusy}
             <span class="check-btn-spinner"></span>
           {:else}
             <Icon name="refresh" size="16px" />
           {/if}
-          <span>检查更新</span>
+          <span>{$t('files.checkFileUpdates')}</span>
+        </button>
+        <button
+          type="button"
+          class="blueprint-check-btn"
+          disabled={queueBusy || pendingUpdates.length === 0}
+          onclick={confirmQueuedUpdates}
+          title={$t('files.confirmQueuedUpdates')}
+        >
+          {#if queueBusy}
+            <span class="check-btn-spinner"></span>
+          {:else}
+            <Icon name="download" size="16px" />
+          {/if}
+          <span>{$t('files.confirmQueuedUpdates')} ({pendingUpdates.length})</span>
         </button>
       </div>
     </div>
@@ -359,7 +396,7 @@
         {/if}
       </div>
       <div class="check-history-list">
-        {#each checkHistory.slice(0, 10) as entry (entry.time)}
+        {#each checkHistory.slice(0, 20) as entry (entry.time)}
           <div class="check-history-row">
             <span class="check-history-icon">{entry.changed > 0 ? '🔔' : '✅'}</span>
             <span class="check-history-time">{formatCheckTime(entry.time)}</span>
