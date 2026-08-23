@@ -7,9 +7,17 @@
  * replaces rather than errors by default.
  */
 
+// The bundled iconv-lite relies on Node's `buffer`; install the browser
+// polyfill before it evaluates so the encoding tool works inside WebView2.
+import { Buffer } from 'buffer';
+
 import iconv from 'iconv-lite';
 
 import { fail, ToolError } from './errors';
+
+if (typeof globalThis.Buffer === 'undefined') {
+  globalThis.Buffer = Buffer;
+}
 
 export const ENCODING_OPTIONS = [
   'UTF-8',
