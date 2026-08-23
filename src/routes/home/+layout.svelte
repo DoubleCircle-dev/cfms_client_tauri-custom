@@ -80,6 +80,7 @@
     $page.url.pathname === '/home/settings' || $page.url.pathname.startsWith('/home/settings/'),
   );
   const isToolsRoute = $derived($page.url.pathname === '/home/tools');
+  const isChatRoute = $derived($page.url.pathname === '/home/chat');
   const isPublicUtilityRoute = $derived(
     $page.url.pathname === '/home/about'
       || $page.url.pathname === '/home/settings'
@@ -123,7 +124,7 @@
     { id: 'about', label: $t('workspace.about'), href: '/home/about', icon: 'info' },
   ]);
   const navigationHasActiveItem = $derived(
-    [...primaryNavigation, ...bottomNavigation].some((item) => isActive(item)) || isToolsRoute,
+    [...primaryNavigation, ...bottomNavigation].some((item) => isActive(item)) || isToolsRoute || isChatRoute,
   );
 
   const currentTitle = $derived.by(() => {
@@ -141,6 +142,7 @@
     }
     if (path === '/home/trash') return $t('workspace.recycleBin');
     if (path === '/home/tools') return $t('tools.title');
+    if (path === '/home/chat') return $t('chat.title');
     if (path === '/home/manage') return $t('workspace.administration');
     if (path === '/home/more') return $t('workspace.account');
     if (path === '/home/diagnostics') return $t('workspace.diagnostics');
@@ -562,6 +564,20 @@
         </div>
         {/if}
       </nav>
+
+      {#if authStore.isLoggedIn}
+        <button
+          data-nav-item
+          type="button"
+          tabindex={isChatRoute ? 0 : -1}
+          class="explorer-nav-item"
+          class:explorer-nav-item--active={isChatRoute}
+          aria-current={isChatRoute ? 'page' : undefined}
+          onclick={() => navigate('/home/chat')}
+        >
+          <Icon name="chat" size="19px" /><span>{$t('chat.title')}</span>
+        </button>
+      {/if}
 
       {#if authStore.isLoggedIn}
         <button

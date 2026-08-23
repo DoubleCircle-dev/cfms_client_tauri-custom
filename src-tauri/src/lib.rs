@@ -665,6 +665,7 @@ pub fn run() {
             commands::unlock_auth_lockouts,
             commands::delete_download,
             commands::open_downloaded_file,
+            commands::read_server_document,
             commands::create_directory,
             commands::delete_directory,
             commands::delete_document,
