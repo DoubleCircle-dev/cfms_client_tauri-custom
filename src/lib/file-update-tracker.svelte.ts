@@ -14,6 +14,12 @@ const UPDATE_VISIBILITY_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** Default polling interval: 1 hour. */
 const DEFAULT_POLL_INTERVAL_MS = 60 * 60 * 1000;
 
+/** Keep up to this many check history records in local persistence and UI. */
+const CHECK_HISTORY_MAX = 20;
+
+/** LocalStorage key for persisted check history. */
+const CHECK_HISTORY_STORAGE_KEY = 'cfms:file-check-history:v1';
+
 /** Files with `last_modified` older than this are considered "not updated" (stale). */
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -55,6 +61,13 @@ export interface CheckHistoryEntry {
   summary: string;
 }
 
+export interface PendingUpdateItem {
+  id: string;
+  title: string;
+  path: string;
+  sha256?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Tracker
 // ---------------------------------------------------------------------------
@@ -84,6 +97,9 @@ class FileUpdateTracker {
   // --- check history ---
   checkHistory = $state<CheckHistoryEntry[]>([]);
 
+  // --- pending update queue (diff results auto-enqueue) ---
+  pendingUpdateQueue = $state<Map<string, PendingUpdateItem>>(new Map());
+
   // =========================================================================
   // Snapshot & polling
   // =========================================================================
@@ -100,6 +116,12 @@ class FileUpdateTracker {
     this.lastCheckTime = Date.now();
     this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
     this.scheduleNext();
+  }
+
+  /** Rebase polling countdown from "now" (used by manual checks). */
+  resetPollingCountdown() {
+    this.lastCheckTime = Date.now();
+    this.nextCheckTime = this.isPolling ? this.lastCheckTime + this.pollIntervalMs : 0;
   }
 
   private scheduleNext() {
@@ -144,12 +166,18 @@ class FileUpdateTracker {
     dirId: string | null = null,
     maxDepth = 20,
     delayMs = 200,
+    onDirectoryDiff?: (ctx: {
+      directoryId: string | null;
+      pathParts: string[];
+      documents: ServerDocumentEntry[];
+      diff: PollChangeResult;
+    }) => void,
   ): Promise<{ changed: number; dirs: number; docs: number }> {
     let changedDirs = 0;
     let checkedDirs = 0;
     let checkedDocs = 0;
 
-    const walk = async (id: string | null, depth: number): Promise<void> => {
+    const walk = async (id: string | null, depth: number, pathParts: string[]): Promise<void> => {
       if (depth > maxDepth) return;
       await new Promise((r) => setTimeout(r, delayMs));
       let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
@@ -159,17 +187,51 @@ class FileUpdateTracker {
         return;
       }
       const result = this.compareSnapshot(id, resp.folders, resp.documents);
+      onDirectoryDiff?.({
+        directoryId: id,
+        pathParts,
+        documents: resp.documents,
+        diff: result,
+      });
       if (result.summary) changedDirs++;
       checkedDirs += resp.folders.length;
       checkedDocs += resp.documents.length;
       for (const f of resp.folders) {
-        await walk(f.id, depth + 1);
+        await walk(f.id, depth + 1, [...pathParts, f.name]);
       }
     };
 
-    await walk(dirId, 0);
+    await walk(dirId, 0, []);
     this.addCheckHistory(changedDirs, checkedDirs, checkedDocs);
     return { changed: changedDirs, dirs: checkedDirs, docs: checkedDocs };
+  }
+
+  /** Queue changed/new documents for user-confirmed update. */
+  enqueuePendingUpdates(items: PendingUpdateItem[]) {
+    if (items.length === 0) return;
+    const next = new Map(this.pendingUpdateQueue);
+    for (const item of items) {
+      next.set(item.id, item);
+    }
+    this.pendingUpdateQueue = next;
+  }
+
+  /** Remove queued items by document id. */
+  removePendingUpdates(ids: string[]) {
+    if (ids.length === 0 || this.pendingUpdateQueue.size === 0) return;
+    const next = new Map(this.pendingUpdateQueue);
+    for (const id of ids) next.delete(id);
+    this.pendingUpdateQueue = next;
+  }
+
+  /** Clear all queued pending updates. */
+  clearPendingUpdates() {
+    this.pendingUpdateQueue = new Map();
+  }
+
+  /** Snapshot pending updates as a stable array for UI. */
+  get pendingUpdates(): PendingUpdateItem[] {
+    return [...this.pendingUpdateQueue.values()];
   }
 
   /**
@@ -442,9 +504,43 @@ class FileUpdateTracker {
       docs,
       summary: changed > 0 ? `${changed} dir(s) changed` : 'no changes',
     };
-    this.checkHistory = [...this.checkHistory, entry];
-    if (this.checkHistory.length > 50) {
-      this.checkHistory = this.checkHistory.slice(-50);
+    this.checkHistory = [...this.checkHistory, entry].slice(-CHECK_HISTORY_MAX);
+    this.persistCheckHistory();
+  }
+
+  /** Load persisted check history from local storage. */
+  loadPersistedCheckHistory() {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(CHECK_HISTORY_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const restored: CheckHistoryEntry[] = parsed
+        .filter((it) => it && typeof it.time === 'number')
+        .map((it) => ({
+          time: Number(it.time),
+          changed: Number(it.changed ?? 0),
+          dirs: Number(it.dirs ?? 0),
+          docs: Number(it.docs ?? 0),
+          summary: String(it.summary ?? ''),
+        }))
+        .slice(-CHECK_HISTORY_MAX);
+      this.checkHistory = restored;
+    } catch {
+      // ignore malformed local state
+    }
+  }
+
+  private persistCheckHistory() {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        CHECK_HISTORY_STORAGE_KEY,
+        JSON.stringify(this.checkHistory.slice(-CHECK_HISTORY_MAX)),
+      );
+    } catch {
+      // ignore storage errors
     }
   }
 
@@ -455,6 +551,7 @@ class FileUpdateTracker {
     this.staleDocumentIds = new Set();
     this.staleFolderIds = new Set();
     this.foldersWithStaleChildren = new Set();
+    this.clearPendingUpdates();
     this.clearSnapshots();
     this.stopPolling();
     if (this.expiryTimer !== null) {
@@ -659,4 +756,7 @@ class FileUpdateTracker {
 }
 
 export const fileUpdateTracker = new FileUpdateTracker();
+if (typeof window !== 'undefined') {
+  fileUpdateTracker.loadPersistedCheckHistory();
+}
 
