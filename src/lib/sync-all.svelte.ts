@@ -11,12 +11,12 @@ import {
   computeLocalSha256,
   deleteDownloadFile,
   downloadGitCommit,
-  downloadGitPresent,
   getDocument,
   listDirectory,
   listDownloadFiles,
   moveDownloadFile,
 } from '$lib/api/files';
+import { getSyncGitTrackingEnabled } from '$lib/api/settings';
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api/types';
 import { dialogStore } from '$lib/dialogs.svelte';
 import { downloadStore, notificationStore } from '$lib/stores.svelte';
@@ -60,6 +60,8 @@ export interface SyncAllOptions {
   overwriteLocal?: boolean;
   /** Ask for confirmation before deleting stale local files. Default true. */
   confirmDeletes?: boolean;
+  /** Whether the download root is versioned with git. Overrides the stored setting. */
+  gitTracking?: boolean;
   /** Called with a status message when the sync summary is ready. */
   onStatus?: (message: string) => void;
   /** Called with an error message on failure. */
@@ -84,12 +86,12 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   const confirmDeletes = options.confirmDeletes ?? true;
   const { onStatus, onError, onRefresh } = options;
 
-  // Local git tracking decides the update strategy:
-  //  - git present  → history is versioned, so updated files are force-overwritten
-  //    and a commit snapshots the sync result;
-  //  - no git       → no git operations; before overwriting an outdated local file,
+  // Local git tracking is an explicit user setting (Settings > Behavior):
+  //  - enabled   → history is versioned, so updated files are force-overwritten
+  //    and a commit snapshots the sync result (repo must exist or commit is skipped);
+  //  - disabled  → no git operations; before overwriting an outdated local file,
   //    the old copy is renamed to `<name>+<timestamp>` as a pre-update backup.
-  const hasGit = await downloadGitPresent().catch(() => false);
+  const hasGit = options.gitTracking ?? await getSyncGitTrackingEnabled().catch(() => false);
   const forceOverwrite = overwriteLocal || hasGit;
   const backupSuffix = `+${backupTimestamp()}`;
 
