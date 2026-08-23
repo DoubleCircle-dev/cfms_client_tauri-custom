@@ -150,6 +150,7 @@ export const en = {
       'The server uses protocol version {serverVersion}, but the earliest version supported by this client is {supportedBoundary}.',
     checkUpdates: 'Check for updates',
     connect: 'Connect',
+    returnToConnection: 'Return to connection',
     recentAddresses: 'Recent addresses',
   },
   login: {

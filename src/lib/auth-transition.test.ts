@@ -1,20 +1,26 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  consumeConnectToUtilityTransition,
-  markConnectToUtilityTransition,
+  consumeConnectToLoginTransition,
+  consumeLoginToConnectTransition,
+  markConnectToLoginTransition,
+  markLoginToConnectTransition,
 } from './auth-transition';
 
-describe('connect utility navigation marker', () => {
+describe('authentication navigation markers', () => {
   beforeEach(() => {
     sessionStorage.clear();
   });
 
-  it('identifies only the next utility layout entered from the connect toolbar', () => {
-    expect(consumeConnectToUtilityTransition()).toBe(false);
+  it('consumes connect-to-login and login-to-connect transitions independently', () => {
+    expect(consumeConnectToLoginTransition()).toBe(false);
+    expect(consumeLoginToConnectTransition()).toBe(false);
 
-    markConnectToUtilityTransition();
+    markConnectToLoginTransition();
+    markLoginToConnectTransition();
 
-    expect(consumeConnectToUtilityTransition()).toBe(true);
-    expect(consumeConnectToUtilityTransition()).toBe(false);
+    expect(consumeConnectToLoginTransition()).toBe(true);
+    expect(consumeConnectToLoginTransition()).toBe(false);
+    expect(consumeLoginToConnectTransition()).toBe(true);
+    expect(consumeLoginToConnectTransition()).toBe(false);
   });
 });

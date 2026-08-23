@@ -149,6 +149,7 @@ export const zh_CN = {
       '服务器使用协议版本 {serverVersion}，但当前客户端最低支持版本 {supportedBoundary}。',
     checkUpdates: '检查更新',
     connect: '连接',
+    returnToConnection: '返回连接界面',
     recentAddresses: '最近地址',
   },
   login: {
