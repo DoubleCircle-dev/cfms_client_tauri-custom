@@ -570,6 +570,10 @@ pub struct UserPreference {
     #[serde(default = "default_file_auto_update_interval_minutes")]
     pub file_auto_update_interval_minutes: u32,
 
+    /// Whether detected updates are downloaded immediately after an automatic check.
+    #[serde(default)]
+    pub file_auto_update_auto_download: bool,
+
     /// Versioned per-user privacy settings. Incompatible shapes and versions
     /// are treated as a fresh installation instead of being migrated.
     #[serde(default, deserialize_with = "deserialize_privacy_preference")]
@@ -601,6 +605,7 @@ impl Default for UserPreference {
             root_back_button_behavior: None,
             file_auto_update_enabled: default_file_auto_update_enabled(),
             file_auto_update_interval_minutes: default_file_auto_update_interval_minutes(),
+            file_auto_update_auto_download: false,
             privacy: PrivacyPreference::default(),
             task_concurrency: TaskConcurrencyPreference::default(),
             transfer: TransferPreference::default(),

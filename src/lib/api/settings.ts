@@ -8,11 +8,14 @@ export type RootBackButtonBehavior = 'background' | 'exit';
 export interface FileAutoUpdateSettings {
   enabled: boolean;
   intervalMinutes: number;
+  /** Download queued updates immediately after an automatic check detects them. */
+  autoDownload: boolean;
 }
 
 export const DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR: RootBackButtonBehavior = 'exit';
 export const DEFAULT_FILE_AUTO_UPDATE_ENABLED = true;
 export const DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES = 60;
+export const DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD = false;
 
 /** Scan a local directory recursively. */
 export async function scanDirectory(
@@ -79,11 +82,13 @@ export async function getFileAutoUpdateSettings(): Promise<FileAutoUpdateSetting
       intervalMinutes: normalizeFileAutoUpdateIntervalMinutes(
         preferences.file_auto_update_interval_minutes,
       ),
+      autoDownload: preferences.file_auto_update_auto_download ?? DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD,
     };
   } catch {
     return {
       enabled: DEFAULT_FILE_AUTO_UPDATE_ENABLED,
       intervalMinutes: DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES,
+      autoDownload: DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD,
     };
   }
 }
@@ -97,6 +102,7 @@ export async function setFileAutoUpdateSettings(
     ...preferences,
     file_auto_update_enabled: settings.enabled,
     file_auto_update_interval_minutes: normalizeFileAutoUpdateIntervalMinutes(settings.intervalMinutes),
+    file_auto_update_auto_download: settings.autoDownload,
   });
 }
 

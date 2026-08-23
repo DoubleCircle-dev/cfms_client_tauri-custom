@@ -637,6 +637,7 @@ export interface UserPreference {
   root_back_button_behavior?: "background" | "exit" | null;
   file_auto_update_enabled?: boolean;
   file_auto_update_interval_minutes?: number;
+  file_auto_update_auto_download?: boolean;
   privacy?: PrivacyPreference;
   task_concurrency: TaskConcurrencyPreference;
   transfer: TransferPreference;
