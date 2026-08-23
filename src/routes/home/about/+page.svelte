@@ -56,7 +56,9 @@
   </section>
 
   <AppUpdateChecker
-    onOpenFeatureTour={releaseHighlightsState.currentTour ? replayReleaseHighlights : undefined}
+    onOpenFeatureTour={releaseHighlightsState.hasAvailableHighlights(authStore.permissions)
+      ? replayReleaseHighlights
+      : undefined}
   />
 
   <ChangelogPanel />

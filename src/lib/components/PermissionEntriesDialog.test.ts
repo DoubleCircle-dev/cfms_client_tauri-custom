@@ -197,6 +197,35 @@ describe('PermissionEntriesDialog', () => {
     expect((screen.getByRole('button', { name: 'manage.saveAllPermissionChanges' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('keeps valid local data and remains dismissible when refreshed data is malformed', async () => {
+    const onClose = vi.fn();
+    const onRefresh = vi.fn().mockResolvedValue({
+      entries: [{ permission: 'search', granted: true, start_time: 100, end_time: null }],
+      effectivePermissions: undefined,
+      inheritedPermissions: null,
+    });
+    render(PermissionEntriesDialog, {
+      props: {
+        title: 'Permissions',
+        description: 'Manage permissions',
+        entries: [{ permission: 'search', granted: true, start_time: 100, end_time: null }],
+        effectivePermissions: ['search'],
+        inheritedPermissions: [],
+        onRefresh,
+        onSave: vi.fn().mockResolvedValue(undefined),
+        onClose,
+      },
+    });
+
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('manage.permissionDataInvalid'));
+    expect((screen.getByLabelText('manage.permissionName') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('manage.permissionName') as HTMLInputElement).value).toBe('search');
+    await fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
   it('protects staged changes when closing or refreshing', async () => {
     const onClose = vi.fn();
     const onRefresh = vi.fn().mockResolvedValue({

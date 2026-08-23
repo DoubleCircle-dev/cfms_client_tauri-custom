@@ -29,7 +29,6 @@
   import {
     consumeLoginToConnectTransition,
     markConnectToLoginTransition,
-    markConnectToUtilityTransition,
   } from "$lib/auth-transition";
   import {
     authStore,
@@ -199,13 +198,12 @@
     }
   }
 
-  /** Navigate to the about/update page as a public utility visit from connect. */
+  /** Navigate to a public utility page from the connection screen. */
   async function goToAbout() {
     await openUtilityFromToolbar('/home/about');
   }
 
   async function openUtilityFromToolbar(path: '/home/about' | '/home/settings') {
-    markConnectToUtilityTransition();
     await goto(path);
   }
 

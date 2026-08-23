@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { onMount, tick } from 'svelte';
-  import { browser } from '$app/environment';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
@@ -13,7 +12,6 @@
     notificationStore,
   } from '$lib/stores.svelte';
   import { appLockStore } from '$lib/app-lock.svelte';
-  import { consumeConnectToUtilityTransition } from '$lib/auth-transition';
   import { canSetOwnAvatar } from '$lib/avatar-permissions';
   import { clearAuthSession, disconnect, getDocument, loadUserPreference, setLockdown } from '$lib/api';
   import { favoriteRecordsFromPreference, type FileRecord } from '$lib/file-preferences';
@@ -34,6 +32,7 @@
   import { extensionsStore } from '$lib/extensions.svelte';
   import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
   import { isIconName } from '$lib/icons';
+  import { shouldOfferConnectionReturn } from '$lib/public-utility-navigation';
   import { transitionOutOfSession } from '$lib/session-exit';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
@@ -50,7 +49,6 @@
   let loadedFavoriteScope = '';
   let routeReloadToken = $state(0);
   let accountTriggerElement = $state<HTMLButtonElement | null>(null);
-  let enteredFromConnectToolbar = $state(browser ? consumeConnectToUtilityTransition() : false);
 
   const showKeyboardShortcutEntry = supportsKeyboardShortcuts();
 
@@ -88,10 +86,11 @@
       || $page.url.pathname.startsWith('/home/settings/'),
   );
   const showPublicUtilityClose = $derived(
-    enteredFromConnectToolbar
-      && isPublicUtilityRoute
-      && !serverStateStore.connected
-      && !authStore.isLoggedIn,
+    shouldOfferConnectionReturn(
+      $page.url.pathname,
+      serverStateStore.connected,
+      authStore.isLoggedIn,
+    ),
   );
 
   const primaryNavigation = $derived<WorkspaceNavItem[]>([
@@ -179,7 +178,7 @@
 
   onMount(() => registerKeyboardCommands({
     id: 'public-utility.close',
-    label: () => $t('common.close'),
+    label: () => $t('connect.returnToConnection'),
     shortcuts: [{ key: 'Escape' }],
     scope: 'page',
     enabled: () => showPublicUtilityClose,
@@ -219,7 +218,6 @@
   }
 
   async function closePublicUtility() {
-    enteredFromConnectToolbar = false;
     drawerOpen = false;
     await goto('/connect');
   }
@@ -517,12 +515,13 @@
       <button
         type="button"
         class="explorer-command-button explorer-public-utility-close"
-        title={$t('common.close')}
-        aria-label={$t('common.close')}
+        title={$t('connect.returnToConnection')}
+        aria-label={$t('connect.returnToConnection')}
         aria-keyshortcuts="Escape"
         onclick={closePublicUtility}
       >
-        <Icon name="close" size="20px" />
+        <Icon name="connect" size="18px" />
+        <span>{$t('connect.returnToConnection')}</span>
       </button>
     {/if}
   </header>
@@ -647,7 +646,15 @@
   .explorer-mobile-menu { display: none; width: 34px; padding: 0; }
   .explorer-route-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text); font-family: var(--font-md3-sans); font-size: 0.9rem; font-weight: 600; }
   .explorer-topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.4rem; }
-  .explorer-public-utility-close { width: 34px; margin-left: auto; padding-inline: 0; }
+  .explorer-public-utility-close {
+    width: auto;
+    margin-left: auto;
+    gap: 0.4rem;
+    padding-inline: 0.55rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
   .explorer-account-wrap { position: relative; }
   .explorer-account-wrap::after { position: absolute; top: 100%; right: 0; left: 0; height: 0.45rem; content: ''; }
   .explorer-account-trigger { display: flex; max-width: 230px; align-items: center; gap: 0.55rem; border: 1px solid transparent; border-radius: 999px; padding: 0.3rem 0.5rem; color: var(--explorer-text); font-family: var(--font-md3-sans); text-align: left; transition: background 120ms ease, border-color 120ms ease; }
@@ -748,5 +755,7 @@
     .explorer-account-trigger > strong { display: none; }
     .explorer-account-trigger { padding-inline: 0.45rem; }
     .explorer-route-title { font-size: 0.82rem; }
+    .explorer-public-utility-close span { display: none; }
+    .explorer-public-utility-close { width: 34px; padding-inline: 0; }
   }
 </style>

@@ -68,6 +68,11 @@ export class ReleaseHighlightsState {
     return this.open(permissions, 'manual');
   }
 
+  hasAvailableHighlights(permissions: readonly string[]): boolean {
+    return this.currentTour !== null
+      && filterReleaseHighlights(this.currentTour.highlights, permissions).length > 0;
+  }
+
   private open(permissions: readonly string[], source: 'automatic' | 'manual'): boolean {
     if (!this.currentTour) return false;
     const highlights = filterReleaseHighlights(this.currentTour.highlights, permissions);

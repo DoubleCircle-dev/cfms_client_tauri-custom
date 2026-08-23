@@ -47,6 +47,22 @@ describe('release highlights state', () => {
     ]);
   });
 
+  it('reports whether the current account has any highlights to display', async () => {
+    const state = new ReleaseHighlightsState({
+      loadVersion: async () => '0.46.0',
+      readSetting: async () => null,
+      writeSetting: async () => {},
+    });
+
+    expect(state.hasAvailableHighlights(['manage_system'])).toBe(false);
+
+    await state.initialize();
+
+    expect(state.hasAvailableHighlights([])).toBe(false);
+    expect(state.hasAvailableHighlights(['diagnostics'])).toBe(false);
+    expect(state.hasAvailableHighlights(['manage_system'])).toBe(true);
+  });
+
   it('fails closed when the seen-version setting is unavailable', async () => {
     const state = new ReleaseHighlightsState({
       loadVersion: async () => '0.45.0',

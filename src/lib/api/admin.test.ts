@@ -5,10 +5,13 @@ import {
   changeGroupPermissions,
   changeUserPermissions,
   disableManagedTwoFactor,
+  getGroupInfo,
   getServerDiagnostics,
   getUserInfo,
   listAuthLockouts,
   listBannedSubnets,
+  listGroups,
+  listUsers,
   manageUserStatus,
   renameUser,
   setLockdown,
@@ -19,6 +22,17 @@ import {
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 const invokeMock = vi.mocked(invoke);
+
+function managedUserInfoResponse(status: unknown) {
+  return {
+    username: 'alice',
+    status,
+    permissions: [],
+    effective_permissions: [],
+    effective_own_permissions: [],
+    effective_inherited_permissions: [],
+  };
+}
 
 describe('admin API', () => {
   beforeEach(() => {
@@ -31,7 +45,7 @@ describe('admin API', () => {
     ['active', 'active'],
     ['disabled', 'disabled'],
   ] as const)('normalizes managed user status %j to %s', async (status, expected) => {
-    invokeMock.mockResolvedValue({ username: 'alice', status });
+    invokeMock.mockResolvedValue(managedUserInfoResponse(status));
 
     await expect(getUserInfo('alice')).resolves.toMatchObject({
       username: 'alice',
@@ -41,9 +55,40 @@ describe('admin API', () => {
   });
 
   it.each([undefined, null, 2, 'inactive'])('rejects unknown managed user status %j', async (status) => {
-    invokeMock.mockResolvedValue({ username: 'alice', status });
+    invokeMock.mockResolvedValue(managedUserInfoResponse(status));
 
     await expect(getUserInfo('alice')).rejects.toThrow('Invalid managed user status');
+  });
+
+  it('rejects malformed permission responses at the IPC boundary', async () => {
+    const user = {
+      username: 'alice',
+      status: 'active',
+      permissions: ['legacy_permission'],
+      own_permissions: ['legacy_permission'],
+      inherited_permissions: [],
+    };
+    const group = {
+      name: 'staff',
+      permissions: [],
+      effective_permissions: null,
+    };
+
+    invokeMock.mockResolvedValueOnce({ users: [user] });
+    await expect(listUsers()).rejects.toThrow('list_users.users[0] response');
+
+    invokeMock.mockResolvedValueOnce(user);
+    await expect(getUserInfo('alice')).rejects.toThrow(
+      'get_user_info response: permissions[0] must be a structured permission entry',
+    );
+
+    invokeMock.mockResolvedValueOnce({ groups: [group] });
+    await expect(listGroups()).rejects.toThrow('list_groups.groups[0] response');
+
+    invokeMock.mockResolvedValueOnce(group);
+    await expect(getGroupInfo('staff')).rejects.toThrow(
+      'get_group_info response: effective_permissions must be an array of permission names',
+    );
   });
 
   it('maps protocol v17 security administration calls to Tauri commands', async () => {

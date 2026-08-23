@@ -4,6 +4,23 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.46.1
+**Released on:** 2026-08-23
+
+**Title:** Bugfix
+
+### Fixed
+- Determine connection entry visibility based on login status
+
+### Added
+- Enhance permission handling in PermissionEntriesDialog and related tests
+- Add hasAvailableHighlights method to ReleaseHighlightsState and update AppUpdateChecker logic
+
+### Improved
+- Remove permission overview logic and update related components
+
+--- 
+
 ## v0.46.0
 **Released on:** 2026-08-22
 
