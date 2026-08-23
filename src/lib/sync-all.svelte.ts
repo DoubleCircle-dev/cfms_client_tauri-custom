@@ -11,7 +11,7 @@ import {
   computeLocalSha256,
   deleteDownloadFile,
   downloadGitCommit,
-  downloadGitInit,
+  downloadGitPresent,
   getDocument,
   listDirectory,
   listDownloadFiles,
@@ -83,6 +83,15 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   const overwriteLocal = options.overwriteLocal ?? false;
   const confirmDeletes = options.confirmDeletes ?? true;
   const { onStatus, onError, onRefresh } = options;
+
+  // Local git tracking decides the update strategy:
+  //  - git present  → history is versioned, so updated files are force-overwritten
+  //    and a commit snapshots the sync result;
+  //  - no git       → no git operations; before overwriting an outdated local file,
+  //    the old copy is renamed to `<name>+<timestamp>` as a pre-update backup.
+  const hasGit = await downloadGitPresent().catch(() => false);
+  const forceOverwrite = overwriteLocal || hasGit;
+  const backupSuffix = `+${backupTimestamp()}`;
 
   let queued = 0;
   let skipped = 0;
@@ -178,7 +187,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
       const hasServerHash = serverHash != null;
       // Server version differs from local copy — always re-download (server is authoritative)
       const mismatch = existsLocally && hasServerHash && localHash !== serverHash;
-      const needsDownload = !isDownloaded && (!existsLocally || mismatch || overwriteLocal);
+      const needsDownload = !isDownloaded && (!existsLocally || mismatch || forceOverwrite);
 
       if (needsDownload) {
         pendingDownloads.push({ docId: doc.id, path: downloadPath, serverHash, existsLocally });
@@ -297,7 +306,20 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     // Execute downloads.
     for (const d of toDownload) {
       try {
-        await downloadWithRetry(d.docId, d.path, d.existsLocally);
+        let overwrite = d.existsLocally;
+        if (!hasGit && d.existsLocally) {
+          // No git history to fall back on — preserve the outdated local copy
+          // under a timestamped name before downloading the new revision.
+          const backupPath = `${d.path}${backupSuffix}`;
+          try {
+            const renamed = await moveDownloadFile(d.path, backupPath);
+            if (renamed) {
+              overwrite = false;
+              console.log(`%c[cfms:sync] Backup: ${d.path} → ${backupPath}`, 'color:#ffb74d');
+            }
+          } catch { /* rename failed — fall through and overwrite */ }
+        }
+        await downloadWithRetry(d.docId, d.path, overwrite);
         if (d.existsLocally) updated++; else queued++;
       } catch { /* skip */ }
     }
@@ -321,8 +343,8 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     }
     await onRefresh?.();
 
-    // --- Git version tracking ---
-    if (changed && (queued + updated > 0)) {
+    // --- Git version tracking (only when the user keeps a repo in the download root) ---
+    if (changed && hasGit && (queued + updated > 0)) {
       // Wait for async download tasks to finish writing files to disk.
       // getDocument returns immediately — the actual download runs in the
       // background. Without waiting, git would snapshot incomplete files.
@@ -332,9 +354,8 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
         await waitForActiveDownloads();
       }
     }
-    if (changed) {
+    if (changed && hasGit) {
       try {
-        await downloadGitInit();
         const msgParts: string[] = [];
         if (queued > 0) msgParts.push(`+${queued}`);
         if (updated > 0) msgParts.push(`~${updated}`);
@@ -371,6 +392,13 @@ function localTimestamp(): string {
   const d = new Date();
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/** Filename-safe timestamp (`YYYYMMDD-HHmmss`) for pre-update backup copies. */
+function backupTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
 /** Wait until no active (pending/downloading/verifying) download tasks remain. */
