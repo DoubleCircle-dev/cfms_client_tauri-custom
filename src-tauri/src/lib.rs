@@ -295,8 +295,20 @@ pub struct AndroidUpdateNotification<R: Runtime> {
 // Bootstrap
 // ---------------------------------------------------------------------------
 
+#[cfg(all(target_os = "linux", not(debug_assertions)))]
+fn apply_process_memory_hardening() {
+    // Release clients do not need same-user ptrace or core-dump diagnostics.
+    // Administrators can still inspect the process; this is not an anti-dump claim.
+    nix::sys::prctl::set_dumpable(false)
+        .expect("failed to disable Linux process dumpability for release build");
+}
+
+#[cfg(any(not(target_os = "linux"), debug_assertions))]
+fn apply_process_memory_hardening() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    apply_process_memory_hardening();
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
     tauri::Builder::default()
@@ -330,16 +342,25 @@ pub fn run() {
                 reset_status,
             ));
 
-            let mut log_targets = vec![
-                Target::new(TargetKind::Stdout),
-                Target::new(TargetKind::Webview),
-            ];
+            let mut log_targets = Vec::new();
+            if cfg!(debug_assertions) {
+                log_targets.push(Target::new(TargetKind::Stdout));
+                log_targets.push(Target::new(TargetKind::Webview));
+            }
             if !reset_recovery_mode {
                 log_targets.push(Target::new(TargetKind::LogDir { file_name: None }));
             }
+            if log_targets.is_empty() {
+                log_targets.push(Target::new(TargetKind::Stdout));
+            }
+            let log_level = if cfg!(debug_assertions) {
+                LevelFilter::Debug
+            } else {
+                LevelFilter::Info
+            };
             app.handle().plugin(
                 tauri_plugin_log::Builder::new()
-                    .level(LevelFilter::Debug)
+                    .level(log_level)
                     .targets(log_targets)
                     .build(),
             )?;
@@ -352,7 +373,7 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir)?;
 
             let db_path = app_data_dir.join("cfms_client.db");
-            tracing::info!("Opening database at {}", db_path.display());
+            tracing::debug!("Opening application database");
 
             // --- Open persistent database (user_settings only) ---
             let db = if reset_recovery_mode {

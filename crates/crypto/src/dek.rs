@@ -140,7 +140,7 @@ pub fn decrypt_dek(encrypted_json: &str, password: &str) -> Result<Zeroizing<[u8
         key
     };
 
-    let plaintext = aead::open(&kek, &nonce, &ct, &tag)?;
+    let plaintext = Zeroizing::new(aead::open(&kek, &nonce, &ct, &tag)?);
 
     if plaintext.len() != KEY_LEN {
         return Err(cfms_core::Error::Crypto(format!(

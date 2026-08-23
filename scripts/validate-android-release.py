@@ -210,6 +210,22 @@ def certificate_sha256_digests(output: str) -> frozenset[str]:
     return frozenset(digests)
 
 
+def manifest_boolean(output: str, name: str) -> bool | None:
+    match = re.search(
+        rf"A:\s+android:{re.escape(name)}\b.*?\(type 0x12\)0x([0-9a-fA-F]+)",
+        output,
+    )
+    return None if match is None else int(match.group(1), 16) != 0
+
+
+def validate_manifest_security(aapt: Path, apk: Path) -> None:
+    output = run_tool(aapt, "dump", "xmltree", str(apk), "AndroidManifest.xml")
+    if manifest_boolean(output, "allowBackup") is not False:
+        fail(f"{apk.name} must explicitly disable android:allowBackup")
+    if manifest_boolean(output, "debuggable") is True:
+        fail(f"{apk.name} is debuggable")
+
+
 def read_signer_digests(apksigner: Path, apk: Path) -> frozenset[str]:
     output = run_tool(apksigner, "verify", "--verbose", "--print-certs-pem", str(apk))
     try:
@@ -264,6 +280,8 @@ def main() -> None:
 
     aapt = find_android_tool("aapt")
     apksigner = find_android_tool("apksigner")
+    for path in apks.values():
+        validate_manifest_security(aapt, path)
     metadata = {name: read_package_metadata(aapt, path) for name, path in apks.items()}
     signer_digests = {name: read_signer_digests(apksigner, path) for name, path in apks.items()}
     if len(set(metadata.values())) != 1:

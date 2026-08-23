@@ -28,17 +28,15 @@ where
     let random_bytes: [u8; 16] = rand::rng().random();
     let nonce = hex::encode(random_bytes);
 
-    let request = serde_json::json!({
-        "action": action,
-        "data": data,
-        "username": username,
-        "token": token,
-        "timestamp": unix_now(),
-        "nonce": nonce,
-    });
-
-    let request_bytes = serde_json::to_vec(&request)
-        .map_err(|e| format!("Failed to encode {action} request: {e}"))?;
+    let request_bytes = cfms_service::sensitive::encode_action_request(
+        action,
+        data,
+        username,
+        token,
+        unix_now(),
+        &nonce,
+    )
+    .map_err(|e| format!("Failed to encode {action} request: {e}"))?;
 
     let mut stream = conn
         .create_stream()
@@ -46,7 +44,7 @@ where
         .map_err(|e| format!("Failed to create stream for {action}: {e}"))?;
 
     stream
-        .send(conn, request_bytes)
+        .send_sensitive(conn, request_bytes.into_zeroizing())
         .await
         .map_err(|e| format!("Failed to send {action} request: {e}"))?;
 
@@ -66,6 +64,7 @@ where
         }
     };
 
+    let response_bytes = zeroize::Zeroizing::new(response_bytes);
     serde_json::from_slice::<cfms_core::Response<T>>(&response_bytes)
         .map_err(|e| format!("Invalid {action} response: {e}"))
 }
@@ -161,7 +160,7 @@ async fn decrypt_preference_dek(
     password: &str,
 ) -> Result<zeroize::Zeroizing<[u8; constants::KEY_LEN]>, String> {
     let encrypted = encrypted_dek.to_owned();
-    let password = password.to_owned();
+    let password = zeroize::Zeroizing::new(password.to_owned());
     tokio::task::spawn_blocking(move || {
         dek::decrypt_dek(&encrypted, &password).map_err(|e| format!("DEK decryption failed: {e}"))
     })
@@ -170,10 +169,10 @@ async fn decrypt_preference_dek(
 }
 
 async fn encrypt_preference_dek(
-    dek_bytes: [u8; constants::KEY_LEN],
+    dek_bytes: cfms_service::sensitive::SecretKey,
     password: &str,
 ) -> Result<String, String> {
-    let password = password.to_owned();
+    let password = zeroize::Zeroizing::new(password.to_owned());
     tokio::task::spawn_blocking(move || {
         dek::encrypt_dek(&dek_bytes, &password).map_err(|e| format!("DEK encryption failed: {e}"))
     })
@@ -223,7 +222,7 @@ async fn upload_and_select_preference_dek(
 
 async fn rewrap_and_upload_preference_dek(
     conn: &cfms_transport::Connection,
-    dek_bytes: [u8; constants::KEY_LEN],
+    dek_bytes: cfms_service::sensitive::SecretKey,
     password: &str,
     username: &str,
     token: &str,
@@ -260,8 +259,14 @@ async fn install_fresh_preference_dek(
     conn: &cfms_transport::Connection,
 ) -> Result<(), String> {
     let new_dek = dek::generate_dek();
-    let encrypted =
-        rewrap_and_upload_preference_dek(conn, *new_dek, password, username, token).await?;
+    let encrypted = rewrap_and_upload_preference_dek(
+        conn,
+        new_dek.clone(),
+        password,
+        username,
+        token,
+    )
+    .await?;
 
     {
         let mut d = inner.dek.write().await;

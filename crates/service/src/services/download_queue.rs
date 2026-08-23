@@ -9,6 +9,7 @@ use tokio::sync::watch;
 use cfms_core::constants::KEY_LEN;
 use cfms_core::{DownloadPhase, DownloadTaskDto, DownloadTaskStatus, Result, ServiceEvent};
 
+use crate::sensitive::SecretKey;
 use crate::services::task_persistence;
 use crate::state::AppState;
 
@@ -35,7 +36,7 @@ struct PersistContext {
     dir: PathBuf,
     server_hash: String,
     username: String,
-    dek: Option<[u8; KEY_LEN]>,
+    dek: Option<SecretKey>,
 }
 
 #[derive(Clone)]
@@ -74,20 +75,18 @@ impl QueueState {
         username: &str,
         dek: Option<&[u8; KEY_LEN]>,
     ) -> Result<usize> {
-        // Store persistence context.
-        {
-            let mut ctx = self.persist_ctx.lock().unwrap();
-            *ctx = Some(PersistContext {
-                dir: app_data.to_path_buf(),
-                server_hash: server_hash.to_string(),
-                username: username.to_string(),
-                dek: dek.cloned(),
-            });
-        }
-
-        // Load from disk.
+        // Drop the previous account's tasks and key before attempting a
+        // replacement. A failed load must not leave either key resident.
+        self.clear();
         let loaded = task_persistence::load(app_data, server_hash, username, dek)?;
         let count = loaded.len();
+
+        *self.persist_ctx.lock().unwrap() = Some(PersistContext {
+            dir: app_data.to_path_buf(),
+            server_hash: server_hash.to_string(),
+            username: username.to_string(),
+            dek: dek.map(|value| zeroize::Zeroizing::new(*value)),
+        });
 
         {
             let mut map = self.tasks.lock().unwrap();
@@ -97,7 +96,7 @@ impl QueueState {
             }
         }
 
-        tracing::info!("Loaded {count} download tasks for user {username} on server {server_hash}");
+        tracing::info!("Loaded {count} download tasks");
         Ok(count)
     }
 
@@ -131,7 +130,7 @@ impl QueueState {
             &ctx.dir,
             &ctx.server_hash,
             &ctx.username,
-            ctx.dek.as_ref(),
+            ctx.dek.as_ref().map(|dek| &**dek),
             &tasks,
         ) {
             tracing::error!("Failed to persist download tasks: {e}");
@@ -993,7 +992,7 @@ async fn execute_download(
         total_bytes: 0,
     });
 
-    tracing::info!("Download started: {task_id} → {file_path}");
+    tracing::info!("Download started: {task_id}");
 
     let queue_for_progress = queue.clone();
     let state_for_progress = state.clone();
@@ -1101,7 +1100,7 @@ async fn execute_download(
         if let Err(e) = std::fs::remove_file(&file_path)
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            tracing::warn!("Failed to clean up partial file {file_path}: {e}");
+            tracing::warn!("Failed to clean up partial download for {task_id}: {e}");
         }
         cleanup_resume_state(&file_path, &task_id);
 
@@ -1154,7 +1153,7 @@ async fn execute_download(
                 if let Err(rm_err) = std::fs::remove_file(&file_path)
                     && rm_err.kind() != std::io::ErrorKind::NotFound
                 {
-                    tracing::warn!("Failed to clean up partial file {file_path}: {rm_err}");
+                    tracing::warn!("Failed to clean up partial download for {task_id}: {rm_err}");
                 }
                 cleanup_resume_state(&file_path, &task_id);
                 let _ = queue.update_status(&task_id, DownloadTaskStatus::Cancelled);
@@ -1209,7 +1208,7 @@ async fn execute_download(
             if let Err(e) = std::fs::remove_file(&file_path)
                 && e.kind() != std::io::ErrorKind::NotFound
             {
-                tracing::warn!("Failed to clean up partial file {file_path}: {e}");
+                tracing::warn!("Failed to clean up partial download for {task_id}: {e}");
             }
             cleanup_resume_state(&file_path, &task_id);
 
@@ -1279,7 +1278,7 @@ fn cleanup_resume_state(file_path: &str, task_id: &str) {
         if let Err(e) = std::fs::remove_file(&candidate)
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            tracing::warn!("Failed to remove resume state {}: {e}", candidate.display());
+            tracing::warn!("Failed to remove download resume state: {e}");
         }
     }
 }
@@ -1450,5 +1449,46 @@ mod tests {
         assert_eq!(queue.get("a").unwrap().status, DownloadTaskStatus::Deleted);
         assert_eq!(queue.get("b").unwrap().status, DownloadTaskStatus::Deleted);
         assert_eq!(queue.get("a").unwrap().message, None);
+    }
+
+    #[test]
+    fn clear_drops_download_persistence_key_context() {
+        let app_data = tempfile::tempdir().unwrap();
+        let key = [0xA5; KEY_LEN];
+        let queue = QueueState::new();
+
+        queue
+            .load_for_user(app_data.path(), "server", "alice", Some(&key))
+            .unwrap();
+        assert!(
+            queue
+                .persist_ctx
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .dek
+                .is_some()
+        );
+
+        queue.clear();
+        assert!(queue.persist_ctx.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn failed_download_reload_leaves_no_key_context() {
+        let app_data = tempfile::tempdir().unwrap();
+        let correct_key = [1; KEY_LEN];
+        let wrong_key = [2; KEY_LEN];
+        task_persistence::save(app_data.path(), "server", "alice", Some(&correct_key), &[])
+            .unwrap();
+        let queue = QueueState::new();
+
+        assert!(
+            queue
+                .load_for_user(app_data.path(), "server", "alice", Some(&wrong_key))
+                .is_err()
+        );
+        assert!(queue.persist_ctx.lock().unwrap().is_none());
     }
 }

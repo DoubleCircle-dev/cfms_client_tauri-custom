@@ -142,12 +142,13 @@ pub fn load(
         )));
     }
 
-    let plaintext = cfms_crypto::decrypt_config(&raw, dek).map_err(|e| {
-        cfms_core::Error::Other(format!(
-            "Failed to decrypt task file {}: {e}",
-            path.display()
-        ))
-    })?;
+    let plaintext =
+        zeroize::Zeroizing::new(cfms_crypto::decrypt_config(&raw, dek).map_err(|e| {
+            cfms_core::Error::Other(format!(
+                "Failed to decrypt task file {}: {e}",
+                path.display()
+            ))
+        })?);
 
     let tasks_data: TasksJson = serde_json::from_slice(&plaintext).map_err(|e| {
         cfms_core::Error::Other(format!("Invalid task data in {}: {e}", path.display()))
@@ -266,8 +267,10 @@ pub fn save(
         })
         .collect();
 
-    let plaintext = serde_json::to_vec(&tasks_json)
-        .map_err(|e| cfms_core::Error::Other(format!("Failed to serialize tasks: {e}")))?;
+    let plaintext = zeroize::Zeroizing::new(
+        serde_json::to_vec(&tasks_json)
+            .map_err(|e| cfms_core::Error::Other(format!("Failed to serialize tasks: {e}")))?,
+    );
 
     let encrypted = cfms_crypto::encrypt_config(&plaintext, dek)
         .map_err(|e| cfms_core::Error::Other(format!("Failed to encrypt tasks: {e}")))?;

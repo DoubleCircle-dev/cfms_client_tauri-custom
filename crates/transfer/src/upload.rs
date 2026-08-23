@@ -13,6 +13,7 @@ use cfms_transport::Connection;
 use serde::Deserialize;
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use zeroize::Zeroizing;
 
 use crate::verify;
 
@@ -102,13 +103,15 @@ pub async fn send(
     if bytes_sent < file_size {
         let mut file = tokio::fs::File::open(source).await?;
         file.seek(std::io::SeekFrom::Start(bytes_sent)).await?;
-        let mut buffer = vec![0u8; chunk_size];
+        let mut buffer = Zeroizing::new(vec![0u8; chunk_size]);
 
         while bytes_sent < file_size {
             let expected = usize::try_from((file_size - bytes_sent).min(chunk_size as u64))
                 .map_err(|_| cfms_core::Error::Protocol("upload chunk size overflow".into()))?;
             file.read_exact(&mut buffer[..expected]).await?;
-            stream.send(conn, buffer[..expected].to_vec()).await?;
+            stream
+                .send_sensitive(conn, Zeroizing::new(buffer[..expected].to_vec()))
+                .await?;
             bytes_sent += expected as u64;
             on_progress(bytes_sent, file_size);
         }

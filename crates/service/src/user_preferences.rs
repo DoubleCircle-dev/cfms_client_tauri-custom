@@ -67,12 +67,13 @@ pub fn load(
     let dek = dek.ok_or_else(|| {
         cfms_core::Error::Other("Encrypted preference file found but DEK is unavailable".into())
     })?;
-    let plaintext = cfms_crypto::decrypt_config(&raw, dek).map_err(|e| {
-        cfms_core::Error::Other(format!(
-            "Failed to decrypt preference file {}: {e}",
-            path.display()
-        ))
-    })?;
+    let plaintext =
+        zeroize::Zeroizing::new(cfms_crypto::decrypt_config(&raw, dek).map_err(|e| {
+            cfms_core::Error::Other(format!(
+                "Failed to decrypt preference file {}: {e}",
+                path.display()
+            ))
+        })?);
 
     serde_json::from_slice(&plaintext).map_err(|e| {
         cfms_core::Error::Other(format!(
@@ -100,8 +101,10 @@ pub fn save(
         })?;
     }
 
-    let plaintext = serde_json::to_vec(preferences)
-        .map_err(|e| cfms_core::Error::Other(format!("Failed to serialize preferences: {e}")))?;
+    let plaintext =
+        zeroize::Zeroizing::new(serde_json::to_vec(preferences).map_err(|e| {
+            cfms_core::Error::Other(format!("Failed to serialize preferences: {e}"))
+        })?);
 
     let dek = dek.ok_or_else(|| {
         cfms_core::Error::Other("Cannot save user preferences without a DEK".into())

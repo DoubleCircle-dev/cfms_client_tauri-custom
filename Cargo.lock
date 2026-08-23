@@ -582,6 +582,7 @@ dependencies = [
  "cfms-transport",
  "fluent-bundle",
  "hex",
+ "nix",
  "rand 0.10.2",
  "reqwest",
  "rustls",
@@ -675,6 +676,7 @@ dependencies = [
  "sha2 0.11.0",
  "tempfile",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -694,6 +696,7 @@ dependencies = [
  "tracing",
  "url",
  "webpki-roots 1.0.9",
+ "zeroize",
 ]
 
 [[package]]

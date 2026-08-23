@@ -9,7 +9,7 @@
   // reference/cfms_client_next/src/include/ui/controls/dialogs/admin/accounts.py
   // and PasswdDialogController in controllers/dialogs/passwd.py.
 
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import DialogActionButton from './DialogActionButton.svelte';
   import Icon from './Icon.svelte';
   import ModalFrame from './ModalFrame.svelte';
@@ -48,6 +48,11 @@
   let newVisible = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
+
+  onDestroy(() => {
+    oldPassword = '';
+    newPassword = '';
+  });
 
   // Live strength estimate of the new password (purely advisory — the server
   // enforces the authoritative rules).

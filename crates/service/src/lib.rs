@@ -18,6 +18,7 @@
 pub mod db;
 pub mod extensions;
 pub mod scan;
+pub mod sensitive;
 pub mod service;
 pub mod services;
 pub mod state;

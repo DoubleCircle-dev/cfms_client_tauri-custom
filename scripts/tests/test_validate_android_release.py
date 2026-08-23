@@ -64,5 +64,18 @@ class CertificateDigestTests(unittest.TestCase):
             )
 
 
+class ManifestBooleanTests(unittest.TestCase):
+    def test_reads_compiled_boolean_attributes(self) -> None:
+        output = "\n".join(
+            (
+                "A: android:allowBackup(0x01010280)=(type 0x12)0x0",
+                "A: android:debuggable(0x0101000f)=(type 0x12)0x1",
+            )
+        )
+        self.assertIs(VALIDATOR.manifest_boolean(output, "allowBackup"), False)
+        self.assertIs(VALIDATOR.manifest_boolean(output, "debuggable"), True)
+        self.assertIsNone(VALIDATOR.manifest_boolean(output, "usesCleartextTraffic"))
+
+
 if __name__ == "__main__":
     unittest.main()

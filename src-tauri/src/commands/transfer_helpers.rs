@@ -1,7 +1,14 @@
 /// Convenience helper: extract (connection, username, token) from app state.
 async fn get_connection_auth(
     state: &AppHandleState,
-) -> Result<(cfms_transport::Connection, String, String), String> {
+) -> Result<
+    (
+        cfms_transport::Connection,
+        String,
+        cfms_service::sensitive::SecretString,
+    ),
+    String,
+> {
     let conn = cfms_service::services::connection::ensure_connected(
         &state.inner,
         cfms_service::services::connection::DEFAULT_RECONNECT_ATTEMPTS,
@@ -1155,33 +1162,9 @@ mod protocol_v15_tests {
 }
 
 async fn clear_auth_state(state: &AppHandleState) {
-    {
-        let mut u = state.inner.username.write().await;
-        let mut t = state.inner.token.write().await;
-        let mut e = state.inner.token_exp.write().await;
-        let mut n = state.inner.nickname.write().await;
-        let mut p = state.inner.permissions.write().await;
-        let mut g = state.inner.groups.write().await;
-        let mut d = state.inner.dek.write().await;
-        let mut spd = state.inner.server_preference_dek.write().await;
-        let mut a = state.inner.avatar_path.write().await;
-        *u = None;
-        *t = None;
-        *e = None;
-        *n = None;
-        p.clear();
-        g.clear();
-        *d = None;
-        *spd = None;
-        *a = None;
-    }
-
+    state.inner.clear_auth().await;
     state.tasks.clear();
     state.upload_tasks.clear();
-    state
-        .inner
-        .pending_2fa
-        .store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
 async fn close_primary_connection(state: &AppHandleState) {
