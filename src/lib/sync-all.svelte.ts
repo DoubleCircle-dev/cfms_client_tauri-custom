@@ -11,12 +11,13 @@ import {
   computeLocalSha256,
   deleteDownloadFile,
   downloadGitCommit,
+  downloadGitInit,
   getDocument,
   listDirectory,
   listDownloadFiles,
   moveDownloadFile,
 } from '$lib/api/files';
-import { getSyncGitTrackingEnabled } from '$lib/api/settings';
+import { getSyncGitTrackingEnabled, getSyncOverwriteStrategy, type SyncOverwriteStrategy } from '$lib/api/settings';
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api/types';
 import { dialogStore } from '$lib/dialogs.svelte';
 import { downloadStore, notificationStore } from '$lib/stores.svelte';
@@ -62,6 +63,9 @@ export interface SyncAllOptions {
   confirmDeletes?: boolean;
   /** Whether the download root is versioned with git. Overrides the stored setting. */
   gitTracking?: boolean;
+  /** How to handle files whose server revision differs from the local copy.
+   *  Overrides the stored setting. */
+  overwriteStrategy?: 'force_overwrite' | 'backup_rename' | 'skip';
   /** Called with a status message when the sync summary is ready. */
   onStatus?: (message: string) => void;
   /** Called with an error message on failure. */
@@ -86,13 +90,26 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   const confirmDeletes = options.confirmDeletes ?? true;
   const { onStatus, onError, onRefresh } = options;
 
-  // Local git tracking is an explicit user setting (Settings > Behavior):
-  //  - enabled   → history is versioned, so updated files are force-overwritten
-  //    and a commit snapshots the sync result (repo must exist or commit is skipped);
-  //  - disabled  → no git operations; before overwriting an outdated local file,
-  //    the old copy is renamed to `<name>+<timestamp>` as a pre-update backup.
-  const hasGit = options.gitTracking ?? await getSyncGitTrackingEnabled().catch(() => false);
-  const forceOverwrite = overwriteLocal || hasGit;
+  // Git version tracking is an explicit user setting (Settings > File Sync).
+  // When enabled, every sync that downloads/updates files commits a snapshot.
+  // The local repo is initialized lazily here; if init fails, tracking is
+  // silently disabled for this run (the settings toggle itself reports the
+  // failure and reverts).
+  let hasGit = options.gitTracking ?? await getSyncGitTrackingEnabled().catch(() => false);
+  if (hasGit) {
+    try {
+      await downloadGitInit();
+    } catch (err) {
+      console.warn('%c[cfms:sync] Git init failed, tracking disabled for this run:', 'color:#ffb74d', err);
+      hasGit = false;
+    }
+  }
+
+  // Overwrite strategy for files whose server revision differs from the local
+  // copy. Git tracking implies force-overwrite (history lives in commits).
+  const storedStrategy: SyncOverwriteStrategy = options.overwriteStrategy
+    ?? await getSyncOverwriteStrategy().catch(() => 'backup_rename' as const);
+  const strategy: SyncOverwriteStrategy = hasGit ? 'force_overwrite' : storedStrategy;
   const backupSuffix = `+${backupTimestamp()}`;
 
   let queued = 0;
@@ -187,9 +204,14 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
       // If server has no hash, fall back to file existence
       const existsLocally = !!localHash;
       const hasServerHash = serverHash != null;
-      // Server version differs from local copy — always re-download (server is authoritative)
+      // Server version differs from local copy
       const mismatch = existsLocally && hasServerHash && localHash !== serverHash;
-      const needsDownload = !isDownloaded && (!existsLocally || mismatch || forceOverwrite);
+      // Skip strategy: leave outdated local files untouched.
+      if (mismatch && strategy === 'skip') {
+        skipped++;
+        continue;
+      }
+      const needsDownload = !isDownloaded && (!existsLocally || mismatch || overwriteLocal || strategy === 'force_overwrite');
 
       if (needsDownload) {
         pendingDownloads.push({ docId: doc.id, path: downloadPath, serverHash, existsLocally });
@@ -309,9 +331,9 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     for (const d of toDownload) {
       try {
         let overwrite = d.existsLocally;
-        if (!hasGit && d.existsLocally) {
-          // No git history to fall back on — preserve the outdated local copy
-          // under a timestamped name before downloading the new revision.
+        if (strategy === 'backup_rename' && d.existsLocally) {
+          // Preserve the outdated local copy under a timestamped name before
+          // downloading the new revision.
           const backupPath = `${d.path}${backupSuffix}`;
           try {
             const renamed = await moveDownloadFile(d.path, backupPath);
