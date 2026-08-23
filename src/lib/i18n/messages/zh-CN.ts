@@ -1279,6 +1279,8 @@ export const zh_CN = {
       fileAutoUpdateIntervalHint: '范围 5 - 1440 分钟。修改后在下次进入主页时生效。',
       fileAutoUpdateAutoDownload: '检测到更新后立即下载',
       fileAutoUpdateAutoDownloadHint: '开启后，自动检测到差异会立即同步；关闭时差异进入待更新队列，需要手动确认。',
+      syncGitTracking: '启用 Git 版本跟踪',
+      syncGitTrackingHint: '开启后同步会强制覆盖本地文件并提交 Git 快照（需已在下载目录初始化仓库）；关闭时不执行 Git 命令，更新前会把旧文件改名为「文件名+时间戳」备份。',
     },
     connection: {
       title: '连接',
@@ -1309,6 +1311,12 @@ export const zh_CN = {
       caRemoved: '移除 {count} 个',
       caUnchanged: '{count} 个未变化',
       caUpdateErrors: '证书更新完成，但存在错误：{errors}',
+    },
+    fileSync: {
+      title: '文件同步',
+      description: '自动检测间隔、更新队列与本地 Git 版本跟踪',
+      gitSectionTitle: '本地 Git 版本跟踪',
+      gitSectionHint: '控制同步时是否使用 Git 快照，以及无 Git 时的旧文件备份行为。',
     },
     storage: {
       title: '存储',

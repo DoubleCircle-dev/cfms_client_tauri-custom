@@ -1290,6 +1290,8 @@ export const en = {
       fileAutoUpdateIntervalHint: 'Range: 5 - 1440 minutes. Changes apply next time Home starts polling.',
       fileAutoUpdateAutoDownload: 'Download updates immediately',
       fileAutoUpdateAutoDownloadHint: 'When on, detected diffs sync right away; when off, diffs enter the pending queue for manual confirmation.',
+      syncGitTracking: 'Enable Git version tracking',
+      syncGitTrackingHint: 'When on, sync force-overwrites local files and commits a Git snapshot (initialize the repo in the download folder first); when off, no Git commands run and outdated files are renamed to "name+timestamp" backups before updating.',
     },
     connection: {
       title: 'Connection',
@@ -1320,6 +1322,12 @@ export const en = {
       caRemoved: '{count} removed',
       caUnchanged: '{count} unchanged',
       caUpdateErrors: 'Certificate update completed with errors: {errors}',
+    },
+    fileSync: {
+      title: 'File Sync',
+      description: 'Automatic check interval, update queue, and local Git version tracking',
+      gitSectionTitle: 'Local Git Version Tracking',
+      gitSectionHint: 'Controls whether sync commits Git snapshots, and how outdated files are backed up without Git.',
     },
     storage: {
       title: 'Storage',
