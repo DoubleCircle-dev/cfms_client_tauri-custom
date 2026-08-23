@@ -1628,6 +1628,7 @@ export const en = {
     noLocalPath: 'Pick a local chatbox folder to browse records offline.',
     renameRoom: 'Rename room',
     renameUser: 'Rename user',
+    selectRoom: 'Open room',
     roomNamePrompt: 'Enter a custom room name (leave empty to reset):',
     userNamePrompt: 'Enter a custom user name (leave empty to reset):',
     roomId: 'Room ID: {id}',

@@ -1617,6 +1617,7 @@ export const zh_CN = {
     noLocalPath: '选择本地聊天文件夹即可离线浏览记录。',
     renameRoom: '重命名房间',
     renameUser: '重命名用户',
+    selectRoom: '打开房间',
     roomNamePrompt: '输入自定义房间名（留空并确定可恢复默认）：',
     userNamePrompt: '输入自定义用户名（留空并确定可恢复默认）：',
     roomId: '房间 ID：{id}',

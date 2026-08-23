@@ -71,7 +71,10 @@
   }
 
   interface ChatRoom {
+    /** Server directory ID used for API calls (online mode only). */
     id: string;
+    /** Chatbox folder name — the real room ID used for display and renames. */
+    roomId: string;
     name: string;
     createdTime: number | null;
     messages: ChatMessage[];
@@ -102,7 +105,7 @@
   });
 
   const selectedRoom = $derived(
-    rooms.find((room) => room.id === selectedRoomId) ?? null,
+    rooms.find((room) => room.roomId === selectedRoomId) ?? null,
   );
   const selectedColorMap = $derived.by(() => {
     const map = new Map<string, { bg: string; strip: string }>();
@@ -208,11 +211,12 @@
 
       const listing = await listDirectory(chatboxFolderId);
       const roomFolders = listing.folders.filter(
-        (folder) => folder.id !== IGNORED_ROOM_ID,
+        (folder) => folder.name !== IGNORED_ROOM_ID,
       );
       rooms = roomFolders.map((folder) => ({
         id: folder.id,
-        name: roomDisplayName(folder.id),
+        roomId: folder.name,
+        name: roomDisplayName(folder.name),
         createdTime: folder.created_time ?? null,
         messages: [],
         attachments: [],
@@ -230,7 +234,7 @@
       // Load room details lazily on selection to keep server requests low
       // (frequent scans can trigger server-side rate limiting).
       if (!selectedRoomId && rooms.length > 0) {
-        selectedRoomId = rooms[0].id;
+        selectedRoomId = rooms[0].roomId;
       }
     } catch (err) {
       error = $t('chat.loadFailed', {
@@ -277,6 +281,7 @@
         messages.sort((a, b) => a.time.localeCompare(b.time));
         return {
           id: room.id,
+          roomId: room.id,
           name: roomDisplayName(room.id),
           createdTime: null,
           messages,
@@ -292,7 +297,7 @@
       });
       rooms = parsed;
       if (!selectedRoomId && rooms.length > 0) {
-        selectedRoomId = rooms[0].id;
+        selectedRoomId = rooms[0].roomId;
       }
     } catch (err) {
       error = $t('chat.loadFailed', {
@@ -349,9 +354,9 @@
     if (loadingRoomId === roomId) return;
     loadingRoomId = roomId;
     try {
-      const room = rooms.find((item) => item.id === roomId);
+      const room = rooms.find((item) => item.roomId === roomId);
       if (!room) return;
-      const listing = await listDirectory(roomId);
+      const listing = await listDirectory(room.id);
 
       const messages: ChatMessage[] = [];
       const nonformat: NonformatBlock[] = [];
@@ -386,7 +391,7 @@
 
       messages.sort((a, b) => a.time.localeCompare(b.time));
 
-      const index = rooms.findIndex((item) => item.id === roomId);
+      const index = rooms.findIndex((item) => item.roomId === roomId);
       if (index >= 0) {
         rooms[index] = {
           ...rooms[index],
@@ -397,7 +402,7 @@
         };
       }
     } catch {
-      const index = rooms.findIndex((item) => item.id === roomId);
+      const index = rooms.findIndex((item) => item.roomId === roomId);
       if (index >= 0) rooms[index] = { ...rooms[index], loaded: true, failed: true };
     } finally {
       loadingRoomId = null;
@@ -453,7 +458,7 @@
   function selectRoom(roomId: string) {
     selectedRoomId = roomId;
     showNonformat = false;
-    const room = rooms.find((item) => item.id === roomId);
+    const room = rooms.find((item) => item.roomId === roomId);
     if (room && !room.loaded) void loadRoomDetails(roomId);
   }
 
@@ -608,16 +613,22 @@
         </div>
       {:else}
         <div class="chat-room-list">
-          {#each rooms as room (room.id)}
-            <button
-              type="button"
+          {#each rooms as room (room.roomId)}
+            <div
               class="chat-room-card"
-              class:chat-room-card--active={room.id === selectedRoomId}
-              onclick={() => selectRoom(room.id)}
-              ondblclick={() => renameRoom(room.id)}
-              title={`${roomDisplayName(room.id)} (${$t('chat.renameRoom')})`}
+              class:chat-room-card--active={room.roomId === selectedRoomId}
+              role="button"
+              tabindex="0"
+              title={$t('chat.selectRoom')}
+              onclick={() => selectRoom(room.roomId)}
+              onkeydown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  selectRoom(room.roomId);
+                }
+              }}
             >
-              <span class="chat-room-name">{roomDisplayName(room.id)}</span>
+              <span class="chat-room-name">{roomDisplayName(room.roomId)}</span>
               <span class="chat-room-meta">
                 {#if room.loaded}
                   {$t('chat.messagesCount', { values: { count: room.messages.length } })}
@@ -630,7 +641,18 @@
                   …
                 {/if}
               </span>
-            </button>
+              <button
+                type="button"
+                class="chat-room-rename"
+                title={$t('chat.renameRoom')}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  renameRoom(room.roomId);
+                }}
+              >
+                <Icon name="edit" size="14px" />
+              </button>
+            </div>
           {/each}
         </div>
       {/if}
@@ -640,9 +662,9 @@
       {#if selectedRoom}
         <header class="chat-view-header">
           <div>
-            <h2>{roomDisplayName(selectedRoom.id)}</h2>
+            <h2>{roomDisplayName(selectedRoom.roomId)}</h2>
             <p>
-              {$t('chat.roomId', { values: { id: selectedRoom.id } })}
+              {$t('chat.roomId', { values: { id: selectedRoom.roomId } })}
               {#if selectedRoom.createdTime}
                 · {$t('chat.createdTime', { values: { time: formatCreatedTime(selectedRoom.createdTime) } })}
               {/if}
@@ -663,7 +685,7 @@
           </div>
         </header>
 
-        {#if loadingRoomId === selectedRoom.id && !selectedRoom.loaded}
+        {#if loadingRoomId === selectedRoom.roomId && !selectedRoom.loaded}
           <div class="chat-state">
             <Icon name="chat" size="28px" />
             <p>{$t('chat.loadingRoom')}</p>
@@ -918,6 +940,33 @@
   .chat-room-card--active {
     border-color: color-mix(in srgb, var(--explorer-accent) 35%, transparent);
     background: var(--explorer-surface-selected);
+  }
+
+  .chat-room-rename {
+    position: absolute;
+    top: 50%;
+    right: 0.45rem;
+    display: grid;
+    width: 24px;
+    height: 24px;
+    transform: translateY(-50%);
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    padding: 0;
+    color: var(--explorer-text-muted);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .chat-room-card:hover .chat-room-rename,
+  .chat-room-card--active .chat-room-rename {
+    display: grid;
+  }
+
+  .chat-room-rename:hover {
+    color: var(--explorer-accent);
+    background: var(--explorer-surface-hover);
   }
 
   .chat-room-name {
