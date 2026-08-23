@@ -171,7 +171,7 @@
   } from '$lib/explorer/file-selection';
   import { isMobilePlatform } from '$lib/platform';
   import { authStore, downloadStore, floatingProgressStore, notificationStore, serverStateStore, uploadStore } from '$lib/stores.svelte';
-  import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
+  import { fileUpdateTracker, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
   import {
     makeDownloadPath,
     syncAllCoordinator,
@@ -1257,6 +1257,8 @@
     return new Set([...undownloadedDocIds, ...outdatedDocIds]);
   });
   const needsSyncCount = $derived(needsSyncDocIds.size);
+  const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
+  let queueBusy = $state(false);
 
   /** Recursively sync all files from root — download missing + overwrite outdated */
   async function syncAllFiles() {
@@ -1284,12 +1286,8 @@
     if (pollBusy || loading || directoryAccessDenied) return;
     pollBusy = true;
     try {
-      const result = await fileUpdateTracker.recursiveCheck(
-        (id) => listDirectory(id),
-        null,
-      );
-      fileUpdateTracker.lastCheckTime = Date.now();
-      fileUpdateTracker.nextCheckTime = fileUpdateTracker.lastCheckTime + 60 * 60 * 1000;
+      const result = await detectAndQueueServerChanges();
+      fileUpdateTracker.resetPollingCountdown();
       if (result.changed > 0) {
         notificationStore.info(
           $t('files.serverChangesDetected', {
@@ -1307,6 +1305,55 @@
       notificationStore.error(String(err), 4000);
     } finally {
       pollBusy = false;
+    }
+  }
+
+  async function detectAndQueueServerChanges() {
+    const changedMap = new Map<string, PendingUpdateItem>();
+    return fileUpdateTracker.recursiveCheck(
+      (id) => listDirectory(id),
+      null,
+      20,
+      200,
+      ({ pathParts, documents, diff }) => {
+        if (diff.newDocuments.length === 0 && diff.modifiedDocuments.length === 0) return;
+        const changedIds = new Set([...diff.newDocuments, ...diff.modifiedDocuments]);
+        for (const doc of documents) {
+          if (!changedIds.has(doc.id)) continue;
+          changedMap.set(doc.id, {
+            id: doc.id,
+            title: doc.title,
+            path: [...pathParts, doc.title].join('/'),
+            sha256: doc.sha256,
+          });
+        }
+      },
+    ).then((result) => {
+      if (changedMap.size > 0) {
+        fileUpdateTracker.enqueuePendingUpdates([...changedMap.values()]);
+      }
+      return result;
+    });
+  }
+
+  async function confirmQueuedUpdates() {
+    if (queueBusy || pendingUpdates.length === 0) return;
+    queueBusy = true;
+    error = null;
+    try {
+      await refreshDownloadedFileIds();
+      await runSharedSyncAll({
+        overwriteLocal,
+        confirmDeletes: true,
+        onStatus: (msg) => { status = msg; },
+        onError: (msg) => { error = msg; },
+        onRefresh: () => refreshDownloadedFileIds(),
+      });
+      fileUpdateTracker.clearPendingUpdates();
+    } catch (err) {
+      error = formatError(err);
+    } finally {
+      queueBusy = false;
     }
   }
 
@@ -1339,6 +1386,14 @@
       disabled: syncAllCoordinator.busy,
       dividerBefore: true,
       run: syncAllFiles,
+    },
+    {
+      id: 'confirm-queued-updates',
+      label: `${$t('files.confirmQueuedUpdates')} (${pendingUpdates.length})`,
+      icon: 'checkCircle',
+      visible: pendingUpdates.length > 0,
+      disabled: queueBusy || syncAllCoordinator.busy,
+      run: confirmQueuedUpdates,
     },
     {
       id: 'download-selected',
