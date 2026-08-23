@@ -638,6 +638,7 @@ export interface UserPreference {
   file_auto_update_enabled?: boolean;
   file_auto_update_interval_minutes?: number;
   file_auto_update_auto_download?: boolean;
+  sync_git_tracking_enabled?: boolean;
   privacy?: PrivacyPreference;
   task_concurrency: TaskConcurrencyPreference;
   transfer: TransferPreference;

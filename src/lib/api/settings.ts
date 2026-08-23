@@ -16,6 +16,26 @@ export const DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR: RootBackButtonBehavior = 'exit';
 export const DEFAULT_FILE_AUTO_UPDATE_ENABLED = true;
 export const DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES = 60;
 export const DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD = false;
+export const DEFAULT_SYNC_GIT_TRACKING_ENABLED = false;
+
+/** Whether the download root is versioned with git (enables force-overwrite + commit on sync). */
+export async function getSyncGitTrackingEnabled(): Promise<boolean> {
+  try {
+    const preferences = await loadUserPreference();
+    return preferences.sync_git_tracking_enabled ?? DEFAULT_SYNC_GIT_TRACKING_ENABLED;
+  } catch {
+    return DEFAULT_SYNC_GIT_TRACKING_ENABLED;
+  }
+}
+
+/** Persist the git version-tracking toggle. */
+export async function setSyncGitTrackingEnabled(enabled: boolean): Promise<void> {
+  const preferences = await loadUserPreference();
+  await saveUserPreference({
+    ...preferences,
+    sync_git_tracking_enabled: enabled,
+  });
+}
 
 /** Scan a local directory recursively. */
 export async function scanDirectory(

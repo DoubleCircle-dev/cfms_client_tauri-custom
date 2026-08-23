@@ -574,6 +574,13 @@ pub struct UserPreference {
     #[serde(default)]
     pub file_auto_update_auto_download: bool,
 
+    /// Whether the local download root is versioned with git. When true, sync
+    /// force-overwrites changed files and commits the result; when false, no git
+    /// commands run and outdated local files are renamed to timestamped backups
+    /// before downloading the new revision.
+    #[serde(default)]
+    pub sync_git_tracking_enabled: bool,
+
     /// Versioned per-user privacy settings. Incompatible shapes and versions
     /// are treated as a fresh installation instead of being migrated.
     #[serde(default, deserialize_with = "deserialize_privacy_preference")]
@@ -606,6 +613,7 @@ impl Default for UserPreference {
             file_auto_update_enabled: default_file_auto_update_enabled(),
             file_auto_update_interval_minutes: default_file_auto_update_interval_minutes(),
             file_auto_update_auto_download: false,
+            sync_git_tracking_enabled: false,
             privacy: PrivacyPreference::default(),
             task_concurrency: TaskConcurrencyPreference::default(),
             transfer: TransferPreference::default(),
