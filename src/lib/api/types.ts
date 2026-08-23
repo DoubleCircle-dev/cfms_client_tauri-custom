@@ -635,6 +635,8 @@ export interface UserPreference {
   external_storage_path: string;
   app_lock?: unknown;
   root_back_button_behavior?: "background" | "exit" | null;
+  file_auto_update_enabled?: boolean;
+  file_auto_update_interval_minutes?: number;
   privacy?: PrivacyPreference;
   task_concurrency: TaskConcurrencyPreference;
   transfer: TransferPreference;

@@ -562,6 +562,14 @@ pub struct UserPreference {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_back_button_behavior: Option<String>,
 
+    /// Whether periodic automatic file-update detection is enabled.
+    #[serde(default = "default_file_auto_update_enabled")]
+    pub file_auto_update_enabled: bool,
+
+    /// Interval in minutes for periodic automatic file-update detection.
+    #[serde(default = "default_file_auto_update_interval_minutes")]
+    pub file_auto_update_interval_minutes: u32,
+
     /// Versioned per-user privacy settings. Incompatible shapes and versions
     /// are treated as a fresh installation instead of being migrated.
     #[serde(default, deserialize_with = "deserialize_privacy_preference")]
@@ -591,6 +599,8 @@ impl Default for UserPreference {
             external_storage_path: String::new(),
             app_lock: serde_json::Value::Null,
             root_back_button_behavior: None,
+            file_auto_update_enabled: default_file_auto_update_enabled(),
+            file_auto_update_interval_minutes: default_file_auto_update_interval_minutes(),
             privacy: PrivacyPreference::default(),
             task_concurrency: TaskConcurrencyPreference::default(),
             transfer: TransferPreference::default(),
@@ -614,6 +624,14 @@ pub struct ExtensionPreference {
 
 fn default_record_recent_visits() -> bool {
     false
+}
+
+fn default_file_auto_update_enabled() -> bool {
+    true
+}
+
+fn default_file_auto_update_interval_minutes() -> u32 {
+    60
 }
 
 /// How the application chooses its color scheme.

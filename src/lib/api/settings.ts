@@ -5,7 +5,14 @@ import { loadUserPreference, saveUserPreference } from './preferences';
 
 export type RootBackButtonBehavior = 'background' | 'exit';
 
+export interface FileAutoUpdateSettings {
+  enabled: boolean;
+  intervalMinutes: number;
+}
+
 export const DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR: RootBackButtonBehavior = 'exit';
+export const DEFAULT_FILE_AUTO_UPDATE_ENABLED = true;
+export const DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES = 60;
 
 /** Scan a local directory recursively. */
 export async function scanDirectory(
@@ -52,6 +59,45 @@ export function normalizeRootBackButtonBehavior(
   value: string | null | undefined,
 ): RootBackButtonBehavior {
   return value === 'background' ? 'background' : DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR;
+}
+
+export function normalizeFileAutoUpdateIntervalMinutes(
+  value: number | null | undefined,
+): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES;
+  }
+  return Math.max(5, Math.min(24 * 60, Math.floor(value)));
+}
+
+/** Load automatic file-update detection settings. */
+export async function getFileAutoUpdateSettings(): Promise<FileAutoUpdateSettings> {
+  try {
+    const preferences = await loadUserPreference();
+    return {
+      enabled: preferences.file_auto_update_enabled ?? DEFAULT_FILE_AUTO_UPDATE_ENABLED,
+      intervalMinutes: normalizeFileAutoUpdateIntervalMinutes(
+        preferences.file_auto_update_interval_minutes,
+      ),
+    };
+  } catch {
+    return {
+      enabled: DEFAULT_FILE_AUTO_UPDATE_ENABLED,
+      intervalMinutes: DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES,
+    };
+  }
+}
+
+/** Persist automatic file-update detection settings. */
+export async function setFileAutoUpdateSettings(
+  settings: FileAutoUpdateSettings,
+): Promise<void> {
+  const preferences = await loadUserPreference();
+  await saveUserPreference({
+    ...preferences,
+    file_auto_update_enabled: settings.enabled,
+    file_auto_update_interval_minutes: normalizeFileAutoUpdateIntervalMinutes(settings.intervalMinutes),
+  });
 }
 
 /** Get the active backend locale. */
