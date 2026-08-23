@@ -33,6 +33,42 @@ export async function resolveNodePath(path: string): Promise<NodeLookupResponse>
   return invoke('resolve_node_path', { path });
 }
 
+/** Download a server document and return its text content.
+ *
+ * The backend fetches the file through the encrypted transfer protocol into a
+ * temporary file and returns the decoded text, so chat records can be read
+ * straight from the server file tree without touching the local download root.
+ */
+export async function readServerDocument(
+  documentId: string,
+): Promise<{ content: string; size: number; truncated: boolean }> {
+  return invoke('read_server_document', { documentId });
+}
+
+export interface LocalChatboxFile {
+  name: string;
+  path: string;
+  kind: string;
+  size: number;
+  content: string | null;
+  truncated: boolean;
+}
+
+export interface LocalChatboxRoom {
+  id: string;
+  files: LocalChatboxFile[];
+}
+
+/** Scan a local chatbox folder (`.runtime/chatbox` or a root containing it). */
+export async function scanLocalChatbox(dir: string): Promise<LocalChatboxRoom[]> {
+  return invoke('scan_local_chatbox', { dir });
+}
+
+/** Open a local file with the system default application (chatbox attachments). */
+export async function openLocalPath(path: string): Promise<void> {
+  return invoke('open_local_path', { path });
+}
+
 /** Request a document download from the CFMS server.
  *
  * Sends the `get_document` action, which creates a download task on the

@@ -155,7 +155,7 @@
 <div class="tools-page">
   <header class="tools-header">
     <h1>{$t('tools.title')}</h1>
-    <p>{$t('tools.matrix.hint')}</p>
+    <p>{$t('tools.description')}</p>
   </header>
 
   <div class="tools-tabs" role="tablist" aria-label={$t('tools.title')}>

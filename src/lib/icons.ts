@@ -16,6 +16,7 @@ export const ICONS = {
   more:          'more_horiz',
   manage:        'cloud_circle',
   tools:         'handyman',
+  chat:          'forum',
 
   // ---- Auth ----
   login:         'login',
@@ -37,6 +38,7 @@ export const ICONS = {
   linkOff:       'link_off',
   download:      'download',
   upload:        'upload',
+  attachment:    'attach_file',
   openInNew:     'open_in_new',
   search:        'search',
   settings:      'settings',
