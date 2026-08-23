@@ -1288,6 +1288,8 @@ export const en = {
       fileAutoUpdateEnabled: 'Enable automatic checks',
       fileAutoUpdateInterval: 'Check interval (minutes)',
       fileAutoUpdateIntervalHint: 'Range: 5 - 1440 minutes. Changes apply next time Home starts polling.',
+      fileAutoUpdateAutoDownload: 'Download updates immediately',
+      fileAutoUpdateAutoDownloadHint: 'When on, detected diffs sync right away; when off, diffs enter the pending queue for manual confirmation.',
     },
     connection: {
       title: 'Connection',

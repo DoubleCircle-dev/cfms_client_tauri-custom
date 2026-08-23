@@ -1277,6 +1277,8 @@ export const zh_CN = {
       fileAutoUpdateEnabled: '启用自动检测',
       fileAutoUpdateInterval: '检测间隔（分钟）',
       fileAutoUpdateIntervalHint: '范围 5 - 1440 分钟。修改后在下次进入主页时生效。',
+      fileAutoUpdateAutoDownload: '检测到更新后立即下载',
+      fileAutoUpdateAutoDownloadHint: '开启后，自动检测到差异会立即同步；关闭时差异进入待更新队列，需要手动确认。',
     },
     connection: {
       title: '连接',
