@@ -1,14 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
-  import { openUrl } from '@tauri-apps/plugin-opener';
+  import { open } from '@tauri-apps/plugin-dialog';
+  import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 
   import Icon from '$lib/components/Icon.svelte';
+  import { DEFAULT_ROOM_NAMES, DEFAULT_USER_NAMES } from '$lib/chatbox/names';
   import {
     getDocument,
     listDirectory,
     readServerDocument,
     resolveNodePath,
+    scanLocalChatbox,
   } from '$lib/api/files';
   import { notificationStore } from '$lib/stores.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
@@ -17,6 +20,8 @@
   const CHATBOX_PATH = '/.runtime/chatbox';
   const ROOM_NAMES_KEY = 'cfms:chatbox:roomNames';
   const USER_NAMES_KEY = 'cfms:chatbox:userNames';
+  const MODE_KEY = 'cfms:chatbox:mode';
+  const LOCAL_PATH_KEY = 'cfms:chatbox:localPath';
 
   const BUBBLE_COLORS = [
     '#ffffff',
@@ -57,6 +62,7 @@
     id: string;
     name: string;
     kind: 'image' | 'audio' | 'other';
+    path?: string;
   }
 
   interface NonformatBlock {
@@ -75,6 +81,8 @@
     failed?: boolean;
   }
 
+  type ChatMode = 'online' | 'local';
+
   let chatboxFolderId = $state<string | null>(null);
   let rooms = $state<ChatRoom[]>([]);
   let selectedRoomId = $state<string | null>(null);
@@ -82,8 +90,16 @@
   let loadingRoomId = $state<string | null>(null);
   let error = $state<string | null>(null);
   let showNonformat = $state(false);
-  let roomNames = $state<Record<string, string>>(loadJson(ROOM_NAMES_KEY));
-  let userNames = $state<Record<string, string>>(loadJson(USER_NAMES_KEY));
+  let mode = $state<ChatMode>(loadMode());
+  let localPath = $state<string | null>(loadLocalPath());
+  let roomNames = $state<Record<string, string>>({
+    ...DEFAULT_ROOM_NAMES,
+    ...loadJson(ROOM_NAMES_KEY),
+  });
+  let userNames = $state<Record<string, string>>({
+    ...DEFAULT_USER_NAMES,
+    ...loadJson(USER_NAMES_KEY),
+  });
 
   const selectedRoom = $derived(
     rooms.find((room) => room.id === selectedRoomId) ?? null,
@@ -105,8 +121,28 @@
   });
 
   onMount(() => {
-    void refresh();
+    if (mode === 'local') {
+      if (localPath) void scanLocal();
+    } else {
+      void refresh();
+    }
   });
+
+  function loadMode(): ChatMode {
+    try {
+      return localStorage.getItem(MODE_KEY) === 'local' ? 'local' : 'online';
+    } catch {
+      return 'online';
+    }
+  }
+
+  function loadLocalPath(): string | null {
+    try {
+      return localStorage.getItem(LOCAL_PATH_KEY);
+    } catch {
+      return null;
+    }
+  }
 
   function loadJson(key: string): Record<string, string> {
     try {
@@ -126,11 +162,15 @@
   }
 
   function displayName(userId: string): string {
-    return userNames[userId] ?? `${userId.slice(0, 8)}…`;
+    return (
+      userNames[userId] ?? DEFAULT_USER_NAMES[userId] ?? `${userId.slice(0, 8)}…`
+    );
   }
 
   function roomDisplayName(roomId: string): string {
-    return roomNames[roomId] ?? `${roomId.slice(0, 8)}…`;
+    return (
+      roomNames[roomId] ?? DEFAULT_ROOM_NAMES[roomId] ?? `${roomId.slice(0, 8)}…`
+    );
   }
 
   async function findChatboxFolder(): Promise<string | null> {
@@ -152,6 +192,10 @@
   }
 
   async function refresh() {
+    if (mode === 'local') {
+      await scanLocal();
+      return;
+    }
     error = null;
     loadingRooms = true;
     try {
@@ -175,14 +219,18 @@
         nonformat: [],
         loaded: false,
       }));
+      // Newest rooms first (folder creation time is the cheap, server-light
+      // proxy; local mode sorts by the real last-message time instead).
+      rooms.sort((a, b) => {
+        const timeA = a.createdTime ?? 0;
+        const timeB = b.createdTime ?? 0;
+        return timeB - timeA;
+      });
 
-      if (rooms.length > 0) {
-        // Preload every room in parallel so the card list can show real
-        // message counts and last-activity times, matching the pytk panel.
-        await Promise.allSettled(rooms.map((room) => loadRoomDetails(room.id)));
-        if (!selectedRoomId && rooms.length > 0) {
-          selectedRoomId = rooms[0].id;
-        }
+      // Load room details lazily on selection to keep server requests low
+      // (frequent scans can trigger server-side rate limiting).
+      if (!selectedRoomId && rooms.length > 0) {
+        selectedRoomId = rooms[0].id;
       }
     } catch (err) {
       error = $t('chat.loadFailed', {
@@ -190,6 +238,110 @@
       });
     } finally {
       loadingRooms = false;
+    }
+  }
+
+  async function scanLocal() {
+    if (!localPath) {
+      rooms = [];
+      selectedRoomId = null;
+      return;
+    }
+    error = null;
+    loadingRooms = true;
+    try {
+      const scanned = await scanLocalChatbox(localPath);
+      const parsed: ChatRoom[] = scanned.map((room) => {
+        const messages: ChatMessage[] = [];
+        const nonformat: NonformatBlock[] = [];
+        const attachments: ChatAttachment[] = [];
+        for (const file of room.files) {
+          if (file.kind === 'text' && file.content !== null) {
+            const userId = file.name.endsWith('.txt')
+              ? file.name.slice(0, -4)
+              : file.name;
+            const result = parseRoomText(userId, file.content);
+            messages.push(...result.messages);
+            if (result.nonformat.length > 0 && result.messages.length > 0) {
+              nonformat.push({ file: file.name, lines: result.nonformat });
+            }
+          } else {
+            attachments.push({
+              id: '',
+              name: file.name,
+              kind: attachmentKind(file.name),
+              path: file.path,
+            });
+          }
+        }
+        messages.sort((a, b) => a.time.localeCompare(b.time));
+        return {
+          id: room.id,
+          name: roomDisplayName(room.id),
+          createdTime: null,
+          messages,
+          attachments,
+          nonformat,
+          loaded: true,
+        };
+      });
+      parsed.sort((a, b) => {
+        const lastA = a.messages[a.messages.length - 1]?.time ?? '';
+        const lastB = b.messages[b.messages.length - 1]?.time ?? '';
+        return lastB.localeCompare(lastA);
+      });
+      rooms = parsed;
+      if (!selectedRoomId && rooms.length > 0) {
+        selectedRoomId = rooms[0].id;
+      }
+    } catch (err) {
+      error = $t('chat.loadFailed', {
+        values: { error: formatUserFacingError(err) },
+      });
+    } finally {
+      loadingRooms = false;
+    }
+  }
+
+  async function pickLocalFolder() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: $t('chat.pickFolder'),
+      });
+      if (typeof selected === 'string' && selected) {
+        localPath = selected;
+        try {
+          localStorage.setItem(LOCAL_PATH_KEY, selected);
+        } catch {
+          // Storage failures only lose the remembered path.
+        }
+        await scanLocal();
+      }
+    } catch (err) {
+      error = $t('chat.loadFailed', {
+        values: { error: formatUserFacingError(err) },
+      });
+    }
+  }
+
+  async function switchMode(next: ChatMode) {
+    if (next === mode) return;
+    mode = next;
+    try {
+      localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // Ignore storage failures; the mode still applies for this session.
+    }
+    selectedRoomId = null;
+    rooms = [];
+    error = null;
+    showNonformat = false;
+    if (next === 'local') {
+      if (localPath) await scanLocal();
+    } else {
+      await refresh();
     }
   }
 
@@ -334,6 +486,14 @@
   }
 
   async function downloadAttachment(attachment: ChatAttachment) {
+    if (attachment.path) {
+      try {
+        await openPath(attachment.path);
+      } catch (err) {
+        notificationStore.error(formatUserFacingError(err));
+      }
+      return;
+    }
     try {
       await getDocument(attachment.id, attachment.name);
       notificationStore.success(
@@ -383,11 +543,41 @@
       <h1>{$t('chat.title')}</h1>
       <p>{$t('chat.description')}</p>
     </div>
-    <button type="button" class="chat-refresh" disabled={loadingRooms} onclick={() => refresh()}>
-      <Icon name="refresh" size="17px" />
-      <span>{$t('chat.refresh')}</span>
-    </button>
+    <div class="chat-header-actions">
+      <div class="chat-mode-toggle" role="group" aria-label={$t('chat.mode')}>
+        <button
+          type="button"
+          class="chat-mode-button"
+          class:chat-mode-button--active={mode === 'online'}
+          onclick={() => switchMode('online')}
+        >
+          {$t('chat.modeOnline')}
+        </button>
+        <button
+          type="button"
+          class="chat-mode-button"
+          class:chat-mode-button--active={mode === 'local'}
+          onclick={() => switchMode('local')}
+        >
+          {$t('chat.modeLocal')}
+        </button>
+      </div>
+      {#if mode === 'local'}
+        <button type="button" class="chat-refresh" onclick={pickLocalFolder}>
+          <Icon name="folder" size="17px" />
+          <span>{$t('chat.pickFolder')}</span>
+        </button>
+      {/if}
+      <button type="button" class="chat-refresh" disabled={loadingRooms} onclick={() => refresh()}>
+        <Icon name="refresh" size="17px" />
+        <span>{$t('chat.refresh')}</span>
+      </button>
+    </div>
   </header>
+
+  <p class="chat-mode-hint">
+    {mode === 'online' ? $t('chat.onlineHint') : $t('chat.localHint')}
+  </p>
 
   {#if error}
     <div class="chat-error" role="alert">
@@ -398,7 +588,15 @@
 
   <div class="chat-body">
     <aside class="chat-rooms" aria-label={$t('chat.title')}>
-      {#if loadingRooms && rooms.length === 0}
+      {#if mode === 'local' && !localPath && !loadingRooms}
+        <div class="chat-state">
+          <Icon name="folder" size="28px" />
+          <p>{$t('chat.noLocalPath')}</p>
+          <button type="button" class="chat-state-button" onclick={pickLocalFolder}>
+            {$t('chat.pickFolder')}
+          </button>
+        </div>
+      {:else if loadingRooms && rooms.length === 0}
         <div class="chat-state">
           <Icon name="chat" size="28px" />
           <p>{$t('chat.loadingRooms')}</p>
@@ -426,8 +624,10 @@
                   {#if formatLastMessageTime(room)}
                     · {$t('chat.lastMessage', { values: { time: formatLastMessageTime(room) } })}
                   {/if}
+                {:else if room.createdTime}
+                  {$t('chat.createdTime', { values: { time: formatCreatedTime(room.createdTime) } })}
                 {:else}
-                  {$t('chat.recordsCount', { values: { count: 0 } })}
+                  …
                 {/if}
               </span>
             </button>
@@ -553,6 +753,11 @@
             {/each}
           {/if}
         </footer>
+      {:else if mode === 'local' && !localPath}
+        <div class="chat-state">
+          <Icon name="folder" size="32px" />
+          <p>{$t('chat.noLocalPath')}</p>
+        </div>
       {:else if !error}
         <div class="chat-state">
           <Icon name="chat" size="32px" />
@@ -594,6 +799,42 @@
     line-height: 1.5;
   }
 
+  .chat-header-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .chat-mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--explorer-border);
+    border-radius: var(--explorer-radius-small);
+    overflow: hidden;
+  }
+
+  .chat-mode-button {
+    border: 0;
+    padding: 0.4rem 0.7rem;
+    color: var(--explorer-text-muted);
+    background: transparent;
+    font-size: 0.75rem;
+  }
+
+  .chat-mode-button + .chat-mode-button {
+    border-left: 1px solid var(--explorer-border);
+  }
+
+  .chat-mode-button:hover {
+    background: var(--explorer-surface-hover);
+  }
+
+  .chat-mode-button--active {
+    color: var(--explorer-text);
+    background: var(--explorer-surface-selected);
+    font-weight: 650;
+  }
+
   .chat-refresh {
     display: inline-flex;
     flex: none;
@@ -613,6 +854,12 @@
 
   .chat-refresh:disabled {
     opacity: 0.55;
+  }
+
+  .chat-mode-hint {
+    margin: 0 1.25rem 0.75rem;
+    color: var(--explorer-text-muted);
+    font-size: 0.7rem;
   }
 
   .chat-error {
@@ -703,6 +950,19 @@
 
   .chat-state :global(.material-symbols-rounded) {
     color: var(--explorer-text-muted);
+  }
+
+  .chat-state-button {
+    border: 1px solid var(--explorer-border);
+    border-radius: var(--explorer-radius-small);
+    padding: 0.4rem 0.8rem;
+    color: var(--explorer-text);
+    background: var(--explorer-surface-raised);
+    font-size: 0.75rem;
+  }
+
+  .chat-state-button:hover {
+    background: var(--explorer-surface-hover);
   }
 
   .chat-view {

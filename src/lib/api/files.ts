@@ -45,6 +45,25 @@ export async function readServerDocument(
   return invoke('read_server_document', { documentId });
 }
 
+export interface LocalChatboxFile {
+  name: string;
+  path: string;
+  kind: string;
+  size: number;
+  content: string | null;
+  truncated: boolean;
+}
+
+export interface LocalChatboxRoom {
+  id: string;
+  files: LocalChatboxFile[];
+}
+
+/** Scan a local chatbox folder (`.runtime/chatbox` or a root containing it). */
+export async function scanLocalChatbox(dir: string): Promise<LocalChatboxRoom[]> {
+  return invoke('scan_local_chatbox', { dir });
+}
+
 /** Request a document download from the CFMS server.
  *
  * Sends the `get_document` action, which creates a download task on the

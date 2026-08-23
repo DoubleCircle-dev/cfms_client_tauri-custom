@@ -666,6 +666,7 @@ pub fn run() {
             commands::delete_download,
             commands::open_downloaded_file,
             commands::read_server_document,
+            commands::scan_local_chatbox,
             commands::create_directory,
             commands::delete_directory,
             commands::delete_document,
