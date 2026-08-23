@@ -456,6 +456,18 @@ fn collect_relative_files(
     Ok(())
 }
 
+/// Check whether a git repository exists in the download root.
+/// Used by the sync flow to decide between git-tracked forced overwrite and
+/// timestamped backup renaming.
+#[tauri::command]
+pub async fn download_git_present(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+) -> Result<bool, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    Ok(download_root.join(".git").exists())
+}
+
 /// Initialize a git repository in the download root (no-op if already initialized).
 #[tauri::command]
 pub async fn download_git_init(

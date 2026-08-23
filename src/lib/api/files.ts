@@ -138,6 +138,11 @@ export async function deleteDownload(taskId: string): Promise<boolean> {
   return invoke("delete_download", { taskId });
 }
 
+/** Check whether the download root contains a git repository. */
+export async function downloadGitPresent(): Promise<boolean> {
+  return invoke("download_git_present");
+}
+
 /** Initialize a git repository in the download root (no-op if already exists). */
 export async function downloadGitInit(): Promise<boolean> {
   return invoke("download_git_init");

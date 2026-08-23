@@ -617,6 +617,7 @@ pub fn run() {
             commands::move_download_file,
             commands::list_download_files,
             commands::ensure_download_subdirectory,
+            commands::download_git_present,
             commands::download_git_init,
             commands::download_git_commit,
             commands::get_setting,
