@@ -1260,11 +1260,14 @@
   const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
   let queueBusy = $state(false);
 
-  /** Recursively sync all files from root — download missing + overwrite outdated */
+  /** Manually triggered: check server changes first (also resets the auto-check
+   *  countdown), then immediately download/update everything found. */
   async function syncAllFiles() {
     if (syncAllCoordinator.busy) return;
     error = null;
     try {
+      await detectAndQueueServerChanges();
+      fileUpdateTracker.resetPollingCountdown();
       await refreshDownloadedFileIds();
       await runSharedSyncAll({
         overwriteLocal,
@@ -1273,6 +1276,7 @@
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
+      fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);
     }
