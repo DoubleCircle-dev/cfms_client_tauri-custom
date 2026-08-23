@@ -3,8 +3,13 @@
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
   import {
+    DEFAULT_FILE_AUTO_UPDATE_ENABLED,
+    DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES,
     DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR,
+    getFileAutoUpdateSettings,
     getRootBackButtonBehavior,
+    normalizeFileAutoUpdateIntervalMinutes,
+    setFileAutoUpdateSettings,
     setRootBackButtonBehavior,
     type RootBackButtonBehavior,
   } from '$lib/api';
@@ -12,6 +17,7 @@
   import { createAutoSave } from '$lib/settings-autosave.svelte';
   import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import MdSwitch from '$lib/components/MdSwitch.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
   import { focusRovingItem } from '$lib/keyboard';
 
@@ -29,6 +35,8 @@
   ];
 
   let behavior = $state<RootBackButtonBehavior>('exit');
+  let autoFileUpdateEnabled = $state(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
+  let autoFileUpdateIntervalMinutes = $state(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
   let loading = $state(true);
   let error = $state<string | null>(null);
   const autoSave = createAutoSave({
@@ -64,6 +72,10 @@
       if (savedBehavior !== behavior) {
         await setRootBackButtonBehavior(behavior);
       }
+
+      const autoUpdateSettings = await getFileAutoUpdateSettings();
+      autoFileUpdateEnabled = autoUpdateSettings.enabled;
+      autoFileUpdateIntervalMinutes = autoUpdateSettings.intervalMinutes;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -92,6 +104,34 @@
 
   function resetBehavior() {
     applyBehavior(DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR);
+    applyAutoFileUpdateEnabled(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
+    applyAutoFileUpdateIntervalMinutes(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
+  }
+
+  function applyAutoFileUpdateEnabled(enabled: boolean) {
+    if (loading) return;
+    autoFileUpdateEnabled = enabled;
+    error = null;
+    const interval = normalizeFileAutoUpdateIntervalMinutes(autoFileUpdateIntervalMinutes);
+    void autoSave.run(async () => {
+      await setFileAutoUpdateSettings({
+        enabled,
+        intervalMinutes: interval,
+      });
+    });
+  }
+
+  function applyAutoFileUpdateIntervalMinutes(rawValue: number) {
+    if (loading) return;
+    const interval = normalizeFileAutoUpdateIntervalMinutes(rawValue);
+    autoFileUpdateIntervalMinutes = interval;
+    error = null;
+    void autoSave.run(async () => {
+      await setFileAutoUpdateSettings({
+        enabled: autoFileUpdateEnabled,
+        intervalMinutes: interval,
+      });
+    });
   }
 
   function handleOptionKeydown(event: KeyboardEvent, nextBehavior: RootBackButtonBehavior) {
@@ -124,6 +164,44 @@
   />
 
   <div class="settings-section-list">
+    <section class="settings-section space-y-4">
+      <div class="settings-section-heading">
+        <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+          {$t('settings.behavior.fileAutoUpdateTitle')}
+        </h2>
+        <p class="text-xs text-md3-on-surface-variant mt-1">
+          {$t('settings.behavior.fileAutoUpdateHint')}
+        </p>
+      </div>
+
+      <div class="settings-row text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+        {$t('settings.behavior.fileAutoUpdateEnabled')}
+        <MdSwitch
+          checked={autoFileUpdateEnabled}
+          disabled={loading}
+          ariaLabel={$t('settings.behavior.fileAutoUpdateEnabled')}
+          onChange={applyAutoFileUpdateEnabled}
+        />
+      </div>
+
+      <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+        {$t('settings.behavior.fileAutoUpdateInterval')}
+        <input
+          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high px-3 py-2 text-md3-on-surface disabled:opacity-60"
+          type="number"
+          min="5"
+          max="1440"
+          step="1"
+          value={autoFileUpdateIntervalMinutes}
+          oninput={(event) => applyAutoFileUpdateIntervalMinutes(Number(event.currentTarget.value))}
+          disabled={loading || !autoFileUpdateEnabled}
+        />
+        <p class="text-xs text-md3-on-surface-variant">
+          {$t('settings.behavior.fileAutoUpdateIntervalHint')}
+        </p>
+      </label>
+    </section>
+
     <section class="settings-section space-y-4">
       <div class="settings-section-heading">
         <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
