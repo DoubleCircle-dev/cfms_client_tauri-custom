@@ -1486,6 +1486,7 @@ export const en = {
   },
   tools: {
     title: 'Tools',
+    description: 'Common puzzle-solving utilities',
     matrix: {
       title: 'Matrix Generator',
       hint: 'Encode an IP address and port into a 7×7 puzzle matrix (with decoy data); decode and transpose are also available.',

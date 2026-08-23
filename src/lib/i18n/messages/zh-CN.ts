@@ -1475,6 +1475,7 @@ export const zh_CN = {
   },
   tools: {
     title: '小工具',
+    description: '解谜相关的常用小工具',
     matrix: {
       title: '矩阵生成',
       hint: '把 IP 与端口编码为 7×7 谜题矩阵（含干扰数据），也可解码还原与转置。',
