@@ -32,6 +32,7 @@ describe('settings entry visibility', () => {
       '/home/settings/app-lock',
     ]);
     expect(groups.find((group) => group.id === 'dataOperations')?.entries.map((entry) => entry.href)).toEqual([
+      '/home/settings/file-sync',
       '/home/settings/storage',
       '/home/settings/activity',
       '/home/settings/tasks',

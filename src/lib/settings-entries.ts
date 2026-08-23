@@ -69,6 +69,15 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     platformScope: 'mobile',
   },
   {
+    labelKey: 'settings.fileSync.title',
+    descriptionKey: 'settings.fileSync.description',
+    icon: 'update',
+    href: '/home/settings/file-sync',
+    group: 'dataOperations',
+    scopeKey: 'settings.overview.scope.accountDevice',
+    requiresAuth: true,
+  },
+  {
     labelKey: 'settings.connection.title',
     descriptionKey: 'settings.connection.description',
     icon: 'connect',
