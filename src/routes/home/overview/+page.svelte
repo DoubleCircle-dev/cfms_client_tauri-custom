@@ -43,6 +43,7 @@
   let recordRecentVisits = $state(true);
   let autoFileUpdateEnabled = $state(true);
   let autoFileUpdateIntervalMinutes = $state(60);
+  let autoFileUpdateAutoDownload = $state(false);
   let queueBusy = $state(false);
 
   onMount(async () => {
@@ -55,12 +56,14 @@
       const autoSettings = await getFileAutoUpdateSettings();
       autoFileUpdateEnabled = autoSettings.enabled;
       autoFileUpdateIntervalMinutes = autoSettings.intervalMinutes;
+      autoFileUpdateAutoDownload = autoSettings.autoDownload;
     } catch {
       recent = [];
       favorites = [];
       recordRecentVisits = true;
       autoFileUpdateEnabled = true;
       autoFileUpdateIntervalMinutes = 60;
+      autoFileUpdateAutoDownload = false;
     } finally {
       loadingRecent = false;
       loadingFavorites = false;
@@ -93,7 +96,10 @@
     if (autoFileUpdateEnabled) {
       fileUpdateTracker.startPolling(async () => {
         try {
-          await detectAndQueueServerChanges();
+          const changes = await detectAndQueueServerChanges();
+          if (changes > 0 && autoFileUpdateAutoDownload) {
+            await confirmQueuedUpdates();
+          }
         } catch (err) {
           console.warn('[cfms:check] Poll failed:', err);
         }
