@@ -1,12 +1,22 @@
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
+import { fileURLToPath } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [tailwindcss(), sveltekit()],
+
+  // iconv-lite (encoding conversion tool) depends on Node's `buffer` module.
+  // Alias it to the browser-safe npm package so the webview bundle contains a
+  // real Buffer implementation instead of an externalized Node builtin.
+  resolve: {
+    alias: {
+      buffer: fileURLToPath(new URL("./node_modules/buffer/", import.meta.url)),
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

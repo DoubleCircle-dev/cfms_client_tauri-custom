@@ -15,6 +15,7 @@ export const ICONS = {
   tasks:         'arrow_circle_down',
   more:          'more_horiz',
   manage:        'cloud_circle',
+  tools:         'handyman',
 
   // ---- Auth ----
   login:         'login',
@@ -44,6 +45,7 @@ export const ICONS = {
   bugReport:     'bug_report',
   update:        'update',
   close:         'close',
+  gridOn:        'grid_on',
   maximizeDialog:'crop_square',
   restoreDialog: 'filter_none',
   done:          'done',

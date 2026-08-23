@@ -81,6 +81,7 @@
   const isSettingsRoute = $derived(
     $page.url.pathname === '/home/settings' || $page.url.pathname.startsWith('/home/settings/'),
   );
+  const isToolsRoute = $derived($page.url.pathname === '/home/tools');
   const isPublicUtilityRoute = $derived(
     $page.url.pathname === '/home/about'
       || $page.url.pathname === '/home/settings'
@@ -123,7 +124,7 @@
     { id: 'about', label: $t('workspace.about'), href: '/home/about', icon: 'info' },
   ]);
   const navigationHasActiveItem = $derived(
-    [...primaryNavigation, ...bottomNavigation].some((item) => isActive(item)),
+    [...primaryNavigation, ...bottomNavigation].some((item) => isActive(item)) || isToolsRoute,
   );
 
   const currentTitle = $derived.by(() => {
@@ -140,6 +141,7 @@
         ?? $t('settings.extensions.title');
     }
     if (path === '/home/trash') return $t('workspace.recycleBin');
+    if (path === '/home/tools') return $t('tools.title');
     if (path === '/home/manage') return $t('workspace.administration');
     if (path === '/home/more') return $t('workspace.account');
     if (path === '/home/diagnostics') return $t('workspace.diagnostics');
@@ -561,6 +563,20 @@
         </div>
         {/if}
       </nav>
+
+      {#if authStore.isLoggedIn}
+        <button
+          data-nav-item
+          type="button"
+          tabindex={isToolsRoute ? 0 : -1}
+          class="explorer-nav-item"
+          class:explorer-nav-item--active={isToolsRoute}
+          aria-current={isToolsRoute ? 'page' : undefined}
+          onclick={() => navigate('/home/tools')}
+        >
+          <Icon name="tools" size="19px" /><span>{$t('tools.title')}</span>
+        </button>
+      {/if}
 
       {#if showKeyboardShortcutEntry}
         <button

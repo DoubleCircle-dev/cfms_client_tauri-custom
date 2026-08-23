@@ -7,6 +7,24 @@ const rootDir = path.resolve(import.meta.dirname, "..");
 const fontsDir = path.join(rootDir, "static", "fonts");
 const execFileAsync = promisify(execFile);
 const curlCommand = process.platform === "win32" ? "curl.exe" : "curl";
+const curlArgs = [
+  "-L",
+  "-sS",
+  "--retry",
+  "5",
+  "--retry-all-errors",
+  "--retry-delay",
+  "1",
+  // A mirror can hang without closing the connection; a bounded timeout lets
+  // the canonical-host fallback kick in instead of blocking forever.
+  "--max-time",
+  "90",
+];
+// Windows schannel sometimes fails the TLS revocation check against Google
+// Fonts; skipping revocation lookup keeps the asset generator working.
+if (process.platform === "win32") {
+  curlArgs.push("--ssl-no-revoke");
+}
 
 const sourceFilesForText = [
   "src/lib/i18n/messages/en.ts",
@@ -39,23 +57,40 @@ async function readIconNames() {
 }
 
 async function fetchText(url) {
-  const { stdout } = await execFileAsync(
-    curlCommand,
-    ["-L", "-sS", "--retry", "3", "-A", "Mozilla/5.0 CFMS font asset generator", url.toString()],
-    { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
-  );
-
-  return stdout;
+  return fetchWithGstaticFallback(url, "utf8", 16 * 1024 * 1024);
 }
 
 async function fetchBinary(url) {
-  const { stdout } = await execFileAsync(
-    curlCommand,
-    ["-L", "-sS", "--retry", "3", "-A", "Mozilla/5.0 CFMS font asset generator", url],
-    { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 },
-  );
+  return fetchWithGstaticFallback(url, "buffer", 64 * 1024 * 1024);
+}
 
-  return stdout;
+// Some networks answer Google Fonts requests with a mirror host
+// (e.g. fonts.gstatic.font.im) that can be flaky for large files. Fall back
+// to the canonical fonts.gstatic.com host, which serves the same file paths.
+async function fetchWithGstaticFallback(url, encoding, maxBuffer) {
+  const candidates = [new URL(url)];
+  if (candidates[0].hostname !== "fonts.gstatic.com") {
+    const fallback = new URL(candidates[0].toString());
+    fallback.protocol = "https:";
+    fallback.hostname = "fonts.gstatic.com";
+    fallback.port = "";
+    candidates.push(fallback);
+  }
+
+  let lastError;
+  for (const candidate of candidates) {
+    try {
+      const { stdout } = await execFileAsync(
+        curlCommand,
+        [...curlArgs, "-A", "Mozilla/5.0 CFMS font asset generator", candidate],
+        { encoding, maxBuffer },
+      );
+      return stdout;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 function googleFontsUrl({ family, display, text, iconNames }) {
@@ -90,7 +125,9 @@ function extensionForFormat(format) {
 
 async function localizeCss({ name, url, localFamily }) {
   const css = await fetchText(url);
-  const fontUrls = [...css.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)\s+format\('([^']+)'\)/g)];
+  // Google Fonts may answer with a mirror host (e.g. fonts.gstatic.font.im);
+  // match any gstatic host so the subsets are still downloaded and embedded.
+  const fontUrls = [...css.matchAll(/url\((https:\/\/fonts\.gstatic\.[^/)]+\/[^)]+)\)\s+format\('([^']+)'\)/g)];
   let localizedCss = css;
 
   for (const [index, match] of fontUrls.entries()) {
