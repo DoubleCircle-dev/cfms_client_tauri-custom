@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
   import {
+    DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD,
     DEFAULT_FILE_AUTO_UPDATE_ENABLED,
     DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES,
     DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR,
@@ -37,6 +38,7 @@
   let behavior = $state<RootBackButtonBehavior>('exit');
   let autoFileUpdateEnabled = $state(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
   let autoFileUpdateIntervalMinutes = $state(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
+  let autoFileUpdateAutoDownload = $state(DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD);
   let loading = $state(true);
   let error = $state<string | null>(null);
   const autoSave = createAutoSave({
@@ -76,6 +78,7 @@
       const autoUpdateSettings = await getFileAutoUpdateSettings();
       autoFileUpdateEnabled = autoUpdateSettings.enabled;
       autoFileUpdateIntervalMinutes = autoUpdateSettings.intervalMinutes;
+      autoFileUpdateAutoDownload = autoUpdateSettings.autoDownload;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -106,18 +109,24 @@
     applyBehavior(DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR);
     applyAutoFileUpdateEnabled(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
     applyAutoFileUpdateIntervalMinutes(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
+    applyAutoFileUpdateAutoDownload(DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD);
+  }
+
+  function currentAutoFileUpdateSettings() {
+    return {
+      enabled: autoFileUpdateEnabled,
+      intervalMinutes: normalizeFileAutoUpdateIntervalMinutes(autoFileUpdateIntervalMinutes),
+      autoDownload: autoFileUpdateAutoDownload,
+    };
   }
 
   function applyAutoFileUpdateEnabled(enabled: boolean) {
     if (loading) return;
     autoFileUpdateEnabled = enabled;
     error = null;
-    const interval = normalizeFileAutoUpdateIntervalMinutes(autoFileUpdateIntervalMinutes);
+    const next = currentAutoFileUpdateSettings();
     void autoSave.run(async () => {
-      await setFileAutoUpdateSettings({
-        enabled,
-        intervalMinutes: interval,
-      });
+      await setFileAutoUpdateSettings(next);
     });
   }
 
@@ -126,11 +135,19 @@
     const interval = normalizeFileAutoUpdateIntervalMinutes(rawValue);
     autoFileUpdateIntervalMinutes = interval;
     error = null;
+    const next = currentAutoFileUpdateSettings();
     void autoSave.run(async () => {
-      await setFileAutoUpdateSettings({
-        enabled: autoFileUpdateEnabled,
-        intervalMinutes: interval,
-      });
+      await setFileAutoUpdateSettings(next);
+    });
+  }
+
+  function applyAutoFileUpdateAutoDownload(autoDownload: boolean) {
+    if (loading) return;
+    autoFileUpdateAutoDownload = autoDownload;
+    error = null;
+    const next = currentAutoFileUpdateSettings();
+    void autoSave.run(async () => {
+      await setFileAutoUpdateSettings(next);
     });
   }
 
@@ -200,6 +217,19 @@
           {$t('settings.behavior.fileAutoUpdateIntervalHint')}
         </p>
       </label>
+
+      <div class="settings-row text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+        {$t('settings.behavior.fileAutoUpdateAutoDownload')}
+        <MdSwitch
+          checked={autoFileUpdateAutoDownload}
+          disabled={loading || !autoFileUpdateEnabled}
+          ariaLabel={$t('settings.behavior.fileAutoUpdateAutoDownload')}
+          onChange={applyAutoFileUpdateAutoDownload}
+        />
+      </div>
+      <p class="-mt-2 text-xs text-md3-on-surface-variant">
+        {$t('settings.behavior.fileAutoUpdateAutoDownloadHint')}
+      </p>
     </section>
 
     <section class="settings-section space-y-4">
