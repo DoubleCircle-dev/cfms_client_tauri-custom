@@ -6,8 +6,10 @@
     getDirectoryInfo,
     getDocument,
     getFileAutoUpdateSettings,
+    getSyncOverwriteStrategy,
     loadUserPreference,
     listDirectory,
+    type SyncOverwriteStrategy,
   } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import HomeRecordPanel from '$lib/components/HomeRecordPanel.svelte';
@@ -44,6 +46,7 @@
   let autoFileUpdateEnabled = $state(true);
   let autoFileUpdateIntervalMinutes = $state(60);
   let autoFileUpdateAutoDownload = $state(false);
+  let syncOverwriteStrategy = $state<SyncOverwriteStrategy>('backup_rename');
   let queueBusy = $state(false);
 
   onMount(async () => {
@@ -57,6 +60,7 @@
       autoFileUpdateEnabled = autoSettings.enabled;
       autoFileUpdateIntervalMinutes = autoSettings.intervalMinutes;
       autoFileUpdateAutoDownload = autoSettings.autoDownload;
+      syncOverwriteStrategy = await getSyncOverwriteStrategy();
     } catch {
       recent = [];
       favorites = [];
@@ -98,7 +102,8 @@
         try {
           const changes = await detectAndQueueServerChanges();
           if (changes > 0 && autoFileUpdateAutoDownload) {
-            await confirmQueuedUpdates();
+            // Automatic download: apply the configured strategy silently.
+            await confirmQueuedUpdates(syncOverwriteStrategy);
           }
         } catch (err) {
           console.warn('[cfms:check] Poll failed:', err);
@@ -258,13 +263,16 @@
     return result.changed;
   }
 
-  async function confirmQueuedUpdates() {
+  /** Confirm queued updates. A preset strategy (automatic downloads) applies
+   *  silently; omitting it (manual confirm) prompts for each differing file. */
+  async function confirmQueuedUpdates(strategy?: SyncOverwriteStrategy) {
     if (queueBusy || pendingUpdates.length === 0) return;
     queueBusy = true;
     try {
       await runSyncAll({
         overwriteLocal: false,
         confirmDeletes: true,
+        overwriteStrategy: strategy,
         onStatus: (msg) => notificationStore.info(msg, 5000),
       });
       fileUpdateTracker.clearPendingUpdates();
@@ -333,7 +341,7 @@
           type="button"
           class="blueprint-check-btn"
           disabled={queueBusy || pendingUpdates.length === 0}
-          onclick={confirmQueuedUpdates}
+          onclick={() => confirmQueuedUpdates()}
           title={$t('files.confirmQueuedUpdates')}
         >
           {#if queueBusy}

@@ -17,7 +17,7 @@ import {
   listDownloadFiles,
   moveDownloadFile,
 } from '$lib/api/files';
-import { getSyncGitTrackingEnabled, getSyncOverwriteStrategy, type SyncOverwriteStrategy } from '$lib/api/settings';
+import { getSyncGitTrackingEnabled, type SyncOverwriteStrategy } from '$lib/api/settings';
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api/types';
 import { dialogStore } from '$lib/dialogs.svelte';
 import { downloadStore, notificationStore } from '$lib/stores.svelte';
@@ -64,7 +64,8 @@ export interface SyncAllOptions {
   /** Whether the download root is versioned with git. Overrides the stored setting. */
   gitTracking?: boolean;
   /** How to handle files whose server revision differs from the local copy.
-   *  Overrides the stored setting. */
+   *  Automatic downloads pass the stored setting; manual syncs omit this and
+   *  are prompted for a choice instead. */
   overwriteStrategy?: 'force_overwrite' | 'backup_rename' | 'skip';
   /** Called with a status message when the sync summary is ready. */
   onStatus?: (message: string) => void;
@@ -107,9 +108,11 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
 
   // Overwrite strategy for files whose server revision differs from the local
   // copy. Git tracking implies force-overwrite (history lives in commits).
-  const storedStrategy: SyncOverwriteStrategy = options.overwriteStrategy
-    ?? await getSyncOverwriteStrategy().catch(() => 'backup_rename' as const);
-  const strategy: SyncOverwriteStrategy = hasGit ? 'force_overwrite' : storedStrategy;
+  // Callers pass the stored setting for automatic downloads; manual syncs omit
+  // it and are prompted below once the differing files are known.
+  let strategy: SyncOverwriteStrategy | null = hasGit
+    ? 'force_overwrite'
+    : (options.overwriteStrategy ?? null);
   const backupSuffix = `+${backupTimestamp()}`;
 
   let queued = 0;
@@ -226,6 +229,34 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
 
   try {
     await walk(null, []);
+
+    // Manual syncs (no preset strategy, no git tracking) ask the user how to
+    // handle local files whose server revision differs. Cancelling skips the
+    // updates — the least destructive interpretation.
+    if (!hasGit && strategy === null) {
+      const conflicting = pendingDownloads.filter(d => d.existsLocally);
+      if (conflicting.length > 0) {
+        const choice = await dialogStore.choose<SyncOverwriteStrategy>({
+          title: get(t)('files.syncOverwriteTitle'),
+          message: get(t)('files.syncOverwriteMessage', { values: { count: conflicting.length } }),
+          choices: [
+            { value: 'backup_rename', label: get(t)('settings.fileSync.overwriteBackup'), description: get(t)('settings.fileSync.overwriteBackupHint'), icon: 'history', intent: 'primary' },
+            { value: 'force_overwrite', label: get(t)('settings.fileSync.overwriteForce'), description: get(t)('settings.fileSync.overwriteForceHint'), icon: 'update', intent: 'danger' },
+            { value: 'skip', label: get(t)('settings.fileSync.overwriteSkip'), description: get(t)('settings.fileSync.overwriteSkipHint'), icon: 'cancel', intent: 'neutral' },
+          ],
+        });
+        strategy = choice?.value ?? 'skip';
+        if (strategy === 'skip') {
+          for (const d of conflicting) {
+            const idx = pendingDownloads.indexOf(d);
+            if (idx >= 0) pendingDownloads.splice(idx, 1);
+            skipped++;
+          }
+        }
+      } else {
+        strategy = 'backup_rename';
+      }
+    }
 
     // --- Collect local files no longer on server ---
     const allLocalFiles = await listDownloadFiles();
