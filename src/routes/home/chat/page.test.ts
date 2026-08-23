@@ -11,11 +11,13 @@ const mocks = vi.hoisted(() => ({
   resolveNodePath: vi.fn(),
   readServerDocument: vi.fn(),
   getDocument: vi.fn(),
+  openLocalPath: vi.fn(),
 }));
 
 vi.mock('$lib/api/files', () => ({
   getDocument: mocks.getDocument,
   listDirectory: mocks.listDirectory,
+  openLocalPath: mocks.openLocalPath,
   readServerDocument: mocks.readServerDocument,
   resolveNodePath: mocks.resolveNodePath,
   scanLocalChatbox: mocks.scanLocalChatbox,

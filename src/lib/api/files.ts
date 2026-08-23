@@ -64,6 +64,11 @@ export async function scanLocalChatbox(dir: string): Promise<LocalChatboxRoom[]>
   return invoke('scan_local_chatbox', { dir });
 }
 
+/** Open a local file with the system default application (chatbox attachments). */
+export async function openLocalPath(path: string): Promise<void> {
+  return invoke('open_local_path', { path });
+}
+
 /** Request a document download from the CFMS server.
  *
  * Sends the `get_document` action, which creates a download task on the

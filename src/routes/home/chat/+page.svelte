@@ -2,13 +2,14 @@
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { open } from '@tauri-apps/plugin-dialog';
-  import { openPath, openUrl } from '@tauri-apps/plugin-opener';
+  import { openUrl } from '@tauri-apps/plugin-opener';
 
   import Icon from '$lib/components/Icon.svelte';
   import { DEFAULT_ROOM_NAMES, DEFAULT_USER_NAMES } from '$lib/chatbox/names';
   import {
     getDocument,
     listDirectory,
+    openLocalPath,
     readServerDocument,
     resolveNodePath,
     scanLocalChatbox,
@@ -493,7 +494,7 @@
   async function downloadAttachment(attachment: ChatAttachment) {
     if (attachment.path) {
       try {
-        await openPath(attachment.path);
+        await openLocalPath(attachment.path);
       } catch (err) {
         notificationStore.error(formatUserFacingError(err));
       }

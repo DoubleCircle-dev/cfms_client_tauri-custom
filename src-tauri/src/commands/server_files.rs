@@ -8,6 +8,8 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use tauri_plugin_opener::OpenerExt;
+
 const MAX_READ_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_LOCAL_TEXT_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -52,6 +54,26 @@ fn local_attachment_kind(name: &str) -> &'static str {
     } else {
         "other"
     }
+}
+
+/// Open a local file with the system default application.
+///
+/// The opener plugin's IPC `open_path` is additionally restricted by an ACL
+/// path scope, so this command invokes the plugin's Rust-side opener directly.
+/// The path always comes from the user's own local chatbox scan.
+#[tauri::command]
+pub fn open_local_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let trimmed = path.trim();
+    let file_path = Path::new(trimmed);
+    if trimmed.is_empty() || !file_path.is_absolute() || file_path.file_name().is_none() {
+        return Err("Invalid local file path".to_string());
+    }
+    if !file_path.exists() {
+        return Err(format!("File not found: {trimmed}"));
+    }
+    app.opener()
+        .open_path(trimmed, None::<&str>)
+        .map_err(|e| format!("Failed to open file: {e}"))
 }
 
 fn read_text_capped(path: &Path) -> (String, bool) {
