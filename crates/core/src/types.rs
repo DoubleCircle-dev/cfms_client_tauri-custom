@@ -581,6 +581,11 @@ pub struct UserPreference {
     #[serde(default)]
     pub sync_git_tracking_enabled: bool,
 
+    /// How sync handles files whose server revision differs from the local copy:
+    /// "force_overwrite" | "backup_rename" (default) | "skip".
+    #[serde(default = "default_sync_overwrite_strategy")]
+    pub sync_overwrite_strategy: String,
+
     /// Versioned per-user privacy settings. Incompatible shapes and versions
     /// are treated as a fresh installation instead of being migrated.
     #[serde(default, deserialize_with = "deserialize_privacy_preference")]
@@ -614,6 +619,7 @@ impl Default for UserPreference {
             file_auto_update_interval_minutes: default_file_auto_update_interval_minutes(),
             file_auto_update_auto_download: false,
             sync_git_tracking_enabled: false,
+            sync_overwrite_strategy: default_sync_overwrite_strategy(),
             privacy: PrivacyPreference::default(),
             task_concurrency: TaskConcurrencyPreference::default(),
             transfer: TransferPreference::default(),
@@ -645,6 +651,10 @@ fn default_file_auto_update_enabled() -> bool {
 
 fn default_file_auto_update_interval_minutes() -> u32 {
     60
+}
+
+fn default_sync_overwrite_strategy() -> String {
+    "backup_rename".to_string()
 }
 
 /// How the application chooses its color scheme.

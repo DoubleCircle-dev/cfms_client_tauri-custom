@@ -18,6 +18,37 @@ export const DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES = 60;
 export const DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD = false;
 export const DEFAULT_SYNC_GIT_TRACKING_ENABLED = false;
 
+/** How sync handles files whose server revision differs from the local copy. */
+export type SyncOverwriteStrategy = 'force_overwrite' | 'backup_rename' | 'skip';
+export const DEFAULT_SYNC_OVERWRITE_STRATEGY: SyncOverwriteStrategy = 'backup_rename';
+
+export function normalizeSyncOverwriteStrategy(
+  value: string | null | undefined,
+): SyncOverwriteStrategy {
+  return value === 'force_overwrite' || value === 'skip'
+    ? value
+    : DEFAULT_SYNC_OVERWRITE_STRATEGY;
+}
+
+/** Load the overwrite strategy used when sync finds a differing local file. */
+export async function getSyncOverwriteStrategy(): Promise<SyncOverwriteStrategy> {
+  try {
+    const preferences = await loadUserPreference();
+    return normalizeSyncOverwriteStrategy(preferences.sync_overwrite_strategy);
+  } catch {
+    return DEFAULT_SYNC_OVERWRITE_STRATEGY;
+  }
+}
+
+/** Persist the overwrite strategy used when sync finds a differing local file. */
+export async function setSyncOverwriteStrategy(strategy: SyncOverwriteStrategy): Promise<void> {
+  const preferences = await loadUserPreference();
+  await saveUserPreference({
+    ...preferences,
+    sync_overwrite_strategy: normalizeSyncOverwriteStrategy(strategy),
+  });
+}
+
 /** Whether the download root is versioned with git (enables force-overwrite + commit on sync). */
 export async function getSyncGitTrackingEnabled(): Promise<boolean> {
   try {
