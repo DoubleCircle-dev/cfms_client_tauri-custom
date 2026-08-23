@@ -7,14 +7,20 @@
     DEFAULT_FILE_AUTO_UPDATE_ENABLED,
     DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES,
     DEFAULT_SYNC_GIT_TRACKING_ENABLED,
+    DEFAULT_SYNC_OVERWRITE_STRATEGY,
+    downloadGitInit,
     getFileAutoUpdateSettings,
     getSyncGitTrackingEnabled,
+    getSyncOverwriteStrategy,
     normalizeFileAutoUpdateIntervalMinutes,
     setFileAutoUpdateSettings,
     setSyncGitTrackingEnabled,
+    setSyncOverwriteStrategy,
+    type SyncOverwriteStrategy,
   } from '$lib/api';
   import { createAutoSave } from '$lib/settings-autosave.svelte';
   import { authStore, notificationStore } from '$lib/stores.svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import MdSwitch from '$lib/components/MdSwitch.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
 
@@ -22,6 +28,8 @@
   let autoFileUpdateIntervalMinutes = $state(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
   let autoFileUpdateAutoDownload = $state(DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD);
   let syncGitTrackingEnabled = $state(DEFAULT_SYNC_GIT_TRACKING_ENABLED);
+  let syncOverwriteStrategy = $state<SyncOverwriteStrategy>(DEFAULT_SYNC_OVERWRITE_STRATEGY);
+  let gitInitBusy = $state(false);
   let loading = $state(true);
   let error = $state<string | null>(null);
   const autoSave = createAutoSave({
@@ -29,6 +37,24 @@
       error = message;
     },
   });
+
+  const overwriteStrategyOptions: Array<{ value: SyncOverwriteStrategy; labelKey: string; descriptionKey: string }> = [
+    {
+      value: 'force_overwrite',
+      labelKey: 'settings.fileSync.overwriteForce',
+      descriptionKey: 'settings.fileSync.overwriteForceHint',
+    },
+    {
+      value: 'backup_rename',
+      labelKey: 'settings.fileSync.overwriteBackup',
+      descriptionKey: 'settings.fileSync.overwriteBackupHint',
+    },
+    {
+      value: 'skip',
+      labelKey: 'settings.fileSync.overwriteSkip',
+      descriptionKey: 'settings.fileSync.overwriteSkipHint',
+    },
+  ];
 
   $effect(() => {
     if (!error) return;
@@ -48,6 +74,7 @@
       autoFileUpdateIntervalMinutes = autoUpdateSettings.intervalMinutes;
       autoFileUpdateAutoDownload = autoUpdateSettings.autoDownload;
       syncGitTrackingEnabled = await getSyncGitTrackingEnabled();
+      syncOverwriteStrategy = await getSyncOverwriteStrategy();
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -93,12 +120,42 @@
     });
   }
 
-  function applySyncGitTrackingEnabled(enabled: boolean) {
-    if (loading) return;
-    syncGitTrackingEnabled = enabled;
+  function applySyncOverwriteStrategy(strategy: SyncOverwriteStrategy) {
+    if (loading || strategy === syncOverwriteStrategy) return;
+    syncOverwriteStrategy = strategy;
     error = null;
     void autoSave.run(async () => {
-      await setSyncGitTrackingEnabled(enabled);
+      await setSyncOverwriteStrategy(strategy);
+    });
+  }
+
+  /** Enable git tracking: initialize the repo if missing; revert with a warning on failure. */
+  function applySyncGitTrackingEnabled(enabled: boolean) {
+    if (loading || gitInitBusy) return;
+    if (!enabled) {
+      syncGitTrackingEnabled = false;
+      error = null;
+      void autoSave.run(async () => {
+        await setSyncGitTrackingEnabled(false);
+      });
+      return;
+    }
+    gitInitBusy = true;
+    error = null;
+    void autoSave.run(async () => {
+      try {
+        await downloadGitInit();
+        await setSyncGitTrackingEnabled(true);
+        syncGitTrackingEnabled = true;
+      } catch (err) {
+        syncGitTrackingEnabled = false;
+        notificationStore.warning(
+          $t('settings.fileSync.gitInitFailed', { values: { error: String(err) } }),
+          6000,
+        );
+      } finally {
+        gitInitBusy = false;
+      }
     });
   }
 
@@ -106,6 +163,7 @@
     applyAutoFileUpdateEnabled(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
     applyAutoFileUpdateIntervalMinutes(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
     applyAutoFileUpdateAutoDownload(DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD);
+    applySyncOverwriteStrategy(DEFAULT_SYNC_OVERWRITE_STRATEGY);
     applySyncGitTrackingEnabled(DEFAULT_SYNC_GIT_TRACKING_ENABLED);
   }
 </script>
@@ -175,6 +233,53 @@
     <section class="settings-section space-y-4">
       <div class="settings-section-heading">
         <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+          {$t('settings.fileSync.overwriteStrategyTitle')}
+        </h2>
+        <p class="text-xs text-md3-on-surface-variant mt-1">
+          {$t('settings.fileSync.overwriteStrategyHint')}
+        </p>
+      </div>
+
+      <div class="space-y-2" role="radiogroup" aria-label={$t('settings.fileSync.overwriteStrategyTitle')}>
+        {#each overwriteStrategyOptions as option}
+          <div
+            class="flex w-full items-start gap-3 px-3 py-2.5 rounded-lg text-left
+                   text-sm text-md3-on-surface border transition-all outline-none
+                   hover:bg-md3-primary-container/15
+                   {syncOverwriteStrategy === option.value
+                     ? 'border-md3-primary bg-md3-primary-container/15'
+                     : 'border-md3-outline/50 bg-md3-surface-container-high/40'}
+                   {loading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}"
+            style="font-family: var(--font-md3-sans);"
+            role="radio"
+            aria-checked={syncOverwriteStrategy === option.value}
+            aria-disabled={loading}
+            tabindex={loading ? -1 : syncOverwriteStrategy === option.value ? 0 : -1}
+            onclick={() => applySyncOverwriteStrategy(option.value)}
+            onkeydown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                applySyncOverwriteStrategy(option.value);
+              }
+            }}
+          >
+            <span class="mt-0.5 shrink-0 {syncOverwriteStrategy === option.value ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}" aria-hidden="true">
+              <Icon name={syncOverwriteStrategy === option.value ? 'radioChecked' : 'radioUnchecked'} size="22px" />
+            </span>
+            <span class="min-w-0">
+              <span class="block font-medium">{$t(option.labelKey)}</span>
+              <span class="block text-xs text-md3-on-surface-variant mt-1">
+                {$t(option.descriptionKey)}
+              </span>
+            </span>
+          </div>
+        {/each}
+      </div>
+    </section>
+
+    <section class="settings-section space-y-4">
+      <div class="settings-section-heading">
+        <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
           {$t('settings.fileSync.gitSectionTitle')}
         </h2>
         <p class="text-xs text-md3-on-surface-variant mt-1">
@@ -186,7 +291,7 @@
         {$t('settings.behavior.syncGitTracking')}
         <MdSwitch
           checked={syncGitTrackingEnabled}
-          disabled={loading}
+          disabled={loading || gitInitBusy}
           ariaLabel={$t('settings.behavior.syncGitTracking')}
           onChange={applySyncGitTrackingEnabled}
         />
