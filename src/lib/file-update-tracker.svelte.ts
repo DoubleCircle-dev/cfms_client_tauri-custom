@@ -107,6 +107,9 @@ class FileUpdateTracker {
   /**
    * Start periodic polling for server changes on a directory.
    * `pollFn` should re-fetch the directory listing and call `compareSnapshot`.
+   *
+   * The countdown is anchored at start (or at the last manual reset). Normal
+   * poll ticks fire every `intervalMs` from that anchor — they never rebase it.
    */
   startPolling(pollFn: () => Promise<void>, intervalMs = DEFAULT_POLL_INTERVAL_MS) {
     this.stopPolling();
@@ -118,20 +121,41 @@ class FileUpdateTracker {
     this.scheduleNext();
   }
 
+  /**
+   * Keep an existing poll schedule running with the same interval, only
+   * swapping in a fresh callback (used when a page remounts after navigation).
+   * Returns true when the existing schedule was preserved.
+   */
+  adoptPolling(pollFn: () => Promise<void>, intervalMs: number): boolean {
+    if (!this.isPolling || this.pollIntervalMs !== intervalMs) return false;
+    this.pollCallback = pollFn;
+    return true;
+  }
+
   /** Rebase polling countdown from "now" (used by manual checks). */
   resetPollingCountdown() {
     this.lastCheckTime = Date.now();
-    this.nextCheckTime = this.isPolling ? this.lastCheckTime + this.pollIntervalMs : 0;
+    this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
+    // Reschedule so the next tick actually fires a full interval from now —
+    // without this the pending fixed-delay timer would fire early.
+    if (this.pollTimer !== null) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+      this.scheduleNext();
+    }
   }
 
   private scheduleNext() {
+    // Fixed-rate anchored to nextCheckTime: if a tick ran late (heavy scan),
+    // the following tick fires sooner to stay on schedule instead of drifting.
+    const delay = Math.max(0, this.nextCheckTime - Date.now());
     this.pollTimer = setTimeout(() => {
       void this.pollCallback?.().then(() => {
         this.lastCheckTime = Date.now();
-        this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
+        this.nextCheckTime += this.pollIntervalMs;
         this.scheduleNext();
       });
-    }, this.pollIntervalMs);
+    }, delay);
   }
 
   /** Stop periodic polling. */

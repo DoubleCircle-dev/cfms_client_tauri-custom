@@ -96,9 +96,13 @@
       }
     }
 
-    // Start/stop persistent polling (survives page navigation) using user settings.
+    // Start persistent polling (survives page navigation) using user settings.
+    // Remounting with an unchanged interval adopts the running schedule so the
+    // countdown is not reset by navigation — only manual checks and interval
+    // changes rebase it.
     if (autoFileUpdateEnabled) {
-      fileUpdateTracker.startPolling(async () => {
+      const intervalMs = autoFileUpdateIntervalMinutes * 60 * 1000;
+      const poll = async () => {
         try {
           const changes = await detectAndQueueServerChanges();
           if (changes > 0 && autoFileUpdateAutoDownload) {
@@ -108,7 +112,10 @@
         } catch (err) {
           console.warn('[cfms:check] Poll failed:', err);
         }
-      }, autoFileUpdateIntervalMinutes * 60 * 1000);
+      };
+      if (!fileUpdateTracker.adoptPolling(poll, intervalMs)) {
+        fileUpdateTracker.startPolling(poll, intervalMs);
+      }
     } else {
       fileUpdateTracker.stopPolling();
     }
