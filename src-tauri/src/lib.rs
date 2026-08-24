@@ -529,7 +529,7 @@ pub fn run() {
                 service_manager: sm,
             });
 
-            let main_window_config = app
+            let mut main_window_config = app
                 .config()
                 .app
                 .windows
@@ -537,6 +537,14 @@ pub fn run() {
                 .find(|config| config.label == "main")
                 .cloned()
                 .ok_or_else(|| std::io::Error::other("Main window configuration is missing"))?;
+
+            // Dev builds: make the window obviously non-production by suffixing
+            // the title with "-dev".
+            #[cfg(debug_assertions)]
+            {
+                main_window_config.title.push_str("-dev");
+            }
+
             tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?.build()?;
 
             // Dev mode: auto-open the vulnerability testing tool in a separate window.
