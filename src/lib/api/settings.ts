@@ -16,6 +16,8 @@ export const DEFAULT_ROOT_BACK_BUTTON_BEHAVIOR: RootBackButtonBehavior = 'exit';
 export const DEFAULT_FILE_AUTO_UPDATE_ENABLED = true;
 export const DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES = 60;
 export const DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD = false;
+/** Run one automatic full detection once at program startup (default off). */
+export const DEFAULT_FILE_AUTO_DETECT_ON_STARTUP = false;
 export const DEFAULT_SYNC_GIT_TRACKING_ENABLED = false;
 
 /** How sync handles files whose server revision differs from the local copy. */
@@ -154,6 +156,25 @@ export async function setFileAutoUpdateSettings(
     file_auto_update_enabled: settings.enabled,
     file_auto_update_interval_minutes: normalizeFileAutoUpdateIntervalMinutes(settings.intervalMinutes),
     file_auto_update_auto_download: settings.autoDownload,
+  });
+}
+
+/** Whether the program runs one automatic file check at startup. */
+export async function getFileAutoDetectOnStartup(): Promise<boolean> {
+  try {
+    const preferences = await loadUserPreference();
+    return preferences.file_auto_detect_on_startup ?? DEFAULT_FILE_AUTO_DETECT_ON_STARTUP;
+  } catch {
+    return DEFAULT_FILE_AUTO_DETECT_ON_STARTUP;
+  }
+}
+
+/** Persist whether the program auto-detects once at startup. */
+export async function setFileAutoDetectOnStartup(enabled: boolean): Promise<void> {
+  const preferences = await loadUserPreference();
+  await saveUserPreference({
+    ...preferences,
+    file_auto_detect_on_startup: enabled,
   });
 }
 
