@@ -515,6 +515,12 @@ pub async fn download_git_init(
     state: tauri::State<'_, AppHandleState>,
 ) -> Result<bool, String> {
     let download_root = resolve_download_root(&app_handle, &state).await?;
+    // The download root may not exist yet (e.g. external storage was just
+    // configured or never written to). Spawning git with a non-existent
+    // current directory fails on Windows with ERROR_DIRECTORY
+    // ("os error 267: the directory name is invalid"), so create it first.
+    std::fs::create_dir_all(&download_root)
+        .map_err(|e| format!("Failed to create download directory: {e}"))?;
     let git_dir = download_root.join(".git");
     if git_dir.exists() {
         return Ok(false);
