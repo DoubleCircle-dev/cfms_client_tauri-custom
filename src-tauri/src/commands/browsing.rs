@@ -444,6 +444,12 @@ fn collect_relative_files(
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
+            // Never descend into git metadata — its object files must not be
+            // treated as ordinary download files, or the sync deletion pass
+            // would wipe the repository's object store.
+            if path.file_name().map(|n| n == ".git").unwrap_or(false) {
+                continue;
+            }
             collect_relative_files(root, &path, out)?;
         } else {
             if let Ok(rel) = path.strip_prefix(root) {

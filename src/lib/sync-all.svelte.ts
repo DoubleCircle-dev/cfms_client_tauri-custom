@@ -303,6 +303,9 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
       // serverPaths always uses '/'. Normalize here so the comparison is
       // robust regardless of backend behavior.
       const localPath = rawPath.replace(/\\/g, '/');
+      // Never treat git metadata as a syncable file, even if an older or
+      // external listing surfaces it — deleting from .git destroys the repo.
+      if (localPath === '.git' || localPath.startsWith('.git/')) continue;
       if (serverPaths.has(localPath)) continue;
       const parentDir = localPath.includes('/')
         ? localPath.slice(0, localPath.lastIndexOf('/'))
