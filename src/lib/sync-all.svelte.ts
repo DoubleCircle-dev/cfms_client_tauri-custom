@@ -137,6 +137,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   let requestCount = 0;
   const serverPaths = new Set<string>();          // all server file paths
   const walkedDirs = new Set<string>();           // relative dir paths that were listed successfully
+  const failedDirs = new Set<string>();           // relative dir paths that failed to list (inaccessible)
   // Downloads are deferred until after the walk so we can detect server-side
   // moves/renames (same content at a different path) and avoid re-downloading.
   const pendingDownloads: { docId: string; path: string; serverHash: string | null | undefined; existsLocally: boolean }[] = [];
@@ -198,6 +199,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     } catch {
       // Never delete anything under a directory we could not list — otherwise
       // a transient failure would make the deletion step treat its files as gone.
+      failedDirs.add(makeDownloadPath(pathParts));
       console.warn(`%c[cfms:sync] Skipping unreachable directory (files preserved): ${makeDownloadPath(pathParts) || '/'}`, 'color:#ffb74d');
       return;
     }
@@ -241,6 +243,27 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     }
   }
 
+  /**
+   * Decide whether a local file must be preserved because its disappearance
+   * from the server cannot be confirmed. Walks the ancestor chain upward:
+   *  - any ancestor that failed to list (rate limit, access denied) → preserve;
+   *  - no successfully listed ancestor at all (root list failed) → preserve;
+   *  - otherwise the file's parent was listed directly (normal case) or is
+   *    absent from a listed parent — i.e. its folder was deleted server-side,
+   *    so the file becomes a deletion candidate.
+   * The local directory structure itself is always preserved, even when a
+   * folder ends up empty.
+   */
+  function shouldPreserveLocalFile(parentDir: string): boolean {
+    let dir = parentDir;
+    while (true) {
+      if (failedDirs.has(dir)) return true;
+      if (walkedDirs.has(dir)) return false;
+      if (dir === 'download') return true; // root was never listed
+      dir = dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : 'download';
+    }
+  }
+
   try {
     await walk(null, []);
 
@@ -281,18 +304,10 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
       // robust regardless of backend behavior.
       const localPath = rawPath.replace(/\\/g, '/');
       if (serverPaths.has(localPath)) continue;
-      // Only consider files whose parent directory was successfully listed during the
-      // walk. This single guard covers both concerns:
-      //  - unreachable directories (rate limit, transient error, access denied) are
-      //    NOT in walkedDirs, so their files are preserved even though they're absent
-      //    from serverPaths;
-      //  - search-only hidden folders (e.g. .debugging) are never walked, so they are
-      //    preserved too. Regular hidden folders like `.runtime` ARE walked, so their
-      //    removed files get deleted just like any other directory.
       const parentDir = localPath.includes('/')
         ? localPath.slice(0, localPath.lastIndexOf('/'))
         : 'download';
-      if (!walkedDirs.has(parentDir)) continue;
+      if (shouldPreserveLocalFile(parentDir)) continue;
       deleteCandidates.push(localPath);
     }
 
