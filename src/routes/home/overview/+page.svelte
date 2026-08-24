@@ -5,6 +5,7 @@
   import {
     getDirectoryInfo,
     getDocument,
+    getFileAutoDetectOnStartup,
     getFileAutoUpdateSettings,
     getSyncOverwriteStrategy,
     loadUserPreference,
@@ -43,6 +44,7 @@
   let loadingFavorites = $state(true);
   let openingId = $state<string | null>(null);
   let recordRecentVisits = $state(true);
+  let autoFileDetectOnStartup = $state(false);
   let autoFileUpdateEnabled = $state(true);
   let autoFileUpdateIntervalMinutes = $state(60);
   let autoFileUpdateAutoDownload = $state(false);
@@ -56,6 +58,7 @@
       recordRecentVisits = shouldRecordRecentVisits(preferences);
       recent = await loadRecentVisits(scope);
       favorites = await loadFavoriteRecords(scope);
+      autoFileDetectOnStartup = await getFileAutoDetectOnStartup();
       const autoSettings = await getFileAutoUpdateSettings();
       autoFileUpdateEnabled = autoSettings.enabled;
       autoFileUpdateIntervalMinutes = autoSettings.intervalMinutes;
@@ -65,6 +68,7 @@
       recent = [];
       favorites = [];
       recordRecentVisits = true;
+      autoFileDetectOnStartup = false;
       autoFileUpdateEnabled = true;
       autoFileUpdateIntervalMinutes = 60;
       autoFileUpdateAutoDownload = false;
@@ -73,26 +77,19 @@
       loadingFavorites = false;
     }
 
-    // Trigger initial full scan once per login session
-    if (!fileUpdateTracker.initialScanDone && !sessionStorage.getItem('cfms:initial-scan-done')) {
+    // Run one automatic full detection at startup only when the user enabled
+    // it (default off) — a sub-option of the "enable automatic checks" master
+    // switch. It runs exactly once per program start and behaves exactly like
+    // a periodic automatic check: diffs are enqueued, and they auto-download
+    // immediately when the "download updates immediately" option is on.
+    if (autoFileUpdateEnabled && autoFileDetectOnStartup && !fileUpdateTracker.initialScanDone && !sessionStorage.getItem('cfms:initial-scan-done')) {
       fileUpdateTracker.initialScanDone = true;
       sessionStorage.setItem('cfms:initial-scan-done', '1');
-      console.log('%c[cfms:check] Initial full scan after login…', 'color:#4fc3f7');
+      console.log('%c[cfms:check] Startup detection after login…', 'color:#4fc3f7');
       try {
-        const result = await fileUpdateTracker.recursiveCheck(
-          (id) => listDirectory(id),
-          null,
-        );
-        if (result.changed > 0) {
-          notificationStore.info(
-            $t('files.serverChangesDetected', {
-              values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
-            }),
-            5000,
-          );
-        }
+        await runAutomaticDetection();
       } catch (err) {
-        console.warn('[cfms:check] Initial scan failed:', err);
+        console.warn('[cfms:check] Startup detection failed:', err);
       }
     }
 
@@ -104,11 +101,7 @@
       const intervalMs = autoFileUpdateIntervalMinutes * 60 * 1000;
       const poll = async () => {
         try {
-          const changes = await detectAndQueueServerChanges();
-          if (changes > 0 && autoFileUpdateAutoDownload) {
-            // Automatic download: apply the configured strategy silently.
-            await confirmQueuedUpdates(syncOverwriteStrategy);
-          }
+          await runAutomaticDetection();
         } catch (err) {
           console.warn('[cfms:check] Poll failed:', err);
         }
@@ -268,6 +261,17 @@
       notificationStore.success($t('files.noChangesDetected'), 2500);
     }
     return result.changed;
+  }
+
+  /** Shared automatic-detection step used by the startup check and the
+   *  periodic poll: detect changes (enqueueing diffs), then auto-download
+   *  immediately when the "download updates immediately" option is on. */
+  async function runAutomaticDetection() {
+    const changes = await detectAndQueueServerChanges();
+    if (changes > 0 && autoFileUpdateAutoDownload) {
+      // Automatic download: apply the configured strategy silently.
+      await confirmQueuedUpdates(syncOverwriteStrategy);
+    }
   }
 
   /** Confirm queued updates. A preset strategy (automatic downloads) applies
