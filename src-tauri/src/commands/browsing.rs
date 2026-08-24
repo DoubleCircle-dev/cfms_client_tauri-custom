@@ -422,6 +422,40 @@ pub async fn move_download_file(
     Ok(true)
 }
 
+/// Create an empty placeholder file inside the local download root at the
+/// given relative path.
+///
+/// Parent directories are created first, so nested relative paths never fail
+/// with "path not found" (os error 3) — a placeholder at `a/b.txt` still works
+/// when `a/` does not exist yet.
+///
+/// The sync flow uses this to mirror server items that exist but are
+/// inaccessible (permission denied): a same-named empty file occupies the
+/// item's relative path so the local tree reflects the server instead of
+/// silently dropping the folder/file.
+#[tauri::command]
+pub async fn create_download_placeholder(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    relative_path: String,
+) -> Result<bool, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let file_path = resolve_download_subdirectory(download_root, &relative_path)?;
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create placeholder directory: {e}"))?;
+    }
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&file_path)
+    {
+        Ok(_) => Ok(true),
+        Err(e) => Err(format!("Failed to create placeholder file: {e}")),
+    }
+}
+
 /// Recursively list all file paths (relative to the download root) in the download root.
 #[tauri::command]
 pub async fn list_download_files(

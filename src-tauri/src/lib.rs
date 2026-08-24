@@ -615,6 +615,7 @@ pub fn run() {
             commands::compute_local_sha256,
             commands::delete_download_file,
             commands::move_download_file,
+            commands::create_download_placeholder,
             commands::list_download_files,
             commands::ensure_download_subdirectory,
             commands::download_git_present,

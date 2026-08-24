@@ -121,6 +121,13 @@ export async function moveDownloadFile(fromPath: string, toPath: string): Promis
   return invoke("move_download_file", { fromPath, toPath });
 }
 
+/** Create an empty placeholder file in the local download root, creating any
+ *  missing parent directories first (so nested paths never hit "os error 3").
+ *  Used by sync to mirror server items that exist but are inaccessible. */
+export async function createDownloadPlaceholder(relativePath: string): Promise<boolean> {
+  return invoke("create_download_placeholder", { relativePath });
+}
+
 /** Recursively list all file paths (relative) in the download root. */
 export async function listDownloadFiles(): Promise<string[]> {
   return invoke("list_download_files");

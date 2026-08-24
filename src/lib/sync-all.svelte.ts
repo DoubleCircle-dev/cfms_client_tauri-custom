@@ -9,6 +9,7 @@ import { get } from 'svelte/store';
 import { _ as t } from 'svelte-i18n';
 import {
   computeLocalSha256,
+  createDownloadPlaceholder,
   deleteDownloadFile,
   downloadGitCommit,
   downloadGitInit,
@@ -17,6 +18,7 @@ import {
   listDownloadFiles,
   moveDownloadFile,
 } from '$lib/api/files';
+import { isAccessDeniedError } from '$lib/api/server-errors';
 import { getSyncGitTrackingEnabled, type SyncOverwriteStrategy } from '$lib/api/settings';
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api/types';
 import { dialogStore } from '$lib/dialogs.svelte';
@@ -192,15 +194,40 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     throw new Error('listDirectory failed after retries');
   }
 
+  /**
+   * Create a same-named empty placeholder file for a server item that exists
+   * but is inaccessible (permission denied). The backend creates any missing
+   * parent directories, so nested paths never surface "os error 3". Failures
+   * are logged and ignored — a placeholder is best-effort only.
+   */
+  async function createPlaceholderSafe(relativePath: string) {
+    if (!relativePath || relativePath === 'download') return;
+    try {
+      await createDownloadPlaceholder(relativePath);
+    } catch (err) {
+      console.warn(`%c[cfms:sync] Placeholder failed for ${relativePath}:`, 'color:#ffb74d', err);
+    }
+  }
+
   async function walk(dirId: string | null, pathParts: string[]) {
     let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
     try {
       resp = await listWithRetry(dirId);
-    } catch {
+    } catch (err) {
       // Never delete anything under a directory we could not list — otherwise
       // a transient failure would make the deletion step treat its files as gone.
-      failedDirs.add(makeDownloadPath(pathParts));
-      console.warn(`%c[cfms:sync] Skipping unreachable directory (files preserved): ${makeDownloadPath(pathParts) || '/'}`, 'color:#ffb74d');
+      const dirPath = makeDownloadPath(pathParts);
+      failedDirs.add(dirPath);
+      // A folder that exists on the server but is inaccessible (permission
+      // denied) is mirrored locally as a same-named empty placeholder file so
+      // the local tree reflects the server instead of silently dropping it.
+      if (isAccessDeniedError(err) && dirPath !== 'download') {
+        await createPlaceholderSafe(dirPath);
+        serverPaths.add(dirPath);
+        console.warn(`%c[cfms:sync] Access denied — placeholder created: ${dirPath}`, 'color:#ef9a9a');
+      } else {
+        console.warn(`%c[cfms:sync] Skipping unreachable directory (files preserved): ${dirPath || '/'}`, 'color:#ffb74d');
+      }
       return;
     }
     // Record that this directory was successfully enumerated, so the deletion
@@ -410,7 +437,16 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
         }
         await downloadWithRetry(d.docId, d.path, overwrite);
         if (d.existsLocally) updated++; else queued++;
-      } catch { /* skip */ }
+      } catch (err) {
+        // A document that exists on the server but cannot be downloaded
+        // (permission denied) is mirrored locally as a same-named empty
+        // placeholder file instead of being silently skipped.
+        if (isAccessDeniedError(err)) {
+          await createPlaceholderSafe(d.path);
+          serverPaths.add(d.path);
+          console.warn(`%c[cfms:sync] Access denied — placeholder created: ${d.path}`, 'color:#ef9a9a');
+        }
+      }
     }
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
