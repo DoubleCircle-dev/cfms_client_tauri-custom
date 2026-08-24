@@ -629,7 +629,6 @@ export const en = {
     syncOverwriteMessage: '{count} local file(s) differ from the server version. Choose how to update them this time:',
     autoSyncStarted: 'Server changes detected, auto-syncing all files…',
     autoDownloadBusy: 'Another sync is already running; the pending queue was kept so you can confirm later.',
-    autoDownloadNoop: 'Automatic download applied nothing (files may have been skipped by strategy or already match locally).',
     autoSyncCompleted: 'Auto-sync complete: {downloaded} downloaded, {updated} updated, {moved} moved, {deleted} deleted.',
   },
   tasks: {

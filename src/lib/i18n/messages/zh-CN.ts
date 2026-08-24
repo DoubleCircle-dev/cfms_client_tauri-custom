@@ -623,7 +623,6 @@ export const zh_CN = {
     syncOverwriteMessage: '有 {count} 个本地文件与服务器版本不一致。请选择本次更新的处理方式：',
     autoSyncStarted: '检测到服务器变化，正在自动同步所有文件…',
     autoDownloadBusy: '另一个同步正在进行，待更新队列已保留，可稍后手动确认。',
-    autoDownloadNoop: '自动下载未更新任何文件（可能已按策略跳过或与本地一致）。',
     autoSyncCompleted: '自动同步完成：{downloaded} 个下载, {updated} 个更新, {moved} 个移动, {deleted} 个删除。',
   },
   tasks: {

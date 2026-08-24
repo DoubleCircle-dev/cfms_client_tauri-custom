@@ -288,12 +288,14 @@
         overwriteStrategy: strategy,
         onStatus: (msg) => notificationStore.info(msg, 5000),
       });
-      if (result.changed) {
-        fileUpdateTracker.clearPendingUpdates();
-      } else if (strategy !== undefined && pendingUpdates.length > 0) {
+      // Always clear once the sync ran: changed means items were applied,
+      // unchanged means they were verified as already current. Keeping the
+      // queue in the unchanged case left a stale "confirm updates (1)" badge.
+      fileUpdateTracker.clearPendingUpdates();
+      if (!result.changed && strategy !== undefined) {
         // Automatic download ran but nothing was applied — surface it so the
         // feature doesn't look broken (e.g. conflicts were skipped).
-        notificationStore.warning($t('files.autoDownloadNoop'), 5000);
+        notificationStore.info($t('files.noChangesDetected'), 3000);
       }
     } catch (err) {
       notificationStore.error(String(err), 4000);
