@@ -351,8 +351,10 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     if (toDelete.length > 0) {
       const fileList = toDelete.slice(0, 8).join('\n')
         + (toDelete.length > 8 ? `\n… +${toDelete.length - 8} more` : '');
-      let confirmed = !confirmDeletes;
-      if (confirmDeletes) {
+      // With git tracking, deletions are recorded in the sync commit, so they
+      // apply directly without an extra confirmation prompt.
+      let confirmed = !confirmDeletes || hasGit;
+      if (confirmDeletes && !hasGit) {
         confirmed = await dialogStore.confirm({
           title: get(t)('files.syncDeleteTitle'),
           message: `${get(t)('files.syncDeleteMessage', { values: { count: toDelete.length } })}\n\n${fileList}`,
