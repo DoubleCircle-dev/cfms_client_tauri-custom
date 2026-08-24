@@ -34,7 +34,7 @@
     serverStateStore,
   } from '$lib/stores.svelte';
   import { fileUpdateTracker, type CheckHistoryEntry, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
-  import { syncAllFiles as runSyncAll } from '$lib/sync-all.svelte';
+  import { syncAllFiles as runSyncAll, syncAllCoordinator } from '$lib/sync-all.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   let recent = $state<RecentFileRecord[]>([]);
@@ -274,15 +274,27 @@
    *  silently; omitting it (manual confirm) prompts for each differing file. */
   async function confirmQueuedUpdates(strategy?: SyncOverwriteStrategy) {
     if (queueBusy || pendingUpdates.length === 0) return;
+    if (syncAllCoordinator.busy) {
+      // Another sync is in flight (e.g. manual sync from the Files page) —
+      // keep the queue so the user can confirm once it finishes.
+      notificationStore.info($t('files.autoDownloadBusy'), 4000);
+      return;
+    }
     queueBusy = true;
     try {
-      await runSyncAll({
+      const result = await runSyncAll({
         overwriteLocal: false,
         confirmDeletes: true,
         overwriteStrategy: strategy,
         onStatus: (msg) => notificationStore.info(msg, 5000),
       });
-      fileUpdateTracker.clearPendingUpdates();
+      if (result.changed) {
+        fileUpdateTracker.clearPendingUpdates();
+      } else if (strategy !== undefined && pendingUpdates.length > 0) {
+        // Automatic download ran but nothing was applied — surface it so the
+        // feature doesn't look broken (e.g. conflicts were skipped).
+        notificationStore.warning($t('files.autoDownloadNoop'), 5000);
+      }
     } catch (err) {
       notificationStore.error(String(err), 4000);
     } finally {

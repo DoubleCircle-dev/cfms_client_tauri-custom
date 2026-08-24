@@ -45,6 +45,21 @@ export function makeDownloadPath(parts: string[]) {
 class SyncAllCoordinator {
   /** Whether a full sync is currently running (shared across all pages). */
   busy = $state(false);
+
+  /**
+   * Atomically claim the sync lock. `syncAllFiles` used to do
+   * `if (busy) return; busy = true` across an await boundary, which let two
+   * syncs interleave — the automatic-download run would then silently no-op.
+   */
+  acquire(): boolean {
+    if (this.busy) return false;
+    this.busy = true;
+    return true;
+  }
+
+  release() {
+    this.busy = false;
+  }
 }
 
 export const syncAllCoordinator = new SyncAllCoordinator();
@@ -85,8 +100,7 @@ export interface SyncAllResult {
 }
 
 export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAllResult> {
-  if (syncAllCoordinator.busy) return emptyResult();
-  syncAllCoordinator.busy = true;
+  if (!syncAllCoordinator.acquire()) return emptyResult();
   const overwriteLocal = options.overwriteLocal ?? false;
   const confirmDeletes = options.confirmDeletes ?? true;
   const { onStatus, onError, onRefresh } = options;
@@ -434,7 +448,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     notificationStore.error(message, 5000);
     return emptyResult();
   } finally {
-    syncAllCoordinator.busy = false;
+    syncAllCoordinator.release();
   }
 }
 
