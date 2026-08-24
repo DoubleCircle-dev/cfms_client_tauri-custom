@@ -3,16 +3,19 @@
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
   import {
+    DEFAULT_FILE_AUTO_DETECT_ON_STARTUP,
     DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD,
     DEFAULT_FILE_AUTO_UPDATE_ENABLED,
     DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES,
     DEFAULT_SYNC_GIT_TRACKING_ENABLED,
     DEFAULT_SYNC_OVERWRITE_STRATEGY,
     downloadGitInit,
+    getFileAutoDetectOnStartup,
     getFileAutoUpdateSettings,
     getSyncGitTrackingEnabled,
     getSyncOverwriteStrategy,
     normalizeFileAutoUpdateIntervalMinutes,
+    setFileAutoDetectOnStartup,
     setFileAutoUpdateSettings,
     setSyncGitTrackingEnabled,
     setSyncOverwriteStrategy,
@@ -24,6 +27,7 @@
   import MdSwitch from '$lib/components/MdSwitch.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
 
+  let autoFileDetectOnStartup = $state(DEFAULT_FILE_AUTO_DETECT_ON_STARTUP);
   let autoFileUpdateEnabled = $state(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
   let autoFileUpdateIntervalMinutes = $state(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
   let autoFileUpdateAutoDownload = $state(DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD);
@@ -69,6 +73,7 @@
     }
 
     try {
+      autoFileDetectOnStartup = await getFileAutoDetectOnStartup();
       const autoUpdateSettings = await getFileAutoUpdateSettings();
       autoFileUpdateEnabled = autoUpdateSettings.enabled;
       autoFileUpdateIntervalMinutes = autoUpdateSettings.intervalMinutes;
@@ -88,6 +93,15 @@
       intervalMinutes: normalizeFileAutoUpdateIntervalMinutes(autoFileUpdateIntervalMinutes),
       autoDownload: autoFileUpdateAutoDownload,
     };
+  }
+
+  function applyAutoFileDetectOnStartup(enabled: boolean) {
+    if (loading) return;
+    autoFileDetectOnStartup = enabled;
+    error = null;
+    void autoSave.run(async () => {
+      await setFileAutoDetectOnStartup(enabled);
+    });
   }
 
   function applyAutoFileUpdateEnabled(enabled: boolean) {
@@ -160,6 +174,7 @@
   }
 
   function resetAll() {
+    applyAutoFileDetectOnStartup(DEFAULT_FILE_AUTO_DETECT_ON_STARTUP);
     applyAutoFileUpdateEnabled(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
     applyAutoFileUpdateIntervalMinutes(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
     applyAutoFileUpdateAutoDownload(DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD);
@@ -199,43 +214,57 @@
         />
       </div>
 
-      <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-        {$t('settings.behavior.fileAutoUpdateInterval')}
-        <input
-          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high px-3 py-2 text-md3-on-surface disabled:opacity-60"
-          type="number"
-          min="5"
-          max="1440"
-          step="1"
-          value={autoFileUpdateIntervalMinutes}
-          oninput={(event) => applyAutoFileUpdateIntervalMinutes(Number(event.currentTarget.value))}
-          disabled={loading || !autoFileUpdateEnabled}
-        />
-        <p class="text-xs text-md3-on-surface-variant">
-          {$t('settings.behavior.fileAutoUpdateIntervalHint')}
+      <div class="ml-4 space-y-4 border-l-2 border-md3-outline/40 pl-4">
+        <div class="settings-row text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+          {$t('settings.behavior.fileAutoDetectOnStartup')}
+          <MdSwitch
+            checked={autoFileDetectOnStartup}
+            disabled={loading || !autoFileUpdateEnabled}
+            ariaLabel={$t('settings.behavior.fileAutoDetectOnStartup')}
+            onChange={applyAutoFileDetectOnStartup}
+          />
+        </div>
+        <p class="-mt-2 text-xs text-md3-on-surface-variant">
+          {$t('settings.behavior.fileAutoDetectOnStartupHint')}
         </p>
-      </label>
 
-      <div class="settings-row text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-        {$t('settings.behavior.fileAutoUpdateAutoDownload')}
-        <MdSwitch
-          checked={autoFileUpdateAutoDownload}
-          disabled={loading || !autoFileUpdateEnabled}
-          ariaLabel={$t('settings.behavior.fileAutoUpdateAutoDownload')}
-          onChange={applyAutoFileUpdateAutoDownload}
-        />
-      </div>
-      <p class="-mt-2 text-xs text-md3-on-surface-variant">
-        {$t('settings.behavior.fileAutoUpdateAutoDownloadHint')}
-      </p>
+        <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+          {$t('settings.behavior.fileAutoUpdateInterval')}
+          <input
+            class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high px-3 py-2 text-md3-on-surface disabled:opacity-60"
+            type="number"
+            min="5"
+            max="1440"
+            step="1"
+            value={autoFileUpdateIntervalMinutes}
+            oninput={(event) => applyAutoFileUpdateIntervalMinutes(Number(event.currentTarget.value))}
+            disabled={loading || !autoFileUpdateEnabled}
+          />
+          <p class="text-xs text-md3-on-surface-variant">
+            {$t('settings.behavior.fileAutoUpdateIntervalHint')}
+          </p>
+        </label>
 
-      {#if autoFileUpdateEnabled && autoFileUpdateAutoDownload}
-        {@const strategyDisabled = loading || syncGitTrackingEnabled}
-        <div
-          class="ml-4 space-y-2 border-l-2 border-md3-outline/40 pl-4"
-          role="radiogroup"
-          aria-label={$t('settings.fileSync.overwriteStrategyTitle')}
-        >
+        <div class="settings-row text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+          {$t('settings.behavior.fileAutoUpdateAutoDownload')}
+          <MdSwitch
+            checked={autoFileUpdateAutoDownload}
+            disabled={loading || !autoFileUpdateEnabled}
+            ariaLabel={$t('settings.behavior.fileAutoUpdateAutoDownload')}
+            onChange={applyAutoFileUpdateAutoDownload}
+          />
+        </div>
+        <p class="-mt-2 text-xs text-md3-on-surface-variant">
+          {$t('settings.behavior.fileAutoUpdateAutoDownloadHint')}
+        </p>
+
+        {#if autoFileUpdateEnabled && autoFileUpdateAutoDownload}
+          {@const strategyDisabled = loading || syncGitTrackingEnabled}
+          <div
+            class="ml-4 space-y-2 border-l-2 border-md3-outline/40 pl-4"
+            role="radiogroup"
+            aria-label={$t('settings.fileSync.overwriteStrategyTitle')}
+          >
           <p class="text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
             {$t('settings.fileSync.overwriteStrategyTitle')}
           </p>
@@ -283,7 +312,8 @@
             </div>
           {/each}
         </div>
-      {/if}
+        {/if}
+      </div>
     </section>
 
     <section class="settings-section space-y-4">
