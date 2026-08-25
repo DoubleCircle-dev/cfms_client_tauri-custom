@@ -7,15 +7,33 @@
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use tauri_plugin_opener::OpenerExt;
 
 const MAX_READ_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_LOCAL_TEXT_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_PREVIEW_TEXT_BYTES: u64 = 4 * 1024 * 1024;
+const PREVIEW_CACHE_DIR: &str = "preview_cache";
+const PREVIEW_CACHE_MAX_AGE_SECS: u64 = 7 * 24 * 60 * 60;
 
 #[derive(serde::Serialize)]
 pub struct ServerTextFile {
     pub content: String,
+    pub size: u64,
+    pub truncated: bool,
+}
+
+#[derive(serde::Serialize)]
+pub struct PreparedFilePreview {
+    pub path: String,
+    pub size: u64,
+    pub cached: bool,
+}
+
+#[derive(serde::Serialize)]
+pub struct ServerTextBytes {
+    pub base64: String,
     pub size: u64,
     pub truncated: bool,
 }
@@ -192,7 +210,40 @@ pub async fn read_server_document(
     state: tauri::State<'_, AppHandleState>,
     document_id: String,
 ) -> Result<ServerTextFile, String> {
-    let (conn, username, token) = get_connection_auth(&state).await?;
+    let temp_dir = tempfile::tempdir()
+        .map_err(|e| format!("Failed to create temporary directory: {e}"))?;
+    let dest = temp_dir.path().join("chat.txt");
+    download_document_to(&state, &document_id, &dest).await?;
+
+    let size = std::fs::metadata(&dest)
+        .map_err(|e| format!("Failed to stat downloaded file: {e}"))?
+        .len();
+    let file = std::fs::File::open(&dest)
+        .map_err(|e| format!("Failed to open downloaded file: {e}"))?;
+    let mut buf = Vec::new();
+    file.take(MAX_READ_BYTES + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("Failed to read downloaded file: {e}"))?;
+
+    let truncated = buf.len() as u64 > MAX_READ_BYTES;
+    buf.truncate(MAX_READ_BYTES as usize);
+    let content = String::from_utf8_lossy(&buf).into_owned();
+
+    Ok(ServerTextFile {
+        content,
+        size,
+        truncated,
+    })
+}
+
+/// Download a server document into `dest` through the encrypted transfer
+/// protocol. Shared by the text reader and the file preview commands.
+async fn download_document_to(
+    state: &AppHandleState,
+    document_id: &str,
+    dest: &Path,
+) -> Result<(), String> {
+    let (conn, username, token) = get_connection_auth(state).await?;
 
     let resp = send_action_request(
         &conn,
@@ -219,11 +270,6 @@ pub async fn read_server_document(
         .to_string();
 
     let transfer_conn = create_transfer_connection(&state.inner).await?;
-
-    let temp_dir = tempfile::tempdir()
-        .map_err(|e| format!("Failed to create temporary directory: {e}"))?;
-    let dest = temp_dir.path().join("chat.txt");
-
     let progress = |_phase: cfms_core::DownloadPhase,
                     _progress: f64,
                     _message: &str,
@@ -237,13 +283,77 @@ pub async fn read_server_document(
     let result = cfms_transfer::download::receive(
         &transfer_conn,
         &task_id,
-        &dest,
+        dest,
         max_chunk_size,
         &progress,
     )
     .await;
     transfer_conn.close().await;
     result.map_err(|e| format!("Document download failed: {e}"))?;
+    Ok(())
+}
+
+/// Prepare a server document for inline preview.
+///
+/// Downloads the file into the persistent preview cache
+/// `{app_data}/preview_cache/{document_id}.{ext}` (unless already cached) and
+/// returns the local path, which the frontend serves through the asset
+/// protocol. Stale cache entries are cleaned at startup.
+#[tauri::command]
+pub async fn prepare_file_preview(
+    state: tauri::State<'_, AppHandleState>,
+    document_id: String,
+    filename: String,
+) -> Result<PreparedFilePreview, String> {
+    let safe_id = sanitize_cache_id(&document_id)?;
+    let ext = Path::new(&filename)
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if ext.is_empty() || !ext.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("Unsupported file name for preview".to_string());
+    }
+
+    let cache_dir = state.app_data_dir.join(PREVIEW_CACHE_DIR);
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("Failed to create preview cache: {e}"))?;
+    let cache_path = cache_dir.join(format!("{safe_id}.{ext}"));
+
+    if cache_path.exists() {
+        let size = std::fs::metadata(&cache_path)
+            .map_err(|e| format!("Failed to stat cached preview: {e}"))?
+            .len();
+        return Ok(PreparedFilePreview {
+            path: cache_path.to_string_lossy().into_owned(),
+            size,
+            cached: true,
+        });
+    }
+
+    download_document_to(&state, &document_id, &cache_path).await?;
+    let size = std::fs::metadata(&cache_path)
+        .map_err(|e| format!("Failed to stat downloaded preview: {e}"))?
+        .len();
+    Ok(PreparedFilePreview {
+        path: cache_path.to_string_lossy().into_owned(),
+        size,
+        cached: false,
+    })
+}
+
+/// Download a server document and return its raw bytes as base64.
+///
+/// The frontend detects the encoding (UTF-8 / UTF-16 / GBK) from the raw
+/// bytes, so text files saved in legacy encodings preview correctly.
+#[tauri::command]
+pub async fn read_file_preview_text(
+    state: tauri::State<'_, AppHandleState>,
+    document_id: String,
+) -> Result<ServerTextBytes, String> {
+    let temp_dir = tempfile::tempdir()
+        .map_err(|e| format!("Failed to create temporary directory: {e}"))?;
+    let dest = temp_dir.path().join("preview.txt");
+    download_document_to(&state, &document_id, &dest).await?;
 
     let size = std::fs::metadata(&dest)
         .map_err(|e| format!("Failed to stat downloaded file: {e}"))?
@@ -251,17 +361,51 @@ pub async fn read_server_document(
     let file = std::fs::File::open(&dest)
         .map_err(|e| format!("Failed to open downloaded file: {e}"))?;
     let mut buf = Vec::new();
-    file.take(MAX_READ_BYTES + 1)
+    file.take(MAX_PREVIEW_TEXT_BYTES + 1)
         .read_to_end(&mut buf)
         .map_err(|e| format!("Failed to read downloaded file: {e}"))?;
+    let truncated = buf.len() as u64 > MAX_PREVIEW_TEXT_BYTES;
+    buf.truncate(MAX_PREVIEW_TEXT_BYTES as usize);
 
-    let truncated = buf.len() as u64 > MAX_READ_BYTES;
-    buf.truncate(MAX_READ_BYTES as usize);
-    let content = String::from_utf8_lossy(&buf).into_owned();
-
-    Ok(ServerTextFile {
-        content,
+    Ok(ServerTextBytes {
+        base64: base64ct::Base64::encode_string(&buf),
         size,
         truncated,
     })
+}
+
+fn sanitize_cache_id(document_id: &str) -> Result<String, String> {
+    if document_id.is_empty()
+        || !document_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("Invalid document id".to_string());
+    }
+    Ok(document_id.to_string())
+}
+
+/// Remove preview cache entries older than 7 days. Called once at startup.
+pub fn cleanup_preview_cache(app_data_dir: &Path) {
+    let cache_dir = app_data_dir.join(PREVIEW_CACHE_DIR);
+    let Ok(entries) = std::fs::read_dir(&cache_dir) else {
+        return;
+    };
+    let now = SystemTime::now();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let stale = entry
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .map(|age| age.as_secs() > PREVIEW_CACHE_MAX_AGE_SECS)
+            .unwrap_or(false);
+        if stale {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
 }

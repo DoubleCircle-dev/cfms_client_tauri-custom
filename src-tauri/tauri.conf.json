@@ -24,12 +24,13 @@
         "connect-src": "ipc: http://ipc.localhost",
         "font-src": "'self' data:",
         "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "media-src": "'self' asset: http://asset.localhost blob: data:",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'"
       },
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/avatars/**"]
+        "scope": ["$APPDATA/avatars/**", "$APPDATA/preview_cache/**"]
       }
     }
   },

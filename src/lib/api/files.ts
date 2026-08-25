@@ -45,6 +45,33 @@ export async function readServerDocument(
   return invoke('read_server_document', { documentId });
 }
 
+export interface PreparedFilePreview {
+  path: string;
+  size: number;
+  cached: boolean;
+}
+
+/** Download a server document into the preview cache and return its local path. */
+export async function prepareFilePreview(
+  documentId: string,
+  filename: string,
+): Promise<PreparedFilePreview> {
+  return invoke('prepare_file_preview', { documentId, filename });
+}
+
+export interface ServerTextBytes {
+  base64: string;
+  size: number;
+  truncated: boolean;
+}
+
+/** Download a server document and return its raw bytes (base64) for preview. */
+export async function readFilePreviewText(
+  documentId: string,
+): Promise<ServerTextBytes> {
+  return invoke('read_file_preview_text', { documentId });
+}
+
 export interface LocalChatboxFile {
   name: string;
   path: string;

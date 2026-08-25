@@ -395,6 +395,7 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
             std::fs::create_dir_all(&app_data_dir)?;
+            commands::cleanup_preview_cache(&app_data_dir);
 
             let db_path = app_data_dir.join("cfms_client.db");
             tracing::info!("Opening database at {}", db_path.display());
@@ -677,6 +678,8 @@ pub fn run() {
             commands::delete_download,
             commands::open_downloaded_file,
             commands::read_server_document,
+            commands::prepare_file_preview,
+            commands::read_file_preview_text,
             commands::scan_local_chatbox,
             commands::open_local_path,
             commands::create_directory,

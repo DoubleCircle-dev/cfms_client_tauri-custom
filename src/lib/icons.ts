@@ -43,6 +43,7 @@ export const ICONS = {
   search:        'search',
   settings:      'settings',
   info:          'info',
+  preview:       'visibility',
   arrowBack:     'arrow_back',
   bugReport:     'bug_report',
   update:        'update',

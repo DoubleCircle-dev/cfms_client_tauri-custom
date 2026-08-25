@@ -11,6 +11,7 @@
   import { page } from '$app/state';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { convertFileSrc } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -22,6 +23,8 @@
     getDownloadTasks,
     checkDownloadsExist,
     computeLocalSha256,
+    prepareFilePreview,
+    readFilePreviewText,
     getRevision,
     inspectUploadDirectoryConflicts,
     createDirectory,
@@ -88,6 +91,9 @@
   } from '$lib/components/files/FileTable.svelte';
   import ExplorerCommandBar from '$lib/components/explorer/ExplorerCommandBar.svelte';
   import ExplorerDetailsPane from '$lib/components/explorer/ExplorerDetailsPane.svelte';
+  import ExplorerPreviewPane, {
+    type PreviewModel,
+  } from '$lib/components/explorer/ExplorerPreviewPane.svelte';
   import ExplorerStatusBar from '$lib/components/explorer/ExplorerStatusBar.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
@@ -119,6 +125,7 @@
     setFavoriteRecord,
   } from '$lib/file-preferences';
   import { formatBytes, formatDate, formatError, formatUnknown, isPickerCancel } from '$lib/files/formatting';
+  import { base64ToBytes, decodeTextBytes, previewKindFor } from '$lib/file-preview';
   import { graphWidth, laneX, buildRevisionRows } from '$lib/files/revision-graph';
   import {
     fileManagerNavigationStore,
@@ -269,6 +276,9 @@
   let detailsOpen = $state(false);
   let detailModel = $state<FileDetailModel | null>(null);
   let detailRequestId = 0;
+  let previewOpen = $state(false);
+  let previewModel = $state<PreviewModel | null>(null);
+  let previewRequestId = 0;
   let documentAccessDenied = $state<{ name: string; id: string; accessedAt: number } | null>(null);
   let addressBar = $state<{
     beginEdit: () => Promise<void>;
@@ -1464,7 +1474,23 @@
       icon: 'info',
       compact: true,
       active: detailsOpen,
-      run: () => { detailsOpen = !detailsOpen; },
+      run: () => {
+        if (detailsOpen) {
+          detailsOpen = false;
+          return;
+        }
+        previewOpen = false;
+        detailsOpen = true;
+      },
+    },
+    {
+      id: 'preview',
+      label: $t('workspace.preview'),
+      icon: 'preview',
+      compact: true,
+      active: previewOpen,
+      disabled: !canPreviewSelection(),
+      run: togglePreview,
     },
     {
       id: 'trash',
@@ -1485,6 +1511,17 @@
       return;
     }
     void loadSelectionDetails();
+  });
+
+  $effect(() => {
+    const open = previewOpen;
+    selectionRevision;
+    if (!open) {
+      previewRequestId += 1;
+      previewModel = null;
+      return;
+    }
+    void loadSelectionPreview();
   });
 
   // --- Download ---
@@ -1730,6 +1767,77 @@
     } catch (detailError) {
       if (requestId !== detailRequestId) return;
       detailModel = { title: selectedName, icon: selectedFolder ? 'folder' : 'filePresent', error: formatError(detailError), rows: [] };
+    }
+  }
+
+  // --- Preview ---
+
+  function canPreviewSelection() {
+    if (totalSelected !== 1 || !selectedDocument) return false;
+    return previewKindFor(selectedDocument.title) !== null;
+  }
+
+  function togglePreview() {
+    if (previewOpen) {
+      previewOpen = false;
+      return;
+    }
+    detailsOpen = false;
+    previewOpen = true;
+  }
+
+  async function loadSelectionPreview() {
+    const requestId = ++previewRequestId;
+    const doc = selectedDocument;
+    if (!doc) {
+      previewModel = null;
+      return;
+    }
+    const kind = previewKindFor(doc.title);
+    if (!kind) {
+      previewModel = {
+        title: doc.title,
+        kind: 'text',
+        error: $t('files.previewUnsupported'),
+      };
+      return;
+    }
+
+    previewModel = { title: doc.title, kind, loading: true };
+    try {
+      if (kind === 'image' || kind === 'audio') {
+        const prepared = await prepareFilePreview(doc.id, doc.title);
+        if (requestId !== previewRequestId) return;
+        previewModel = {
+          title: doc.title,
+          kind,
+          src: convertFileSrc(prepared.path),
+          loading: false,
+        };
+        return;
+      }
+
+      const data = await readFilePreviewText(doc.id);
+      if (requestId !== previewRequestId) return;
+      const bytes = base64ToBytes(data.base64);
+      const decoded = decodeTextBytes(bytes);
+      previewModel = {
+        title: doc.title,
+        kind: 'text',
+        text: decoded.text,
+        markdown: doc.title.toLowerCase().endsWith('.md'),
+        truncated: data.truncated,
+        encoding: decoded.encoding,
+        loading: false,
+      };
+    } catch (previewError) {
+      if (requestId !== previewRequestId) return;
+      previewModel = {
+        title: doc.title,
+        kind,
+        error: formatError(previewError),
+        loading: false,
+      };
     }
   }
 
@@ -4344,6 +4452,16 @@
       closeLabel={$t('workspace.closeDetails')}
       resizeLabel={$t('workspace.resizeDetails')}
       onClose={() => (detailsOpen = false)}
+    />
+    <ExplorerPreviewPane
+      open={previewOpen}
+      model={previewModel}
+      emptyTitle={$t('workspace.preview')}
+      emptyLabel={$t('workspace.selectForPreview')}
+      closeLabel={$t('workspace.closePreview')}
+      truncatedLabel={$t('files.previewTextTruncated')}
+      encodingLabel={$t('files.previewTextEncoding')}
+      onClose={() => (previewOpen = false)}
     />
   </div>
 
