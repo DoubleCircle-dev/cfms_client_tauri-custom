@@ -21,20 +21,21 @@ export const DEFAULT_ROOM_NAMES: Record<string, string> = {
 };
 
 export const DEFAULT_USER_NAMES: Record<string, string> = {
+  // Decoded real usernames are kept as-is (highest priority).
+  '6025d18': 'user2',
+  '5860faf': 'user3',
+  'b2e8fa7': 'user131',
+  '31b1081': 'user147',
+  '4a0aa48': 'Creeper19472',
+  '5342bed': 'midnightlev',
+  'f60afa4': 'user8',
+  '6a08afe': 'user193',
+  '7ac3691': 'user379',
+  // Remaining users use their display names.
   'e17e013': '聊天系统开发者',
-  '6025d18': '好奇的参与者',
-  '5860faf': '观察员',
-  'b2e8fa7': '线索发现者',
-  '31b1081': '回应者',
-  '4a0aa48': '主创',
-  '5342bed': '伙伴',
-  'f60afa4': '研究者A',
   '1a9c660': '研究者B',
-  '6a08afe': '解谜者',
   '0816205': '观测组成员',
-  'f67ebac': '程序',
   '20c59a1': '不关心',
-  '7ac3691': '发现者',
   '39cb792': '知情人',
   '9f1b371': '提问者',
   '055720a': '系统广播',
@@ -42,4 +43,5 @@ export const DEFAULT_USER_NAMES: Record<string, string> = {
   '97e148a': '始作俑者',
   'ab6e5dc': '劝慰者',
   'af398d9': '分类与信息化成员',
+  'f67ebac': 'cz0822',
 };
