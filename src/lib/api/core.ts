@@ -7,6 +7,16 @@ export async function ping(): Promise<string> {
   return invoke("ping");
 }
 
+/**
+ * Send a liveness heartbeat to the Rust backend.
+ *
+ * The WebView crash watchdog treats a stale heartbeat as a crashed renderer
+ * and automatically restores the window.
+ */
+export async function heartbeat(): Promise<void> {
+  await invoke("heartbeat");
+}
+
 /** Get the current protocol version. */
 export async function protocolVersion(): Promise<number> {
   return invoke("protocol_version");

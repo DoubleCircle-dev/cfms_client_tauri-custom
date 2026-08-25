@@ -46,7 +46,7 @@
   import { appLockStore } from "$lib/app-lock.svelte";
   import { extensionsStore } from "$lib/extensions.svelte";
   import { USER_EXTENSIONS_ENABLED } from "$lib/feature-flags";
-  import { clearAuthSession, getLocalDataResetStatus, getServiceStatus, getAuthStatus, getServerState, getLocalIpAddresses } from "$lib/api";
+  import { clearAuthSession, getLocalDataResetStatus, getServiceStatus, getAuthStatus, getServerState, getLocalIpAddresses, heartbeat } from "$lib/api";
   import AppLockOverlay from "$lib/components/AppLockOverlay.svelte";
   import LockdownBanner from "$lib/components/LockdownBanner.svelte";
   import DialogHost from "$lib/components/DialogHost.svelte";
@@ -333,6 +333,20 @@
 
   onMount(() => {
     if (!resetRecoveryMode) appearanceStore.init();
+  });
+
+  // Keep the Rust-side WebView crash watchdog alive: as long as this interval
+  // fires the renderer is healthy. If the renderer process crashes the
+  // heartbeat stops and the watchdog restores the window automatically.
+  onMount(() => {
+    const beat = () => {
+      void heartbeat().catch(() => {
+        /* The app may be running outside Tauri (plain browser preview). */
+      });
+    };
+    beat();
+    const interval = setInterval(beat, 2000);
+    return () => clearInterval(interval);
   });
 
   $effect(() => {

@@ -9,8 +9,11 @@
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod background;
 mod commands;
+mod heartbeat;
 mod local_data_reset;
 mod localization;
+#[cfg(target_os = "windows")]
+mod webview_guard;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -414,6 +417,7 @@ pub fn run() {
                 .flatten()
                 .unwrap_or_else(|| "zh_CN".to_string());
             let localizer = Arc::new(LocalizationManager::new(initial_locale));
+            app.manage(heartbeat::HeartbeatState::default());
             let tasks = QueueState::new();
             let upload_tasks = UploadQueueState::new();
             let active_downloads = ActiveRegistry::new();
@@ -539,6 +543,10 @@ pub fn run() {
                 .ok_or_else(|| std::io::Error::other("Main window configuration is missing"))?;
             tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?.build()?;
 
+            // Watch for WebView2 renderer crashes and automatically recover.
+            #[cfg(target_os = "windows")]
+            webview_guard::start_webview_watchdog(app.handle().clone());
+
             // Dev mode: auto-open the vulnerability testing tool in a separate window.
             #[cfg(debug_assertions)]
             {
@@ -573,6 +581,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            heartbeat::heartbeat,
             commands::greet,
             commands::ping,
             commands::protocol_version,
