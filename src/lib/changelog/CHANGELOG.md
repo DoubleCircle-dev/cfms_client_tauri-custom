@@ -4,6 +4,19 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.47.0
+**Released on:** 2026-08-25
+
+**Title:** Protocol Version 25
+
+### Added
+- Update protocol version to 25 and enhance error handling for file task claims
+- Enhance download task management with failure handling and record removal
+- Enhance AppUpdateChecker and ChangelogPanel components with improved accessibility and state management
+- Enhance security measures and sensitive data handling
+
+--- 
+
 ## v0.46.1
 **Released on:** 2026-08-23
 
