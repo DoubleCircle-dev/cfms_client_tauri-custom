@@ -17,12 +17,27 @@
   import { notificationStore } from '$lib/stores.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
-  const IGNORED_ROOM_ID = '00000000-0000-0000-000000000000';
-  const CHATBOX_PATH = '/.runtime/chatbox';
   const ROOM_NAMES_KEY = 'cfms:chatbox:roomNames';
   const USER_NAMES_KEY = 'cfms:chatbox:userNames';
   const MODE_KEY = 'cfms:chatbox:mode';
   const LOCAL_PATH_KEY = 'cfms:chatbox:localPath';
+  const SOURCE_KEY = 'cfms:chatbox:source';
+
+  const CHATBOX_SOURCES = [
+    {
+      id: 'runtime',
+      path: '/.runtime/chatbox',
+      segments: ['.runtime', 'chatbox'],
+      labelKey: 'chat.sourceRuntime',
+    },
+    {
+      id: 'echo',
+      path: '/回响/.reserved/chatbox',
+      segments: ['回响', '.reserved', 'chatbox'],
+      labelKey: 'chat.sourceEcho',
+    },
+  ] as const;
+  type ChatboxSourceId = (typeof CHATBOX_SOURCES)[number]['id'];
 
   const BUBBLE_COLORS = [
     '#ffffff',
@@ -96,6 +111,7 @@
   let showNonformat = $state(false);
   let mode = $state<ChatMode>(loadMode());
   let localPath = $state<string | null>(loadLocalPath());
+  let chatboxSource = $state<ChatboxSourceId>(loadChatboxSource());
   let roomNames = $state<Record<string, string>>({
     ...DEFAULT_ROOM_NAMES,
     ...loadJson(ROOM_NAMES_KEY),
@@ -123,6 +139,9 @@
     });
     return map;
   });
+  const activeChatboxPath = $derived(
+    CHATBOX_SOURCES.find((source) => source.id === chatboxSource)?.path ?? '',
+  );
 
   onMount(() => {
     if (mode === 'local') {
@@ -145,6 +164,17 @@
       return localStorage.getItem(LOCAL_PATH_KEY);
     } catch {
       return null;
+    }
+  }
+
+  function loadChatboxSource(): ChatboxSourceId {
+    try {
+      const saved = localStorage.getItem(SOURCE_KEY);
+      return CHATBOX_SOURCES.some((source) => source.id === saved)
+        ? (saved as ChatboxSourceId)
+        : 'runtime';
+    } catch {
+      return 'runtime';
     }
   }
 
@@ -177,10 +207,12 @@
     );
   }
 
-  async function findChatboxFolder(): Promise<string | null> {
+  async function findChatboxFolder(source: ChatboxSourceId): Promise<string | null> {
+    const config =
+      CHATBOX_SOURCES.find((item) => item.id === source) ?? CHATBOX_SOURCES[0];
     // Preferred: the node_lookup server extension resolves paths directly.
     try {
-      const lookup = await resolveNodePath(CHATBOX_PATH);
+      const lookup = await resolveNodePath(config.path);
       const ids = lookup.node_ids ?? [];
       const folderId = ids[ids.length - 1];
       if (folderId && folderId !== '/') return folderId;
@@ -188,11 +220,14 @@
       // Fall through to walking the root listing.
     }
 
-    const root = await listDirectory(null);
-    const runtime = root.folders.find((folder) => folder.name === '.runtime');
-    if (!runtime) return null;
-    const runtimeListing = await listDirectory(runtime.id);
-    return runtimeListing.folders.find((folder) => folder.name === 'chatbox')?.id ?? null;
+    let current: string | null = null;
+    for (const segment of config.segments) {
+      const listing = await listDirectory(current);
+      const folder = listing.folders.find((item) => item.name === segment);
+      if (!folder) return null;
+      current = folder.id;
+    }
+    return current;
   }
 
   async function refresh() {
@@ -203,7 +238,7 @@
     error = null;
     loadingRooms = true;
     try {
-      chatboxFolderId = await findChatboxFolder();
+      chatboxFolderId = await findChatboxFolder(chatboxSource);
       if (!chatboxFolderId) {
         rooms = [];
         error = $t('chat.chatboxNotFound');
@@ -211,10 +246,7 @@
       }
 
       const listing = await listDirectory(chatboxFolderId);
-      const roomFolders = listing.folders.filter(
-        (folder) => folder.name !== IGNORED_ROOM_ID,
-      );
-      rooms = roomFolders.map((folder) => ({
+      rooms = listing.folders.map((folder) => ({
         id: folder.id,
         roomId: folder.name,
         name: roomDisplayName(folder.name),
@@ -244,6 +276,21 @@
     } finally {
       loadingRooms = false;
     }
+  }
+
+  async function switchChatboxSource(next: ChatboxSourceId) {
+    if (next === chatboxSource) return;
+    chatboxSource = next;
+    try {
+      localStorage.setItem(SOURCE_KEY, next);
+    } catch {
+      // Ignore storage failures; the source still applies for this session.
+    }
+    selectedRoomId = null;
+    rooms = [];
+    error = null;
+    showNonformat = false;
+    if (mode === 'online') await refresh();
   }
 
   async function scanLocal() {
@@ -568,6 +615,21 @@
           {$t('chat.modeLocal')}
         </button>
       </div>
+      {#if mode === 'online'}
+        <div class="chat-mode-toggle" role="group" aria-label={$t('chat.sourceLabel')}>
+          {#each CHATBOX_SOURCES as source (source.id)}
+            <button
+              type="button"
+              class="chat-mode-button"
+              class:chat-mode-button--active={chatboxSource === source.id}
+              title={source.path}
+              onclick={() => switchChatboxSource(source.id)}
+            >
+              {$t(source.labelKey)}
+            </button>
+          {/each}
+        </div>
+      {/if}
       {#if mode === 'local'}
         <button type="button" class="chat-refresh" onclick={pickLocalFolder}>
           <Icon name="folder" size="17px" />
@@ -582,7 +644,9 @@
   </header>
 
   <p class="chat-mode-hint">
-    {mode === 'online' ? $t('chat.onlineHint') : $t('chat.localHint')}
+    {mode === 'online'
+      ? $t('chat.onlineHint', { values: { path: activeChatboxPath } })
+      : $t('chat.localHint')}
   </p>
 
   {#if error}

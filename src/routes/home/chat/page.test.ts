@@ -99,7 +99,7 @@ describe('chat page local mode', () => {
     render(ChatPage);
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button').some((b) => b.textContent?.includes('8.12会议'))).toBe(true);
+      expect(screen.getAllByRole('button').some((b) => b.textContent?.includes('8月12日会议通知'))).toBe(true);
     });
 
     const cards = roomCards();
@@ -118,7 +118,7 @@ describe('chat page local mode', () => {
 });
 
 describe('chat page online mode', () => {
-  it('lists rooms by folder name (room id), filters the special room, and displays the folder name in the header', async () => {
+  it('lists rooms by folder name (room id), includes the public room, and displays the folder name in the header', async () => {
     mocks.resolveNodePath.mockResolvedValue({
       node_ids: ['/', '.runtime', 'chatbox-folder-id'],
     });
@@ -145,26 +145,52 @@ describe('chat page online mode', () => {
     render(ChatPage);
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button').some((b) => b.textContent?.includes('8.12会议'))).toBe(true);
+      expect(screen.getAllByRole('button').some((b) => b.textContent?.includes('8月12日会议通知'))).toBe(true);
     });
 
     const cards = roomCards();
-    // The special 00000000… room is filtered out.
-    expect(cards.length).toBe(2);
-    // Created-time descending order puts the ade46a55 room first.
+    // The 00000000… room is a normal conversation room now.
+    expect(cards.length).toBe(3);
+    // Created-time descending order puts the public room first.
     let header = document.querySelector('.chat-view-header');
-    expect(header?.textContent).toContain('ade46a55-db85-4660-9e74-ea25eb06fc47');
+    expect(header?.textContent).toContain('公共聊天室');
     expect(header?.textContent).not.toContain('dir-audio');
 
     const secondCard = cards[1].closest('.chat-room-card') as HTMLElement;
     await fireEvent.click(secondCard);
     await waitFor(() => {
       const active = document.querySelector('.chat-room-card--active .chat-room-name');
-      expect(active?.textContent).toContain('8.12会议');
+      expect(active?.textContent).toContain('音频线索分析');
     });
     header = document.querySelector('.chat-view-header');
-    expect(header?.textContent).toContain('b55215f8-6958-453f-899f-8d6dbdd0d332');
+    expect(header?.textContent).toContain('ade46a55-db85-4660-9e74-ea25eb06fc47');
     // Server directory ids must never appear as the displayed room id.
-    expect(header?.textContent).not.toContain('dir-8-12');
+    expect(header?.textContent).not.toContain('dir-audio');
+  });
+
+  it('switches the online chatbox source between the two server folders', async () => {
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', 'echo', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockResolvedValue({
+      folders: [],
+      documents: [],
+      parent_id: null,
+    });
+
+    render(ChatPage);
+    await waitFor(() => {
+      expect(mocks.resolveNodePath).toHaveBeenCalledWith('/.runtime/chatbox');
+    });
+
+    const echoButton = screen
+      .getAllByRole('button')
+      .find((button) => button.textContent?.includes('chat.sourceEcho'));
+    expect(echoButton).toBeTruthy();
+    await fireEvent.click(echoButton as HTMLElement);
+
+    await waitFor(() => {
+      expect(mocks.resolveNodePath).toHaveBeenCalledWith('/回响/.reserved/chatbox');
+    });
   });
 });
