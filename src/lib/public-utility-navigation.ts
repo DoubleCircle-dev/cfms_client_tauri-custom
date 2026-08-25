@@ -1,4 +1,4 @@
-const PUBLIC_UTILITY_ROUTES = ['/home/about', '/home/settings'] as const;
+const PUBLIC_UTILITY_ROUTES = ['/home/about', '/home/settings', '/home/tools'] as const;
 
 export function isPublicUtilityRoute(pathname: string): boolean {
   return PUBLIC_UTILITY_ROUTES.some(
