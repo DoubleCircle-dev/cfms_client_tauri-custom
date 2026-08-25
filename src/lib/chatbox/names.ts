@@ -21,7 +21,9 @@ export const DEFAULT_ROOM_NAMES: Record<string, string> = {
 };
 
 export const DEFAULT_USER_NAMES: Record<string, string> = {
-  // Decoded real usernames are kept as-is (highest priority).
+  // Decoded real usernames are kept as-is (highest priority). The 11 entries
+  // below are the ones that have been decoded so far; user578 was decoded in
+  // earlier exports and is intentionally retained.
   '6025d18': 'user2',
   '5860faf': 'user3',
   'b2e8fa7': 'user131',
@@ -31,6 +33,8 @@ export const DEFAULT_USER_NAMES: Record<string, string> = {
   'f60afa4': 'user8',
   '6a08afe': 'user193',
   '7ac3691': 'user379',
+  '20c59a1': 'user578',
+  'f67ebac': 'cz0822',
   // Remaining users use their display names.
   'e17e013': '聊天系统开发者',
   '1a9c660': '研究者B',
@@ -43,5 +47,4 @@ export const DEFAULT_USER_NAMES: Record<string, string> = {
   '97e148a': '始作俑者',
   'ab6e5dc': '劝慰者',
   'af398d9': '分类与信息化成员',
-  'f67ebac': 'cz0822',
 };
