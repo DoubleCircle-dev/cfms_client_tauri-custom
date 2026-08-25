@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::watch;
 
 use cfms_core::constants::KEY_LEN;
-use cfms_core::{DownloadPhase, DownloadTaskDto, DownloadTaskStatus, Result, ServiceEvent};
+use cfms_core::{
+    DownloadFailureKind, DownloadPhase, DownloadTaskDto, DownloadTaskStatus, Result, ServiceEvent,
+};
 
 use crate::sensitive::SecretKey;
 use crate::services::task_persistence;
@@ -307,6 +309,8 @@ impl QueueState {
                 t.stage = 4;
                 t.completed_at = Some(now);
                 t.pause_position = None;
+                t.error = None;
+                t.failure_kind = None;
             }
         }
         self.save();
@@ -314,6 +318,15 @@ impl QueueState {
     }
 
     pub fn mark_failed(&self, task_id: &str, error: &str) -> Result<()> {
+        self.mark_failed_with_kind(task_id, error, None)
+    }
+
+    pub fn mark_failed_with_kind(
+        &self,
+        task_id: &str,
+        error: &str,
+        failure_kind: Option<DownloadFailureKind>,
+    ) -> Result<()> {
         let now = unix_now();
         {
             let mut map = self.tasks.lock().unwrap();
@@ -326,6 +339,7 @@ impl QueueState {
                 }
                 t.status = DownloadTaskStatus::Failed;
                 t.error = Some(error.to_string());
+                t.failure_kind = failure_kind;
                 t.completed_at = Some(now);
             }
         }
@@ -353,6 +367,7 @@ impl QueueState {
                     t.status = DownloadTaskStatus::Deleted;
                     t.message = None;
                     t.error = None;
+                    t.failure_kind = None;
                     changed = true;
                 }
             }
@@ -384,6 +399,7 @@ impl QueueState {
             if t.retry_count > t.max_retries {
                 t.status = DownloadTaskStatus::Failed;
                 t.error = Some(error.to_string());
+                t.failure_kind = None;
                 t.completed_at = Some(unix_now());
                 DownloadTaskStatus::Failed
             } else {
@@ -394,6 +410,7 @@ impl QueueState {
                 t.scheduled_time = Some(unix_now().saturating_add(delay as i64));
                 t.pause_position = Some(t.current_bytes);
                 t.error = Some(error.to_string());
+                t.failure_kind = None;
                 DownloadTaskStatus::Scheduled
             }
         };
@@ -542,6 +559,7 @@ impl QueueState {
             t.current_bytes = 0;
             t.message = None;
             t.error = None;
+            t.failure_kind = None;
             t.started_at = None;
             t.completed_at = None;
             t.retry_count = 0;
@@ -554,6 +572,64 @@ impl QueueState {
         }
         Ok(retried)
     }
+
+    /// Atomically replace one server task identifier while retaining the
+    /// logical download's destination, ordering, priority, and batch metadata.
+    pub fn replace_server_task(
+        &self,
+        old_task_id: &str,
+        expected_status: DownloadTaskStatus,
+        new_task_id: &str,
+        supports_resume: bool,
+    ) -> Result<Option<DownloadTaskDto>> {
+        if new_task_id == old_task_id {
+            return Err(cfms_core::Error::Other(
+                "Server recreated download with the same unusable task id".into(),
+            ));
+        }
+
+        let replacement = {
+            let mut map = self.tasks.lock().unwrap();
+            let Some(existing) = map.get(old_task_id) else {
+                return Ok(None);
+            };
+            if existing.status != expected_status {
+                return Ok(None);
+            }
+            if map.contains_key(new_task_id) {
+                return Err(cfms_core::Error::Other(format!(
+                    "Server recreated download with duplicate task id {new_task_id}"
+                )));
+            }
+
+            let mut replacement = existing.clone();
+            replacement.task_id = new_task_id.to_string();
+            replacement.status = DownloadTaskStatus::Pending;
+            replacement.progress = 0.0;
+            replacement.current_bytes = 0;
+            replacement.total_bytes = 0;
+            replacement.message = None;
+            replacement.error = None;
+            replacement.failure_kind = None;
+            replacement.started_at = None;
+            replacement.completed_at = None;
+            replacement.retry_count = 0;
+            replacement.scheduled_time = None;
+            replacement.stage = 0;
+            replacement.pause_position = None;
+            replacement.supports_resume = supports_resume;
+            replacement.server_task_recreate_count =
+                replacement.server_task_recreate_count.saturating_add(1);
+
+            map.remove(old_task_id);
+            map.insert(new_task_id.to_string(), replacement.clone());
+            replacement
+        };
+
+        cleanup_resume_state(&replacement.file_path, old_task_id);
+        self.save();
+        Ok(Some(replacement))
+    }
 }
 
 /// Parameters for updating task progress in a single call.
@@ -564,6 +640,129 @@ pub struct UpdateProgressParams {
     pub current_bytes: Option<u64>,
     pub total_bytes: Option<u64>,
     pub stage: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerDownloadTask {
+    pub task_id: String,
+    pub supports_resume: bool,
+}
+
+/// Request a fresh one-shot download task from the authenticated server.
+pub async fn request_server_download_task(
+    state: &AppState,
+    document_id: &str,
+) -> Result<ServerDownloadTask> {
+    let conn = state
+        .conn
+        .read()
+        .await
+        .clone()
+        .ok_or_else(|| cfms_core::Error::Connection("Not connected to a server".into()))?;
+    let username = state
+        .username
+        .read()
+        .await
+        .clone()
+        .ok_or_else(|| cfms_core::Error::Auth("Not logged in".into()))?;
+    let token = state
+        .token
+        .read()
+        .await
+        .clone()
+        .ok_or_else(|| cfms_core::Error::Auth("Not logged in".into()))?;
+
+    let response = super::rpc::send_action_request(
+        &conn,
+        "get_document",
+        serde_json::json!({ "document_id": document_id }),
+        &username,
+        token.as_str(),
+    )
+    .await?;
+
+    if response.code != 200 {
+        return Err(server_response_error(&response));
+    }
+
+    let task_data = response.data.get("task_data").ok_or_else(|| {
+        cfms_core::Error::Protocol("get_document response missing task_data".into())
+    })?;
+    let task_id = task_data
+        .get("task_id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|task_id| !task_id.trim().is_empty())
+        .ok_or_else(|| cfms_core::Error::Protocol("get_document response missing task_id".into()))?
+        .to_string();
+    let supports_resume = task_data
+        .get("supports_resume")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+
+    Ok(ServerDownloadTask {
+        task_id,
+        supports_resume,
+    })
+}
+
+fn server_response_error(response: &cfms_core::Response) -> cfms_core::Error {
+    cfms_core::Error::Server {
+        code: u32::from(response.code),
+        message: response.message.clone(),
+        scope: response
+            .data
+            .get("scope")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        limit: response
+            .data
+            .get("limit")
+            .and_then(serde_json::Value::as_u64),
+        retry_after_seconds: response
+            .data
+            .get("retry_after_seconds")
+            .and_then(serde_json::Value::as_u64),
+    }
+}
+
+pub fn is_unclaimable_server_task_error(error: &cfms_core::Error) -> bool {
+    matches!(
+        error,
+        cfms_core::Error::Server { code: 400, message, .. }
+            if message.trim() == "Task cannot be claimed"
+    )
+}
+
+fn should_automatically_recreate_server_task(
+    task: Option<&DownloadTaskDto>,
+    error: &cfms_core::Error,
+) -> bool {
+    is_unclaimable_server_task_error(error)
+        && task.is_some_and(|task| task.batch_id.is_some() && task.server_task_recreate_count == 0)
+}
+
+/// Recreate a server task and replace the local record only if it has not
+/// changed state while the network request was in flight.
+pub async fn recreate_server_task(
+    state: &AppState,
+    queue: &QueueState,
+    old_task_id: &str,
+    expected_status: DownloadTaskStatus,
+) -> Result<Option<DownloadTaskDto>> {
+    let Some(existing) = queue.get(old_task_id) else {
+        return Ok(None);
+    };
+    if existing.status != expected_status {
+        return Ok(None);
+    }
+
+    let server_task = request_server_download_task(state, &existing.file_id).await?;
+    queue.replace_server_task(
+        old_task_id,
+        expected_status,
+        &server_task.task_id,
+        server_task.supports_resume,
+    )
 }
 
 struct ProgressEventThrottle {
@@ -1168,12 +1367,69 @@ async fn execute_download(
             let error_msg = e.to_string();
             tracing::error!("Download {task_id} failed: {error_msg}");
 
+            let recovery_task = queue.get(&task_id);
+            let is_unclaimable = is_unclaimable_server_task_error(&e);
+            let can_recreate_automatically =
+                should_automatically_recreate_server_task(recovery_task.as_ref(), &e);
+
+            if can_recreate_automatically {
+                cleanup_resume_state(&file_path, &task_id);
+                match recreate_server_task(
+                    &state,
+                    &queue,
+                    &task_id,
+                    DownloadTaskStatus::Downloading,
+                )
+                .await
+                {
+                    Ok(Some(replacement)) => {
+                        let _ = state.event_tx.send(ServiceEvent::DownloadTaskReplaced {
+                            old_task_id: task_id.clone(),
+                            task: replacement.clone(),
+                        });
+                        emit_active_count(&queue, &state);
+                        tracing::info!(
+                            "Recreated unclaimable server download {task_id} as {}",
+                            replacement.task_id
+                        );
+                        return DownloadOutcome::reusable();
+                    }
+                    Ok(None) => {
+                        emit_active_count(&queue, &state);
+                        tracing::info!(
+                            "Skipped recreation for {task_id} because its state changed"
+                        );
+                        return DownloadOutcome::discard_and_stop();
+                    }
+                    Err(recreate_error) => {
+                        let recovery_error = format!(
+                            "{error_msg}; automatic server task recreation failed: {recreate_error}"
+                        );
+                        let _ = queue.mark_failed_with_kind(
+                            &task_id,
+                            &recovery_error,
+                            Some(DownloadFailureKind::ServerTaskUnclaimable),
+                        );
+                        emit_task_update(&queue, &state, &task_id);
+                        emit_active_count(&queue, &state);
+                        let _ = state.event_tx.send(ServiceEvent::DownloadFailed {
+                            task_id: task_id.clone(),
+                            error: recovery_error,
+                        });
+                        return DownloadOutcome::discard_and_stop();
+                    }
+                }
+            }
+
             let retry_after_seconds = super::retry::is_transient_error(&e)
                 .then(|| super::retry::error_retry_after_seconds(&e));
 
             if retry_after_seconds.is_none() {
                 cleanup_resume_state(&file_path, &task_id);
-                let _ = queue.mark_failed(&task_id, &error_msg);
+                let failure_kind = (is_unclaimable
+                    && recovery_task.is_some_and(|task| task.batch_id.is_some()))
+                .then_some(DownloadFailureKind::ServerTaskUnclaimable);
+                let _ = queue.mark_failed_with_kind(&task_id, &error_msg, failure_kind);
                 emit_task_update(&queue, &state, &task_id);
                 emit_active_count(&queue, &state);
                 let _ = state.event_tx.send(ServiceEvent::DownloadFailed {
@@ -1404,6 +1660,7 @@ mod tests {
             total_bytes: 10,
             message: Some("complete".into()),
             error: None,
+            failure_kind: None,
             created_at: 1,
             started_at: Some(1),
             completed_at: Some(2),
@@ -1415,6 +1672,7 @@ mod tests {
             bandwidth_limit: None,
             pause_position: None,
             supports_resume: true,
+            server_task_recreate_count: 0,
             batch_id: Some("batch-1".into()),
             batch_name: Some("Evidence bundle".into()),
             batch_root_id: None,
@@ -1449,6 +1707,107 @@ mod tests {
         assert_eq!(queue.get("a").unwrap().status, DownloadTaskStatus::Deleted);
         assert_eq!(queue.get("b").unwrap().status, DownloadTaskStatus::Deleted);
         assert_eq!(queue.get("a").unwrap().message, None);
+    }
+
+    #[test]
+    fn only_the_exact_unclaimable_response_requests_automatic_recreation() {
+        let server_error = |code, message: &str| cfms_core::Error::Server {
+            code,
+            message: message.into(),
+            scope: None,
+            limit: None,
+            retry_after_seconds: None,
+        };
+        let task = task("stale", DownloadTaskStatus::Downloading);
+
+        assert!(should_automatically_recreate_server_task(
+            Some(&task),
+            &server_error(400, " Task cannot be claimed "),
+        ));
+        assert!(!should_automatically_recreate_server_task(
+            Some(&task),
+            &server_error(400, "Task claim rejected"),
+        ));
+        assert!(!should_automatically_recreate_server_task(
+            Some(&task),
+            &server_error(400, "task cannot be claimed"),
+        ));
+        assert!(!should_automatically_recreate_server_task(
+            Some(&task),
+            &server_error(409, "Task cannot be claimed"),
+        ));
+
+        let mut already_recreated = task;
+        already_recreated.server_task_recreate_count = 1;
+        assert!(!should_automatically_recreate_server_task(
+            Some(&already_recreated),
+            &server_error(400, "Task cannot be claimed"),
+        ));
+    }
+
+    #[test]
+    fn server_task_replacement_preserves_logical_download_metadata() {
+        let queue = QueueState::new();
+        let mut original = task("stale", DownloadTaskStatus::Downloading);
+        original.progress = 0.75;
+        original.current_bytes = 768;
+        original.total_bytes = 1024;
+        original.retry_count = 2;
+        original.error = Some("old failure".into());
+        original.failure_kind = Some(DownloadFailureKind::ServerTaskUnclaimable);
+        queue.insert(&original).unwrap();
+
+        let replacement = queue
+            .replace_server_task("stale", DownloadTaskStatus::Downloading, "fresh", false)
+            .unwrap()
+            .unwrap();
+
+        assert!(queue.get("stale").is_none());
+        assert_eq!(queue.get("fresh").unwrap().task_id, "fresh");
+        assert_eq!(replacement.file_id, original.file_id);
+        assert_eq!(replacement.file_path, original.file_path);
+        assert_eq!(replacement.batch_id, original.batch_id);
+        assert_eq!(replacement.batch_created_at, original.batch_created_at);
+        assert_eq!(replacement.created_at, original.created_at);
+        assert_eq!(replacement.status, DownloadTaskStatus::Pending);
+        assert_eq!(replacement.progress, 0.0);
+        assert_eq!(replacement.current_bytes, 0);
+        assert_eq!(replacement.total_bytes, 0);
+        assert_eq!(replacement.retry_count, 0);
+        assert_eq!(replacement.failure_kind, None);
+        assert_eq!(replacement.server_task_recreate_count, 1);
+        assert!(!replacement.supports_resume);
+    }
+
+    #[test]
+    fn server_task_replacement_does_not_revive_changed_or_duplicate_tasks() {
+        let queue = QueueState::new();
+        queue
+            .insert(&task("cancelled", DownloadTaskStatus::Cancelled))
+            .unwrap();
+        queue
+            .insert(&task("fresh", DownloadTaskStatus::Pending))
+            .unwrap();
+
+        assert!(
+            queue
+                .replace_server_task(
+                    "cancelled",
+                    DownloadTaskStatus::Downloading,
+                    "replacement",
+                    true,
+                )
+                .unwrap()
+                .is_none()
+        );
+        assert!(queue.get("cancelled").is_some());
+        assert!(
+            queue
+                .replace_server_task("cancelled", DownloadTaskStatus::Cancelled, "fresh", true,)
+                .is_err()
+        );
+        assert!(queue.get("cancelled").is_some());
+        assert!(queue.get("fresh").is_some());
     }
 
     #[test]

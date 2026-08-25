@@ -1,12 +1,15 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
-  import { canDeleteDownloadTaskGroupFiles, type DownloadTaskGroup } from '$lib/download-task-groups';
+  import {
+    canDeleteDownloadTaskGroupFiles, canRemoveDownloadTaskGroupRecords,
+    type DownloadTaskGroup,
+  } from '$lib/download-task-groups';
   import { flyScale } from '$lib/motion/transitions';
   import { formatByteRate } from '$lib/transfer-speed';
   import Icon from './Icon.svelte';
   import ProgressRing from './ProgressRing.svelte';
 
-  type PendingAction = 'pause' | 'resume' | 'retry' | 'cancel' | 'delete' | null;
+  type PendingAction = 'pause' | 'resume' | 'retry' | 'cancel' | 'delete' | 'remove' | null;
 
   interface Props {
     group: DownloadTaskGroup;
@@ -17,6 +20,7 @@
     onRetry: (groupId: string) => Promise<void>;
     onCancel: (groupId: string) => Promise<void>;
     onDeleteFiles: (groupId: string) => Promise<void>;
+    onRemoveRecords: (groupId: string) => Promise<void>;
     pendingAction?: PendingAction;
     bytesPerSecond?: number;
     onContextMenu?: (event: MouseEvent | KeyboardEvent, group: DownloadTaskGroup) => void;
@@ -31,12 +35,15 @@
     onRetry,
     onCancel,
     onDeleteFiles,
+    onRemoveRecords,
     pendingAction = null,
     bytesPerSecond = 0,
     onContextMenu,
   }: Props = $props();
 
   const isDeleting = $derived(pendingAction === 'delete');
+  const isRemoving = $derived(pendingAction === 'remove');
+  const isBusy = $derived(Boolean(pendingAction));
   const percent = $derived(group.progressKnown ? Math.round(group.progress * 100) : null);
   const progressWidth = $derived(`${percent ?? 0}%`);
   const canPause = $derived(
@@ -54,12 +61,14 @@
     ),
   );
   const canDeleteFiles = $derived(canDeleteDownloadTaskGroupFiles(group));
+  const canRemoveRecords = $derived(canRemoveDownloadTaskGroupRecords(group));
   const primaryAction = $derived(
     canRetry ? 'retry' : canResume ? 'resume' : canPause ? 'pause' : null,
   );
   const hasSecondaryActions = $derived(
     canCancel
     || canDeleteFiles
+    || canRemoveRecords
     || (canPause && primaryAction !== 'pause')
     || (canResume && primaryAction !== 'resume')
     || (canRetry && primaryAction !== 'retry'),
@@ -74,6 +83,8 @@
   const statusText = $derived(
     isDeleting
       ? $t('tasks.batchDeleting')
+      : isRemoving
+      ? $t('tasks.batchRemoving')
       : group.preparing
       ? [
         group.batchPaused
@@ -98,7 +109,7 @@
   }
 
   function handleContextMenu(event: MouseEvent | KeyboardEvent) {
-    if (isDeleting) {
+    if (isBusy) {
       event.preventDefault();
       return;
     }
@@ -112,7 +123,7 @@
   class:batch-card-deleting={isDeleting}
   role="group"
   aria-label={group.name}
-  aria-busy={isDeleting}
+  aria-busy={isBusy}
   oncontextmenu={handleContextMenu}
   onkeydown={(event) => {
     if ((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu') {
@@ -175,7 +186,7 @@
         aria-expanded={expanded}
         aria-label={expanded ? $t('tasks.collapseBatch') : $t('tasks.expandBatch')}
         title={expanded ? $t('tasks.collapseBatch') : $t('tasks.expandBatch')}
-        disabled={isDeleting}
+        disabled={isBusy}
         onclick={() => onToggle(group.id)}
       >
         <span class:batch-chevron-expanded={expanded} class="batch-chevron"><Icon name="expandMore" size="18px" /></span>
@@ -201,6 +212,12 @@
         <button type="button" class="batch-action batch-action-danger" disabled={Boolean(pendingAction) || isDeleting} onclick={() => runAction(onDeleteFiles)}>
           {#if isDeleting}<ProgressRing class="batch-delete-ring" size={14} strokeWidth={2.4} label={$t('tasks.batchDeleting')} />{:else}<Icon name="delete" size="14px" />{/if}
           {isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')}
+        </button>
+      {/if}
+      {#if canRemoveRecords}
+        <button type="button" class="batch-action" disabled={Boolean(pendingAction)} onclick={() => runAction(onRemoveRecords)}>
+          {#if isRemoving}<ProgressRing size={14} strokeWidth={2.4} label={$t('tasks.batchRemoving')} />{:else}<Icon name="playlistRemove" size="14px" />{/if}
+          {isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')}
         </button>
       {/if}
     </div>

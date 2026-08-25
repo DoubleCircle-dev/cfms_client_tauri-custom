@@ -179,56 +179,11 @@ pub async fn get_document(
     batch_created_at: Option<i64>,
     batch_estimated_total: Option<u32>,
 ) -> Result<serde_json::Value, String> {
-    let conn = {
-        let c = state.inner.conn.read().await;
-        c.clone()
-    }
-    .ok_or_else(|| "Not connected to a server".to_string())?;
-
-    let username = {
-        let u = state.inner.username.read().await;
-        u.clone()
-    }
-    .ok_or_else(|| "Not logged in".to_string())?;
-
-    let token = {
-        let t = state.inner.token.read().await;
-        t.clone()
-    }
-    .ok_or_else(|| "Not logged in".to_string())?;
-
-    let resp = send_action_request(
-        &conn,
-        "get_document",
-        serde_json::json!({"document_id": document_id}),
-        &username,
-        &token,
-    )
-    .await?;
-
-    // Handle 403 (Access Denied)
-    if resp.code == 403 {
-        return Err(format_server_response_error(&resp));
-    }
-
-    // Handle 404 (Not Found)
-    if resp.code == 404 {
-        return Err(format_server_response_error(&resp));
-    }
-
-    if resp.code != 200 {
-        return Err(format_server_response_error(&resp));
-    }
-
-    // Extract task data from the server response.
-    let task_data = &resp.data["task_data"];
-    let task_id = task_data["task_id"]
-        .as_str()
-        .ok_or_else(|| "Server response missing task_id".to_string())?
-        .to_string();
-    let _start_time = task_data["start_time"].as_f64().unwrap_or(0.0);
-    let _end_time = task_data["end_time"].as_f64().unwrap_or(0.0);
-    let supports_resume = task_data["supports_resume"].as_bool().unwrap_or(false);
+    let server_task = download_queue::request_server_download_task(&state.inner, &document_id)
+        .await
+        .map_err(format_download_task_request_error)?;
+    let task_id = server_task.task_id;
+    let supports_resume = server_task.supports_resume;
 
     // Build a local download path.  Use the Tauri download directory when
     // available; otherwise fall back to the app data directory.
@@ -260,6 +215,7 @@ pub async fn get_document(
         total_bytes: 0,
         message: None,
         error: None,
+        failure_kind: None,
         created_at: now,
         started_at: None,
         completed_at: None,
@@ -271,6 +227,7 @@ pub async fn get_document(
         bandwidth_limit: None,
         pause_position: None,
         supports_resume,
+        server_task_recreate_count: 0,
         batch_id: non_empty_optional(batch_id),
         batch_name: non_empty_optional(batch_name),
         batch_root_id: non_empty_optional(batch_root_id),
@@ -305,6 +262,31 @@ fn download_display_filename(path_or_name: &str) -> String {
         .rfind(|part| !part.is_empty())
         .unwrap_or(path_or_name)
         .to_string()
+}
+
+fn format_download_task_request_error(error: cfms_core::Error) -> String {
+    match error {
+        cfms_core::Error::Server {
+            code,
+            message,
+            scope,
+            limit,
+            retry_after_seconds,
+        } => {
+            let mut data = serde_json::Map::new();
+            if let Some(scope) = scope {
+                data.insert("scope".into(), scope.into());
+            }
+            if let Some(limit) = limit {
+                data.insert("limit".into(), limit.into());
+            }
+            if let Some(seconds) = retry_after_seconds {
+                data.insert("retry_after_seconds".into(), seconds.into());
+            }
+            format_server_error_parts(code, &message, &serde_json::Value::Object(data))
+        }
+        error => error.to_string(),
+    }
 }
 
 /// Create a subdirectory under the local download root.

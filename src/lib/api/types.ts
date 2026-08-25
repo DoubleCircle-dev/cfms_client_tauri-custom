@@ -55,6 +55,7 @@ export interface DownloadTaskDto {
   total_bytes: number;
   message: string | null;
   error: string | null;
+  failure_kind?: "server_task_unclaimable" | null;
   created_at: number;
   started_at: number | null;
   completed_at: number | null;
@@ -66,6 +67,7 @@ export interface DownloadTaskDto {
   bandwidth_limit: number | null;
   pause_position: number | null;
   supports_resume: boolean;
+  server_task_recreate_count?: number;
   batch_id?: string | null;
   batch_name?: string | null;
   batch_root_id?: string | null;
@@ -443,6 +445,7 @@ export interface SelectedUploadDirectory {
 export type ServiceEvent =
   | { event: "DownloadProgress"; data: { task_id: string; phase: string; progress: number; message: string; current_bytes: number; total_bytes: number } }
   | { event: "DownloadTaskUpdated"; data: { task: DownloadTaskDto } }
+  | { event: "DownloadTaskReplaced"; data: { old_task_id: string; task: DownloadTaskDto } }
   | { event: "DownloadCompleted"; data: { task_id: string; file_path: string } }
   | { event: "DownloadFailed"; data: { task_id: string; error: string } }
   | { event: "DownloadPaused"; data: { task_id: string } }
