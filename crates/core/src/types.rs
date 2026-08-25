@@ -153,7 +153,7 @@ impl DownloadTaskStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadFailureKind {
-    /// The server-side one-shot task was already consumed and must be recreated.
+    /// Protocol 25 rejected the task credential, so a fresh task is required.
     ServerTaskUnclaimable,
 }
 

@@ -121,6 +121,8 @@ fn format_transport_error(error: &cfms_core::Error) -> String {
             scope,
             limit,
             retry_after_seconds,
+            task_status,
+            retryable,
         } => {
             let mut data = serde_json::Map::new();
             if let Some(scope) = scope {
@@ -131,6 +133,12 @@ fn format_transport_error(error: &cfms_core::Error) -> String {
             }
             if let Some(seconds) = retry_after_seconds {
                 data.insert("retry_after_seconds".into(), (*seconds).into());
+            }
+            if let Some(task_status) = task_status {
+                data.insert("task_status".into(), task_status.clone().into());
+            }
+            if let Some(retryable) = retryable {
+                data.insert("retryable".into(), (*retryable).into());
             }
             format_server_error_parts(
                 *code,
@@ -457,6 +465,8 @@ mod response_error_tests {
             scope: Some("server_concurrency".to_string()),
             limit: Some(4),
             retry_after_seconds: Some(2),
+            task_status: None,
+            retryable: None,
         };
 
         let formatted = format_transport_error(&error);
@@ -464,5 +474,23 @@ mod response_error_tests {
         assert!(formatted.contains("\"scope\":\"server_concurrency\""));
         assert!(formatted.contains("\"limit\":4"));
         assert!(formatted.contains("\"retry_after_seconds\":2"));
+    }
+
+    #[test]
+    fn preserves_protocol_twenty_five_claim_metadata() {
+        let error = cfms_core::Error::Server {
+            code: 46_001,
+            message: "Task is already in progress".to_string(),
+            scope: None,
+            limit: None,
+            retry_after_seconds: None,
+            task_status: Some("in_progress".to_string()),
+            retryable: Some(true),
+        };
+
+        let formatted = format_transport_error(&error);
+        assert!(formatted.starts_with("Server returned 46001: Task is already in progress"));
+        assert!(formatted.contains("\"task_status\":\"in_progress\""));
+        assert!(formatted.contains("\"retryable\":true"));
     }
 }

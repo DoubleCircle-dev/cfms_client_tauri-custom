@@ -49,6 +49,8 @@ struct ServerResponseData {
     scope: Option<String>,
     limit: Option<u64>,
     retry_after_seconds: Option<u64>,
+    task_status: Option<String>,
+    retryable: Option<bool>,
 }
 
 /// Upload a file, resuming from the server's durable checkpoint when present.
@@ -218,6 +220,8 @@ fn server_error(response: ServerResponse) -> cfms_core::Error {
         scope: response.data.scope,
         limit: response.data.limit,
         retry_after_seconds: response.data.retry_after_seconds,
+        task_status: response.data.task_status,
+        retryable: response.data.retryable,
     }
 }
 
@@ -269,6 +273,20 @@ mod tests {
         let raw = br#"{"code":409,"message":"Upload metadata does not match the resumable task","data":{"chunk_size":1024}}"#;
         let error = parse_negotiation(raw).unwrap_err();
         assert!(matches!(error, cfms_core::Error::Server { code: 409, .. }));
+    }
+
+    #[test]
+    fn negotiation_preserves_protocol_twenty_five_claim_failure() {
+        let raw = br#"{"code":46005,"message":"Task claim conflicted with another request","data":{"retryable":true}}"#;
+        let error = parse_negotiation(raw).unwrap_err();
+        assert!(matches!(
+            error,
+            cfms_core::Error::Server {
+                code: 46_005,
+                retryable: Some(true),
+                ..
+            }
+        ));
     }
 
     #[test]

@@ -272,6 +272,8 @@ fn format_download_task_request_error(error: cfms_core::Error) -> String {
             scope,
             limit,
             retry_after_seconds,
+            task_status,
+            retryable,
         } => {
             let mut data = serde_json::Map::new();
             if let Some(scope) = scope {
@@ -282,6 +284,12 @@ fn format_download_task_request_error(error: cfms_core::Error) -> String {
             }
             if let Some(seconds) = retry_after_seconds {
                 data.insert("retry_after_seconds".into(), seconds.into());
+            }
+            if let Some(task_status) = task_status {
+                data.insert("task_status".into(), task_status.into());
+            }
+            if let Some(retryable) = retryable {
+                data.insert("retryable".into(), retryable.into());
             }
             format_server_error_parts(code, &message, &serde_json::Value::Object(data))
         }

@@ -722,14 +722,25 @@ fn server_response_error(response: &cfms_core::Response) -> cfms_core::Error {
             .data
             .get("retry_after_seconds")
             .and_then(serde_json::Value::as_u64),
+        task_status: response
+            .data
+            .get("task_status")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        retryable: response
+            .data
+            .get("retryable")
+            .and_then(serde_json::Value::as_bool),
     }
 }
 
 pub fn is_unclaimable_server_task_error(error: &cfms_core::Error) -> bool {
     matches!(
         error,
-        cfms_core::Error::Server { code: 400, message, .. }
-            if message.trim() == "Task cannot be claimed"
+        cfms_core::Error::Server {
+            code: cfms_core::constants::file_task_claim_code::INVALID,
+            ..
+        }
     )
 }
 
@@ -738,7 +749,7 @@ fn should_automatically_recreate_server_task(
     error: &cfms_core::Error,
 ) -> bool {
     is_unclaimable_server_task_error(error)
-        && task.is_some_and(|task| task.batch_id.is_some() && task.server_task_recreate_count == 0)
+        && task.is_some_and(|task| task.server_task_recreate_count == 0)
 }
 
 /// Recreate a server task and replace the local record only if it has not
@@ -1426,9 +1437,8 @@ async fn execute_download(
 
             if retry_after_seconds.is_none() {
                 cleanup_resume_state(&file_path, &task_id);
-                let failure_kind = (is_unclaimable
-                    && recovery_task.is_some_and(|task| task.batch_id.is_some()))
-                .then_some(DownloadFailureKind::ServerTaskUnclaimable);
+                let failure_kind =
+                    is_unclaimable.then_some(DownloadFailureKind::ServerTaskUnclaimable);
                 let _ = queue.mark_failed_with_kind(&task_id, &error_msg, failure_kind);
                 emit_task_update(&queue, &state, &task_id);
                 emit_active_count(&queue, &state);
@@ -1710,38 +1720,47 @@ mod tests {
     }
 
     #[test]
-    fn only_the_exact_unclaimable_response_requests_automatic_recreation() {
+    fn only_protocol_twenty_five_invalid_claims_request_automatic_recreation() {
         let server_error = |code, message: &str| cfms_core::Error::Server {
             code,
             message: message.into(),
             scope: None,
             limit: None,
             retry_after_seconds: None,
+            task_status: None,
+            retryable: Some(false),
         };
         let task = task("stale", DownloadTaskStatus::Downloading);
 
         assert!(should_automatically_recreate_server_task(
             Some(&task),
-            &server_error(400, " Task cannot be claimed "),
+            &server_error(46_000, "Task cannot be claimed"),
+        ));
+        assert!(should_automatically_recreate_server_task(
+            Some(&task),
+            &server_error(46_000, "Different localized message"),
         ));
         assert!(!should_automatically_recreate_server_task(
             Some(&task),
-            &server_error(400, "Task claim rejected"),
+            &server_error(400, "Task cannot be claimed"),
         ));
         assert!(!should_automatically_recreate_server_task(
             Some(&task),
-            &server_error(400, "task cannot be claimed"),
+            &server_error(46_001, "Task is already in progress"),
         ));
-        assert!(!should_automatically_recreate_server_task(
-            Some(&task),
-            &server_error(409, "Task cannot be claimed"),
+
+        let mut ungrouped = task.clone();
+        ungrouped.batch_id = None;
+        assert!(should_automatically_recreate_server_task(
+            Some(&ungrouped),
+            &server_error(46_000, "Task cannot be claimed"),
         ));
 
         let mut already_recreated = task;
         already_recreated.server_task_recreate_count = 1;
         assert!(!should_automatically_recreate_server_task(
             Some(&already_recreated),
-            &server_error(400, "Task cannot be claimed"),
+            &server_error(46_000, "Task cannot be claimed"),
         ));
     }
 

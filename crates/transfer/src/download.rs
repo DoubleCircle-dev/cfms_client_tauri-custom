@@ -131,6 +131,8 @@ struct ServerErrorData {
     scope: Option<String>,
     limit: Option<u64>,
     retry_after_seconds: Option<u64>,
+    task_status: Option<String>,
+    retryable: Option<bool>,
 }
 
 /// Receive an encrypted file, optionally resuming from a byte offset.
@@ -512,6 +514,8 @@ fn parse_metadata_response(raw: &[u8]) -> Result<FileMetadataResponse> {
             scope: response.data.scope,
             limit: response.data.limit,
             retry_after_seconds: response.data.retry_after_seconds,
+            task_status: response.data.task_status,
+            retryable: response.data.retryable,
         });
     }
 
@@ -635,6 +639,8 @@ fn parse_transfer_completion(raw: &[u8]) -> Result<()> {
             scope: response.data.scope,
             limit: response.data.limit,
             retry_after_seconds: response.data.retry_after_seconds,
+            task_status: response.data.task_status,
+            retryable: response.data.retryable,
         });
     }
 
@@ -671,14 +677,19 @@ mod tests {
     }
 
     #[test]
-    fn metadata_parser_preserves_server_rejection() {
-        let raw = br#"{"code":400,"data":{},"message":"Task is not in a valid state for download","timestamp":1781931222.0}"#;
+    fn metadata_parser_preserves_protocol_twenty_five_claim_rejection() {
+        let raw = br#"{"code":46001,"data":{"task_status":"in_progress","retryable":true},"message":"Task is already in progress","timestamp":1781931222.0}"#;
         let err = parse_metadata_response(raw).unwrap_err();
 
         assert!(matches!(
             err,
-            cfms_core::Error::Server { code: 400, ref message, .. }
-                if message == "Task is not in a valid state for download"
+            cfms_core::Error::Server {
+                code: 46_001,
+                ref message,
+                task_status: Some(ref task_status),
+                retryable: Some(true),
+                ..
+            } if message == "Task is already in progress" && task_status == "in_progress"
         ));
     }
 
@@ -733,8 +744,16 @@ mod tests {
 
     #[test]
     fn completion_parser_preserves_server_rejection() {
-        let raw = br#"{"code":410,"message":"Task ended","data":{"task_status":"expired"}}"#;
+        let raw = br#"{"code":46004,"message":"Task is expired","data":{"task_status":"expired","retryable":false}}"#;
         let error = parse_transfer_completion(raw).unwrap_err();
-        assert!(matches!(error, cfms_core::Error::Server { code: 410, .. }));
+        assert!(matches!(
+            error,
+            cfms_core::Error::Server {
+                code: 46_004,
+                task_status: Some(ref task_status),
+                retryable: Some(false),
+                ..
+            } if task_status == "expired"
+        ));
     }
 }
