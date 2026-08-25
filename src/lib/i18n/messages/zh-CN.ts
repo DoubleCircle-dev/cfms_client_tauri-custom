@@ -698,13 +698,16 @@ export const zh_CN = {
     passwordTip: '输入当前密码并选择新密码。',
   },
   about: {
-    title: '关于 CFMS Client',
     productName: '机密文件管理系统',
     version: '版本',
     protocol: '协议版本',
     copyright: '版权',
     license: '许可证',
+    legalInformation: '法律信息',
     softwareUpdate: '软件更新',
+    runtimeSummary: '当前客户端运行摘要',
+    updateStatus: '更新状态',
+    updateNotChecked: '尚未检查',
     checkingUpdates: '正在检查更新...',
   },
   diagnostics: {

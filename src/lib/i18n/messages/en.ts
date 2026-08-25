@@ -704,13 +704,16 @@ export const en = {
     passwordTip: 'Enter your current password and choose a new one.',
   },
   about: {
-    title: 'About CFMS Client',
     productName: 'Confidential File Management System',
     version: 'Version',
     protocol: 'Protocol Version',
     copyright: 'Copyright',
     license: 'License',
+    legalInformation: 'Legal information',
     softwareUpdate: 'Software Update',
+    runtimeSummary: 'Current client runtime summary',
+    updateStatus: 'Update status',
+    updateNotChecked: 'Not checked yet',
     checkingUpdates: 'Checking for updates...',
   },
   diagnostics: {
