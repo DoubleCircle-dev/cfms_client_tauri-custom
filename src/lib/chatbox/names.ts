@@ -39,7 +39,6 @@ export const DEFAULT_USER_NAMES: Record<string, string> = {
   'e17e013': '聊天系统开发者',
   '1a9c660': '研究者B',
   '0816205': '观测组成员',
-  '20c59a1': '不关心',
   '39cb792': '知情人',
   '9f1b371': '提问者',
   '055720a': '系统广播',

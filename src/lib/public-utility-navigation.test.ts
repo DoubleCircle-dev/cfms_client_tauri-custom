@@ -6,6 +6,7 @@ describe('public utility connection recovery', () => {
     '/home/settings',
     '/home/settings/connection',
     '/home/about',
+    '/home/tools',
   ])('offers a connection return from %s while signed out and disconnected', (pathname) => {
     expect(shouldOfferConnectionReturn(pathname, false, false)).toBe(true);
   });
