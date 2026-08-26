@@ -4,7 +4,6 @@
     canDeleteDownloadTaskGroupFiles, canRemoveDownloadTaskGroupRecords,
     type DownloadTaskGroup,
   } from '$lib/download-task-groups';
-  import { flyScale } from '$lib/motion/transitions';
   import { formatByteRate } from '$lib/transfer-speed';
   import Icon from './Icon.svelte';
   import ProgressRing from './ProgressRing.svelte';
@@ -65,13 +64,13 @@
   const primaryAction = $derived(
     canRetry ? 'retry' : canResume ? 'resume' : canPause ? 'pause' : null,
   );
-  const hasSecondaryActions = $derived(
+  const hasActions = $derived(
     canCancel
     || canDeleteFiles
     || canRemoveRecords
-    || (canPause && primaryAction !== 'pause')
-    || (canResume && primaryAction !== 'resume')
-    || (canRetry && primaryAction !== 'retry'),
+    || canPause
+    || canResume
+    || canRetry,
   );
   const isCancelled = $derived(
     !group.preparing
@@ -163,8 +162,8 @@
         {/if}
       </span>
     </span>
-    <span class="batch-state" class:batch-state-warning={isRateLimited} title={statusText} aria-live="polite">
-      {#if isRateLimited}<Icon name="warningAmber" size="15px" />{/if}
+    <span class="batch-state" class:batch-state-warning={isRateLimited} aria-live="polite">
+      {#if isRateLimited}<span class="batch-state-icon" aria-hidden="true"><Icon name="warningAmber" size="15px" /></span>{/if}
       <span class="batch-state-copy">
         {statusText || (group.total > 0 && group.completed === group.total
           ? $t('tasks.completed')
@@ -190,12 +189,37 @@
     </span>
     <span class="batch-row-actions">
       {#if primaryAction === 'retry'}
-        <button class="batch-primary-action batch-action-primary" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.retryAction')} onclick={() => runAction(onRetry)}><Icon name="restartAlt" size="16px" /><span>{$t('tasks.retryAction')}</span></button>
+        <button class="batch-primary-action batch-action-primary" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.retryAction')} aria-label={$t('tasks.retryAction')} onclick={() => runAction(onRetry)}><Icon name="restartAlt" size="16px" /><span class="batch-action-label">{$t('tasks.retryAction')}</span></button>
       {:else if primaryAction === 'resume'}
-        <button class="batch-primary-action batch-action-primary" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.resume')} onclick={() => runAction(onResume)}><Icon name="resume" size="16px" /><span>{$t('tasks.resume')}</span></button>
+        <button class="batch-primary-action batch-action-primary" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.resume')} aria-label={$t('tasks.resume')} onclick={() => runAction(onResume)}><Icon name="resume" size="16px" /><span class="batch-action-label">{$t('tasks.resume')}</span></button>
       {:else if primaryAction === 'pause'}
-        <button class="batch-primary-action batch-action-warning" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.pause')} onclick={() => runAction(onPause)}><Icon name="pause" size="16px" /><span>{$t('tasks.pause')}</span></button>
+        <button class="batch-primary-action batch-action-warning" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.pause')} aria-label={$t('tasks.pause')} onclick={() => runAction(onPause)}><Icon name="pause" size="16px" /><span class="batch-action-label">{$t('tasks.pause')}</span></button>
       {/if}
+      {#if canPause && primaryAction !== 'pause'}
+        <button type="button" class="batch-action batch-action-warning" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.pause')} aria-label={$t('tasks.pause')} onclick={() => runAction(onPause)}><Icon name="pause" size="16px" /><span class="batch-action-label">{$t('tasks.pause')}</span></button>
+      {/if}
+      {#if canResume && primaryAction !== 'resume'}
+        <button type="button" class="batch-action batch-action-primary" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.resume')} aria-label={$t('tasks.resume')} onclick={() => runAction(onResume)}><Icon name="resume" size="16px" /><span class="batch-action-label">{$t('tasks.resume')}</span></button>
+      {/if}
+      {#if canRetry && primaryAction !== 'retry'}
+        <button type="button" class="batch-action batch-action-primary" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.retryAction')} aria-label={$t('tasks.retryAction')} onclick={() => runAction(onRetry)}><Icon name="restartAlt" size="16px" /><span class="batch-action-label">{$t('tasks.retryAction')}</span></button>
+      {/if}
+      {#if canCancel}
+        <button type="button" class="batch-action batch-action-danger" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.cancel')} aria-label={$t('tasks.cancel')} onclick={() => runAction(onCancel)}><Icon name="cancel" size="16px" /><span class="batch-action-label">{$t('tasks.cancel')}</span></button>
+      {/if}
+      {#if canDeleteFiles}
+        <button type="button" class="batch-action batch-action-danger" disabled={Boolean(pendingAction) || isDeleting} title={isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')} aria-label={isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')} onclick={() => runAction(onDeleteFiles)}>
+          {#if isDeleting}<ProgressRing class="batch-delete-ring" size={16} strokeWidth={2.4} label={$t('tasks.batchDeleting')} />{:else}<Icon name="delete" size="16px" />{/if}
+          <span class="batch-action-label">{isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')}</span>
+        </button>
+      {/if}
+      {#if canRemoveRecords}
+        <button type="button" class="batch-action" disabled={Boolean(pendingAction)} title={isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')} aria-label={isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')} onclick={() => runAction(onRemoveRecords)}>
+          {#if isRemoving}<ProgressRing size={16} strokeWidth={2.4} label={$t('tasks.batchRemoving')} />{:else}<Icon name="playlistRemove" size="16px" />{/if}
+          <span class="batch-action-label">{isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')}</span>
+        </button>
+      {/if}
+      {#if hasActions}<span class="batch-action-divider" aria-hidden="true"></span>{/if}
       <button
         type="button"
         class="batch-expand"
@@ -209,39 +233,12 @@
       </button>
     </span>
   </div>
-
-  {#if expanded && hasSecondaryActions}
-    <div class="batch-secondary-actions" in:flyScale={{ y: -4, duration: 160 }}>
-      {#if canPause && primaryAction !== 'pause'}
-        <button type="button" class="batch-action batch-action-warning" disabled={Boolean(pendingAction) || isDeleting} onclick={() => runAction(onPause)}><Icon name="pause" size="14px" />{$t('tasks.pause')}</button>
-      {/if}
-      {#if canResume && primaryAction !== 'resume'}
-        <button type="button" class="batch-action batch-action-primary" disabled={Boolean(pendingAction) || isDeleting} onclick={() => runAction(onResume)}><Icon name="resume" size="14px" />{$t('tasks.resume')}</button>
-      {/if}
-      {#if canRetry && primaryAction !== 'retry'}
-        <button type="button" class="batch-action batch-action-primary" disabled={Boolean(pendingAction) || isDeleting} onclick={() => runAction(onRetry)}><Icon name="restartAlt" size="14px" />{$t('tasks.retryAction')}</button>
-      {/if}
-      {#if canCancel}
-        <button type="button" class="batch-action batch-action-danger" disabled={Boolean(pendingAction) || isDeleting} onclick={() => runAction(onCancel)}><Icon name="cancel" size="14px" />{$t('tasks.cancel')}</button>
-      {/if}
-      {#if canDeleteFiles}
-        <button type="button" class="batch-action batch-action-danger" disabled={Boolean(pendingAction) || isDeleting} onclick={() => runAction(onDeleteFiles)}>
-          {#if isDeleting}<ProgressRing class="batch-delete-ring" size={14} strokeWidth={2.4} label={$t('tasks.batchDeleting')} />{:else}<Icon name="delete" size="14px" />{/if}
-          {isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')}
-        </button>
-      {/if}
-      {#if canRemoveRecords}
-        <button type="button" class="batch-action" disabled={Boolean(pendingAction)} onclick={() => runAction(onRemoveRecords)}>
-          {#if isRemoving}<ProgressRing size={14} strokeWidth={2.4} label={$t('tasks.batchRemoving')} />{:else}<Icon name="playlistRemove" size="14px" />{/if}
-          {isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')}
-        </button>
-      {/if}
-    </div>
-  {/if}
 </div>
 
 <style>
   .batch-card {
+    container-name: download-batch;
+    container-type: inline-size;
     min-width: 0;
     overflow: hidden;
     border-bottom: 1px solid var(--explorer-border);
@@ -261,24 +258,24 @@
     display: grid;
     width: 100%;
     min-width: 0;
-    min-height: 64px;
-    grid-template-columns: 28px minmax(160px, 1.5fr) minmax(112px, 0.7fr) minmax(180px, 1.2fr) auto;
+    min-height: 72px;
+    grid-template:
+      'folder copy progress actions' auto
+      'folder state progress actions' auto /
+      28px minmax(180px, 1fr) minmax(180px, 0.72fr) auto;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.35rem 0.75rem;
     padding: 0.55rem 0.7rem;
     font-family: var(--font-md3-sans);
   }
 
   .batch-folder {
     display: grid;
+    grid-area: folder;
+    width: 28px;
+    height: 28px;
     align-items: center;
     justify-content: center;
-    color: var(--explorer-folder);
-  }
-
-  .batch-folder {
-    height: 28px;
-    width: 28px;
     color: var(--explorer-folder);
     transition:
       background-color 180ms var(--motion-easing-standard),
@@ -291,6 +288,7 @@
 
   .batch-copy {
     display: grid;
+    grid-area: copy;
     min-width: 0;
     gap: 0.2rem;
   }
@@ -316,28 +314,34 @@
 
   .batch-state {
     display: flex;
+    grid-area: state;
     min-width: 0;
-    overflow: hidden;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.35rem;
     color: var(--explorer-text-muted);
     font-size: 0.75rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .batch-state-warning {
     color: var(--explorer-warning);
   }
 
+  .batch-state-icon {
+    display: inline-flex;
+    flex: none;
+    margin-top: 0.08rem;
+  }
+
   .batch-state-copy {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .batch-progress-cell {
     display: grid;
+    grid-area: progress;
     min-width: 0;
     gap: 0.35rem;
   }
@@ -370,11 +374,12 @@
     animation: batch-progress-sweep 1.3s var(--motion-easing-emphasized-decelerate) infinite;
   }
 
-  .batch-row-actions,
-  .batch-secondary-actions {
+  .batch-row-actions {
     display: flex;
+    grid-area: actions;
     min-width: 0;
     align-items: center;
+    justify-content: flex-end;
     gap: 0.3rem;
   }
 
@@ -395,31 +400,32 @@
     white-space: nowrap;
   }
 
-  .batch-secondary-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    border-top: 1px solid color-mix(in srgb, var(--explorer-border) 65%, transparent);
-    padding: 0.4rem 0.7rem 0.45rem 3rem;
-  }
-
   .batch-primary-action,
   .batch-action {
     display: inline-flex;
+    flex: none;
     align-items: center;
+    justify-content: center;
     gap: 0.25rem;
-    min-height: 30px;
+    min-height: 34px;
     border-radius: 5px;
     padding: 0.25rem 0.55rem;
     font-size: 0.75rem;
     font-weight: 600;
+    white-space: nowrap;
     transition:
+      background-color 120ms var(--motion-easing-standard),
       filter 160ms var(--motion-easing-standard),
       opacity 160ms var(--motion-easing-standard),
       transform 120ms var(--motion-easing-standard);
   }
 
-  .batch-primary-action {
-    min-height: 34px;
+  .batch-action-divider {
+    width: 1px;
+    height: 20px;
+    flex: none;
+    margin: 0 0.15rem;
+    background: var(--explorer-border);
   }
 
   .batch-expand {
@@ -442,7 +448,15 @@
 
   .batch-primary-action:hover:not(:disabled),
   .batch-action:hover:not(:disabled) {
+    background: var(--explorer-surface-selected);
     filter: brightness(1.08);
+  }
+
+  .batch-primary-action:focus-visible,
+  .batch-action:focus-visible,
+  .batch-expand:focus-visible {
+    outline: 2px solid var(--explorer-accent);
+    outline-offset: -2px;
   }
 
   .batch-primary-action:active:not(:disabled),
@@ -480,21 +494,48 @@
     }
   }
 
-  @media (max-width: 760px) {
+  @container download-batch (max-width: 64rem) {
+    .batch-primary-action,
+    .batch-action {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+    }
+
+    .batch-action-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  @container download-batch (max-width: 46rem) {
     .batch-summary {
-      grid-template-columns: 28px minmax(0, 1fr) auto;
-      gap: 0.55rem;
+      grid-template:
+        'folder copy copy' auto
+        '. state state' auto
+        '. progress progress' auto
+        '. actions actions' auto /
+        28px minmax(0, 1fr) auto;
+      gap: 0.5rem 0.55rem;
       padding: 0.65rem;
     }
 
-    .batch-state { grid-column: 2; }
-    .batch-progress-cell { grid-column: 2 / -1; }
-    .batch-row-actions { grid-column: 3; grid-row: 1 / span 2; }
-    .batch-primary-action span { display: none; }
+    .batch-row-actions {
+      flex-wrap: wrap;
+    }
   }
 
   @media (pointer: coarse) {
-    .batch-primary-action, .batch-action { min-height: 44px; }
+    .batch-primary-action,
+    .batch-action {
+      min-width: 44px;
+      min-height: 44px;
+    }
     .batch-expand { width: 44px; height: 44px; }
   }
 

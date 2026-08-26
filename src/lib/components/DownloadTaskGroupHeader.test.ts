@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { DownloadTaskDto } from '$lib/api';
 import type { DownloadTaskGroup } from '$lib/download-task-groups';
 import DownloadTaskGroupHeader from './DownloadTaskGroupHeader.svelte';
 
@@ -26,6 +27,33 @@ vi.mock('$lib/motion/transitions', () => ({
 afterEach(() => cleanup());
 
 const noop = async () => undefined;
+
+function task(overrides: Partial<DownloadTaskDto> = {}): DownloadTaskDto {
+  return {
+    task_id: 'task-1',
+    file_id: 'file-1',
+    filename: 'evidence.pdf',
+    file_path: '/evidence.pdf',
+    status: 'downloading',
+    progress: 0.5,
+    current_bytes: 50,
+    total_bytes: 100,
+    message: null,
+    error: null,
+    created_at: 1,
+    started_at: 1,
+    completed_at: null,
+    priority: 0,
+    retry_count: 0,
+    max_retries: 3,
+    scheduled_time: null,
+    stage: 0,
+    bandwidth_limit: null,
+    pause_position: null,
+    supports_resume: true,
+    ...overrides,
+  };
+}
 
 function group(overrides: Partial<DownloadTaskGroup> = {}): DownloadTaskGroup {
   return {
@@ -59,17 +87,27 @@ function group(overrides: Partial<DownloadTaskGroup> = {}): DownloadTaskGroup {
   };
 }
 
-function renderHeader(value: DownloadTaskGroup) {
+function renderHeader(
+  value: DownloadTaskGroup,
+  options: {
+    expanded?: boolean;
+    pendingAction?: 'pause' | 'resume' | 'retry' | 'cancel' | 'delete' | 'remove' | null;
+    onToggle?: (groupId: string) => void;
+    onPause?: (groupId: string) => Promise<void>;
+    onCancel?: (groupId: string) => Promise<void>;
+  } = {},
+) {
   return render(DownloadTaskGroupHeader, {
     group: value,
-    expanded: false,
-    onToggle: vi.fn(),
-    onPause: noop,
+    expanded: options.expanded ?? false,
+    onToggle: options.onToggle ?? vi.fn(),
+    onPause: options.onPause ?? noop,
     onResume: noop,
     onRetry: noop,
-    onCancel: noop,
+    onCancel: options.onCancel ?? noop,
     onDeleteFiles: noop,
     onRemoveRecords: noop,
+    pendingAction: options.pendingAction ?? null,
   });
 }
 
@@ -95,5 +133,69 @@ describe('DownloadTaskGroupHeader rate-limit feedback', () => {
 
     expect(screen.getByText('tasks.batchRateLimitedCount:19')).toBeTruthy();
     expect(screen.queryByText('tasks.batchProgressPending')).toBeNull();
+  });
+
+  it('keeps every material state in the rendered summary', () => {
+    const { container } = renderHeader(group({
+      pending: 4,
+      scheduled: 2,
+      rateLimited: 1,
+      running: 3,
+      paused: 2,
+      failed: 1,
+      cancelled: 1,
+    }));
+
+    const state = container.querySelector('.batch-state');
+    expect(state?.textContent).toContain('tasks.batchRateLimitedCount:1');
+    expect(state?.textContent).toContain('tasks.batchRetryWaitingCount:1');
+    expect(state?.textContent).toContain('tasks.batchPendingCount:2');
+    expect(state?.textContent).toContain('tasks.batchActiveCount:3');
+    expect(state?.textContent).toContain('tasks.batchPausedCount:2');
+    expect(state?.textContent).toContain('tasks.batchFailedCount:1');
+    expect(state?.textContent).toContain('tasks.batchCancelledCount:1');
+    expect(state?.hasAttribute('title')).toBe(false);
+  });
+});
+
+describe('DownloadTaskGroupHeader actions', () => {
+  it('shows primary and destructive actions while the group is collapsed', async () => {
+    const onPause = vi.fn(noop);
+    const onCancel = vi.fn(noop);
+    renderHeader(group({
+      tasks: [task()],
+      running: 1,
+    }), { onPause, onCancel });
+
+    const pause = screen.getByRole('button', { name: 'tasks.pause' });
+    const cancel = screen.getByRole('button', { name: 'tasks.cancel' });
+    expect((pause as HTMLButtonElement).disabled).toBe(false);
+    expect((cancel as HTMLButtonElement).disabled).toBe(false);
+
+    await fireEvent.click(pause);
+    await fireEvent.click(cancel);
+    expect(onPause).toHaveBeenCalledWith('batch-1');
+    expect(onCancel).toHaveBeenCalledWith('batch-1');
+  });
+
+  it('disables every action and disclosure while an action is pending', () => {
+    renderHeader(group({
+      tasks: [task()],
+      running: 1,
+    }), { pendingAction: 'pause' });
+
+    expect((screen.getByRole('button', { name: 'tasks.pause' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'tasks.cancel' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'tasks.expandBatch' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps disclosure semantics and toggles only the child task list', async () => {
+    const onToggle = vi.fn();
+    renderHeader(group(), { expanded: true, onToggle });
+
+    const disclosure = screen.getByRole('button', { name: 'tasks.collapseBatch' });
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    await fireEvent.click(disclosure);
+    expect(onToggle).toHaveBeenCalledWith('batch-1');
   });
 });
