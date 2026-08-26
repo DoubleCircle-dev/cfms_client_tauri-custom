@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use cfms_core::constants::KEY_LEN;
-use cfms_core::{DownloadTaskDto, DownloadTaskStatus, Result};
+use cfms_core::{DownloadFailureKind, DownloadTaskDto, DownloadTaskStatus, Result};
 use serde::{Deserialize, Serialize};
 
 /// Shape of the JSON written to disk.
@@ -40,6 +40,8 @@ struct TaskJson {
     total_bytes: u64,
     message: Option<String>,
     error: Option<String>,
+    #[serde(default)]
+    failure_kind: Option<DownloadFailureKind>,
     created_at: i64,
     started_at: Option<i64>,
     completed_at: Option<i64>,
@@ -51,6 +53,8 @@ struct TaskJson {
     bandwidth_limit: Option<i64>,
     pause_position: Option<u64>,
     supports_resume: bool,
+    #[serde(default)]
+    server_task_recreate_count: u32,
     #[serde(default)]
     batch_id: Option<String>,
     #[serde(default)]
@@ -142,12 +146,13 @@ pub fn load(
         )));
     }
 
-    let plaintext = cfms_crypto::decrypt_config(&raw, dek).map_err(|e| {
-        cfms_core::Error::Other(format!(
-            "Failed to decrypt task file {}: {e}",
-            path.display()
-        ))
-    })?;
+    let plaintext =
+        zeroize::Zeroizing::new(cfms_crypto::decrypt_config(&raw, dek).map_err(|e| {
+            cfms_core::Error::Other(format!(
+                "Failed to decrypt task file {}: {e}",
+                path.display()
+            ))
+        })?);
 
     let tasks_data: TasksJson = serde_json::from_slice(&plaintext).map_err(|e| {
         cfms_core::Error::Other(format!("Invalid task data in {}: {e}", path.display()))
@@ -178,6 +183,7 @@ pub fn load(
                 total_bytes: tj.total_bytes,
                 message: tj.message,
                 error: tj.error,
+                failure_kind: tj.failure_kind,
                 created_at: tj.created_at,
                 started_at: if status == DownloadTaskStatus::Pending {
                     None
@@ -193,6 +199,7 @@ pub fn load(
                 bandwidth_limit: tj.bandwidth_limit,
                 pause_position: tj.pause_position,
                 supports_resume: tj.supports_resume,
+                server_task_recreate_count: tj.server_task_recreate_count,
                 batch_id: tj.batch_id,
                 batch_name: tj.batch_name,
                 batch_root_id: tj.batch_root_id,
@@ -245,6 +252,7 @@ pub fn save(
                     total_bytes: t.total_bytes,
                     message: t.message.clone(),
                     error: t.error.clone(),
+                    failure_kind: t.failure_kind,
                     created_at: t.created_at,
                     started_at: t.started_at,
                     completed_at: t.completed_at,
@@ -256,6 +264,7 @@ pub fn save(
                     bandwidth_limit: t.bandwidth_limit,
                     pause_position: t.pause_position,
                     supports_resume: t.supports_resume,
+                    server_task_recreate_count: t.server_task_recreate_count,
                     batch_id: t.batch_id.clone(),
                     batch_name: t.batch_name.clone(),
                     batch_root_id: t.batch_root_id.clone(),
@@ -266,8 +275,10 @@ pub fn save(
         })
         .collect();
 
-    let plaintext = serde_json::to_vec(&tasks_json)
-        .map_err(|e| cfms_core::Error::Other(format!("Failed to serialize tasks: {e}")))?;
+    let plaintext = zeroize::Zeroizing::new(
+        serde_json::to_vec(&tasks_json)
+            .map_err(|e| cfms_core::Error::Other(format!("Failed to serialize tasks: {e}")))?,
+    );
 
     let encrypted = cfms_crypto::encrypt_config(&plaintext, dek)
         .map_err(|e| cfms_core::Error::Other(format!("Failed to encrypt tasks: {e}")))?;

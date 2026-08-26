@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
@@ -19,6 +20,10 @@
   let nickname = $state('');
   let password = $state('');
   let passwordVisible = $state(false);
+
+  onDestroy(() => {
+    password = '';
+  });
   let busy = $state(false);
   let error = $state<string | null>(null);
   let usernameInput = $state<HTMLInputElement | null>(null);

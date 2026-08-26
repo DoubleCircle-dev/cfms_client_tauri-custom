@@ -105,6 +105,9 @@ CFMS is intended for confidential information. Authorized files are decrypted lo
 - Do not disable TLS certificate validation unless you fully understand the risk and are performing controlled troubleshooting.
 - Enable app lock and a system screen lock, install client updates promptly, and follow your organization's rules for handling and distributing confidential data.
 - Never commit private keys, signing certificates, credentials, or build artifacts containing sensitive files.
+- App lock is a privacy barrier for the UI, not a native authorization boundary: existing transfers and service state remain active while the UI is locked.
+- The native client minimizes and zeroizes application-owned password, token, DEK, and serialized request buffers. WebView/JavaScript, operating-system, networking-library, register, and historical allocation copies cannot be reliably erased.
+- Release builds disable frontend source maps and verbose WebView/stdout logging; Linux release builds also disable ordinary same-user process dumps. None of these controls claims to resist an administrator, root, kernel compromise, jailbroken device, or physical forensics.
 
 The complete disclaimer is shown when the application is first used.
 

@@ -100,6 +100,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
+      - name: Validate release security mitigations
+        run: >-
+          python scripts/validate-release-security.py
+          --frontend-dist build
+          --windows-binary target/release/cfms-client-tauri.exe
+
       - name: EV Code Sign
         shell: pwsh
         env:
@@ -277,6 +283,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
+      - name: Validate release frontend security
+        run: python scripts/validate-release-security.py --frontend-dist build
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -359,6 +368,12 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_SplitApks: "true"
         run: pnpm tauri android build --ci --apk --aab --target aarch64 --target x86_64
+
+      - name: Validate release frontend security
+        run: >-
+          python scripts/validate-release-security.py
+          --frontend-dist build
+          --android-manifest src-tauri/gen/android/app/src/main/AndroidManifest.xml
 
       - name: Test Android release validator
         run: python -B -m unittest discover -s scripts/tests -p "test_*.py"

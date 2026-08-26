@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { DownloadTaskDto } from './api';
 import type { DownloadBatchSnapshot } from './download-batch-control';
 import {
-  buildDownloadTaskSections, canDeleteDownloadTaskGroupFiles, downloadTaskGroupSection,
+  buildDownloadTaskSections, canDeleteDownloadTaskGroupFiles,
+  canRemoveDownloadTaskGroupRecords, downloadTaskGroupSection,
 } from './download-task-groups';
 
 function task(
@@ -153,6 +154,32 @@ describe('download task groups', () => {
     expect(deletedOnlyRow.kind).toBe('group');
     if (deletedOnlyRow.kind === 'group') {
       expect(canDeleteDownloadTaskGroupFiles(deletedOnlyRow.group)).toBe(false);
+    }
+  });
+
+  it('allows terminal mixed-result batches to delete successful files or remove records', () => {
+    const row = buildDownloadTaskSections([
+      task('available', 'completed'),
+      task('failed', 'failed'),
+    ], new Set())[0].rows[0];
+
+    expect(row.kind).toBe('group');
+    if (row.kind === 'group') {
+      expect(canDeleteDownloadTaskGroupFiles(row.group)).toBe(true);
+      expect(canRemoveDownloadTaskGroupRecords(row.group)).toBe(true);
+    }
+  });
+
+  it('does not expose terminal batch cleanup while work is still pending', () => {
+    const row = buildDownloadTaskSections([
+      task('available', 'completed'),
+      task('pending', 'pending'),
+    ], new Set())[0].rows[0];
+
+    expect(row.kind).toBe('group');
+    if (row.kind === 'group') {
+      expect(canDeleteDownloadTaskGroupFiles(row.group)).toBe(false);
+      expect(canRemoveDownloadTaskGroupRecords(row.group)).toBe(false);
     }
   });
 });

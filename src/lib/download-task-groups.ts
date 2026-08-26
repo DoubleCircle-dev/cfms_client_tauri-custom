@@ -183,10 +183,13 @@ export function canDeleteDownloadTaskGroupFiles(group: DownloadTaskGroup) {
   return group.tasks.length > 0
     && !group.preparing
     && group.tasks.some((task) => task.status === 'completed')
-    && group.tasks.every((task) => TERMINAL_DOWNLOAD_STATUSES.has(task.status))
-    // A naturally failed batch remains retry-only. Once cancellation has been
-    // recorded, failed siblings must not hide the action that clears the batch.
-    && (group.failed === 0 || group.cancelled > 0);
+    && group.tasks.every((task) => TERMINAL_DOWNLOAD_STATUSES.has(task.status));
+}
+
+export function canRemoveDownloadTaskGroupRecords(group: DownloadTaskGroup) {
+  return group.tasks.length > 0
+    && !group.preparing
+    && group.tasks.every((task) => TERMINAL_DOWNLOAD_STATUSES.has(task.status));
 }
 
 function buildDownloadTaskGroup(

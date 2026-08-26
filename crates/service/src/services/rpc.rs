@@ -13,22 +13,17 @@ pub async fn send_action_request(
     let random_bytes: [u8; 16] = rand::rng().random();
     let nonce = hex::encode(random_bytes);
 
-    let request = serde_json::json!({
-        "action": action,
-        "data": data,
-        "username": username,
-        "token": token,
-        "timestamp": unix_now(),
-        "nonce": nonce,
-    });
-
-    let request_bytes = serde_json::to_vec(&request).map_err(|error| {
-        cfms_core::Error::Other(format!("Failed to encode {action} request: {error}"))
-    })?;
+    let request_bytes =
+        crate::sensitive::encode_action_request(action, data, username, token, unix_now(), &nonce)
+            .map_err(|error| {
+                cfms_core::Error::Other(format!("Failed to encode {action} request: {error}"))
+            })?;
 
     let mut stream = conn.create_stream().await?;
 
-    stream.send(conn, request_bytes).await?;
+    stream
+        .send_sensitive(conn, request_bytes.into_zeroizing())
+        .await?;
 
     let response_bytes = match stream.recv().await {
         Some(response) => response,
@@ -48,6 +43,7 @@ pub async fn send_action_request(
         }
     };
 
+    let response_bytes = zeroize::Zeroizing::new(response_bytes);
     serde_json::from_slice::<cfms_core::Response>(&response_bytes)
         .map_err(|error| cfms_core::Error::Protocol(format!("Invalid {action} response: {error}")))
 }

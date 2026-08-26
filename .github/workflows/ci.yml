@@ -83,3 +83,9 @@ jobs:
 
       - name: Production build
         run: pnpm build
+
+      - name: Validate release security configuration
+        run: >-
+          python scripts/validate-release-security.py
+          --frontend-dist build
+          --android-manifest src-tauri/gen/android/app/src/main/AndroidManifest.xml

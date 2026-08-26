@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getVersion } from '@tauri-apps/api/app';
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -15,12 +14,21 @@
   import ProgressRing from '$lib/components/ProgressRing.svelte';
 
   interface Props {
+    currentVersion: string | null;
+    currentVersionLoaded: boolean;
+    protocolVersion: number | null;
+    protocolVersionLoaded: boolean;
     onOpenFeatureTour?: () => void | Promise<void>;
   }
 
-  let { onOpenFeatureTour }: Props = $props();
+  let {
+    currentVersion,
+    currentVersionLoaded,
+    protocolVersion,
+    protocolVersionLoaded,
+    onOpenFeatureTour,
+  }: Props = $props();
 
-  let appVersion = $state('');
   let loading = $state(true);
   let status = $state<string | null>(null);
   let error = $state<string | null>(null);
@@ -80,11 +88,7 @@
 
   onMount(async () => {
     try {
-      const [, version] = await Promise.all([
-        appUpdateState.ensureChannel(),
-        getVersion().catch(() => $t('common.unknown')),
-      ]);
-      appVersion = version;
+      await appUpdateState.ensureChannel();
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -142,37 +146,76 @@
   }
 </script>
 
-<section class="update-checker">
+<section class="update-checker" aria-labelledby="update-heading">
   <div class="update-header">
-    <div>
-      <h2>{$t('about.softwareUpdate')}</h2>
-      <p>
-        {$t('settings.updates.currentVersion')}: {appVersion || '...'} ·
-        {$t('settings.updates.channel')}: {channelLabel}
-      </p>
-    </div>
+    <h2 id="update-heading">{$t('about.softwareUpdate')}</h2>
 
-    {#if appUpdateState.checking}
-      <span class="inline-status text-md3-primary-emphasis">
-        <ProgressRing size={16} strokeWidth={2.4} label={$t('about.checkingUpdates')} />
-        {$t('about.checkingUpdates')}
-      </span>
-    {:else if appUpdateState.installed}
-      <span class="inline-status text-md3-success">
-        <Icon name="checkCircle" size="18px" />
-        {$t('settings.updates.installed')}
-      </span>
-    {:else if appUpdateState.update}
-      <span class="inline-status text-md3-warning">
-        <Icon name="update" size="18px" />
-        {$t('settings.updates.available')}
-      </span>
-    {:else if appUpdateState.checked}
-      <span class="inline-status text-md3-success">
-        <Icon name="checkCircle" size="18px" />
-        {$t('settings.updates.latest')}
-      </span>
-    {/if}
+    <dl class="runtime-summary" aria-label={$t('about.runtimeSummary')}>
+      <div>
+        <dt>{$t('settings.updates.currentVersion')}</dt>
+        <dd class="technical-value" aria-busy={!currentVersionLoaded}>
+          {#if currentVersionLoaded}
+            {currentVersion ?? $t('common.unknown')}
+          {:else}
+            <span class="loading-value" aria-hidden="true"></span>
+            <span class="visually-hidden">{$t('common.loading')}</span>
+          {/if}
+        </dd>
+      </div>
+
+      <div>
+        <dt>{$t('about.protocol')}</dt>
+        <dd class="technical-value" aria-busy={!protocolVersionLoaded}>
+          {#if protocolVersionLoaded}
+            {protocolVersion ?? $t('common.unknown')}
+          {:else}
+            <span class="loading-value loading-value--short" aria-hidden="true"></span>
+            <span class="visually-hidden">{$t('common.loading')}</span>
+          {/if}
+        </dd>
+      </div>
+
+      <div>
+        <dt>{$t('settings.updates.channel')}</dt>
+        <dd aria-busy={loading}>
+          {#if loading}
+            <span class="loading-value loading-value--channel" aria-hidden="true"></span>
+            <span class="visually-hidden">{$t('common.loading')}</span>
+          {:else}
+            {channelLabel}
+          {/if}
+        </dd>
+      </div>
+
+      <div class="runtime-status">
+        <dt>{$t('about.updateStatus')}</dt>
+        <dd class="status-region" aria-live="polite" aria-atomic="true">
+          {#if appUpdateState.checking}
+            <span class="inline-status status-checking">
+              <ProgressRing size={16} strokeWidth={2.4} label={$t('about.checkingUpdates')} />
+              {$t('about.checkingUpdates')}
+            </span>
+          {:else if appUpdateState.installed}
+            <span class="inline-status status-success">
+              <Icon name="checkCircle" size="18px" />
+              {$t('settings.updates.installed')}
+            </span>
+          {:else if appUpdateState.update}
+            <span class="inline-status status-warning">
+              <Icon name="update" size="18px" />
+              {$t('settings.updates.available')}
+            </span>
+          {:else if appUpdateState.checked}
+            <span class="inline-status status-success">
+              <Icon name="checkCircle" size="18px" />
+              {$t('settings.updates.latest')}
+            </span>
+          {:else}
+            <span class="inline-status status-neutral">{$t('about.updateNotChecked')}</span>
+          {/if}
+        </dd>
+      </div>
+    </dl>
   </div>
 
   {#if appUpdateState.update}
@@ -195,10 +238,20 @@
 
   {#if appUpdateState.installing || appUpdateState.progress.phase !== 'idle'}
     <div class="progress-block animate-fade-scale-in">
-      <div class="progress-track" aria-label={progressLabel}>
+      <div
+        class="progress-track"
+        role="progressbar"
+        aria-label={progressLabel}
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow={progressPercent ?? undefined}
+        aria-valuetext={progressLabel}
+      >
         <div
-          class="progress-fill {appUpdateState.progress.progress === null && appUpdateState.progress.phase === 'downloading' ? 'animate-progress-stripe' : ''}"
-          style="width: {appUpdateState.progress.progress === null ? 0 : appUpdateState.progress.progress * 100}%;"
+          class="progress-fill"
+          class:progress-fill--indeterminate={appUpdateState.progress.progress === null && appUpdateState.progress.phase === 'downloading'}
+          class:progress-fill--complete={appUpdateState.progress.phase === 'finished'}
+          style:transform={appUpdateState.progress.progress === null ? undefined : `scaleX(${appUpdateState.progress.progress})`}
         ></div>
       </div>
       <div class="progress-label">
@@ -211,15 +264,6 @@
   {/if}
 
   <div class="actions">
-    <button class="primary-action" onclick={checkForUpdates} disabled={loading || appUpdateState.checking || appUpdateState.installing}>
-      {#if appUpdateState.checking}
-        <ProgressRing size={18} strokeWidth={2.4} label={$t('about.checkingUpdates')} />
-      {:else}
-        <Icon name="update" size="18px" />
-      {/if}
-      {$t('settings.updates.check')}
-    </button>
-
     {#if appUpdateState.update && !appUpdateState.installed}
       <button class="success-action" onclick={installUpdate} disabled={appUpdateState.installing || appUpdateState.checking}>
         {#if appUpdateState.installing}
@@ -237,6 +281,20 @@
         {$t('settings.updates.restartNow')}
       </button>
     {/if}
+
+    <button
+      class:primary-action={!appUpdateState.update && !appUpdateState.installed}
+      class:secondary-action={Boolean(appUpdateState.update || appUpdateState.installed)}
+      onclick={checkForUpdates}
+      disabled={loading || appUpdateState.checking || appUpdateState.installing}
+    >
+      {#if appUpdateState.checking}
+        <ProgressRing size={18} strokeWidth={2.4} label={$t('about.checkingUpdates')} />
+      {:else}
+        <Icon name="update" size="18px" />
+      {/if}
+      {$t('settings.updates.check')}
+    </button>
 
     <button class="text-action" onclick={() => goto('/home/settings/updates')} disabled={appUpdateState.checking || appUpdateState.installing}>
       <Icon name="settings" size="18px" />
@@ -259,16 +317,14 @@
 <style>
   .update-checker {
     display: grid;
-    gap: 1rem;
-    padding-top: 1.25rem;
+    gap: 1.05rem;
+    padding-top: 1.5rem;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
   }
 
   .update-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
+    display: grid;
+    gap: 0.85rem;
   }
 
   h2,
@@ -281,27 +337,104 @@
   }
 
   h2 {
-    font-size: 1rem;
+    font-size: 0.9375rem;
   }
 
   h3 {
-    font-size: 0.95rem;
+    font-size: 0.9375rem;
   }
 
-  p {
-    margin: 0.3rem 0 0;
+  .runtime-summary {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.65rem 1.5rem;
+    margin: 0;
+  }
+
+  .runtime-summary > div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 5.5rem;
+  }
+
+  .runtime-summary dt {
     color: var(--color-md3-on-surface-variant);
+    font-family: var(--font-md3-sans);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .runtime-summary dd {
+    min-height: 1.5rem;
+    margin: 0;
+    color: var(--color-md3-on-surface);
+    font-family: var(--font-md3-sans);
     font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .runtime-summary .technical-value {
+    font-family: var(--font-md3-mono);
+    font-size: 0.8rem;
+  }
+
+  .runtime-status {
+    flex: 1 1 12rem;
   }
 
   .inline-status {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    min-height: 2rem;
+    min-height: 1.5rem;
     font-size: 0.8125rem;
     font-weight: 600;
     white-space: nowrap;
+  }
+
+  .status-region {
+    min-height: 1.5rem;
+  }
+
+  .status-checking {
+    color: var(--color-md3-primary-emphasis);
+  }
+
+  .status-success {
+    color: var(--color-md3-success);
+  }
+
+  .status-warning {
+    color: var(--color-md3-warning);
+  }
+
+  .status-neutral {
+    color: var(--color-md3-on-surface-variant);
+    font-weight: 400;
+  }
+
+  .loading-value {
+    display: block;
+    width: 4.8rem;
+    height: 0.75rem;
+    margin-top: 0.25rem;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--color-md3-on-surface-variant) 20%, transparent);
+    animation: value-pulse 1.4s ease-in-out infinite;
+  }
+
+  .loading-value--short {
+    width: 2.4rem;
+  }
+
+  .loading-value--channel {
+    width: 3.6rem;
+  }
+
+  @keyframes value-pulse {
+    50% { opacity: 0.42; }
   }
 
   .release-block {
@@ -350,15 +483,34 @@
   }
 
   .progress-track {
-    height: 0.3rem;
+    height: 0.35rem;
     overflow: hidden;
+    border-radius: 999px;
     background: color-mix(in srgb, var(--color-md3-outline) 55%, transparent);
   }
 
   .progress-fill {
+    width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, var(--color-md3-primary-emphasis), var(--color-md3-success));
-    transition: width var(--motion-duration-medium2) var(--motion-easing-emphasized-decelerate);
+    border-radius: inherit;
+    background: var(--color-md3-primary-emphasis);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--motion-duration-medium2) var(--motion-easing-emphasized-decelerate);
+  }
+
+  .progress-fill--complete {
+    background: var(--color-md3-success);
+  }
+
+  .progress-fill--indeterminate {
+    width: 34%;
+    animation: progress-travel 1.2s var(--motion-easing-emphasized-decelerate) infinite;
+  }
+
+  @keyframes progress-travel {
+    from { transform: translateX(-110%); }
+    to { transform: translateX(320%); }
   }
 
   .progress-label {
@@ -382,29 +534,54 @@
     justify-content: center;
     gap: 0.45rem;
     min-height: 2.35rem;
-    border-radius: 6px;
+    border-radius: 5px;
     padding: 0 0.85rem;
     font-family: var(--font-md3-sans);
     font-size: 0.875rem;
     font-weight: 700;
     transition:
       background-color var(--motion-duration-short4) var(--motion-easing-standard),
+      border-color var(--motion-duration-short4) var(--motion-easing-standard),
       color var(--motion-duration-short4) var(--motion-easing-standard),
-      opacity var(--motion-duration-short4) var(--motion-easing-standard);
+      opacity var(--motion-duration-short4) var(--motion-easing-standard),
+      transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate);
   }
 
   button:disabled {
+    cursor: not-allowed;
     opacity: 0.55;
   }
 
+  button:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
   .primary-action {
-    background: var(--color-md3-primary-container);
-    color: var(--color-md3-on-primary-container);
+    border: 1px solid transparent;
+    color: var(--explorer-background);
+    background: var(--color-md3-primary-emphasis);
   }
 
   .success-action {
-    background: var(--color-md3-success-container);
-    color: var(--color-md3-on-success-container);
+    border: 1px solid transparent;
+    color: var(--explorer-background);
+    background: var(--color-md3-success);
+  }
+
+  .primary-action:hover:not(:disabled),
+  .success-action:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+
+  .secondary-action {
+    border: 1px solid var(--color-md3-outline);
+    color: var(--color-md3-on-surface);
+    background: transparent;
+  }
+
+  .secondary-action:hover:not(:disabled) {
+    border-color: var(--color-md3-outline-variant);
+    background: color-mix(in srgb, var(--color-md3-on-surface) 7%, transparent);
   }
 
   .text-action {
@@ -420,11 +597,50 @@
     margin-inline-start: auto;
   }
 
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   @media (max-width: 640px) {
-    .update-header,
+    .runtime-summary,
     .release-title {
       flex-direction: column;
       align-items: flex-start;
+    }
+
+    .runtime-summary {
+      gap: 0.75rem;
+    }
+
+    .runtime-summary > div {
+      display: grid;
+      grid-template-columns: minmax(6.5rem, auto) minmax(0, 1fr);
+      align-items: baseline;
+      gap: 0.75rem;
+      width: 100%;
+    }
+
+    .feature-tour-action {
+      margin-inline-start: 0;
+    }
+  }
+
+  @media (pointer: coarse) {
+    button {
+      min-height: 44px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loading-value,
+    .progress-fill--indeterminate {
+      animation: none;
     }
   }
 </style>

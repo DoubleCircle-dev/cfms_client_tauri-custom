@@ -179,60 +179,23 @@ pub async fn get_document(
     batch_created_at: Option<i64>,
     batch_estimated_total: Option<u32>,
 ) -> Result<serde_json::Value, String> {
-    let conn = {
-        let c = state.inner.conn.read().await;
-        c.clone()
-    }
-    .ok_or_else(|| "Not connected to a server".to_string())?;
+    let server_task = download_queue::request_server_download_task(&state.inner, &document_id)
+        .await
+        .map_err(format_download_task_request_error)?;
+    let task_id = server_task.task_id;
+    let supports_resume = server_task.supports_resume;
 
-    let username = {
-        let u = state.inner.username.read().await;
-        u.clone()
-    }
-    .ok_or_else(|| "Not logged in".to_string())?;
-
-    let token = {
-        let t = state.inner.token.read().await;
-        t.clone()
-    }
-    .ok_or_else(|| "Not logged in".to_string())?;
-
-    let resp = send_action_request(
-        &conn,
-        "get_document",
-        serde_json::json!({"document_id": document_id}),
-        &username,
-        &token,
-    )
-    .await?;
-
-    // Handle 403 (Access Denied)
-    if resp.code == 403 {
-        return Err(format!("Access denied: {}", resp.message));
-    }
-
-    // Handle 404 (Not Found)
-    if resp.code == 404 {
-        return Err("Document not found on server".to_string());
-    }
-
-    if resp.code != 200 {
-        return Err(format!("Server returned {}: {}", resp.code, resp.message));
-    }
-
-    // Extract task data from the server response.
-    let task_data = &resp.data["task_data"];
-    let task_id = task_data["task_id"]
-        .as_str()
-        .ok_or_else(|| "Server response missing task_id".to_string())?
-        .to_string();
-    let _start_time = task_data["start_time"].as_f64().unwrap_or(0.0);
-    let _end_time = task_data["end_time"].as_f64().unwrap_or(0.0);
-    let supports_resume = task_data["supports_resume"].as_bool().unwrap_or(false);
-
-    // Build a local download path, respecting the user's external storage
-    // preference when configured.
-    let download_root = resolve_download_root(&app_handle, &state).await?;
+    // Build a local download path.  Use the Tauri download directory when
+    // available; otherwise fall back to the app data directory.
+    let download_root = app_handle
+        .path()
+        .resolve("downloads", tauri::path::BaseDirectory::Download)
+        .unwrap_or_else(|_| {
+            app_handle
+                .path()
+                .resolve("downloads", tauri::path::BaseDirectory::AppData)
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
 
     // Ensure the download directory exists.
     let _ = std::fs::create_dir_all(&download_root);
@@ -252,6 +215,7 @@ pub async fn get_document(
         total_bytes: 0,
         message: None,
         error: None,
+        failure_kind: None,
         created_at: now,
         started_at: None,
         completed_at: None,
@@ -263,6 +227,7 @@ pub async fn get_document(
         bandwidth_limit: None,
         pause_position: None,
         supports_resume,
+        server_task_recreate_count: 0,
         batch_id: non_empty_optional(batch_id),
         batch_name: non_empty_optional(batch_name),
         batch_root_id: non_empty_optional(batch_root_id),
@@ -294,20 +259,51 @@ pub async fn get_document(
 fn download_display_filename(path_or_name: &str) -> String {
     path_or_name
         .split(['/', '\\'])
-        .filter(|part| !part.is_empty())
-        .next_back()
+        .rfind(|part| !part.is_empty())
         .unwrap_or(path_or_name)
         .to_string()
+}
+
+fn format_download_task_request_error(error: cfms_core::Error) -> String {
+    match error {
+        cfms_core::Error::Server {
+            code,
+            message,
+            scope,
+            limit,
+            retry_after_seconds,
+            task_status,
+            retryable,
+        } => {
+            let mut data = serde_json::Map::new();
+            if let Some(scope) = scope {
+                data.insert("scope".into(), scope.into());
+            }
+            if let Some(limit) = limit {
+                data.insert("limit".into(), limit.into());
+            }
+            if let Some(seconds) = retry_after_seconds {
+                data.insert("retry_after_seconds".into(), seconds.into());
+            }
+            if let Some(task_status) = task_status {
+                data.insert("task_status".into(), task_status.into());
+            }
+            if let Some(retryable) = retryable {
+                data.insert("retryable".into(), retryable.into());
+            }
+            format_server_error_parts(code, &message, &serde_json::Value::Object(data))
+        }
+        error => error.to_string(),
+    }
 }
 
 /// Create a subdirectory under the local download root.
 #[tauri::command]
 pub async fn ensure_download_subdirectory(
     app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
     relative_path: String,
 ) -> Result<String, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let download_root = download_root(&app_handle)?;
     let directory_path = resolve_download_subdirectory(download_root, &relative_path)?;
     std::fs::create_dir_all(&directory_path)
         .map_err(|e| format!("Failed to create download directory: {e}"))?;
@@ -336,256 +332,3 @@ fn resolve_download_subdirectory(
 }
 
 // ---------------------------------------------------------------------------
-// Local download file management
-// ---------------------------------------------------------------------------
-
-/// Check which files from a list of filenames exist in the local download root.
-#[tauri::command]
-pub async fn check_downloads_exist(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-    filenames: Vec<String>,
-) -> Result<Vec<String>, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    let mut existing = Vec::new();
-    for name in &filenames {
-        if resolve_download_subdirectory(download_root.clone(), name).is_ok_and(|p| p.exists()) {
-            existing.push(name.clone());
-        }
-    }
-    Ok(existing)
-}
-
-/// Compute SHA-256 hashes of local files in the download root.
-/// Returns a map of filename → hex-encoded SHA-256 digest.
-#[tauri::command]
-pub async fn compute_local_sha256(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-    filenames: Vec<String>,
-) -> Result<std::collections::HashMap<String, String>, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    let mut results = std::collections::HashMap::new();
-    for name in &filenames {
-        let path = resolve_download_subdirectory(download_root.clone(), name)?;
-        let hash = match std::fs::read(&path) {
-            Ok(data) => {
-                use sha2::{Digest, Sha256};
-                let digest = Sha256::digest(&data);
-                hex::encode(digest)
-            }
-            Err(_) => continue,
-        };
-        results.insert(name.clone(), hash);
-    }
-    Ok(results)
-}
-
-/// Delete a file from the local download root by relative path.
-#[tauri::command]
-pub async fn delete_download_file(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-    relative_path: String,
-) -> Result<bool, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    let file_path = resolve_download_subdirectory(download_root, &relative_path)?;
-    if !file_path.exists() {
-        return Ok(false);
-    }
-    std::fs::remove_file(&file_path)
-        .map_err(|e| format!("Failed to delete download file: {e}"))?;
-    Ok(true)
-}
-
-/// Move (rename) a file within the local download root by relative paths.
-/// Creates the destination directory if needed.
-#[tauri::command]
-pub async fn move_download_file(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-    from_path: String,
-    to_path: String,
-) -> Result<bool, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    let src = resolve_download_subdirectory(download_root.clone(), &from_path)?;
-    let dst = resolve_download_subdirectory(download_root, &to_path)?;
-    if !src.exists() {
-        return Ok(false);
-    }
-    if let Some(parent) = dst.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create destination directory: {e}"))?;
-    }
-    std::fs::rename(&src, &dst)
-        .map_err(|e| format!("Failed to move download file: {e}"))?;
-    Ok(true)
-}
-
-/// Create an empty placeholder file inside the local download root at the
-/// given relative path.
-///
-/// Parent directories are created first, so nested relative paths never fail
-/// with "path not found" (os error 3) — a placeholder at `a/b.txt` still works
-/// when `a/` does not exist yet.
-///
-/// The sync flow uses this to mirror server items that exist but are
-/// inaccessible (permission denied): a same-named empty file occupies the
-/// item's relative path so the local tree reflects the server instead of
-/// silently dropping the folder/file.
-#[tauri::command]
-pub async fn create_download_placeholder(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-    relative_path: String,
-) -> Result<bool, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    let file_path = resolve_download_subdirectory(download_root, &relative_path)?;
-    if let Some(parent) = file_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create placeholder directory: {e}"))?;
-    }
-    match std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&file_path)
-    {
-        Ok(_) => Ok(true),
-        Err(e) => Err(format!("Failed to create placeholder file: {e}")),
-    }
-}
-
-/// Recursively list all file paths (relative to the download root) in the download root.
-#[tauri::command]
-pub async fn list_download_files(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-) -> Result<Vec<String>, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    let mut files = Vec::new();
-    collect_relative_files(&download_root, &download_root, &mut files)
-        .map_err(|e| format!("Failed to list download files: {e}"))?;
-    Ok(files)
-}
-
-fn collect_relative_files(
-    root: &std::path::Path,
-    current: &std::path::Path,
-    out: &mut Vec<String>,
-) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(current)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            // Never descend into git metadata — its object files must not be
-            // treated as ordinary download files, or the sync deletion pass
-            // would wipe the repository's object store.
-            if path.file_name().map(|n| n == ".git").unwrap_or(false) {
-                continue;
-            }
-            collect_relative_files(root, &path, out)?;
-        } else {
-            if let Ok(rel) = path.strip_prefix(root) {
-                // Normalize to forward slashes so paths match the frontend's
-                // serverPaths (which uses '/'), regardless of platform separator.
-                out.push(rel.to_string_lossy().replace('\\', "/"));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Check whether a git repository exists in the download root.
-/// Used by the sync flow to decide between git-tracked forced overwrite and
-/// timestamped backup renaming.
-#[tauri::command]
-pub async fn download_git_present(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-) -> Result<bool, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    Ok(download_root.join(".git").exists())
-}
-
-/// Initialize a git repository in the download root (no-op if already initialized).
-#[tauri::command]
-pub async fn download_git_init(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-) -> Result<bool, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    // The download root may not exist yet (e.g. external storage was just
-    // configured or never written to). Spawning git with a non-existent
-    // current directory fails on Windows with ERROR_DIRECTORY
-    // ("os error 267: the directory name is invalid"), so create it first.
-    std::fs::create_dir_all(&download_root)
-        .map_err(|e| format!("Failed to create download directory: {e}"))?;
-    let git_dir = download_root.join(".git");
-    if git_dir.exists() {
-        return Ok(false);
-    }
-    let output = std::process::Command::new("git")
-        .arg("init")
-        .current_dir(&download_root)
-        .output()
-        .map_err(|e| format!("Failed to run git init: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("git init failed: {stderr}"));
-    }
-    Ok(true)
-}
-
-/// Stage all changes and commit in the download root git repo.
-/// Returns the commit hash, or empty string if nothing to commit.
-#[tauri::command]
-pub async fn download_git_commit(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppHandleState>,
-    message: String,
-) -> Result<String, String> {
-    let download_root = resolve_download_root(&app_handle, &state).await?;
-    let git_dir = download_root.join(".git");
-    if !git_dir.exists() {
-        return Err("No git repository in download root. Run download_git_init first.".to_string());
-    }
-
-    // Stage all changes.
-    let add_output = std::process::Command::new("git")
-        .args(["add", "."])
-        .current_dir(&download_root)
-        .output()
-        .map_err(|e| format!("Failed to run git add: {e}"))?;
-    if !add_output.status.success() {
-        let stderr = String::from_utf8_lossy(&add_output.stderr);
-        return Err(format!("git add failed: {stderr}"));
-    }
-
-    // Commit.
-    let commit_output = std::process::Command::new("git")
-        .args(["commit", "-m", &message])
-        .current_dir(&download_root)
-        .output()
-        .map_err(|e| format!("Failed to run git commit: {e}"))?;
-    if !commit_output.status.success() {
-        let stderr = String::from_utf8_lossy(&commit_output.stderr);
-        // "nothing to commit" is not an error — return empty string.
-        if stderr.contains("nothing to commit") {
-            return Ok(String::new());
-        }
-        return Err(format!("git commit failed: {stderr}"));
-    }
-
-    // Get the commit hash.
-    let hash_output = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(&download_root)
-        .output()
-        .map_err(|e| format!("Failed to get commit hash: {e}"))?;
-    if !hash_output.status.success() {
-        return Ok(String::new());
-    }
-    let hash = String::from_utf8_lossy(&hash_output.stdout).trim().to_string();
-    Ok(hash)
-}

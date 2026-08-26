@@ -45,6 +45,10 @@ pub enum Error {
         scope: Option<String>,
         limit: Option<u64>,
         retry_after_seconds: Option<u64>,
+        /// File-task state returned by protocol 25 claim failures.
+        task_status: Option<String>,
+        /// Server-declared retryability for protocol 25 file-task claim failures.
+        retryable: Option<bool>,
     },
 
     /// A wrapped [`std::io::Error`].

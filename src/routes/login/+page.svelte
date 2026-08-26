@@ -12,7 +12,7 @@
   // Reference: LoginModel in reference/src/include/ui/models/login.py
   //            LoginFormController in reference/src/include/controllers/login.py
 
-  import { onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { _ as t } from 'svelte-i18n';
@@ -119,6 +119,15 @@
   // The temporary password is kept in memory during 2FA so we can re-send
   // the login request with the verification code.
   let pendingPassword = $state("");
+
+  // JavaScript strings cannot be reliably overwritten. Drop all live references
+  // as soon as this route is destroyed to minimize their WebView residency.
+  onDestroy(() => {
+    password = "";
+    pendingPassword = "";
+    corruptedPreferenceCurrentPassword = "";
+    corruptedPreferenceResolver = null;
+  });
 
   // Loading phases after successful login (matching reference's DataLoadingView).
   const loadingPhases = [

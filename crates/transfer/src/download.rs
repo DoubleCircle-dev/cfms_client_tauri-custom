@@ -15,6 +15,7 @@ use serde::Deserialize;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::chunks::{ChunkStore, ResumeHint, TransferCheckpoint};
 use crate::decrypt::decrypt_chunk;
@@ -46,13 +47,15 @@ struct FileMetadataData {
 }
 
 /// Expected shape of the decryption info message.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Zeroize)]
+#[zeroize(drop)]
 struct DecryptionInfo {
     action: String,
     data: DecryptionInfoData,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Zeroize)]
+#[zeroize(drop)]
 struct DecryptionInfoData {
     key: String, // base64-encoded
 }
@@ -128,6 +131,8 @@ struct ServerErrorData {
     scope: Option<String>,
     limit: Option<u64>,
     retry_after_seconds: Option<u64>,
+    task_status: Option<String>,
+    retryable: Option<bool>,
 }
 
 /// Receive an encrypted file, optionally resuming from a byte offset.
@@ -359,10 +364,10 @@ pub async fn receive_with_resume(
     store.commit()?;
 
     // --- Step 4: receive decryption key ---
-    let key_raw = stream
-        .recv()
-        .await
-        .ok_or_else(|| cfms_core::Error::Connection("stream closed before key delivery".into()))?;
+    let key_raw =
+        Zeroizing::new(stream.recv().await.ok_or_else(|| {
+            cfms_core::Error::Connection("stream closed before key delivery".into())
+        })?);
 
     let key_info: DecryptionInfo = serde_json::from_slice(&key_raw)
         .map_err(|e| cfms_core::Error::Protocol(format!("invalid key info: {e}")))?;
@@ -373,8 +378,10 @@ pub async fn receive_with_resume(
         )));
     }
 
-    let aes_key_bytes = base64ct::Base64::decode_vec(&key_info.data.key)
-        .map_err(|e| cfms_core::Error::Protocol(format!("invalid key base64: {e}")))?;
+    let aes_key_bytes = Zeroizing::new(
+        base64ct::Base64::decode_vec(&key_info.data.key)
+            .map_err(|e| cfms_core::Error::Protocol(format!("invalid key base64: {e}")))?,
+    );
 
     if aes_key_bytes.len() != KEY_LEN {
         return Err(cfms_core::Error::Protocol(format!(
@@ -383,7 +390,7 @@ pub async fn receive_with_resume(
         )));
     }
 
-    let mut aes_key = [0u8; KEY_LEN];
+    let mut aes_key = Zeroizing::new([0u8; KEY_LEN]);
     aes_key.copy_from_slice(&aes_key_bytes);
 
     // --- Step 5: decrypt and write chunks ---
@@ -421,8 +428,13 @@ pub async fn receive_with_resume(
         // Lazy iteration: each chunk is read, decrypted, written, and dropped
         // before the next row is fetched — no full Vec materialization.
         store.for_each_ordered_chunk(|chunk| {
-            let decrypted =
-                decrypt_chunk(&aes_key, &chunk.prefix, chunk.idx, &chunk.data, &chunk.tag)?;
+            let decrypted = Zeroizing::new(decrypt_chunk(
+                &aes_key,
+                &chunk.prefix,
+                chunk.idx,
+                &chunk.data,
+                &chunk.tag,
+            )?);
 
             writer.write_all(&decrypted)?;
 
@@ -502,6 +514,8 @@ fn parse_metadata_response(raw: &[u8]) -> Result<FileMetadataResponse> {
             scope: response.data.scope,
             limit: response.data.limit,
             retry_after_seconds: response.data.retry_after_seconds,
+            task_status: response.data.task_status,
+            retryable: response.data.retryable,
         });
     }
 
@@ -625,6 +639,8 @@ fn parse_transfer_completion(raw: &[u8]) -> Result<()> {
             scope: response.data.scope,
             limit: response.data.limit,
             retry_after_seconds: response.data.retry_after_seconds,
+            task_status: response.data.task_status,
+            retryable: response.data.retryable,
         });
     }
 
@@ -661,14 +677,19 @@ mod tests {
     }
 
     #[test]
-    fn metadata_parser_preserves_server_rejection() {
-        let raw = br#"{"code":400,"data":{},"message":"Task is not in a valid state for download","timestamp":1781931222.0}"#;
+    fn metadata_parser_preserves_protocol_twenty_five_claim_rejection() {
+        let raw = br#"{"code":46001,"data":{"task_status":"in_progress","retryable":true},"message":"Task is already in progress","timestamp":1781931222.0}"#;
         let err = parse_metadata_response(raw).unwrap_err();
 
         assert!(matches!(
             err,
-            cfms_core::Error::Server { code: 400, ref message, .. }
-                if message == "Task is not in a valid state for download"
+            cfms_core::Error::Server {
+                code: 46_001,
+                ref message,
+                task_status: Some(ref task_status),
+                retryable: Some(true),
+                ..
+            } if message == "Task is already in progress" && task_status == "in_progress"
         ));
     }
 
@@ -723,8 +744,16 @@ mod tests {
 
     #[test]
     fn completion_parser_preserves_server_rejection() {
-        let raw = br#"{"code":410,"message":"Task ended","data":{"task_status":"expired"}}"#;
+        let raw = br#"{"code":46004,"message":"Task is expired","data":{"task_status":"expired","retryable":false}}"#;
         let error = parse_transfer_completion(raw).unwrap_err();
-        assert!(matches!(error, cfms_core::Error::Server { code: 410, .. }));
+        assert!(matches!(
+            error,
+            cfms_core::Error::Server {
+                code: 46_004,
+                task_status: Some(ref task_status),
+                retryable: Some(false),
+                ..
+            } if task_status == "expired"
+        ));
     }
 }
