@@ -49,6 +49,8 @@ const snapshot: DownloadBatchSnapshot = {
   discovered: 4,
   queued: 0,
   failed: 0,
+  rateLimited: 0,
+  rateLimitWaiting: false,
 };
 
 describe('download task groups', () => {
@@ -154,6 +156,32 @@ describe('download task groups', () => {
     expect(deletedOnlyRow.kind).toBe('group');
     if (deletedOnlyRow.kind === 'group') {
       expect(canDeleteDownloadTaskGroupFiles(deletedOnlyRow.group)).toBe(false);
+    }
+  });
+
+  it('surfaces queue-time and scheduled rate limits in the aggregate batch state', () => {
+    const rateLimitedTask = {
+      ...task('limited', 'scheduled'),
+      error: 'server rejected request (429): slow down',
+      scheduled_time: 30,
+    };
+    const liveSnapshot = { ...snapshot, failed: 2, rateLimited: 2, rateLimitWaiting: true };
+    const sections = buildDownloadTaskSections(
+      [rateLimitedTask],
+      new Set(),
+      [{ ...liveSnapshot, batchId: 'batch-1', batchName: 'Evidence bundle' }],
+    );
+    const row = sections[0].rows[0];
+
+    expect(row.kind).toBe('group');
+    if (row.kind === 'group') {
+      expect(row.group).toMatchObject({
+        scheduled: 1,
+        rateLimited: 1,
+        queueRateLimited: 2,
+        rateLimitWaiting: true,
+        failed: 2,
+      });
     }
   });
 

@@ -75,6 +75,7 @@
     isDownloadBatchStop,
     markDownloadBatchFailed,
     markDownloadBatchQueued,
+    setDownloadBatchRateLimitWaiting,
     setDownloadBatchPhase,
     waitForDownloadBatchResume,
   } from '$lib/download-batch-control';
@@ -133,7 +134,7 @@
     DirectoryRequestTimeoutError,
   } from '$lib/files/directory-load-controller';
   import { canSearchFiles } from '$lib/files/search-permissions';
-  import { isAccessDeniedError, serverErrorStatus } from '$lib/api/server-errors';
+  import { isAccessDeniedError, serverAvailability, serverErrorStatus } from '$lib/api/server-errors';
   import {
     fileManagerShortcutFor,
     isFindShortcut,
@@ -183,6 +184,7 @@
   const SEARCH_PREVIEW_DEBOUNCE_MS = 120;
   const SEARCH_PREVIEW_SCROLL_THRESHOLD = 72;
   const SORT_FIELDS: SortField[] = ['name', 'modified', 'size'];
+  const MAX_BATCH_RATE_LIMIT_RETRIES = 3;
 
   type DirectoryLoadPhase = 'idle' | 'initial-loading' | 'loading-more' | 'complete' | 'partial-error';
 
@@ -2293,6 +2295,7 @@
     const controller = beginDownloadBatch(batch);
     let queued = 0;
     let failed = 0;
+    let rateLimited = 0;
 
     try {
       const items: DownloadQueueItem[] = selectedDocuments.map((document) => ({
@@ -2307,10 +2310,12 @@
           const result = await collectDirectoryDownloadItems(folder, [folder.name], controller.signal, batch.batchId);
           items.push(...result.items);
           failed += result.failed;
+          rateLimited += result.rateLimited;
         } catch (e) {
           if (isDownloadBatchStop(e)) throw e;
           failed += 1;
-          markDownloadBatchFailed(batch.batchId);
+          if (serverAvailability(e)?.kind === 'rate_limited') rateLimited += 1;
+          markDownloadBatchFailed(batch.batchId, e);
         }
       }
 
@@ -2318,19 +2323,20 @@
       const result = await queueCollectedDownloads(items, controller.signal, batch);
       queued += result.queued;
       failed += result.failed;
+      rateLimited += result.rateLimited;
 
       if (queued > 0) {
         status = $t('files.batchDownloadQueued', { values: { count: queued } });
       }
       if (failed > 0) {
-        error = $t('files.batchDownloadPartialFailed', { values: { count: failed } });
+        error = batchDownloadFailureText(failed, rateLimited);
       }
       if (queued > 0 && failed === 0) clearSelection();
     } catch (e) {
       if (isDownloadBatchStop(e)) {
         status = $t('files.batchDownloadStopped');
       } else {
-        error = String(e);
+        error = formatError(e);
       }
     } finally {
       finishDownloadBatch(controller);
@@ -2351,17 +2357,18 @@
       const queuedResult = await queueCollectedDownloads(collected.items, controller.signal, batch);
       const queued = queuedResult.queued;
       const failed = collected.failed + queuedResult.failed;
+      const rateLimited = collected.rateLimited + queuedResult.rateLimited;
       if (queued > 0) {
         status = $t('files.batchDownloadQueued', { values: { count: queued } });
       }
       if (failed > 0) {
-        error = $t('files.batchDownloadPartialFailed', { values: { count: failed } });
+        error = batchDownloadFailureText(failed, rateLimited);
       }
     } catch (e) {
       if (isDownloadBatchStop(e)) {
         status = $t('files.batchDownloadStopped');
       } else {
-        error = String(e);
+        error = formatError(e);
       }
     } finally {
       finishDownloadBatch(controller);
@@ -2376,7 +2383,11 @@
     batch?: DownloadBatchMetadata,
   ) {
     await waitForDownloadBatchResume(signal);
-    await getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]), batch);
+    await runBatchRateLimitedRequest(
+      () => getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]), batch),
+      signal,
+      batch?.batchId,
+    );
     await waitForDownloadBatchResume(signal);
   }
 
@@ -2385,19 +2396,25 @@
     pathParts: string[],
     signal: AbortSignal,
     batchId?: string,
-  ): Promise<{ items: DownloadQueueItem[]; failed: number }> {
+  ): Promise<{ items: DownloadQueueItem[]; failed: number; rateLimited: number }> {
     await waitForDownloadBatchResume(signal);
-    const response = await listDirectory(folder.id);
+    const response = await runBatchRateLimitedRequest(
+      () => listDirectory(folder.id),
+      signal,
+      batchId,
+    );
     await waitForDownloadBatchResume(signal);
     const items: DownloadQueueItem[] = [];
     let failed = 0;
+    let rateLimited = 0;
     const downloadPath = makeDownloadPath(pathParts);
 
     try {
       await ensureDownloadSubdirectory(downloadPath);
-    } catch {
+    } catch (e) {
       failed += 1;
-      if (batchId) markDownloadBatchFailed(batchId);
+      if (serverAvailability(e)?.kind === 'rate_limited') rateLimited += 1;
+      if (batchId) markDownloadBatchFailed(batchId, e);
     }
 
     for (const doc of response.documents) {
@@ -2414,14 +2431,16 @@
         const result = await collectDirectoryDownloadItems(child, [...pathParts, child.name], signal, batchId);
         items.push(...result.items);
         failed += result.failed;
+        rateLimited += result.rateLimited;
       } catch (e) {
         if (isDownloadBatchStop(e)) throw e;
         failed += 1;
-        if (batchId) markDownloadBatchFailed(batchId);
+        if (serverAvailability(e)?.kind === 'rate_limited') rateLimited += 1;
+        if (batchId) markDownloadBatchFailed(batchId, e);
       }
     }
 
-    return { items, failed };
+    return { items, failed, rateLimited };
   }
 
   async function handleDeleteRevision(revision: RevisionEntry) {
@@ -2448,28 +2467,95 @@
     items: DownloadQueueItem[],
     signal: AbortSignal,
     batch: DownloadBatchMetadata,
-  ): Promise<{ queued: number; failed: number }> {
+  ): Promise<{ queued: number; failed: number; rateLimited: number }> {
     let queued = 0;
     let failed = 0;
-    const queuedBatch = {
-      ...batch,
-      batchEstimatedTotal: items.length,
-    };
+    let rateLimited = 0;
 
     for (const item of items) {
       await waitForDownloadBatchResume(signal);
       try {
+        // Only persist work that actually entered the queue in the durable
+        // estimate. The live snapshot still carries the discovered total while
+        // queueing, but a rejected item must not leave the completed batch at a
+        // permanently misleading partial percentage.
+        const queuedBatch = { ...batch, batchEstimatedTotal: queued + 1 };
         await queueDocumentDownload(item.document, item.pathParts, signal, queuedBatch);
         queued += 1;
         markDownloadBatchQueued(batch.batchId);
       } catch (e) {
         if (isDownloadBatchStop(e)) throw e;
         failed += 1;
-        markDownloadBatchFailed(batch.batchId);
+        if (serverAvailability(e)?.kind === 'rate_limited') rateLimited += 1;
+        markDownloadBatchFailed(batch.batchId, e);
       }
     }
 
-    return { queued, failed };
+    return { queued, failed, rateLimited };
+  }
+
+  function batchDownloadFailureText(failed: number, rateLimited: number) {
+    if (rateLimited <= 0) {
+      return $t('files.batchDownloadPartialFailed', { values: { count: failed } });
+    }
+    const other = Math.max(0, failed - rateLimited);
+    return other > 0
+      ? $t('files.batchDownloadRateLimitedMixed', { values: { rateLimited, other } })
+      : $t('files.batchDownloadRateLimited', { values: { count: rateLimited } });
+  }
+
+  async function runBatchRateLimitedRequest<T>(
+    request: () => Promise<T>,
+    signal: AbortSignal,
+    batchId?: string,
+  ): Promise<T> {
+    let retryCount = 0;
+
+    while (true) {
+      await waitForDownloadBatchResume(signal);
+      try {
+        const result = await request();
+        if (batchId) setDownloadBatchRateLimitWaiting(batchId, false);
+        if (retryCount > 0) status = null;
+        return result;
+      } catch (requestError) {
+        const availability = serverAvailability(requestError);
+        if (availability?.kind !== 'rate_limited' || retryCount >= MAX_BATCH_RATE_LIMIT_RETRIES) {
+          if (batchId) setDownloadBatchRateLimitWaiting(batchId, false);
+          if (retryCount > 0) status = null;
+          throw requestError;
+        }
+
+        retryCount += 1;
+        const seconds = availability.retryAfterSeconds ?? Math.min(2 ** (retryCount - 1), 8);
+        if (batchId) setDownloadBatchRateLimitWaiting(batchId, true);
+        status = $t('files.batchDownloadRateLimitWaiting', { values: { seconds } });
+        try {
+          await waitForBatchRetryDelay(seconds * 1000, signal);
+        } finally {
+          if (batchId) setDownloadBatchRateLimitWaiting(batchId, false);
+        }
+      }
+    }
+  }
+
+  function waitForBatchRetryDelay(delayMs: number, signal: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Folder download queueing stopped.', 'AbortError'));
+        return;
+      }
+      const complete = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const timeout = window.setTimeout(complete, delayMs);
+      const abort = () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException('Folder download queueing stopped.', 'AbortError'));
+      };
+      signal.addEventListener('abort', abort, { once: true });
+    });
   }
 
   function createDownloadBatchMetadata(name: string, rootId: string | null): DownloadBatchMetadata {

@@ -54,7 +54,7 @@
     ),
   );
   const canResume = $derived(group.batchPaused || group.paused > 0);
-  const canRetry = $derived(group.failed > 0);
+  const canRetry = $derived(group.tasks.some((task) => task.status === 'failed'));
   const canCancel = $derived(
     group.preparing || group.tasks.some((task) =>
       ['pending', 'scheduled', 'downloading', 'decrypting', 'verifying', 'paused'].includes(task.status),
@@ -80,6 +80,12 @@
     && group.running === 0
     && group.paused === 0,
   );
+  const isRateLimited = $derived(
+    group.rateLimitWaiting || group.queueRateLimited > 0 || group.rateLimited > 0,
+  );
+  const unclassifiedQueueFailures = $derived(Math.max(0, group.failed - group.queueRateLimited));
+  const otherScheduled = $derived(Math.max(0, group.scheduled - group.rateLimited));
+  const waitingToStart = $derived(Math.max(0, group.pending - group.scheduled));
   const statusText = $derived(
     isDeleting
       ? $t('tasks.batchDeleting')
@@ -87,14 +93,21 @@
       ? $t('tasks.batchRemoving')
       : group.preparing
       ? [
-        group.batchPaused
+        group.rateLimitWaiting
+          ? $t('tasks.batchRateLimitWaiting')
+          : group.queueRateLimited > 0
+          ? $t('tasks.batchQueueRateLimitedCount', { values: { count: group.queueRateLimited } })
+          : group.batchPaused
           ? $t('tasks.paused')
           : group.phase === 'queueing' ? $t('tasks.batchQueueing') : $t('tasks.batchPreparing'),
         group.queued > 0 ? $t('tasks.batchQueuedCount', { values: { count: group.queued } }) : null,
-        group.failed > 0 ? $t('tasks.batchFailedCount', { values: { count: group.failed } }) : null,
+        unclassifiedQueueFailures > 0 ? $t('tasks.batchFailedCount', { values: { count: unclassifiedQueueFailures } }) : null,
         group.cancelled > 0 ? $t('tasks.batchCancelledCount', { values: { count: group.cancelled } }) : null,
       ].filter(Boolean).join(' · ')
       : [
+        group.rateLimited > 0 ? $t('tasks.batchRateLimitedCount', { values: { count: group.rateLimited } }) : null,
+        otherScheduled > 0 ? $t('tasks.batchRetryWaitingCount', { values: { count: otherScheduled } }) : null,
+        waitingToStart > 0 ? $t('tasks.batchPendingCount', { values: { count: waitingToStart } }) : null,
         group.running > 0 ? $t('tasks.batchActiveCount', { values: { count: group.running } }) : null,
         group.paused > 0 ? $t('tasks.batchPausedCount', { values: { count: group.paused } }) : null,
         group.failed > 0 ? $t('tasks.batchFailedCount', { values: { count: group.failed } }) : null,
@@ -150,10 +163,13 @@
         {/if}
       </span>
     </span>
-    <span class="batch-state" title={statusText} aria-live="polite">
-      {statusText || (group.total > 0 && group.completed === group.total
-        ? $t('tasks.completed')
-        : $t('tasks.batchProgressPending'))}
+    <span class="batch-state" class:batch-state-warning={isRateLimited} title={statusText} aria-live="polite">
+      {#if isRateLimited}<Icon name="warningAmber" size="15px" />{/if}
+      <span class="batch-state-copy">
+        {statusText || (group.total > 0 && group.completed === group.total
+          ? $t('tasks.completed')
+          : $t('tasks.batchProgressPending'))}
+      </span>
     </span>
     <span class="batch-progress-cell">
       <span class="batch-progress-meta">
@@ -299,12 +315,25 @@
   }
 
   .batch-state {
+    display: flex;
     min-width: 0;
     overflow: hidden;
+    align-items: center;
+    gap: 0.35rem;
     color: var(--explorer-text-muted);
     font-size: 0.75rem;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .batch-state-warning {
+    color: var(--explorer-warning);
+  }
+
+  .batch-state-copy {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .batch-progress-cell {
