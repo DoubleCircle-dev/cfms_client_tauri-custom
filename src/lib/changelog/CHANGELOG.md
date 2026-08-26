@@ -4,6 +4,16 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.48.0
+**Released on:** 2026-08-26
+
+**Title:** Better Interaction Support for Rate Limiting
+
+### Added
+- Enhance download task management with rate limit handling and user feedback
+
+--- 
+
 ## v0.47.0
 **Released on:** 2026-08-25
 
