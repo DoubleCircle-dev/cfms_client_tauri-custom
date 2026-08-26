@@ -14,6 +14,8 @@ describe('server errors', () => {
     expect(serverErrorStatus('Server returned 403: permission denied')).toBe(403);
     expect(serverErrorStatus(new Error('(404) missing'))).toBe(404);
     expect(serverErrorStatus('Login failed: (4003) User account is not active')).toBe(4003);
+    expect(serverErrorStatus('server rejected request (429): slow down')).toBe(429);
+    expect(serverErrorStatus('connection rejected (503): at capacity')).toBe(503);
   });
 
   it('extracts structured server error data without exposing it as display copy', () => {
@@ -61,6 +63,10 @@ describe('server errors', () => {
     expect(serverAvailability(
       'Server returned 429: slow down\nCFMS_ERROR_DATA:{"retry_after_seconds":8}',
     )).toEqual({ kind: 'rate_limited', retryAfterSeconds: 8 });
+    expect(serverAvailability('server rejected request (429): slow down')).toEqual({
+      kind: 'rate_limited',
+      retryAfterSeconds: null,
+    });
     expect(serverAvailability('Server returned 503: busy')).toEqual({
       kind: 'server_busy',
       retryAfterSeconds: null,

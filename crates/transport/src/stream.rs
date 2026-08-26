@@ -7,6 +7,7 @@
 
 use cfms_core::Result;
 use tokio::sync::mpsc;
+use zeroize::Zeroizing;
 
 use crate::connector::Connection;
 use crate::frame::FrameKind;
@@ -50,6 +51,15 @@ impl Stream {
     /// The connection prepends the frame header (with [`FrameKind::Process`])
     /// before writing to the WebSocket.
     pub async fn send(&self, conn: &Connection, data: Vec<u8>) -> Result<()> {
+        conn.send_raw(self.id, FrameKind::Process, &data).await
+    }
+
+    /// Send an application-controlled sensitive payload and zeroize the
+    /// caller's serialized buffer after the WebSocket send completes.
+    ///
+    /// The networking stack and operating system may retain their own copies;
+    /// this method only governs the buffer owned by this layer.
+    pub async fn send_sensitive(&self, conn: &Connection, data: Zeroizing<Vec<u8>>) -> Result<()> {
         conn.send_raw(self.id, FrameKind::Process, &data).await
     }
 

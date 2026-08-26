@@ -64,7 +64,7 @@ pub fn load(
             path.display()
         )));
     }
-    let plaintext = cfms_crypto::decrypt_config(&raw, dek)?;
+    let plaintext = zeroize::Zeroizing::new(cfms_crypto::decrypt_config(&raw, dek)?);
     let records: UploadTasksJson = serde_json::from_slice(&plaintext).map_err(|error| {
         cfms_core::Error::Other(format!(
             "Invalid upload task data in {}: {error}",
@@ -102,9 +102,9 @@ pub fn save(
         .cloned()
         .map(|record| (record.task.upload_id.clone(), record))
         .collect();
-    let plaintext = serde_json::to_vec(&records).map_err(|error| {
+    let plaintext = zeroize::Zeroizing::new(serde_json::to_vec(&records).map_err(|error| {
         cfms_core::Error::Other(format!("Failed to serialize upload tasks: {error}"))
-    })?;
+    })?);
     let encrypted = cfms_crypto::encrypt_config(&plaintext, dek)?;
     let path = file_path(app_data, server_hash, username);
     if let Some(parent) = path.parent() {

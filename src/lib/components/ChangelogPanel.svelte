@@ -10,7 +10,7 @@
 
   let expanded = $state(false);
 
-  const visibleEntries = $derived(expanded ? changelogEntries : changelogEntries.slice(0, 2));
+  const visibleEntries = $derived(expanded ? changelogEntries : changelogEntries.slice(0, 1));
 
   function entryDate(entry: ChangelogEntry) {
     return formatChangelogDate(entry.date, $t('common.unknown'));
@@ -23,17 +23,27 @@
       <h2 id="changelog-heading">{$t('changelog.title')}</h2>
       <p>{$t('changelog.description')}</p>
     </div>
-    {#if changelogEntries.length > 2}
-      <button type="button" class="text-action" onclick={() => (expanded = !expanded)}>
+    {#if changelogEntries.length > 1}
+      <button
+        type="button"
+        class="text-action"
+        aria-expanded={expanded}
+        aria-controls="changelog-entries"
+        onclick={() => (expanded = !expanded)}
+      >
         <Icon name={expanded ? 'expandLess' : 'expandMore'} size="18px" />
         {expanded ? $t('changelog.showLess') : $t('changelog.showAll')}
       </button>
     {/if}
   </div>
 
-  <div class="entry-list">
+  <div id="changelog-entries" class="entry-list">
     {#each visibleEntries as entry, index (entry.version)}
-      <article class="changelog-entry animate-fade-scale-in" style={`animation-delay: ${index * 45}ms;`}>
+      <article
+        class="changelog-entry"
+        class:entry-revealed={expanded && index > 0}
+        style:animation-delay={expanded && index > 0 ? `${Math.min(index * 35, 175)}ms` : undefined}
+      >
         <div class="entry-rail" aria-hidden="true">
           <span></span>
         </div>
@@ -55,8 +65,8 @@
 <style>
   .changelog-panel {
     display: grid;
-    gap: 1rem;
-    padding-top: 1.25rem;
+    gap: 1.05rem;
+    padding-top: 1.5rem;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
   }
 
@@ -76,9 +86,9 @@
   h2,
   h3 {
     color: var(--color-md3-on-surface);
-    font-family: var(--font-md3-serif);
-    font-weight: 800;
-    letter-spacing: 0;
+    font-family: var(--font-md3-sans);
+    font-weight: 650;
+    letter-spacing: -0.01em;
   }
 
   h2 {
@@ -98,7 +108,7 @@
 
   .entry-list {
     display: grid;
-    gap: 0.9rem;
+    gap: 1rem;
   }
 
   .changelog-entry {
@@ -131,11 +141,16 @@
   .entry-rail span {
     position: relative;
     z-index: 1;
-    width: 0.65rem;
-    height: 0.65rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border: 1px solid var(--color-md3-outline-variant);
     border-radius: 999px;
+    background: var(--color-md3-surface-container-high);
+  }
+
+  .changelog-entry:first-child .entry-rail span {
+    border-color: var(--color-md3-primary-emphasis);
     background: var(--color-md3-primary-emphasis);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-md3-primary-emphasis) 16%, transparent);
   }
 
   .entry-body {
@@ -154,13 +169,13 @@
   .version {
     display: inline-flex;
     color: var(--color-md3-primary-emphasis);
-    font: 700 0.75rem var(--font-md3-serif);
+    font: 650 0.75rem var(--font-md3-sans);
   }
 
   time {
     flex: none;
     color: var(--color-md3-on-surface-variant);
-    font-family: var(--font-md3-serif);
+    font-family: var(--font-md3-sans);
     font-size: 0.75rem;
   }
 
@@ -174,12 +189,29 @@
     border-radius: 6px;
     padding: 0 0.65rem;
     color: var(--color-md3-primary-emphasis);
-    font: 700 0.8125rem var(--font-md3-serif);
-    transition: background-color var(--motion-duration-short4) var(--motion-easing-standard);
+    font: 650 0.8125rem var(--font-md3-sans);
+    transition:
+      background-color var(--motion-duration-short4) var(--motion-easing-standard),
+      transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate);
   }
 
   .text-action:hover {
     background: color-mix(in srgb, var(--color-md3-primary-emphasis) 10%, transparent);
+  }
+
+  .text-action:active {
+    transform: scale(0.97);
+  }
+
+  .entry-revealed {
+    animation: changelog-entry-reveal 180ms var(--motion-easing-emphasized-decelerate) both;
+  }
+
+  @keyframes changelog-entry-reveal {
+    from {
+      opacity: 0.65;
+      transform: translateY(-4px);
+    }
   }
 
   @media (max-width: 640px) {
@@ -187,6 +219,12 @@
     .entry-title {
       flex-direction: column;
       align-items: flex-start;
+    }
+  }
+
+  @media (pointer: coarse) {
+    .text-action {
+      min-height: 44px;
     }
   }
 </style>

@@ -18,10 +18,10 @@ pub mod types;
 pub use error::{Error, Result};
 pub use types::{
     AppearancePreference, ColorSchemePreference, CursorPage, DEFAULT_TASK_CONCURRENCY,
-    DownloadPhase, DownloadProgress, DownloadTaskDto, DownloadTaskStatus, ExtensionPreference,
-    Favourites, FileEntry, FileMetadata, ListDirectoryResponse, MAX_TASK_CONCURRENCY,
-    MIN_TASK_CONCURRENCY, NodeLookupResponse, PRIVACY_PREFERENCE_VERSION, PermissionEntry,
-    PrivacyPreference, ReduceMotionPreference, Response, ServerDiagnosticDatabase,
+    DownloadFailureKind, DownloadPhase, DownloadProgress, DownloadTaskDto, DownloadTaskStatus,
+    ExtensionPreference, Favourites, FileEntry, FileMetadata, ListDirectoryResponse,
+    MAX_TASK_CONCURRENCY, MIN_TASK_CONCURRENCY, NodeLookupResponse, PRIVACY_PREFERENCE_VERSION,
+    PermissionEntry, PrivacyPreference, ReduceMotionPreference, Response, ServerDiagnosticDatabase,
     ServerDiagnosticExtension, ServerDiagnosticIdentity, ServerDiagnosticLockdown,
     ServerDiagnosticProviders, ServerDiagnosticRuntime, ServerDiagnostics, ServerDirectoryEntry,
     ServerDocumentEntry, ServerInfo, ServerListingItem, ServiceEvent, ServiceStatusInfo,

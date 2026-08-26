@@ -45,6 +45,12 @@ pub fn is_transient_error(error: &cfms_core::Error) -> bool {
                 code: 429 | 503,
                 ..
             }
+            | cfms_core::Error::Server {
+                code: cfms_core::constants::file_task_claim_code::IN_PROGRESS
+                    | cfms_core::constants::file_task_claim_code::CONFLICT,
+                retryable: Some(true),
+                ..
+            }
     )
 }
 
@@ -104,27 +110,36 @@ mod tests {
             message: String::new(),
             retry_after_seconds: Some(9),
         };
-        let server = |code| cfms_core::Error::Server {
+        let server = |code, retryable| cfms_core::Error::Server {
             code,
             message: String::new(),
             scope: None,
             limit: None,
             retry_after_seconds: Some(4),
+            task_status: None,
+            retryable,
         };
 
         assert!(is_transient_error(&rejected(429)));
         assert!(is_transient_error(&rejected(503)));
-        assert!(is_transient_error(&server(429)));
-        assert!(is_transient_error(&server(503)));
+        assert!(is_transient_error(&server(429, None)));
+        assert!(is_transient_error(&server(503, None)));
+        assert!(is_transient_error(&server(46_001, Some(true))));
+        assert!(is_transient_error(&server(46_005, Some(true))));
         assert!(is_transient_error(&cfms_core::Error::Connection(
             String::new()
         )));
         assert!(!is_transient_error(&rejected(403)));
-        assert!(!is_transient_error(&server(400)));
+        assert!(!is_transient_error(&server(400, None)));
+        assert!(!is_transient_error(&server(46_000, Some(false))));
+        assert!(!is_transient_error(&server(46_001, Some(false))));
+        assert!(!is_transient_error(&server(46_002, Some(false))));
+        assert!(!is_transient_error(&server(46_003, Some(false))));
+        assert!(!is_transient_error(&server(46_004, Some(false))));
         assert!(!is_transient_error(&cfms_core::Error::Protocol(
             String::new()
         )));
         assert_eq!(error_retry_after_seconds(&rejected(503)), Some(9));
-        assert_eq!(error_retry_after_seconds(&server(429)), Some(4));
+        assert_eq!(error_retry_after_seconds(&server(429, None)), Some(4));
     }
 }

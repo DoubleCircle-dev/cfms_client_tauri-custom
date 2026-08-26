@@ -110,6 +110,7 @@ pub async fn setup_preference_dek(
     state: tauri::State<'_, AppHandleState>,
     current_password: String,
 ) -> Result<serde_json::Value, String> {
+    let current_password = zeroize::Zeroizing::new(current_password);
     let (conn, username, token) = get_connection_auth(&state).await?;
     let server_addr = {
         let a = state.inner.server_address.read().await;
@@ -128,7 +129,7 @@ pub async fn setup_preference_dek(
 
     let status = setup_preference_dek_for_loading(
         &state.inner,
-        &current_password,
+        current_password.as_str(),
         &username,
         &token,
         &conn,
@@ -183,6 +184,7 @@ pub async fn reset_preference_dek(
     state: tauri::State<'_, AppHandleState>,
     current_password: String,
 ) -> Result<(), String> {
+    let current_password = zeroize::Zeroizing::new(current_password);
     if state.inner.dek.read().await.is_some() {
         return Ok(());
     }
@@ -199,7 +201,7 @@ pub async fn reset_preference_dek(
 
     ensure_preference_dek(
         &state.inner,
-        &current_password,
+        current_password.as_str(),
         &username,
         &token,
         &conn,

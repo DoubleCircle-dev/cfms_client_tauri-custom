@@ -40,6 +40,7 @@ export default defineConfig(async () => ({
     },
   },
   build: {
-    sourcemap: true
+    // Production source maps expose implementation details and are not shipped.
+    sourcemap: false
   },
 }));

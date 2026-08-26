@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -31,6 +32,10 @@
   let disableTwoFactorAfterReset = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
+
+  onDestroy(() => {
+    password = '';
+  });
 
   const strength = $derived(estimateStrength(password));
 

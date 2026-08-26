@@ -40,7 +40,7 @@ pub async fn reload_tasks_for_user(
         .load_for_user(&state.app_data_dir, &server_hash, &username, dek.as_deref())
         .map_err(|e| format!("Failed to load upload tasks: {e}"))?;
 
-    tracing::info!("Reloaded {count} download tasks and {upload_count} upload tasks for user {username}");
+    tracing::info!("Reloaded {count} download tasks and {upload_count} upload tasks");
     Ok(count)
 }
 

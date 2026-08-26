@@ -15,10 +15,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 
-use tokio::sync::{Mutex, RwLock, broadcast};
-use zeroize::Zeroizing;
-
 use cfms_core::ServiceEvent;
+use tokio::sync::{Mutex, RwLock, broadcast};
+
+use crate::sensitive::{SecretKey, SecretString};
 
 /// Central application state shared via `Arc`.
 pub struct AppState {
@@ -26,7 +26,7 @@ pub struct AppState {
     /// Logged-in username.  `None` means not authenticated.
     pub username: RwLock<Option<String>>,
     /// Bearer token for API requests.
-    pub token: RwLock<Option<String>>,
+    pub token: RwLock<Option<SecretString>>,
     /// Unix timestamp (seconds) when the token expires.
     pub token_exp: RwLock<Option<i64>>,
     /// Display name.
@@ -39,7 +39,7 @@ pub struct AppState {
     // --- Encryption ---
     /// Data Encryption Key (256-bit AES key).  Never persisted to disk;
     /// lives only in memory and is zeroized on drop.
-    pub dek: RwLock<Option<Zeroizing<[u8; 32]>>>,
+    pub dek: RwLock<Option<SecretKey>>,
     /// Encrypted preference DEK returned by the server during this login.
     /// Kept only in memory so the user can recover from an administrator
     /// password reset by supplying the old password that wraps this DEK.
@@ -169,5 +169,70 @@ impl AppState {
             lockdown: self.app_lockdown.load(std::sync::atomic::Ordering::Relaxed),
             token_near_expiry,
         }
+    }
+
+    /// Clear all authentication material owned by the service layer.
+    ///
+    /// `SecretString` and `SecretKey` values are zeroized as they are removed.
+    /// Queue-specific persistence contexts are cleared by the Tauri shell,
+    /// which owns those queues.
+    pub async fn clear_auth(&self) {
+        let mut username = self.username.write().await;
+        let mut token = self.token.write().await;
+        let mut token_exp = self.token_exp.write().await;
+        let mut nickname = self.nickname.write().await;
+        let mut permissions = self.permissions.write().await;
+        let mut groups = self.groups.write().await;
+        let mut dek = self.dek.write().await;
+        let mut server_preference_dek = self.server_preference_dek.write().await;
+        let mut avatar_path = self.avatar_path.write().await;
+
+        username.take();
+        token.take();
+        token_exp.take();
+        nickname.take();
+        permissions.clear();
+        groups.clear();
+        dek.take();
+        server_preference_dek.take();
+        avatar_path.take();
+        self.pending_2fa
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zeroize::Zeroizing;
+
+    #[tokio::test]
+    async fn clear_auth_removes_every_session_value() {
+        let state = AppState::new();
+        *state.username.write().await = Some("alice".into());
+        *state.token.write().await = Some(SecretString::new("token".into()));
+        *state.token_exp.write().await = Some(42);
+        *state.nickname.write().await = Some("Alice".into());
+        state.permissions.write().await.push("read".into());
+        state.groups.write().await.push("staff".into());
+        *state.dek.write().await = Some(Zeroizing::new([7; 32]));
+        *state.server_preference_dek.write().await = Some("encrypted-envelope".into());
+        *state.avatar_path.write().await = Some("avatar.png".into());
+        state
+            .pending_2fa
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        state.clear_auth().await;
+
+        assert!(state.username.read().await.is_none());
+        assert!(state.token.read().await.is_none());
+        assert!(state.token_exp.read().await.is_none());
+        assert!(state.nickname.read().await.is_none());
+        assert!(state.permissions.read().await.is_empty());
+        assert!(state.groups.read().await.is_empty());
+        assert!(state.dek.read().await.is_none());
+        assert!(state.server_preference_dek.read().await.is_none());
+        assert!(state.avatar_path.read().await.is_none());
+        assert!(!state.pending_2fa.load(std::sync::atomic::Ordering::SeqCst));
     }
 }
