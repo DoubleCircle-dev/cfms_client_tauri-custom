@@ -45,6 +45,12 @@ fn default_download_root(app_handle: &tauri::AppHandle) -> Result<std::path::Pat
         }))
 }
 
+/// The default local download root (kept for commands that do not need the
+/// user preference lookup, matching the upstream 0.47.0 helper).
+fn download_root(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    default_download_root(app_handle)
+}
+
 /// Resolve the download root directory, respecting the user's external storage
 /// preference when configured.
 async fn resolve_download_root(

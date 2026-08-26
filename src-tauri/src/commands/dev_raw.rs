@@ -59,7 +59,10 @@ pub async fn send_raw_request(
 
         if let serde_json::Value::Object(ref mut map) = value {
             map.insert("username".into(), serde_json::Value::String(username));
-            map.insert("token".into(), serde_json::Value::String(token));
+            map.insert(
+                "token".into(),
+                serde_json::Value::String(token.as_str().to_string()),
+            );
             map.insert("timestamp".into(), serde_json::Value::Number(timestamp.into()));
             map.insert("nonce".into(), serde_json::Value::String(nonce));
         }
