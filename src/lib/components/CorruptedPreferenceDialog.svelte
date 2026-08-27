@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -23,6 +24,10 @@
   let recoveryVisible = $state(false);
   let recoveryBusy = $state(false);
   let recoveryError = $state<string | null>(null);
+
+  onDestroy(() => {
+    recoveryPassword = '';
+  });
 
   async function submitRecovery() {
     if (!onRecover || !onRecovered || recoveryBusy) return;

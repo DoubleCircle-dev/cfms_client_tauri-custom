@@ -8,13 +8,14 @@ use cfms_core::constants::KEY_LEN;
 use cfms_core::{Result, UploadTaskDto, UploadTaskStatus};
 
 use super::upload_task_persistence::{self, UploadTaskRecord};
+use crate::sensitive::SecretKey;
 
 #[derive(Clone)]
 struct PersistContext {
     dir: PathBuf,
     server_hash: String,
     username: String,
-    dek: Option<[u8; KEY_LEN]>,
+    dek: Option<SecretKey>,
 }
 
 #[derive(Clone, Default)]
@@ -35,14 +36,15 @@ impl UploadQueueState {
         username: &str,
         dek: Option<&[u8; KEY_LEN]>,
     ) -> Result<usize> {
+        self.clear();
+        let loaded = upload_task_persistence::load(app_data, server_hash, username, dek)?;
+        let count = loaded.len();
         *self.persist_ctx.lock().unwrap() = Some(PersistContext {
             dir: app_data.to_path_buf(),
             server_hash: server_hash.to_string(),
             username: username.to_string(),
-            dek: dek.cloned(),
+            dek: dek.map(|value| zeroize::Zeroizing::new(*value)),
         });
-        let loaded = upload_task_persistence::load(app_data, server_hash, username, dek)?;
-        let count = loaded.len();
         *self.records.lock().unwrap() = loaded
             .into_iter()
             .map(|record| (record.task.upload_id.clone(), record))
@@ -292,7 +294,7 @@ impl UploadQueueState {
             &ctx.dir,
             &ctx.server_hash,
             &ctx.username,
-            ctx.dek.as_ref(),
+            ctx.dek.as_ref().map(|dek| &**dek),
             &records,
         ) {
             tracing::error!("Failed to persist upload tasks: {error}");
@@ -428,5 +430,46 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(queue.list()[0].status, UploadTaskStatus::Cancelled);
+    }
+
+    #[test]
+    fn clear_drops_upload_persistence_key_context() {
+        let app_data = tempfile::tempdir().unwrap();
+        let key = [0x5A; KEY_LEN];
+        let queue = UploadQueueState::new();
+
+        queue
+            .load_for_user(app_data.path(), "server", "alice", Some(&key))
+            .unwrap();
+        assert!(
+            queue
+                .persist_ctx
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .dek
+                .is_some()
+        );
+
+        queue.clear();
+        assert!(queue.persist_ctx.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn failed_upload_reload_leaves_no_key_context() {
+        let app_data = tempfile::tempdir().unwrap();
+        let correct_key = [3; KEY_LEN];
+        let wrong_key = [4; KEY_LEN];
+        upload_task_persistence::save(app_data.path(), "server", "alice", Some(&correct_key), &[])
+            .unwrap();
+        let queue = UploadQueueState::new();
+
+        assert!(
+            queue
+                .load_for_user(app_data.path(), "server", "alice", Some(&wrong_key))
+                .is_err()
+        );
+        assert!(queue.persist_ctx.lock().unwrap().is_none());
     }
 }

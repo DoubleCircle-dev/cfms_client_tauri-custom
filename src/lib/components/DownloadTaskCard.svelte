@@ -7,6 +7,8 @@
   import { formatPathFilename } from '$lib/path-format';
   import { shortIdentifier } from '$lib/identifiers';
   import { formatLocalDateTimeWithUtcOffset } from '$lib/date-time';
+  import { serverAvailability } from '$lib/api/server-errors';
+  import { formatUserFacingError } from '$lib/user-facing-errors';
   import { flyScale } from '$lib/motion/transitions';
   import type { IconName } from '$lib/icons';
   import DownloadProgress from './DownloadProgress.svelte';
@@ -32,6 +34,14 @@
   const capabilities = $derived(downloadCapabilities(task));
   const displayName = $derived(formatPathFilename(task.filename));
   const phaseMessageKey = $derived(downloadPhaseMessageKey(task));
+  const retryReasonKey = $derived.by(() => {
+    if (task.status !== 'scheduled') return null;
+    const availability = serverAvailability(task.error);
+    if (availability?.kind === 'rate_limited') return 'tasks.rateLimitedAutoRetry';
+    if (availability?.kind === 'server_busy') return 'tasks.serverBusyAutoRetry';
+    return null;
+  });
+  const displayError = $derived(task.error ? formatUserFacingError(task.error) : null);
 
   function statusIcon(status: DownloadTaskStatus): IconName {
     return ({ pending: 'schedule', downloading: 'download', paused: 'pauseCircle', decrypting: 'lockOpen',
@@ -69,7 +79,11 @@
 
     <div class="task-state" aria-live="polite" aria-atomic="true">
       <span class="text-xs font-semibold {statusColor(task.status)}">{$t(downloadStatusMessageKey(task.status))}</span>
-      {#if phaseMessageKey}<span class="truncate text-[11px] text-md3-on-surface-variant">{$t(phaseMessageKey)}</span>{/if}
+      {#if retryReasonKey}
+        <span class="truncate text-[11px] text-md3-warning">{$t(retryReasonKey)}</span>
+      {:else if phaseMessageKey}
+        <span class="truncate text-[11px] text-md3-on-surface-variant">{$t(phaseMessageKey)}</span>
+      {/if}
     </div>
 
     <div class="task-progress">
@@ -105,7 +119,7 @@
         <div><dt>{$t('tasks.retryCount')}</dt><dd>{task.retry_count} / {task.max_retries}</dd></div>
         <div><dt>{$t('tasks.resumeSupport')}</dt><dd>{task.supports_resume ? $t('common.yes') : $t('common.no')}</dd></div>
       </dl>
-      {#if task.error}<p class="detail-error"><Icon name="errorFilled" size="16px" /> {task.error}</p>{/if}
+      {#if displayError}<p class="detail-error"><Icon name="errorFilled" size="16px" /> {displayError}</p>{/if}
       <div class="detail-actions">
         {#if capabilities.cancel}<TaskActionButton presentation="labelled" icon="cancel" label={$t('tasks.cancel')} tone="danger" onclick={() => run('cancel', onCancel)} disabled={Boolean(pendingAction)} />{/if}
         {#if capabilities.deleteFile}<TaskActionButton presentation="labelled" icon="deleteForever" label={$t('tasks.deleteLocalFile')} tone="danger" onclick={() => run('delete', onDeleteFile)} disabled={Boolean(pendingAction)} />{/if}

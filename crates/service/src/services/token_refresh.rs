@@ -10,6 +10,7 @@ use tokio::sync::watch;
 
 use cfms_core::ServiceEvent;
 
+use crate::sensitive::SecretString;
 use crate::state::AppState;
 
 /// Interval between token lifetime checks.
@@ -66,7 +67,7 @@ async fn tick(state: &AppState) {
     if remaining <= 0 {
         // Token already expired — clear auth state.
         tracing::warn!("Token expired — clearing auth state");
-        clear_auth(state).await;
+        state.clear_auth().await;
         let _ = state.event_tx.send(ServiceEvent::TokenExpired);
         return;
     }
@@ -85,7 +86,7 @@ async fn tick(state: &AppState) {
                 tracing::error!("Token refresh failed: {e}");
                 // On auth failure (401/403), clear state.
                 if e.contains("401") || e.contains("403") {
-                    clear_auth(state).await;
+                    state.clear_auth().await;
                     let _ = state.event_tx.send(ServiceEvent::TokenExpired);
                 }
             }
@@ -98,7 +99,7 @@ async fn try_refresh(
     state: &AppState,
     username: &str,
     token: &str,
-) -> Result<(String, i64), String> {
+) -> Result<(SecretString, i64), String> {
     let mut conn = super::connection::ensure_connected(
         state,
         super::connection::DEFAULT_RECONNECT_ATTEMPTS,
@@ -159,38 +160,14 @@ async fn try_refresh(
     };
 
     // Extract new token and expiry from response data.
-    let data = response.data;
-    let new_token = data["token"]
-        .as_str()
-        .ok_or("missing token in response")?
-        .to_string();
+    let mut data = response.data;
+    let new_token = match data.get_mut("token").map(std::mem::take) {
+        Some(serde_json::Value::String(token)) => SecretString::new(token),
+        _ => return Err("missing token in response".to_string()),
+    };
     let new_exp = data["exp"].as_i64().unwrap_or_else(|| unix_now() + 3600); // default 1h
 
     Ok((new_token, new_exp))
-}
-
-async fn clear_auth(state: &AppState) {
-    let mut username = state.username.write().await;
-    let mut token = state.token.write().await;
-    let mut token_exp = state.token_exp.write().await;
-    let mut nickname = state.nickname.write().await;
-    let mut permissions = state.permissions.write().await;
-    let mut groups = state.groups.write().await;
-    let mut dek = state.dek.write().await;
-    let mut server_preference_dek = state.server_preference_dek.write().await;
-    let mut avatar_path = state.avatar_path.write().await;
-    *username = None;
-    *token = None;
-    *token_exp = None;
-    *nickname = None;
-    permissions.clear();
-    groups.clear();
-    *dek = None;
-    *server_preference_dek = None;
-    *avatar_path = None;
-    state
-        .pending_2fa
-        .store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
 fn unix_now() -> i64 {

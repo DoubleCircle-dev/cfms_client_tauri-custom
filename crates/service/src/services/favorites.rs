@@ -230,9 +230,9 @@ fn validation_directory_ids(preferences: &cfms_core::UserPreference) -> HashSet<
 #[derive(Clone)]
 struct ValidationSnapshot {
     username: String,
-    token: String,
+    token: crate::sensitive::SecretString,
     server_hash: String,
-    dek: Option<[u8; cfms_core::constants::KEY_LEN]>,
+    dek: Option<crate::sensitive::SecretKey>,
 }
 
 async fn validation_snapshot(state: &AppState) -> Option<ValidationSnapshot> {
@@ -243,7 +243,7 @@ async fn validation_snapshot(state: &AppState) -> Option<ValidationSnapshot> {
     let username = state.username.read().await.clone()?;
     let token = state.token.read().await.clone()?;
     let server_addr = state.server_address.read().await.clone()?;
-    let dek = state.dek.read().await.clone().map(|d| *d);
+    let dek = state.dek.read().await.clone();
 
     Some(ValidationSnapshot {
         username,
@@ -260,11 +260,16 @@ async fn load_preferences(
     let app_data_dir = app_data_dir.to_path_buf();
     let server_hash = snapshot.server_hash.clone();
     let username = snapshot.username.clone();
-    let dek = snapshot.dek;
+    let dek = snapshot.dek.clone();
 
     tokio::task::spawn_blocking(move || {
-        crate::user_preferences::load(&app_data_dir, &server_hash, &username, dek.as_ref())
-            .map_err(|e| e.to_string())
+        crate::user_preferences::load(
+            &app_data_dir,
+            &server_hash,
+            &username,
+            dek.as_ref().map(|dek| &**dek),
+        )
+        .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| format!("Preference load task failed: {e}"))?

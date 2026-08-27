@@ -1,4 +1,5 @@
 import type { DownloadTaskDto } from './api';
+import { serverAvailability } from './api/server-errors';
 import type { DownloadBatchSnapshot } from './download-batch-control';
 import {
   TRANSFER_SECTION_ORDER, downloadSection, matchesTransferQuery, type TransferSectionKey,
@@ -17,6 +18,10 @@ export interface DownloadTaskGroup {
   tasks: DownloadTaskDto[];
   total: number;
   pending: number;
+  scheduled: number;
+  rateLimited: number;
+  queueRateLimited: number;
+  rateLimitWaiting: boolean;
   running: number;
   paused: number;
   completed: number;
@@ -183,10 +188,13 @@ export function canDeleteDownloadTaskGroupFiles(group: DownloadTaskGroup) {
   return group.tasks.length > 0
     && !group.preparing
     && group.tasks.some((task) => task.status === 'completed')
-    && group.tasks.every((task) => TERMINAL_DOWNLOAD_STATUSES.has(task.status))
-    // A naturally failed batch remains retry-only. Once cancellation has been
-    // recorded, failed siblings must not hide the action that clears the batch.
-    && (group.failed === 0 || group.cancelled > 0);
+    && group.tasks.every((task) => TERMINAL_DOWNLOAD_STATUSES.has(task.status));
+}
+
+export function canRemoveDownloadTaskGroupRecords(group: DownloadTaskGroup) {
+  return group.tasks.length > 0
+    && !group.preparing
+    && group.tasks.every((task) => TERMINAL_DOWNLOAD_STATUSES.has(task.status));
 }
 
 function buildDownloadTaskGroup(
@@ -212,8 +220,12 @@ function buildDownloadTaskGroup(
   // Deleting a local file does not undo its completed transfer. Keep transfer
   // progress monotonic while exposing local-file availability separately.
   const completed = available + deleted;
-  const failed = countStatus(sortedTasks, ['failed']);
+  const failed = countStatus(sortedTasks, ['failed']) + (activeBatch?.failed ?? 0);
   const cancelled = countStatus(sortedTasks, ['cancelled']);
+  const scheduledTasks = sortedTasks.filter((task) => task.status === 'scheduled');
+  const rateLimited = scheduledTasks.filter((task) =>
+    serverAvailability(task.error)?.kind === 'rate_limited'
+  ).length;
   const estimatedTotal = maxEstimatedTotal(sortedTasks);
   const isBatchGroup = Boolean(activeBatch || sortedTasks.some((task) => task.batch_id?.trim()));
   const total = Math.max(sortedTasks.length, estimatedTotal, activeBatch?.discovered ?? 0, activeBatch?.queued ?? 0);
@@ -230,6 +242,10 @@ function buildDownloadTaskGroup(
     tasks: sortedTasks,
     total,
     pending: countStatus(sortedTasks, ['pending', 'scheduled']),
+    scheduled: scheduledTasks.length,
+    rateLimited,
+    queueRateLimited: activeBatch?.rateLimited ?? 0,
+    rateLimitWaiting: activeBatch?.rateLimitWaiting ?? false,
     running: sortedTasks.filter(isRunningDownloadTask).length,
     paused: countStatus(sortedTasks, ['paused']),
     completed,

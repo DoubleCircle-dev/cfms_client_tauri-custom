@@ -42,6 +42,18 @@ export async function initEventListeners(): Promise<void> {
         break;
       }
 
+      case "DownloadTaskReplaced": {
+        downloadStore.remove(event.data.old_task_id);
+        downloadStore.upsert(event.data.task);
+        updateDownloadBadgeFromStore();
+        eventLog.push(
+          "info",
+          `Download task renewed: ${event.data.old_task_id.slice(0, 8)}… → ${event.data.task.task_id.slice(0, 8)}…`,
+        );
+        emitExtensionEvent("tasks.changed");
+        break;
+      }
+
       case "DownloadCompleted": {
         const { task_id, file_path } = event.data;
         downloadStore.markCompleted(task_id);

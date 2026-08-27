@@ -149,6 +149,14 @@ impl DownloadTaskStatus {
     }
 }
 
+/// Machine-readable recovery required after a terminal download failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DownloadFailureKind {
+    /// Protocol 25 rejected the task credential, so a fresh task is required.
+    ServerTaskUnclaimable,
+}
+
 /// Serializable DTO for a download task, used for IPC with the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadTaskDto {
@@ -172,6 +180,9 @@ pub struct DownloadTaskDto {
     pub message: Option<String>,
     /// Error message if the task failed.
     pub error: Option<String>,
+    /// Structured recovery hint for failures that cannot reuse the server task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_kind: Option<DownloadFailureKind>,
     /// Unix timestamp (seconds) when the task was created.
     pub created_at: i64,
     /// Unix timestamp (seconds) when the task started downloading.
@@ -195,6 +206,9 @@ pub struct DownloadTaskDto {
     pub pause_position: Option<u64>,
     /// Whether the server supports pause/resume for this task.
     pub supports_resume: bool,
+    /// Number of times the server-side task has been recreated for this logical download.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub server_task_recreate_count: u32,
     /// Optional client-side batch/group identifier for folder downloads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub batch_id: Option<String>,
@@ -210,6 +224,10 @@ pub struct DownloadTaskDto {
     /// Estimated number of document download tasks in the batch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub batch_estimated_total: Option<u32>,
+}
+
+fn is_zero_u32(value: &u32) -> bool {
+    *value == 0
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +309,11 @@ pub enum ServiceEvent {
     },
     /// A download task snapshot has changed.
     DownloadTaskUpdated { task: DownloadTaskDto },
+    /// A stale server-side task was replaced while preserving the logical download.
+    DownloadTaskReplaced {
+        old_task_id: String,
+        task: DownloadTaskDto,
+    },
     /// A download has completed successfully.
     DownloadCompleted { task_id: String, file_path: String },
     /// A download has failed.

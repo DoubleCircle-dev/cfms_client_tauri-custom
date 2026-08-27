@@ -18,6 +18,44 @@ export default defineConfig(async () => ({
     },
   },
 
+  // Pre-bundle dependencies at dev-server startup so Vite NEVER discovers a
+  // new one mid-session. Without this, Vite optimizes lazily-discovered route
+  // imports (e.g. `@tanstack/svelte-virtual` on the files page,
+  // `@tauri-apps/api/webview`, `@tauri-apps/plugin-dialog`, `qrcode`,
+  // `lottie-web`, `markdown-it`/`dompurify`, …) and triggers a full-page
+  // reload ("new dependencies optimized … reloading"). That reload wipes the
+  // frontend's in-memory auth/connection state, and the auth guard then
+  // redirects to /connect, whose onMount calls `disconnect()` — kicking the
+  // user out of an otherwise healthy session ("Disconnected" / "Connection
+  // closed" in logs). `noDiscovery` disables the runtime re-scan entirely so
+  // no reload can ever be triggered; every runtime dependency is listed here
+  // so they are all pre-bundled. When adding a new dependency, add it below.
+  optimizeDeps: {
+    noDiscovery: true,
+    include: [
+      "@tanstack/svelte-virtual",
+      "@tauri-apps/api/app",
+      "@tauri-apps/api/core",
+      "@tauri-apps/api/event",
+      "@tauri-apps/api/webview",
+      "@tauri-apps/api/window",
+      "@tauri-apps/plugin-biometric",
+      "@tauri-apps/plugin-dialog",
+      "@tauri-apps/plugin-log",
+      "@tauri-apps/plugin-notification",
+      "@tauri-apps/plugin-opener",
+      "@tauri-apps/plugin-os",
+      "@tauri-apps/plugin-process",
+      "@tauri-apps/plugin-updater",
+      "dompurify",
+      "lottie-web/build/player/lottie_light",
+      "markdown-it",
+      "markdown-it/lib/token.mjs",
+      "qrcode",
+      "svelte-i18n",
+    ],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent vite from obscuring rust errors
@@ -40,6 +78,7 @@ export default defineConfig(async () => ({
     },
   },
   build: {
-    sourcemap: true
+    // Production source maps expose implementation details and are not shipped.
+    sourcemap: false
   },
 }));
