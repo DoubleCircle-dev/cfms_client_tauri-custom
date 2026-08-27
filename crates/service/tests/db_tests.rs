@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use cfms_core::{DownloadTaskDto, DownloadTaskStatus};
+use cfms_core::{DownloadFailureKind, DownloadTaskDto, DownloadTaskStatus};
 use cfms_crypto::{decrypt_config, generate_dek, is_encrypted};
 use cfms_service::services::{download_queue, task_persistence};
 
@@ -40,6 +40,7 @@ fn make_task(id: &str, status: DownloadTaskStatus) -> DownloadTaskDto {
         total_bytes: 1024 * 1024,
         message: None,
         error: None,
+        failure_kind: None,
         created_at: now,
         started_at: None,
         completed_at: None,
@@ -51,6 +52,7 @@ fn make_task(id: &str, status: DownloadTaskStatus) -> DownloadTaskDto {
         bandwidth_limit: None,
         pause_position: None,
         supports_resume: false,
+        server_task_recreate_count: 0,
         batch_id: None,
         batch_name: None,
         batch_root_id: None,
@@ -315,6 +317,7 @@ fn all_task_fields_roundtrip() {
         total_bytes: 4096,
         message: Some("Processing...".into()),
         error: Some("Previous attempt failed".into()),
+        failure_kind: Some(DownloadFailureKind::ServerTaskUnclaimable),
         created_at: now - 3600,
         started_at: Some(now - 1800),
         completed_at: None,
@@ -326,6 +329,7 @@ fn all_task_fields_roundtrip() {
         bandwidth_limit: Some(1_000_000),
         pause_position: Some(512),
         supports_resume: true,
+        server_task_recreate_count: 2,
         batch_id: Some("batch-001".into()),
         batch_name: Some("Folder".into()),
         batch_root_id: Some("folder-001".into()),
@@ -356,6 +360,10 @@ fn all_task_fields_roundtrip() {
     assert_eq!(t.total_bytes, 4096);
     assert_eq!(t.message.as_deref(), Some("Processing..."));
     assert_eq!(t.error.as_deref(), Some("Previous attempt failed"));
+    assert_eq!(
+        t.failure_kind,
+        Some(DownloadFailureKind::ServerTaskUnclaimable)
+    );
     assert_eq!(t.created_at, now - 3600);
     assert_eq!(t.started_at, Some(now - 1800));
     assert_eq!(t.completed_at, None);
@@ -367,6 +375,7 @@ fn all_task_fields_roundtrip() {
     assert_eq!(t.bandwidth_limit, Some(1_000_000));
     assert_eq!(t.pause_position, Some(512));
     assert!(t.supports_resume);
+    assert_eq!(t.server_task_recreate_count, 2);
     assert_eq!(t.batch_id.as_deref(), Some("batch-001"));
     assert_eq!(t.batch_name.as_deref(), Some("Folder"));
     assert_eq!(t.batch_root_id.as_deref(), Some("folder-001"));
@@ -387,6 +396,7 @@ fn failed_task_can_be_retried_from_queue() {
     task.retry_count = 4;
     task.scheduled_time = Some(789);
     task.pause_position = Some(512);
+    task.failure_kind = Some(DownloadFailureKind::ServerTaskUnclaimable);
 
     queue.insert(&task).expect("insert failed task");
 
@@ -398,6 +408,7 @@ fn failed_task_can_be_retried_from_queue() {
     assert_eq!(retried_task.progress, 0.0);
     assert_eq!(retried_task.current_bytes, 0);
     assert!(retried_task.error.is_none());
+    assert!(retried_task.failure_kind.is_none());
     assert!(retried_task.message.is_none());
     assert!(retried_task.started_at.is_none());
     assert!(retried_task.completed_at.is_none());

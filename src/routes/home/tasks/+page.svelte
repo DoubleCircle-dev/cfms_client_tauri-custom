@@ -9,6 +9,7 @@
     resumeDownload, retryDownload, retryUploadTask, uploadDirectory, uploadDocumentFile,
   } from '$lib/api';
   import { formatUserFacingError } from '$lib/user-facing-errors';
+  import { dialogStore } from '$lib/dialogs.svelte';
   import { downloadStore, notificationStore, uploadStore } from '$lib/stores.svelte';
   import { downloadBatchSnapshots, pauseActiveDownloadBatches, resumeActiveDownloadBatches, stopActiveDownloadBatch } from '$lib/download-batch-control';
   import {
@@ -32,7 +33,7 @@
   import TaskActionButton from '$lib/components/TaskActionButton.svelte';
 
   type TaskTab = 'downloads' | 'uploads';
-  type GroupAction = 'pause' | 'resume' | 'retry' | 'cancel' | 'delete';
+  type GroupAction = 'pause' | 'resume' | 'retry' | 'cancel' | 'delete' | 'remove';
   type DownloadPageRow =
     | { kind: 'section'; section: TransferSectionKey; count: number }
     | { kind: 'download'; section: TransferSectionKey; row: DownloadTaskRow };
@@ -278,10 +279,39 @@
   async function handleRetryGroup(id: string) { await runGroup(id, 'retry', async () => { await Promise.all(groupTasks(id).filter((t) => t.status === 'failed').map((t) => retryDownload(t.task_id))); }); }
   async function handleCancelGroup(id: string) { await runGroup(id, 'cancel', async () => { stopActiveDownloadBatch(id); await Promise.all(groupTasks(id).filter((t) => !t.completed_at).map((t) => cancelDownload(t.task_id))); }); }
   async function handleDeleteGroupFiles(id: string) {
-    if (!window.confirm($t('tasks.deleteBatchFilesConfirm'))) return;
+    const completedTasks = groupTasks(id).filter((task) => task.status === 'completed');
+    if (completedTasks.length === 0) return;
+    const confirmed = await dialogStore.confirm({
+      title: $t('tasks.deleteBatchFilesTitle'),
+      message: $t('tasks.deleteBatchFilesConfirm', { values: { count: completedTasks.length } }),
+      confirmLabel: $t('tasks.deleteBatchFiles'),
+      cancelLabel: $t('common.cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
     await runGroup(id, 'delete', async () => {
-      const result = await deleteDownloadedFiles(groupTasks(id).filter((t) => t.status === 'completed').map((t) => t.task_id));
+      const result = await deleteDownloadedFiles(completedTasks.map((task) => task.task_id));
       showBatchFailures(result);
+    });
+  }
+  async function handleRemoveGroupRecords(id: string) {
+    const tasks = groupTasks(id);
+    if (tasks.length === 0) return;
+    const confirmed = await dialogStore.confirm({
+      title: $t('tasks.removeBatchRecordsTitle'),
+      message: $t('tasks.removeBatchRecordsConfirm', { values: { count: tasks.length } }),
+      confirmLabel: $t('tasks.removeBatchRecords'),
+      cancelLabel: $t('common.cancel'),
+    });
+    if (!confirmed) return;
+    await runGroup(id, 'remove', async () => {
+      const result = await removeTransferRecords('download', tasks.map((task) => task.task_id));
+      showBatchFailures(result);
+      if (result.failed.length === 0) {
+        const next = new Set(expandedGroups);
+        next.delete(id);
+        expandedGroups = next;
+      }
     });
   }
 
@@ -469,7 +499,7 @@
           {:else if row.kind === 'upload'}
             <UploadTaskCard task={row.task} onPause={handlePauseUpload} onResume={handleResumeUpload} onRestart={handleRestartUpload} onReselect={handleReselectUpload} onCancel={handleCancelUpload} onRemove={handleRemoveUpload} pending={pendingUploadActions.has(row.task.upload_id)} />
           {:else if row.row.kind === 'group'}
-            <DownloadTaskGroupHeader group={row.row.group} expanded={expandedGroups.has(row.row.group.id)} onToggle={toggleGroup} onPause={handlePauseGroup} onResume={handleResumeGroup} onRetry={handleRetryGroup} onCancel={handleCancelGroup} onDeleteFiles={handleDeleteGroupFiles} bytesPerSecond={row.row.group.tasks.reduce((sum, task) => sum + (downloadStore.speeds.get(task.task_id) ?? 0), 0)} pendingAction={pendingGroupActions.get(row.row.group.id) ?? null} />
+            <DownloadTaskGroupHeader group={row.row.group} expanded={expandedGroups.has(row.row.group.id)} onToggle={toggleGroup} onPause={handlePauseGroup} onResume={handleResumeGroup} onRetry={handleRetryGroup} onCancel={handleCancelGroup} onDeleteFiles={handleDeleteGroupFiles} onRemoveRecords={handleRemoveGroupRecords} bytesPerSecond={row.row.group.tasks.reduce((sum, task) => sum + (downloadStore.speeds.get(task.task_id) ?? 0), 0)} pendingAction={pendingGroupActions.get(row.row.group.id) ?? null} />
           {:else}
             <div class:group-child={row.row.kind === 'group-task'}>
               <DownloadTaskCard task={row.row.task} onPause={handlePause} onResume={handleResume} onRetry={handleRetry} onCancel={handleCancel} onOpen={handleOpen} onRemove={handleRemoveDownload} onDeleteFile={handleDeleteFile} bytesPerSecond={downloadStore.speeds.get(row.row.task.task_id) ?? 0} pendingAction={pendingDownloadActions.has(row.row.task.task_id) ? 'cancel' : null} />

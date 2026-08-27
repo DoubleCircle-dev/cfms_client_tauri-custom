@@ -8,17 +8,22 @@
   import AppUpdateChecker from '$lib/components/AppUpdateChecker.svelte';
   import ChangelogPanel from '$lib/components/ChangelogPanel.svelte';
 
-  let protoVer = $state(0);
-  let appVersion = $state('');
+  let protoVer = $state<number | null>(null);
+  let appVersion = $state<string | null>(null);
+  let protoVerLoaded = $state(false);
+  let appVersionLoaded = $state(false);
 
   onMount(async () => {
     void releaseHighlightsState.initialize();
-    appVersion = await loadAppVersion();
-    try {
-      protoVer = await protocolVersion();
-    } catch {
-      // Non-fatal on the about page.
-    }
+    const [versionResult, protocolResult] = await Promise.allSettled([
+      loadAppVersion(),
+      protocolVersion(),
+    ]);
+
+    appVersion = versionResult.status === 'fulfilled' ? versionResult.value : null;
+    protoVer = protocolResult.status === 'fulfilled' ? protocolResult.value : null;
+    appVersionLoaded = true;
+    protoVerLoaded = true;
   });
 
   async function replayReleaseHighlights() {
@@ -28,112 +33,122 @@
 
 </script>
 
-<div class="about-page">
-  <header class="page-header">
-    <h1>{$t('about.title')}</h1>
+<div class="workspace-page about-page">
+  <header class="product-heading">
+    <h2>CFMS Client</h2>
     <p>{$t('about.productName')}</p>
   </header>
 
-  <section class="product-meta" aria-label={$t('about.productName')}>
-    <dl>
-      <div>
-        <dt>{$t('about.version')}</dt>
-        <dd>{appVersion || '...'}</dd>
-      </div>
-      <div>
-        <dt>{$t('about.protocol')}</dt>
-        <dd>{protoVer || '...'}</dd>
-      </div>
-      <div>
-        <dt>{$t('about.copyright')}</dt>
-        <dd>© 2025–2026 Creeper Team</dd>
-      </div>
-      <div>
-        <dt>{$t('about.license')}</dt>
-        <dd>Apache License 2.0</dd>
-      </div>
-    </dl>
-  </section>
-
   <AppUpdateChecker
+    currentVersion={appVersionLoaded ? appVersion : null}
+    currentVersionLoaded={appVersionLoaded}
+    protocolVersion={protoVerLoaded ? protoVer : null}
+    protocolVersionLoaded={protoVerLoaded}
     onOpenFeatureTour={releaseHighlightsState.hasAvailableHighlights(authStore.permissions)
       ? replayReleaseHighlights
       : undefined}
   />
 
   <ChangelogPanel />
+
+  <footer class="product-legal" aria-label={$t('about.legalInformation')}>
+    <dl>
+      <div>
+        <dt>{$t('about.license')}</dt>
+        <dd>Apache License 2.0</dd>
+      </div>
+      <div>
+        <dt>{$t('about.copyright')}</dt>
+        <dd>© 2025–2026 Creeper Team</dd>
+      </div>
+    </dl>
+  </footer>
 </div>
 
 <style>
   .about-page {
-    width: min(720px, calc(100% - 2rem));
-    margin: 0 auto;
-    padding: 2rem 0 3rem;
     display: grid;
+    width: min(100%, 45rem);
     gap: 1.5rem;
+    margin-inline: auto;
+    padding: 1.5rem 1.25rem 3rem;
   }
 
-  .page-header {
-    display: grid;
-    gap: 0.35rem;
+  .product-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.8rem;
+    min-width: 0;
+    padding-block: 0.2rem 0.05rem;
   }
 
-  h1 {
+  .product-heading h2,
+  .product-heading p {
     margin: 0;
+  }
+
+  .product-heading h2 {
     color: var(--color-md3-on-surface);
-    font-family: var(--font-md3-sans);
-    font-size: clamp(1.6rem, 4vw, 2.25rem);
-    font-weight: 800;
-    letter-spacing: 0;
+    font: 700 1.25rem/1.2 var(--font-md3-sans);
+    letter-spacing: -0.01em;
+    text-wrap: balance;
   }
 
-  .page-header p {
-    margin: 0;
+  .product-heading p {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.95rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
   }
 
-  .product-meta {
-    padding-block: 0.25rem 0.75rem;
+  .product-legal {
+    padding-top: 1rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 55%, transparent);
   }
 
-  dl {
+  .product-legal dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 1.25rem;
     margin: 0;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem 2rem;
   }
 
-  dl > div {
+  .product-legal dl > div {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
     min-width: 0;
   }
 
-  dt {
+  .product-legal dt {
     color: var(--color-md3-on-surface-variant);
     font-family: var(--font-md3-sans);
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
   }
 
-  dd {
-    margin: 0.25rem 0 0;
-    color: var(--color-md3-on-surface);
-    font-size: 1rem;
-    word-break: break-word;
+  .product-legal dd {
+    margin: 0;
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.875rem;
+    line-height: 1.5;
   }
 
   @media (max-width: 640px) {
     .about-page {
-      width: min(100% - 2rem, 720px);
-      padding-top: 1.5rem;
+      padding-top: 1rem;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .about-page {
+      padding-inline: 1rem;
     }
 
-    dl {
-      grid-template-columns: 1fr;
-      gap: 0.9rem;
+    .product-heading {
+      display: grid;
+      gap: 0.25rem;
     }
-
   }
 </style>

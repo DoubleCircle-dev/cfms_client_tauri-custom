@@ -4,18 +4,19 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import { locale } from 'svelte-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '$lib/i18n';
+import type { AppUpdateMetadata, UpdateProgressSnapshot } from '$lib/updater';
 import AppUpdateChecker from './AppUpdateChecker.svelte';
 
 const mocks = vi.hoisted(() => ({
-  getVersion: vi.fn(async () => '0.43.0'),
   goto: vi.fn(),
+  relaunchApp: vi.fn(),
   notificationSuccess: vi.fn(),
   notificationError: vi.fn(),
   appUpdateState: {
     channel: 'stable',
     checked: false,
     checking: false,
-    update: null,
+    update: null as AppUpdateMetadata | null,
     error: null,
     installing: false,
     installed: false,
@@ -25,16 +26,19 @@ const mocks = vi.hoisted(() => ({
       downloadedBytes: 0,
       totalBytes: null,
       progress: null,
-    },
+    } as UpdateProgressSnapshot,
     ensureChannel: vi.fn(async () => 'stable'),
     check: vi.fn(async () => null),
     install: vi.fn(async () => {}),
   },
 }));
 
-vi.mock('@tauri-apps/api/app', () => ({ getVersion: mocks.getVersion }));
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$lib/app-update-state.svelte', () => ({ appUpdateState: mocks.appUpdateState }));
+vi.mock('$lib/updater', async (importOriginal) => ({
+  ...await importOriginal<typeof import('$lib/updater')>(),
+  relaunchApp: mocks.relaunchApp,
+}));
 vi.mock('$lib/stores.svelte', () => ({
   notificationStore: {
     success: mocks.notificationSuccess,
@@ -46,6 +50,7 @@ beforeEach(() => {
   locale.set('en');
   mocks.appUpdateState.checking = false;
   mocks.appUpdateState.installing = false;
+  mocks.appUpdateState.installed = false;
   mocks.appUpdateState.checked = false;
   mocks.appUpdateState.update = null;
   mocks.appUpdateState.error = null;
@@ -61,16 +66,51 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe('AppUpdateChecker feature tour action', () => {
-  it('does not render the action when no tour callback is supplied', async () => {
-    render(AppUpdateChecker);
-    await waitFor(() => expect(screen.getByText(/Current version: 0.43.0/)).toBeTruthy());
+const availableUpdate = {
+  currentVersion: '0.43.0',
+  version: '0.44.0',
+  date: '2026-08-25T00:00:00Z',
+  body: null,
+  channel: 'stable' as const,
+  releaseUrl: 'https://example.com/releases/0.44.0',
+  installMode: 'desktop' as const,
+};
+
+function renderChecker(onOpenFeatureTour?: () => void | Promise<void>) {
+  return render(AppUpdateChecker, {
+    props: {
+      currentVersion: '0.43.0',
+      currentVersionLoaded: true,
+      protocolVersion: 24,
+      protocolVersionLoaded: true,
+      onOpenFeatureTour,
+    },
+  });
+}
+
+describe('AppUpdateChecker', () => {
+  it('uses the supplied version as accessible context and emphasizes checking while idle', async () => {
+    renderChecker();
+
+    await waitFor(() => expect(screen.getByText('Stable')).toBeTruthy());
+    expect(mocks.appUpdateState.ensureChannel).toHaveBeenCalledOnce();
+    expect(screen.getByText('Current version')).toBeTruthy();
+    expect(screen.getByText('0.43.0')).toBeTruthy();
+    expect(screen.getByText('Protocol Version')).toBeTruthy();
+    expect(screen.getByText('24')).toBeTruthy();
+    expect(screen.getByText('Not checked yet')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Check for Updates' }).classList.contains('primary-action')).toBe(true);
+  });
+
+  it('does not render the feature tour action when no callback is supplied', async () => {
+    renderChecker();
+    await waitFor(() => expect(mocks.appUpdateState.ensureChannel).toHaveBeenCalledOnce());
     expect(screen.queryByRole('button', { name: 'Feature tour' })).toBeNull();
   });
 
   it('renders the non-emphasized Wand Stars action and invokes its callback', async () => {
     const onOpenFeatureTour = vi.fn();
-    const { container } = render(AppUpdateChecker, { props: { onOpenFeatureTour } });
+    const { container } = renderChecker(onOpenFeatureTour);
     const button = await screen.findByRole('button', { name: 'Feature tour' });
 
     expect(button.classList.contains('text-action')).toBe(true);
@@ -81,9 +121,68 @@ describe('AppUpdateChecker feature tour action', () => {
 
   it('matches the update-channel disabled state during update activity', async () => {
     mocks.appUpdateState.checking = true;
-    render(AppUpdateChecker, { props: { onOpenFeatureTour: vi.fn() } });
+    renderChecker(vi.fn());
 
     expect((await screen.findByRole('button', { name: 'Feature tour' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Update Channel' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('announces the latest state after a completed check', () => {
+    mocks.appUpdateState.checked = true;
+    renderChecker();
+
+    expect(screen.getByText('You are on the latest version.')).toBeTruthy();
+  });
+
+  it('prioritizes installation and demotes checking when an update is available', () => {
+    mocks.appUpdateState.checked = true;
+    mocks.appUpdateState.update = availableUpdate;
+    renderChecker();
+
+    expect(screen.getByText('Update available')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Download and Install' }).classList.contains('success-action')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Check for Updates' }).classList.contains('secondary-action')).toBe(true);
+  });
+
+  it('exposes determinate download progress semantics', () => {
+    mocks.appUpdateState.update = availableUpdate;
+    mocks.appUpdateState.installing = true;
+    mocks.appUpdateState.progress = {
+      phase: 'downloading',
+      downloadedBytes: 512,
+      totalBytes: 1024,
+      progress: 0.5,
+    };
+    renderChecker();
+
+    const progress = screen.getByRole('progressbar');
+    expect(progress.getAttribute('aria-valuenow')).toBe('50');
+    expect(progress.getAttribute('aria-valuetext')).toContain('50.0%');
+  });
+
+  it('omits a numeric value for indeterminate download progress', () => {
+    mocks.appUpdateState.update = availableUpdate;
+    mocks.appUpdateState.installing = true;
+    mocks.appUpdateState.progress = {
+      phase: 'downloading',
+      downloadedBytes: 0,
+      totalBytes: null,
+      progress: null,
+    };
+    const { container } = renderChecker();
+
+    expect(screen.getByRole('progressbar').hasAttribute('aria-valuenow')).toBe(false);
+    expect(container.querySelector('.progress-fill--indeterminate')).toBeTruthy();
+  });
+
+  it('prioritizes restart after a desktop update is installed', async () => {
+    mocks.appUpdateState.update = availableUpdate;
+    mocks.appUpdateState.installed = true;
+    renderChecker();
+
+    expect(screen.getByText('Update installed')).toBeTruthy();
+    const restart = screen.getByRole('button', { name: 'Restart Now' });
+    await fireEvent.click(restart);
+    expect(mocks.relaunchApp).toHaveBeenCalledOnce();
   });
 });

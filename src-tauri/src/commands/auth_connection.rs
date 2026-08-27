@@ -21,6 +21,9 @@ pub async fn login(
     password: String,
     twofa_token: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let password = zeroize::Zeroizing::new(password);
+    let twofa_token = twofa_token.map(zeroize::Zeroizing::new);
+
     // --- Obtain the active connection ---
     let conn = {
         let c = state.inner.conn.read().await;
@@ -28,21 +31,27 @@ pub async fn login(
     }
     .ok_or_else(|| "Not connected to a server".to_string())?;
 
-    let response =
-        send_login_request(&conn, &username, &password, twofa_token.as_deref()).await?;
+    let mut response = send_login_request(
+        &conn,
+        &username,
+        &password,
+        twofa_token.as_ref().map(|token| token.as_str()),
+    )
+    .await?;
 
-    tracing::info!(
-        "Login response: code={}, message={}",
-        response.code,
-        response.message
-    );
+    tracing::info!("Login response received with code={}", response.code);
 
     match response.code {
         // --- Success (no 2FA) ---
         200 => {
-            let data = &response.data;
-
-            apply_successful_login_response(&state, &username, data, true, true).await?;
+            apply_successful_login_response(
+                &state,
+                &username,
+                &mut response.data,
+                true,
+                true,
+            )
+            .await?;
 
             let mut status = build_auth_status(&state.inner).await;
             status["needs_preference_dek_setup"] = serde_json::Value::Bool(true);
@@ -69,7 +78,9 @@ pub async fn login(
             {
                 // Store a placeholder token to indicate partial auth.
                 let mut t = state.inner.token.write().await;
-                *t = Some("pending_2fa".to_string());
+                *t = Some(cfms_service::sensitive::SecretString::new(
+                    "pending_2fa".to_string(),
+                ));
             }
             {
                 let mut e = state.inner.token_exp.write().await;
@@ -147,27 +158,41 @@ async fn send_login_request(
     password: &str,
     twofa_token: Option<&str>,
 ) -> Result<cfms_core::Response, String> {
-    let mut request = serde_json::json!({
-        "action": "login",
-        "data": {
-            "username": username,
-            "password": password,
-        },
-    });
-    if let Some(token) = twofa_token {
-        request["data"]["2fa_token"] = serde_json::Value::String(token.to_string());
+    #[derive(serde::Serialize)]
+    struct LoginData<'a> {
+        username: &'a str,
+        password: &'a str,
+        #[serde(rename = "2fa_token", skip_serializing_if = "Option::is_none")]
+        twofa_token: Option<&'a str>,
     }
+
+    #[derive(serde::Serialize)]
+    struct LoginRequest<'a> {
+        action: &'static str,
+        data: LoginData<'a>,
+    }
+
+    let request = LoginRequest {
+        action: "login",
+        data: LoginData {
+            username,
+            password,
+            twofa_token,
+        },
+    };
 
     let mut stream = conn
         .create_stream()
         .await
         .map_err(|e| format!("Failed to create stream: {e}"))?;
 
-    let request_bytes =
-        serde_json::to_vec(&request).map_err(|e| format!("Failed to encode login request: {e}"))?;
+    let request_bytes = zeroize::Zeroizing::new(
+        serde_json::to_vec(&request)
+            .map_err(|e| format!("Failed to encode login request: {e}"))?,
+    );
 
     stream
-        .send(conn, request_bytes)
+        .send_sensitive(conn, request_bytes)
         .await
         .map_err(|e| format!("Failed to send login request: {e}"))?;
 
@@ -187,6 +212,7 @@ async fn send_login_request(
         }
     };
 
+    let response_bytes = zeroize::Zeroizing::new(response_bytes);
     serde_json::from_slice(&response_bytes)
         .map_err(|e| format!("Invalid login response from server: {e}"))
 }
@@ -194,14 +220,16 @@ async fn send_login_request(
 async fn apply_successful_login_response(
     state: &AppHandleState,
     username: &str,
-    data: &serde_json::Value,
+    data: &mut serde_json::Value,
     clear_dek: bool,
     clear_tasks: bool,
-) -> Result<String, String> {
-    let token = data["token"]
-        .as_str()
-        .ok_or_else(|| "Server did not return a token".to_string())?
-        .to_string();
+) -> Result<(), String> {
+    let token = match data.get_mut("token").map(std::mem::take) {
+        Some(serde_json::Value::String(token)) => {
+            cfms_service::sensitive::SecretString::new(token)
+        }
+        _ => return Err("Server did not return a token".to_string()),
+    };
 
     {
         let mut u = state.inner.username.write().await;
@@ -209,7 +237,7 @@ async fn apply_successful_login_response(
     }
     {
         let mut t = state.inner.token.write().await;
-        *t = Some(token.clone());
+        *t = Some(token);
     }
     {
         let exp = data["exp"].as_i64().unwrap_or(unix_now() + 3600);
@@ -268,7 +296,7 @@ async fn apply_successful_login_response(
         state.upload_tasks.clear();
     }
 
-    Ok(token)
+    Ok(())
 }
 
 /// Change a user's password via the server's `set_passwd` action.
@@ -291,6 +319,9 @@ pub async fn change_password(
     old_password: String,
     new_password: String,
 ) -> Result<(), String> {
+    let old_password = zeroize::Zeroizing::new(old_password);
+    let new_password = zeroize::Zeroizing::new(new_password);
+
     // --- Obtain the active connection ---
     let conn = {
         let c = state.inner.conn.read().await;
@@ -301,11 +332,11 @@ pub async fn change_password(
     let mut prepared_dek_rewrap = if let Some(existing_dek) = state.inner.dek.read().await.clone() {
         match get_connection_auth(&state).await {
             Ok((auth_conn, auth_username, auth_token))
-                if auth_username == username && auth_token != "pending_2fa" =>
+                if auth_username == username && auth_token.as_str() != "pending_2fa" =>
             {
                 let encrypted = rewrap_and_upload_preference_dek(
                     &auth_conn,
-                    *existing_dek,
+                    existing_dek.clone(),
                     &new_password,
                     &auth_username,
                     &auth_token,
@@ -322,27 +353,29 @@ pub async fn change_password(
         None
     };
 
-    let request = serde_json::json!({
+    let request = cfms_service::sensitive::SensitiveJson::new(serde_json::json!({
         "action": "set_passwd",
         "data": {
             "username": &username,
-            "old_passwd": &old_password,
-            "new_passwd": &new_password,
+            "old_passwd": old_password.as_str(),
+            "new_passwd": new_password.as_str(),
             "bypass_passwd_requirements": false,
             "force_update_after_login": false,
         },
-    });
+    }));
 
     let mut stream = conn
         .create_stream()
         .await
         .map_err(|e| format!("Failed to create stream: {e}"))?;
 
-    let request_bytes = serde_json::to_vec(&request)
-        .map_err(|e| format!("Failed to encode change-password request: {e}"))?;
+    let request_bytes = zeroize::Zeroizing::new(
+        serde_json::to_vec(request.as_value())
+            .map_err(|e| format!("Failed to encode change-password request: {e}"))?,
+    );
 
     stream
-        .send(&conn, request_bytes)
+        .send_sensitive(&conn, request_bytes)
         .await
         .map_err(|e| format!("Failed to send change-password request: {e}"))?;
 
@@ -365,20 +398,17 @@ pub async fn change_password(
     // Politely close the stream.
     let _ = stream.send_final(&conn, vec![]).await;
 
+    let response_bytes = zeroize::Zeroizing::new(response_bytes);
     let response: cfms_core::Response = serde_json::from_slice(&response_bytes)
         .map_err(|e| format!("Invalid change-password response from server: {e}"))?;
 
-    tracing::info!(
-        "set_passwd response: code={}, message={}",
-        response.code,
-        response.message
-    );
+    tracing::info!("set_passwd response received with code={}", response.code);
 
     if response.code != 200 {
         if let Some((dek, _, auth_conn, auth_username, auth_token)) = prepared_dek_rewrap.take() {
             match rewrap_and_upload_preference_dek(
                 &auth_conn,
-                *dek,
+                dek.clone(),
                 &old_password,
                 &auth_username,
                 &auth_token,
@@ -423,6 +453,9 @@ pub async fn recover_preference_dek(
     recovery_password: String,
     current_password: String,
 ) -> Result<(), String> {
+    let recovery_password = zeroize::Zeroizing::new(recovery_password);
+    let current_password = zeroize::Zeroizing::new(current_password);
+
     if recovery_password.is_empty() {
         return Err("Recovery password is required".to_string());
     }
@@ -445,7 +478,7 @@ pub async fn recover_preference_dek(
     let (conn, username, token) = get_connection_auth(&state).await?;
     let encrypted_for_current_password = rewrap_and_upload_preference_dek(
         &conn,
-        *recovered_dek,
+        recovered_dek.clone(),
         &current_password,
         &username,
         &token,
@@ -596,8 +629,8 @@ pub async fn connect(
     };
 
     tracing::info!(
-        "Connecting to {url} (disable_ssl_enforcement={disable_ssl_enforcement}, effective_disable_ssl={effective_disable_ssl}, proxy={}, force_ipv4={})",
-        proxy_addr.as_deref().unwrap_or("none"),
+        "Connecting (disable_ssl_enforcement={disable_ssl_enforcement}, effective_disable_ssl={effective_disable_ssl}, proxy_configured={}, force_ipv4={})",
+        proxy_addr.is_some(),
         connection_settings.force_ipv4,
     );
 
@@ -786,8 +819,7 @@ pub async fn connect(
     }
 
     tracing::info!(
-        "Connected to {url} — server={}, protocol={}, lockdown={}",
-        server_info.server_name,
+        "Connected — protocol={}, lockdown={}",
         server_info.protocol_version,
         server_info.lockdown,
     );
@@ -1063,12 +1095,13 @@ pub async fn validate_2fa(
     state: tauri::State<'_, AppHandleState>,
     token: String,
 ) -> Result<(), String> {
+    let token = zeroize::Zeroizing::new(token);
     let (conn, username, auth_token) = get_connection_auth(&state).await?;
 
     let resp = send_action_request(
         &conn,
         "validate_2fa",
-        serde_json::json!({"token": token}),
+        serde_json::json!({"token": token.as_str()}),
         &username,
         &auth_token,
     )
@@ -1108,12 +1141,13 @@ pub async fn disable_2fa(
     state: tauri::State<'_, AppHandleState>,
     password: String,
 ) -> Result<(), String> {
+    let password = zeroize::Zeroizing::new(password);
     let (conn, username, token) = get_connection_auth(&state).await?;
 
     let resp = send_action_request(
         &conn,
         "disable_2fa",
-        serde_json::json!({"password": password}),
+        serde_json::json!({"password": password.as_str()}),
         &username,
         &token,
     )

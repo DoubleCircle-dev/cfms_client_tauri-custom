@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import type { DownloadBatchMetadata } from './api';
+import { serverAvailability } from './api/server-errors';
 
 export type DownloadBatchPhase = 'collecting' | 'queueing';
 
@@ -13,6 +14,8 @@ export interface DownloadBatchSnapshot {
   discovered: number;
   queued: number;
   failed: number;
+  rateLimited: number;
+  rateLimitWaiting: boolean;
 }
 
 let activeController: AbortController | null = null;
@@ -41,6 +44,8 @@ export function beginDownloadBatch(batch: DownloadBatchMetadata) {
     discovered: 0,
     queued: 0,
     failed: 0,
+    rateLimited: 0,
+    rateLimitWaiting: false,
   });
   return activeController;
 }
@@ -133,11 +138,20 @@ export function markDownloadBatchQueued(batchId: string) {
   }));
 }
 
-export function markDownloadBatchFailed(batchId: string, count = 1) {
+export function markDownloadBatchFailed(batchId: string, error?: unknown, count = 1) {
   if (count <= 0) return;
+  const rateLimited = serverAvailability(error)?.kind === 'rate_limited' ? count : 0;
   updateDownloadBatchSnapshot(batchId, (snapshot) => ({
     ...snapshot,
     failed: snapshot.failed + count,
+    rateLimited: snapshot.rateLimited + rateLimited,
+  }));
+}
+
+export function setDownloadBatchRateLimitWaiting(batchId: string, waiting: boolean) {
+  updateDownloadBatchSnapshot(batchId, (snapshot) => ({
+    ...snapshot,
+    rateLimitWaiting: waiting,
   }));
 }
 

@@ -19,3 +19,4 @@ tracing.workspace = true
 dashmap.workspace = true
 url.workspace = true
 base64ct.workspace = true
+zeroize.workspace = true

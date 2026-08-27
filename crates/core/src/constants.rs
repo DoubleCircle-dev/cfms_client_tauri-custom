@@ -8,7 +8,7 @@
 // Protocol version
 // ---------------------------------------------------------------------------
 /// Exact wire-protocol version required by this client.
-pub const PROTOCOL_VERSION: u32 = 24;
+pub const PROTOCOL_VERSION: u32 = 25;
 
 /// Oldest wire-protocol version supported by this client.
 pub const MIN_SUPPORTED_PROTOCOL_VERSION: u32 = PROTOCOL_VERSION;
@@ -19,6 +19,16 @@ pub const MAX_SUPPORTED_PROTOCOL_VERSION: u32 = PROTOCOL_VERSION;
 /// Return whether a server wire-protocol version is compatible with this client.
 pub const fn is_supported_protocol_version(version: u32) -> bool {
     version == PROTOCOL_VERSION
+}
+
+/// Protocol 25 conclusion codes returned when a file task cannot be claimed.
+pub mod file_task_claim_code {
+    pub const INVALID: u32 = 46_000;
+    pub const IN_PROGRESS: u32 = 46_001;
+    pub const COMPLETED: u32 = 46_002;
+    pub const CANCELLED: u32 = 46_003;
+    pub const EXPIRED: u32 = 46_004;
+    pub const CONFLICT: u32 = 46_005;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,9 +119,9 @@ mod tests {
     }
 
     #[test]
-    fn supports_only_protocol_twenty_four() {
-        assert!(is_supported_protocol_version(24));
-        assert!(!is_supported_protocol_version(23));
-        assert!(!is_supported_protocol_version(25));
+    fn supports_only_protocol_twenty_five() {
+        assert!(is_supported_protocol_version(25));
+        assert!(!is_supported_protocol_version(24));
+        assert!(!is_supported_protocol_version(26));
     }
 }

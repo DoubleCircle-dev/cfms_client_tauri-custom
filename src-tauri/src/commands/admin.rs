@@ -87,12 +87,13 @@ pub async fn create_user(
     password: String,
     nickname: String,
 ) -> Result<bool, String> {
+    let password = zeroize::Zeroizing::new(password);
     server_action_bool(
         &state,
         "create_user",
         serde_json::json!({
             "username": username,
-            "password": password,
+            "password": password.as_str(),
             "nickname": nickname,
             "permissions": [],
             "groups": [],
@@ -240,12 +241,13 @@ pub async fn reset_user_password(
     bypass_passwd_requirements: bool,
     force_update_after_login: bool,
 ) -> Result<bool, String> {
+    let new_password = zeroize::Zeroizing::new(new_password);
     server_action_bool(
         &state,
         "set_passwd",
         admin_password_reset_data(
             &username,
-            &new_password,
+            new_password.as_str(),
             bypass_passwd_requirements,
             force_update_after_login,
         ),

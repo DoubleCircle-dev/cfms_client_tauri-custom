@@ -208,16 +208,16 @@ pub async fn get_document(
 
     // Handle 403 (Access Denied)
     if resp.code == 403 {
-        return Err(format!("Access denied: {}", resp.message));
+        return Err(format_server_response_error(&resp));
     }
 
     // Handle 404 (Not Found)
     if resp.code == 404 {
-        return Err("Document not found on server".to_string());
+        return Err(format_server_response_error(&resp));
     }
 
     if resp.code != 200 {
-        return Err(format!("Server returned {}: {}", resp.code, resp.message));
+        return Err(format_server_response_error(&resp));
     }
 
     // Extract task data from the server response.
@@ -252,6 +252,7 @@ pub async fn get_document(
         total_bytes: 0,
         message: None,
         error: None,
+        failure_kind: None,
         created_at: now,
         started_at: None,
         completed_at: None,
@@ -263,6 +264,7 @@ pub async fn get_document(
         bandwidth_limit: None,
         pause_position: None,
         supports_resume,
+        server_task_recreate_count: 0,
         batch_id: non_empty_optional(batch_id),
         batch_name: non_empty_optional(batch_name),
         batch_root_id: non_empty_optional(batch_root_id),

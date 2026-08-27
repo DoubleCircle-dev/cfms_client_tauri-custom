@@ -83,6 +83,34 @@ pub async fn retry_download(
     state: tauri::State<'_, AppHandleState>,
     task_id: String,
 ) -> Result<bool, String> {
+    if state.tasks.get(&task_id).is_some_and(|task| {
+        task.status == DownloadTaskStatus::Failed
+            && task.failure_kind == Some(cfms_core::DownloadFailureKind::ServerTaskUnclaimable)
+    }) {
+        let replacement = download_queue::recreate_server_task(
+            &state.inner,
+            &state.tasks,
+            &task_id,
+            DownloadTaskStatus::Failed,
+        )
+        .await
+        .map_err(|e| format!("Failed to recreate download: {e}"))?;
+        let Some(replacement) = replacement else {
+            return Ok(false);
+        };
+        let _ = state
+            .inner
+            .event_tx
+            .send(ServiceEvent::DownloadTaskReplaced {
+                old_task_id: task_id,
+                task: replacement,
+            });
+        let _ = state.inner.event_tx.send(ServiceEvent::ActiveCountChanged {
+            count: state.tasks.active_count(),
+        });
+        return Ok(true);
+    }
+
     let retried = download_queue::retry_failed_task(&state.tasks, &task_id)
         .map_err(|e| format!("Failed to retry download: {e}"))?;
     if retried {

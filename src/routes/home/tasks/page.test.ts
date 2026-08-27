@@ -2,6 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { downloadStore } from '$lib/stores.svelte';
+import type { DownloadTaskDto } from '$lib/api';
 import TasksPage from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
@@ -12,19 +14,22 @@ const mocks = vi.hoisted(() => ({
   setDownloads: vi.fn(),
   setUploads: vi.fn(),
   notifySuccess: vi.fn(),
+  confirmDialog: vi.fn(),
+  deleteDownloadedFiles: vi.fn(),
+  removeTransferRecords: vi.fn(),
 }));
 
 vi.mock('$lib/api', () => ({
   cancelDownload: vi.fn(),
   controlTransferTasks: vi.fn(),
-  deleteDownloadedFiles: vi.fn(),
+  deleteDownloadedFiles: mocks.deleteDownloadedFiles,
   getDocument: mocks.getDocument,
   getDocumentInfo: mocks.getDocumentInfo,
   getDownloadTasks: mocks.getDownloadTasks,
   getUploadTasks: mocks.getUploadTasks,
   openDownloadedFile: vi.fn(),
   pauseDownload: vi.fn(),
-  removeTransferRecords: vi.fn(),
+  removeTransferRecords: mocks.removeTransferRecords,
   resumeDownload: vi.fn(),
   retryDownload: vi.fn(),
   retryUploadTask: vi.fn(),
@@ -53,6 +58,10 @@ vi.mock('$lib/stores.svelte', () => ({
     success: mocks.notifySuccess,
     error: vi.fn(),
   },
+}));
+
+vi.mock('$lib/dialogs.svelte', () => ({
+  dialogStore: { confirm: mocks.confirmDialog },
 }));
 
 vi.mock('$lib/download-batch-control', () => ({
@@ -115,10 +124,14 @@ beforeEach(() => {
   });
   mocks.getDownloadTasks.mockResolvedValue([]);
   mocks.getUploadTasks.mockResolvedValue([]);
+  mocks.confirmDialog.mockResolvedValue(true);
+  mocks.deleteDownloadedFiles.mockResolvedValue({ succeeded: [], failed: [] });
+  mocks.removeTransferRecords.mockResolvedValue({ succeeded: [], failed: [] });
 });
 
 afterEach(() => {
   cleanup();
+  downloadStore.tasks.clear();
   vi.clearAllMocks();
 });
 
@@ -137,6 +150,36 @@ async function openDialogAndSubmit(documentId = 'document-42') {
   await fireEvent.input(input, { target: { value: documentId } });
   await fireEvent.click(within(dialog).getByRole('button', { name: 'tasks.downloadByIdAction' }));
   return { dialog, input };
+}
+
+function batchTask(taskId: string, status: DownloadTaskDto['status']): DownloadTaskDto {
+  return {
+    task_id: taskId,
+    file_id: `file-${taskId}`,
+    filename: `${taskId}.pdf`,
+    file_path: `C:/Downloads/${taskId}.pdf`,
+    status,
+    progress: status === 'completed' ? 1 : 0,
+    current_bytes: status === 'completed' ? 10 : 0,
+    total_bytes: 10,
+    message: null,
+    error: status === 'failed' ? 'server rejected request' : null,
+    created_at: 1,
+    started_at: null,
+    completed_at: 2,
+    priority: 0,
+    retry_count: 0,
+    max_retries: 3,
+    scheduled_time: null,
+    stage: status === 'completed' ? 4 : 0,
+    bandwidth_limit: null,
+    pause_position: null,
+    supports_resume: true,
+    batch_id: 'batch-1',
+    batch_name: 'Evidence bundle',
+    batch_created_at: 1,
+    batch_estimated_total: 2,
+  };
 }
 
 describe('direct document ID downloads', () => {
@@ -199,5 +242,44 @@ describe('direct document ID downloads', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Queue unavailable');
     expect((input as HTMLInputElement).value).toBe('document-42');
     expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+});
+
+describe('terminal download batch cleanup', () => {
+  beforeEach(() => {
+    downloadStore.tasks.set('complete', batchTask('complete', 'completed'));
+    downloadStore.tasks.set('failed', batchTask('failed', 'failed'));
+  });
+
+  it('offers separate file deletion and record removal for a mixed-result batch', async () => {
+    await renderLoadedPage();
+    await fireEvent.click(screen.getByRole('button', { name: 'tasks.expandBatch' }));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'tasks.deleteBatchFiles' }));
+    await waitFor(() => expect(mocks.deleteDownloadedFiles).toHaveBeenCalledWith(['complete']));
+    expect(mocks.confirmDialog).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'tasks.deleteBatchFilesTitle',
+      danger: true,
+    }));
+
+    const removeButton = screen.getByRole('button', { name: 'tasks.removeBatchRecords' });
+    await waitFor(() => expect(removeButton.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(removeButton);
+    await waitFor(() => expect(mocks.removeTransferRecords).toHaveBeenCalledWith(
+      'download',
+      expect.arrayContaining(['complete', 'failed']),
+    ));
+    expect(mocks.confirmDialog).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: 'tasks.removeBatchRecordsTitle',
+    }));
+  });
+
+  it('does nothing when destructive file deletion is not confirmed', async () => {
+    mocks.confirmDialog.mockResolvedValueOnce(false);
+    await renderLoadedPage();
+    await fireEvent.click(screen.getByRole('button', { name: 'tasks.expandBatch' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'tasks.deleteBatchFiles' }));
+
+    expect(mocks.deleteDownloadedFiles).not.toHaveBeenCalled();
   });
 });
