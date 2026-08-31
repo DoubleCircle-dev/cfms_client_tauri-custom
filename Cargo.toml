@@ -88,3 +88,21 @@ tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 async-trait = "0.1"
+
+# ---------------------------------------------------------------------------
+# Build profiles — tune dev compile/link time (shorter `tauri dev` startup)
+# ---------------------------------------------------------------------------
+[profile.dev]
+# Keep stack traces but skip full debug info. Compiling a large crate with full
+# `debug = true` generates a lot of DWARF/PDB data; line-tables-only keeps
+# readable backtraces (line numbers) while cutting compile + link time and
+# shrinking the target directory.
+debug = "line-tables-only"
+# Split debug info per object file so the final binary link is faster.
+split-debuginfo = "unpacked"
+# sccache cannot cache incremental-compiled crates, and cargo's `-C incremental`
+# would make every sccache call a cache miss. Disable it explicitly so sccache
+# (see .cargo/config.toml) provides the caching, which also survives `target/`
+# cleanups. NOTE: `CARGO_INCREMENTAL` as an env var does NOT affect cargo's own
+# decision — it must be set here in the profile.
+incremental = false

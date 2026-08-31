@@ -27,3 +27,11 @@ rustflags = ["-C", "target-feature=+aes,+ssse3"]
 
 [build]
 rustflags = ["-Z", "threads=8"]
+# Route rustc through sccache so compiled artifacts are cached across builds
+# and even across `target/` cleanups. `sccache` is installed via Scoop and its
+# shim is on PATH. (`build.rustc-wrapper` is the config-level way to set the
+# compiler wrapper; an `[env] RUSTC_WRAPPER` entry does NOT affect cargo's own
+# wrapper selection.)
+# NOTE: cargo's incremental compilation is disabled in `[profile.dev]`
+# (Cargo.toml) — sccache cannot cache incremental crates.
+rustc-wrapper = "sccache"
