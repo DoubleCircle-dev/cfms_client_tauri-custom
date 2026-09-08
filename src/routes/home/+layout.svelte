@@ -76,6 +76,12 @@
       && authStore.isLoggedIn
       && authStore.permissions.includes('diagnostics'),
   );
+  const canViewSchedules = $derived(
+    serverStateStore.connected
+      && authStore.isLoggedIn
+      && authStore.permissions.includes('view_schedules')
+      && serverStateStore.extensionFlags.includes('scheduling'),
+  );
   const isSettingsRoute = $derived(
     $page.url.pathname === '/home/settings' || $page.url.pathname.startsWith('/home/settings/'),
   );
@@ -114,6 +120,9 @@
   ]);
 
   const bottomNavigation = $derived<WorkspaceNavItem[]>([
+    ...(canViewSchedules
+      ? [{ id: 'schedules', label: $t('workspace.schedules'), href: '/home/schedules', icon: 'schedules' as const, exact: true }]
+      : []),
     ...(isAdmin
       ? [{ id: 'manage', label: $t('workspace.administration'), href: '/home/manage', icon: 'adminPanelSettings' as const }]
       : []),
@@ -144,6 +153,7 @@
     if (path === '/home/tools') return $t('tools.title');
     if (path === '/home/chat') return $t('chat.title');
     if (path === '/home/manage') return $t('workspace.administration');
+    if (path === '/home/schedules') return $t('workspace.schedules');
     if (path === '/home/more') return $t('workspace.account');
     if (path === '/home/diagnostics') return $t('workspace.diagnostics');
     if (path === '/home/about') return $t('workspace.about');

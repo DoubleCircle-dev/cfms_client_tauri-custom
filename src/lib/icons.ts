@@ -17,6 +17,7 @@ export const ICONS = {
   manage:        'cloud_circle',
   tools:         'handyman',
   chat:          'forum',
+  schedules:     'event_repeat',
 
   // ---- Auth ----
   login:         'login',
