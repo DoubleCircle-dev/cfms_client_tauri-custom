@@ -4,6 +4,18 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.49.0
+**Released on:** 2026-09-08
+
+**Title:** Add protocol 26 schedule workspace
+
+### Added
+- Add protocol 26 schedule workspace
+- Adapt client to protocol 26 scheduling API
+- Improve DownloadTaskGroupHeader with enhanced action handling and state management in tests
+
+--- 
+
 ## v0.48.0
 **Released on:** 2026-08-26
 
