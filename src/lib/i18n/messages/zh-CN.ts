@@ -819,6 +819,8 @@ export const zh_CN = {
     noMatchesHelp: '请尝试输入任务名称、计划 ID 或账户名称。',
     createFirst: '创建首个计划任务',
     createAction: '新建计划',
+    createUnavailableHelp: '为什么无法新建计划？',
+    noAvailableTaskTypes: '当前账户没有可用的计划任务类型。请启用提供计划任务的扩展，或授予该任务类型要求的权限。',
     createTitle: '创建计划任务',
     editTitle: '编辑计划任务',
     definition: '计划定义',

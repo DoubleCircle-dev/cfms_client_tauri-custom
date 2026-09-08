@@ -4,6 +4,16 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.49.1
+**Released on:** 2026-09-08
+
+**Title:** Bugfix
+
+### Added
+- Enhance schedule creation with availability checks and tooltips fix: adjust font-family order for material symbols style: update icon component for better overflow handling test: add tests for schedule page button states and search input focus
+
+--- 
+
 ## v0.49.0
 **Released on:** 2026-09-08
 

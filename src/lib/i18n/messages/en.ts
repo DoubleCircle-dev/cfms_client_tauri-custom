@@ -825,6 +825,8 @@ export const en = {
     noMatchesHelp: 'Try a task name, schedule ID, or account name.',
     createFirst: 'Create the first schedule',
     createAction: 'New schedule',
+    createUnavailableHelp: 'Why is New schedule unavailable?',
+    noAvailableTaskTypes: 'No schedulable task types are available to this account. Enable an extension that provides scheduled work, or grant its required permission.',
     createTitle: 'Create schedule',
     editTitle: 'Edit schedule',
     definition: 'Schedule definition',

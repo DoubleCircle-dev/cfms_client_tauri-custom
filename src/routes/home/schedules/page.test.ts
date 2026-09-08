@@ -137,8 +137,21 @@ describe('schedules page', () => {
     render(SchedulesPage);
 
     await screen.findByText('reports.weekly');
-    expect((screen.getByRole('button', { name: 'New schedule' }) as HTMLButtonElement).disabled).toBe(true);
+    const createButton = screen.getByRole('button', { name: 'New schedule' }) as HTMLButtonElement;
+    expect(createButton.disabled).toBe(true);
+    expect(createButton.getAttribute('aria-describedby')).toBe('schedule-create-unavailable');
+    expect(screen.getByRole('button', { name: 'Why is New schedule unavailable?' }).getAttribute('aria-describedby')).toBe('schedule-create-unavailable');
+    expect(screen.getByRole('tooltip').id).toBe('schedule-create-unavailable');
+    expect(screen.getByText(/No schedulable task types are available to this account/)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('switch', { name: 'Toggle reports.weekly' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('delegates the search input focus ring to its composite field', async () => {
+    signIn(['view_schedules']);
+    render(SchedulesPage);
+
+    await screen.findByText('reports.weekly');
+    expect(screen.getByPlaceholderText('Search this page by task, ID, or owner').getAttribute('data-focus-ring')).toBe('delegated');
   });
 });

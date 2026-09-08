@@ -36,6 +36,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   let editorBusy = $state(false);
   let rowBusyId = $state<string | null>(null);
   let loadError = $state<string | null>(null);
+  let taskTypesLoaded = $state(false);
   let selected = $state<Schedule | null>(null);
   let editorMode = $state<'create' | 'edit' | null>(null);
   let search = $state('');
@@ -51,6 +52,9 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
       && serverStateStore.extensionFlags.includes('scheduling'),
   );
   const canManage = $derived(authStore.permissions.includes('manage_schedules'));
+  const noAvailableTaskTypes = $derived(
+    canManage && taskTypesLoaded && taskTypes.length === 0 && loadError === null,
+  );
   const filteredSchedules = $derived.by(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return schedules;
@@ -89,6 +93,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
       nextCursor = page.next_cursor;
       if (selected) selected = page.items.find((item) => item.id === selected?.id) ?? null;
       taskTypes = types;
+      taskTypesLoaded = true;
     } catch (error) {
       loadError = formatUserFacingError(error);
     } finally {
@@ -265,8 +270,27 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
           <Icon name="refresh" size="18px" />{$t('common.refresh')}
         </button>
         {#if canManage}
-          <button type="button" class="primary-action" disabled={taskTypes.length === 0 || editorMode !== null} onclick={openCreate}>
+          <button
+            type="button"
+            class="primary-action"
+            disabled={taskTypes.length === 0 || editorMode !== null}
+            aria-describedby={noAvailableTaskTypes ? 'schedule-create-unavailable' : undefined}
+            onclick={openCreate}
+          >
             <Icon name="add" size="18px" />{$t('schedules.createAction')}
+          </button>
+        {/if}
+        {#if noAvailableTaskTypes}
+          <button
+            type="button"
+            class="create-unavailable-help"
+            aria-label={$t('schedules.createUnavailableHelp')}
+            aria-describedby="schedule-create-unavailable"
+          >
+            <Icon name="info" size="16px" />
+            <span id="schedule-create-unavailable" class="create-unavailable-tooltip" role="tooltip">
+              {$t('schedules.noAvailableTaskTypes')}
+            </span>
           </button>
         {/if}
       </div>
@@ -285,7 +309,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
           <label class="search-field">
             <Icon name="search" size="18px" />
             <span class="sr-only">{$t('schedules.search')}</span>
-            <input bind:value={search} disabled={editorMode !== null} placeholder={$t('schedules.searchPlaceholder')} />
+            <input data-focus-ring="delegated" bind:value={search} disabled={editorMode !== null} placeholder={$t('schedules.searchPlaceholder')} />
           </label>
           <label class="deleted-filter">
             <input type="checkbox" bind:checked={includeDeleted} disabled={editorMode !== null} onchange={resetAndRefresh} />
@@ -421,8 +445,14 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem; padding: 1.5rem 1.5rem 1rem; }
   h1, h2, p { margin: 0; }
   h1 { color: var(--color-md3-on-surface); font-size: clamp(1.45rem, 4vw, 2.2rem); font-weight: 600; line-height: 1.15; letter-spacing: -0.025em; }
-  .page-header p { max-width: 68ch; margin-top: 0.35rem; color: var(--color-md3-on-surface-variant); font-size: 0.85rem; line-height: 1.5; }
+  .page-header > div > p { max-width: 68ch; margin-top: 0.35rem; color: var(--color-md3-on-surface-variant); font-size: 0.85rem; line-height: 1.5; }
   .header-actions, .row-actions, .pagination, .schedule-details footer { display: flex; align-items: center; gap: 0.5rem; }
+  .header-actions { white-space: nowrap; }
+  .create-unavailable-help { position: relative; display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 0; border-radius: 999px; padding: 0; color: var(--color-md3-on-surface-variant); background: transparent; cursor: help; transition: color 120ms ease, background 120ms ease; }
+  .create-unavailable-help:hover, .create-unavailable-help:focus-visible { color: var(--color-md3-on-surface); background: var(--color-md3-surface-container-highest); }
+  .create-unavailable-help:focus-visible { outline: 2px solid var(--color-md3-primary-emphasis, var(--color-md3-primary)); outline-offset: -2px; }
+  .create-unavailable-tooltip { position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 25; width: max-content; max-width: min(32rem, calc(100vw - 2rem)); border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.65rem 0.75rem; color: var(--color-md3-on-surface); background: color-mix(in srgb, var(--color-md3-surface-container-high) 96%, transparent); box-shadow: var(--explorer-shadow); font-size: 0.75rem; line-height: 1.5; text-align: left; white-space: normal; pointer-events: none; opacity: 0; transform: translateY(-4px); transition: opacity 120ms ease, transform 120ms ease; }
+  .create-unavailable-help:hover .create-unavailable-tooltip, .create-unavailable-help:focus-visible .create-unavailable-tooltip { opacity: 1; transform: translateY(0); }
   button { font-family: inherit; }
   .primary-action, .secondary-action, .danger-action, .pagination button, .load-state button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 0.4rem; border-radius: 5px; padding: 0.35rem 0.75rem; font-size: 0.76rem; font-weight: 650; cursor: pointer; }
   .primary-action { border: 1px solid var(--color-md3-primary); background: var(--color-md3-primary); color: var(--color-md3-on-primary); }
@@ -486,18 +516,18 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   .payload-preview pre { max-height: 260px; overflow: auto; margin: 0; border-radius: 8px; padding: 0.7rem; background: var(--color-md3-surface-container-high); color: var(--color-md3-on-surface); font: 0.72rem/1.5 var(--font-md3-mono); white-space: pre-wrap; }
   .schedule-details footer { justify-content: flex-end; border-top: 1px solid var(--color-md3-outline); padding: 0.9rem 1.1rem; }
   .load-state, .empty-state, .unavailable-state { color: var(--color-md3-on-surface-variant); }
-  .load-state { display: flex; min-height: 180px; align-items: center; justify-content: center; gap: 0.7rem; padding: 1rem; font-size: 0.8rem; }
+  .load-state { display: flex; min-height: 0; flex: 1; align-items: center; justify-content: center; gap: 0.7rem; padding: 1rem; font-size: 0.8rem; }
   .error-state { align-items: flex-start; }
   .error-state div { display: grid; gap: 0.25rem; }
   .error-state strong { color: var(--color-md3-error); }
   .error-state p { max-width: 58ch; font-size: 0.76rem; line-height: 1.45; }
-  .empty-state { display: grid; min-height: 260px; place-items: center; align-content: center; gap: 0.45rem; padding: 1.5rem; text-align: center; }
+  .empty-state { display: grid; min-height: 0; flex: 1; place-items: center; align-content: center; gap: 0.45rem; padding: 1.5rem; text-align: center; }
   .empty-state h2, .unavailable-state h2 { color: var(--color-md3-on-surface); font-size: 0.95rem; }
   .empty-state p, .unavailable-state p { max-width: 55ch; font-size: 0.78rem; line-height: 1.5; }
   .unavailable-state { display: flex; align-items: flex-start; gap: 0.75rem; margin: 0 1.5rem; border-top: 1px solid var(--color-md3-outline); padding: 1.25rem 0; }
   .unavailable-state div { display: grid; gap: 0.3rem; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
-  @media (min-width: 1280px) {
+  @container (min-width: 1100px) {
     .schedule-workspace { grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); }
     .schedule-workspace.has-inspector .ledger { display: flex; }
     .inspector-empty { display: grid; }
@@ -510,6 +540,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     .page-header { align-items: flex-start; flex-direction: column; padding: 1.1rem 1rem 0.8rem; }
     .header-actions { width: 100%; }
     .header-actions button { flex: 1; }
+    .header-actions .create-unavailable-help { width: 44px; height: 44px; flex: none; }
     .command-bar { flex-wrap: wrap; }
     .search-field { max-width: none; flex-basis: 100%; }
     .ledger-count { margin-left: auto; }
