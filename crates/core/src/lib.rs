@@ -21,12 +21,13 @@ pub use types::{
     DownloadFailureKind, DownloadPhase, DownloadProgress, DownloadTaskDto, DownloadTaskStatus,
     ExtensionPreference, Favourites, FileEntry, FileMetadata, ListDirectoryResponse,
     MAX_TASK_CONCURRENCY, MIN_TASK_CONCURRENCY, NodeLookupResponse, PRIVACY_PREFERENCE_VERSION,
-    PermissionEntry, PrivacyPreference, ReduceMotionPreference, Response, ServerDiagnosticDatabase,
-    ServerDiagnosticExtension, ServerDiagnosticIdentity, ServerDiagnosticLockdown,
-    ServerDiagnosticProviders, ServerDiagnosticRuntime, ServerDiagnostics, ServerDirectoryEntry,
-    ServerDocumentEntry, ServerInfo, ServerListingItem, ServiceEvent, ServiceStatusInfo,
-    TaskConcurrencyPreference, TransferPreference, UploadProgress, UploadTaskDto, UploadTaskKind,
-    UploadTaskStatus, UserPreference,
+    PermissionEntry, PrivacyPreference, ReduceMotionPreference, Response, Schedule,
+    ScheduleTrigger, ScheduledTaskType, ServerDiagnosticDatabase, ServerDiagnosticExtension,
+    ServerDiagnosticIdentity, ServerDiagnosticLockdown, ServerDiagnosticProviders,
+    ServerDiagnosticRuntime, ServerDiagnostics, ServerDirectoryEntry, ServerDocumentEntry,
+    ServerInfo, ServerListingItem, ServiceEvent, ServiceStatusInfo, TaskConcurrencyPreference,
+    TransferPreference, UploadProgress, UploadTaskDto, UploadTaskKind, UploadTaskStatus,
+    UserPreference,
 };
 
 // ---------------------------------------------------------------------------

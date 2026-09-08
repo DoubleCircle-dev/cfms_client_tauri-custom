@@ -53,6 +53,7 @@ include!("commands/downloads.rs");
 include!("commands/upload_tasks.rs");
 include!("commands/documents.rs");
 include!("commands/admin.rs");
+include!("commands/schedules.rs");
 include!("commands/browsing.rs");
 include!("commands/settings.rs");
 include!("commands/extensions.rs");

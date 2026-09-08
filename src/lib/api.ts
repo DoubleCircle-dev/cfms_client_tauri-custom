@@ -18,3 +18,4 @@ export * from './api/server-errors';
 export * from './api/extensions';
 export * from './api/local-data';
 export * from './api/developer';
+export * from './api/schedules';
