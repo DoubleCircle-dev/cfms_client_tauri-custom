@@ -515,6 +515,7 @@ pub struct ServerDiagnostics {
     pub component_versions: std::collections::BTreeMap<String, String>,
     pub database: ServerDiagnosticDatabase,
     pub providers: ServerDiagnosticProviders,
+    pub scheduling: ServerDiagnosticScheduling,
     pub extensions: Vec<ServerDiagnosticExtension>,
     pub extension_flags: Vec<String>,
     pub lockdown: ServerDiagnosticLockdown,
@@ -550,6 +551,14 @@ pub struct ServerDiagnosticProviders {
     pub caching: String,
     pub event_bus: String,
     pub rate_limit: String,
+    pub scheduling: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerDiagnosticScheduling {
+    pub available: bool,
+    pub mode: String,
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -967,8 +976,10 @@ mod tests {
                 "storage": "local",
                 "caching": "memory",
                 "event_bus": "local",
-                "rate_limit": "memory"
+                "rate_limit": "memory",
+                "scheduling": "local"
             },
+            "scheduling": { "available": true, "mode": "local", "detail": null },
             "extensions": [
                 { "identifier": "builtin", "name": "Built-in", "version": "0.5.0" }
             ],
@@ -981,6 +992,7 @@ mod tests {
         assert_eq!(parsed.server.protocol_version, 22);
         assert_eq!(parsed.component_versions["pydantic"], "2.13.4");
         assert_eq!(parsed.extensions[0].identifier, "builtin");
+        assert!(parsed.scheduling.available);
     }
 
     #[test]

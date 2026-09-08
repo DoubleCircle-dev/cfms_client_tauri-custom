@@ -15,6 +15,7 @@ export const ICONS = {
   tasks:         'arrow_circle_down',
   more:          'more_horiz',
   manage:        'cloud_circle',
+  schedules:     'event_repeat',
 
   // ---- Auth ----
   login:         'login',

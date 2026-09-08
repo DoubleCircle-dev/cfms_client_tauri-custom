@@ -609,6 +609,12 @@ export interface ServerDiagnostics {
     caching: string;
     event_bus: string;
     rate_limit: string;
+    scheduling: string;
+  };
+  scheduling: {
+    available: boolean;
+    mode: string;
+    detail: string | null;
   };
   extensions: Array<{
     identifier: string;

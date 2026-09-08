@@ -24,10 +24,10 @@ pub use types::{
     PermissionEntry, PrivacyPreference, ReduceMotionPreference, Response, Schedule,
     ScheduleTrigger, ScheduledTaskType, ServerDiagnosticDatabase, ServerDiagnosticExtension,
     ServerDiagnosticIdentity, ServerDiagnosticLockdown, ServerDiagnosticProviders,
-    ServerDiagnosticRuntime, ServerDiagnostics, ServerDirectoryEntry, ServerDocumentEntry,
-    ServerInfo, ServerListingItem, ServiceEvent, ServiceStatusInfo, TaskConcurrencyPreference,
-    TransferPreference, UploadProgress, UploadTaskDto, UploadTaskKind, UploadTaskStatus,
-    UserPreference,
+    ServerDiagnosticRuntime, ServerDiagnosticScheduling, ServerDiagnostics, ServerDirectoryEntry,
+    ServerDocumentEntry, ServerInfo, ServerListingItem, ServiceEvent, ServiceStatusInfo,
+    TaskConcurrencyPreference, TransferPreference, UploadProgress, UploadTaskDto, UploadTaskKind,
+    UploadTaskStatus, UserPreference,
 };
 
 // ---------------------------------------------------------------------------
