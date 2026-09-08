@@ -113,7 +113,7 @@ async function localizeCss({ name, url, localFamily }) {
   if (name === "material-symbols-outlined" && localFamily) {
     localizedCss = localizedCss.replace(
       `.material-symbols-outlined {\n  font-family: '${localFamily}';`,
-      `.material-symbols-outlined {\n  font-family: 'Material Symbols Outlined', '${localFamily}';`,
+      `.material-symbols-outlined {\n  font-family: '${localFamily}', 'Material Symbols Outlined';`,
     );
   }
 
