@@ -33,6 +33,11 @@ export default defineConfig(async () => ({
   optimizeDeps: {
     noDiscovery: true,
     include: [
+      // `buffer` (CJS) must be pre-bundled for `import { Buffer } from
+      // 'buffer'` in src/lib/tools/encodings.ts to resolve — pre-bundling
+      // performs the CJS→ESM interop that raw serving does not.
+      "buffer",
+      "iconv-lite",
       "@tanstack/svelte-virtual",
       "@tauri-apps/api/app",
       "@tauri-apps/api/core",

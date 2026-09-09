@@ -488,6 +488,12 @@ fn collect_relative_files(
             }
             collect_relative_files(root, &path, out)?;
         } else {
+            // Git bookkeeping at the repo root (`.gitignore` keeps large
+            // downloads out of the repo) is not server content and must never
+            // surface as a download file or deletion candidate.
+            if path.file_name().map(|n| n == ".gitignore").unwrap_or(false) {
+                continue;
+            }
             if let Ok(rel) = path.strip_prefix(root) {
                 // Normalize to forward slashes so paths match the frontend's
                 // serverPaths (which uses '/'), regardless of platform separator.
@@ -541,6 +547,12 @@ pub async fn download_git_init(
 
 /// Stage all changes and commit in the download root git repo.
 /// Returns the commit hash, or empty string if nothing to commit.
+///
+/// Files at or above [`LARGE_FILE_THRESHOLD_BYTES`] are never committed with
+/// their real content: the real file stays on disk (git-ignored, marked
+/// `skip-worktree`) while the same-named path in the repo holds a placeholder
+/// text describing the file and its SHA-256 — see
+/// [`stage_large_file_placeholders`].
 #[tauri::command]
 pub async fn download_git_commit(
     app_handle: tauri::AppHandle,
@@ -553,20 +565,19 @@ pub async fn download_git_commit(
         return Err("No git repository in download root. Run download_git_init first.".to_string());
     }
 
-    // Stage all changes.
-    let add_output = std::process::Command::new("git")
-        .args(["add", "."])
-        .current_dir(&download_root)
-        .output()
-        .map_err(|e| format!("Failed to run git add: {e}"))?;
-    if !add_output.status.success() {
-        let stderr = String::from_utf8_lossy(&add_output.stderr);
-        return Err(format!("git add failed: {stderr}"));
-    }
+    // Replace every large file with a same-named placeholder in the index
+    // (this also appends them to `.gitignore`, so the `git add .` below never
+    // stages their real bytes).
+    stage_large_file_placeholders(&download_root)?;
+
+    // Stage all remaining changes (small files, renames, deletions, and the
+    // `.gitignore` rules for large files).
+    run_git(&download_root, &["add", "."])?;
 
     // Commit.
+    let commit_msg = message.trim();
     let commit_output = std::process::Command::new("git")
-        .args(["commit", "-m", &message])
+        .args(["commit", "-m", commit_msg])
         .current_dir(&download_root)
         .output()
         .map_err(|e| format!("Failed to run git commit: {e}"))?;
@@ -580,14 +591,462 @@ pub async fn download_git_commit(
     }
 
     // Get the commit hash.
-    let hash_output = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(&download_root)
-        .output()
-        .map_err(|e| format!("Failed to get commit hash: {e}"))?;
-    if !hash_output.status.success() {
-        return Ok(String::new());
+    match run_git(&download_root, &["rev-parse", "HEAD"]) {
+        Ok(hash) => Ok(hash),
+        Err(_) => Ok(String::new()),
     }
-    let hash = String::from_utf8_lossy(&hash_output.stdout).trim().to_string();
-    Ok(hash)
+}
+
+// ---------------------------------------------------------------------------
+// Large-file placeholders in the download-root git repo
+// ---------------------------------------------------------------------------
+
+/// Files at or above this size are not committed to the download-root git
+/// repository. GitHub refuses per-file pushes over 100 MB, so the real file
+/// stays on disk while the repo records a same-named placeholder (description
+/// + SHA-256) in its place.
+const LARGE_FILE_THRESHOLD_BYTES: u64 = 100 * 1024 * 1024; // 100 MiB
+
+/// Recursively collect every regular file under `root` whose size is at or
+/// above `threshold`, returning its absolute path and byte size. Git
+/// bookkeeping (the `.git` directory) is skipped.
+fn collect_large_files(
+    root: &std::path::Path,
+    current: &std::path::Path,
+    threshold: u64,
+    out: &mut Vec<(std::path::PathBuf, u64)>,
+) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name == ".git" {
+                continue;
+            }
+            collect_large_files(root, &path, threshold, out)?;
+        } else if let Ok(meta) = entry.metadata()
+            && meta.len() >= threshold
+            && path.strip_prefix(root).is_ok()
+        {
+            out.push((path, meta.len()));
+        }
+    }
+    Ok(())
+}
+
+/// Compute the SHA-256 hex digest of a file without loading it fully into
+/// memory, so very large files hash safely.
+fn file_sha256(path: &std::path::Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let file =
+        std::fs::File::open(path).map_err(|e| format!("Failed to open file for hashing: {e}"))?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 1024 * 1024];
+    loop {
+        let n = reader
+            .read(&mut buf)
+            .map_err(|e| format!("Failed to read file for hashing: {e}"))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+/// Escape a path for use as a single anchored line in `.gitignore` (a leading
+/// `#` would become a comment, a leading `!` would negate the rule).
+fn gitignore_escape(rel: &str) -> String {
+    let mut out = String::with_capacity(rel.len() + 4);
+    for (i, ch) in rel.char_indices() {
+        if i == 0 && (ch == '#' || ch == '!') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// Ensure `.gitignore` at the repo root contains an anchored rule ignoring
+/// `rel`. Returns whether a new rule was appended.
+fn ensure_gitignored(root: &std::path::Path, rel: &str) -> Result<bool, String> {
+    let ignore_path = root.join(".gitignore");
+    let existing = if ignore_path.exists() {
+        std::fs::read_to_string(&ignore_path)
+            .map_err(|e| format!("Failed to read .gitignore: {e}"))?
+    } else {
+        String::new()
+    };
+    let line = format!("/{}", gitignore_escape(rel));
+    if existing.lines().any(|l| l == line) {
+        return Ok(false);
+    }
+    let mut updated = existing;
+    if !updated.is_empty() && !updated.ends_with('\n') {
+        updated.push('\n');
+    }
+    updated.push_str(&line);
+    updated.push('\n');
+    std::fs::write(&ignore_path, updated)
+        .map_err(|e| format!("Failed to write .gitignore: {e}"))?;
+    Ok(true)
+}
+
+/// Build the placeholder text recorded in git for a file that is intentionally
+/// not committed (it exceeds GitHub's 100 MB per-file limit). The same-named
+/// path in the repo holds this text so viewers know the file exists but lives
+/// elsewhere (a GitHub Release).
+fn large_file_placeholder_text(rel: &str, sha256: &str, size_bytes: u64) -> String {
+    format!(
+        "该文件大于100MB。如果在github中查看请检查release。\n\
+         此文件超过 100 MB（GitHub 单文件大小上限），因此未纳入 Git 仓库；\n\
+         仓库中该路径为同名占位文件，请从 GitHub Releases 或原服务器获取真实文件。\n\
+         \n\
+         文件名: {rel}\n\
+         大小: {size_bytes} bytes ({:.1} MB)\n\
+         SHA-256: {sha256}\n",
+        size_bytes as f64 / (1024.0 * 1024.0)
+    )
+}
+
+/// Run `git` in `root` and return its trimmed stdout, erroring on failure.
+fn run_git(root: &std::path::Path, args: &[&str]) -> Result<String, String> {
+    let git = args.first().copied().unwrap_or("");
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("Failed to run git {git}: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git {git} failed: {stderr}"));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Run `git` in `root`, writing `stdin` to the process, and return its trimmed
+/// stdout. Used for `hash-object --stdin` and `update-index --index-info`.
+fn run_git_with_stdin(
+    root: &std::path::Path,
+    args: &[&str],
+    stdin: &[u8],
+) -> Result<String, String> {
+    use std::io::Write as _;
+    let git = args.first().copied().unwrap_or("");
+    let mut child = std::process::Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn git {git}: {e}"))?;
+    {
+        let mut child_stdin = child.stdin.take().expect("git stdin should be piped");
+        child_stdin
+            .write_all(stdin)
+            .map_err(|e| format!("Failed to write to git stdin: {e}"))?;
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to wait for git {git}: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git {git} failed: {stderr}"));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Run `git` in `root` and return raw stdout bytes, erroring on failure.
+/// Used when the output must be parsed byte-exactly (e.g. NUL-separated
+/// `ls-files -vz` output).
+fn run_git_raw(root: &std::path::Path, args: &[&str]) -> Result<Vec<u8>, String> {
+    let git = args.first().copied().unwrap_or("");
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("Failed to run git {git}: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git {git} failed: {stderr}"));
+    }
+    Ok(output.stdout)
+}
+
+/// List index paths with the skip-worktree bit set — i.e. paths recorded as
+/// large-file placeholders in an earlier commit. Paths are NUL-separated by
+/// `git ls-files -vz`, so entries containing spaces parse correctly.
+fn list_skip_worktree_paths(root: &std::path::Path) -> Result<Vec<String>, String> {
+    let raw = run_git_raw(root, &["ls-files", "-vz"])?;
+    let text = String::from_utf8_lossy(&raw);
+    let mut out = Vec::new();
+    for chunk in text.split('\0') {
+        if let Some(path) = chunk.strip_prefix("S ")
+            && !path.is_empty()
+        {
+            out.push(path.to_string());
+        }
+    }
+    Ok(out)
+}
+
+/// Remove the anchored `.gitignore` rule for `rel`, if present. Returns
+/// whether a line was removed.
+fn remove_gitignore_rule(root: &std::path::Path, rel: &str) -> Result<bool, String> {
+    let ignore_path = root.join(".gitignore");
+    if !ignore_path.exists() {
+        return Ok(false);
+    }
+    let existing = std::fs::read_to_string(&ignore_path)
+        .map_err(|e| format!("Failed to read .gitignore: {e}"))?;
+    let line = format!("/{}", gitignore_escape(rel));
+    let kept: Vec<&str> = existing.lines().filter(|l| *l != line).collect();
+    if kept.len() == existing.lines().count() {
+        return Ok(false);
+    }
+    let mut updated = kept.join("\n");
+    if !updated.is_empty() {
+        updated.push('\n');
+    }
+    std::fs::write(&ignore_path, updated)
+        .map_err(|e| format!("Failed to write .gitignore: {e}"))?;
+    Ok(true)
+}
+
+/// For every file at or above [`LARGE_FILE_THRESHOLD_BYTES`] under `root`,
+/// replace its index entry with a same-named placeholder blob.
+///
+/// The real file is left untouched on disk:
+///  1. its path is appended to `.gitignore` so `git add .` never stages the
+///     actual bytes (and future syncs won't re-stage them);
+///  2. any previously committed real content is dropped from the index;
+///  3. a placeholder blob (description + SHA-256, see
+///     [`large_file_placeholder_text`]) is recorded under the file's own path,
+///     so the repo contains a same-named placeholder while the real file stays
+///     on disk;
+///  4. the path is marked `skip-worktree` so git stops reporting the real
+///     working file as modified.
+fn stage_large_file_placeholders(root: &std::path::Path) -> Result<(), String> {
+    // 1. Current large files on disk — every one becomes a same-named
+    //    placeholder blob in the index (see [`large_file_placeholder_text`]).
+    let mut large: Vec<(std::path::PathBuf, u64)> = Vec::new();
+    collect_large_files(root, root, LARGE_FILE_THRESHOLD_BYTES, &mut large)
+        .map_err(|e| format!("Failed to scan download root for large files: {e}"))?;
+    let mut large_rel: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for (path, size) in &large {
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|_| "Large file is outside the download root".to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        large_rel.insert(rel.clone());
+
+        // 1a. Ignore the real file so `git add .` never stages its bytes.
+        ensure_gitignored(root, &rel)?;
+
+        // 1b. Compute the SHA-256 of the real file (streamed, memory-safe).
+        let sha256 = file_sha256(path)?;
+
+        // 1c. Clear a stale skip-worktree flag and drop any previously
+        //     committed real content so the index can be rewritten.
+        let _ = run_git(root, &["update-index", "--no-skip-worktree", "--", &rel]);
+        let _ = run_git(root, &["rm", "--cached", "--ignore-unmatch", "--", &rel]);
+
+        // 1d. Record the placeholder blob under the SAME path in the index —
+        //     the on-disk file is deliberately left untouched.
+        let placeholder = large_file_placeholder_text(&rel, &sha256, *size);
+        let blob = run_git_with_stdin(
+            root,
+            &["hash-object", "-w", "--stdin"],
+            placeholder.as_bytes(),
+        )?;
+        if blob.is_empty() {
+            return Err("git hash-object returned an empty blob hash".to_string());
+        }
+        let index_line = format!("100644 {blob}\t{rel}\n");
+        run_git_with_stdin(
+            root,
+            &["update-index", "--add", "--index-info"],
+            index_line.as_bytes(),
+        )?;
+
+        // 1e. Mark skip-worktree so git ignores the real file in the worktree.
+        run_git(root, &["update-index", "--skip-worktree", "--", &rel])?;
+    }
+
+    // 2. Reconcile placeholder paths that are no longer large (deleted, or
+    //    now below the threshold): clear their skip-worktree bit, drop the
+    //    placeholder index entry, and remove the ignore rule. This lets the
+    //    following `git add .` commit the real state — a re-added small file,
+    //    or the deletion of a removed file — instead of leaving a stale
+    //    placeholder behind.
+    for stale in list_skip_worktree_paths(root)? {
+        if large_rel.contains(&stale) {
+            continue;
+        }
+        let _ = run_git(root, &["update-index", "--no-skip-worktree", "--", &stale]);
+        let _ = run_git(root, &["rm", "--cached", "--ignore-unmatch", "--", &stale]);
+        let _ = remove_gitignore_rule(root, &stale);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod large_file_placeholder_tests {
+    use super::*;
+
+    #[test]
+    fn placeholder_text_contains_required_note_and_sha256() {
+        let text = large_file_placeholder_text("a/b.bin", "abc123", 150 * 1024 * 1024);
+        assert!(text.contains("该文件大于100MB。如果在github中查看请检查release。"));
+        assert!(text.contains("SHA-256: abc123"));
+        assert!(text.contains("a/b.bin"));
+        assert!(text.contains("150.0 MB"));
+    }
+
+    #[test]
+    fn gitignore_escape_handles_comment_and_negation_prefixes() {
+        assert_eq!(gitignore_escape("#leading"), "\\#leading");
+        assert_eq!(gitignore_escape("!negated"), "\\!negated");
+        assert_eq!(gitignore_escape("plain file.bin"), "plain file.bin");
+    }
+
+    #[test]
+    fn ensure_gitignored_is_idempotent() {
+        let dir = std::env::temp_dir().join(format!(
+            "cfms-gitignore-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        assert!(ensure_gitignored(&dir, "big file.bin").unwrap());
+        // Adding the same rule again must be a no-op.
+        assert!(!ensure_gitignored(&dir, "big file.bin").unwrap());
+        // A second, different rule still gets appended.
+        assert!(ensure_gitignored(&dir, "other.bin").unwrap());
+
+        let contents = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert_eq!(contents.lines().count(), 2);
+        assert!(contents.lines().any(|l| l == "/big file.bin"));
+        assert!(contents.lines().any(|l| l == "/other.bin"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn remove_gitignore_rule_removes_only_the_matching_line() {
+        let dir = std::env::temp_dir().join(format!(
+            "cfms-gitignore-remove-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(".gitignore"), "/big file.bin\n/other.bin\n").unwrap();
+
+        assert!(remove_gitignore_rule(&dir, "big file.bin").unwrap());
+        // Removing the same rule again is a no-op.
+        assert!(!remove_gitignore_rule(&dir, "big file.bin").unwrap());
+        let contents = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert_eq!(contents, "/other.bin\n");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn collect_large_files_finds_over_threshold_and_skips_git() {
+        let dir = std::env::temp_dir().join(format!(
+            "cfms-large-scan-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+
+        let small = dir.join("small.bin");
+        let big = dir.join("sub").join("big.bin");
+        let git_obj = dir.join(".git").join("big.bin");
+        std::fs::File::create(&small).unwrap().set_len(5).unwrap();
+        std::fs::File::create(&big).unwrap().set_len(100).unwrap();
+        std::fs::File::create(&git_obj)
+            .unwrap()
+            .set_len(1000)
+            .unwrap();
+
+        let mut found = Vec::new();
+        collect_large_files(&dir, &dir, 10, &mut found).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].0, big);
+        assert_eq!(found[0].1, 100);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[ignore = "requires git on PATH; run explicitly with: cargo test -- --ignored"]
+    fn stage_large_file_placeholders_records_same_named_placeholder() {
+        let dir = std::env::temp_dir().join(format!(
+            "cfms-git-placeholder-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let init = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&dir)
+            .output()
+            .expect("git init should succeed");
+        assert!(init.status.success());
+
+        // Create a large file (above the threshold) at a nested, spaced path.
+        let big_rel = "sub/big file.bin";
+        let big_path = dir.join("sub").join("big file.bin");
+        std::fs::create_dir_all(big_path.parent().unwrap()).unwrap();
+        std::fs::File::create(&big_path)
+            .unwrap()
+            .set_len(LARGE_FILE_THRESHOLD_BYTES + 1)
+            .unwrap();
+
+        // Realistic flow: replace large files, stage everything, commit.
+        stage_large_file_placeholders(&dir).unwrap();
+        run_git(&dir, &["add", "."]).unwrap();
+        run_git(&dir, &["commit", "-q", "-m", "test"]).unwrap();
+
+        // The committed blob at the same path is the placeholder, not the file.
+        let shown = run_git(&dir, &["show", &format!("HEAD:{big_rel}")]).unwrap();
+        assert!(shown.contains("该文件大于100MB。如果在github中查看请检查release。"));
+        assert!(shown.contains("SHA-256:"));
+
+        // The real file is still on disk and the worktree is clean.
+        assert_eq!(
+            std::fs::metadata(&big_path).unwrap().len(),
+            LARGE_FILE_THRESHOLD_BYTES + 1
+        );
+        assert_eq!(run_git(&dir, &["status", "--porcelain"]).unwrap(), "");
+
+        // --- Transition: the file shrinks below the threshold. ---
+        // The stale placeholder must be dropped and the real (small) content
+        // committed on the next sync, leaving a clean worktree.
+        std::fs::write(&big_path, b"now small").unwrap();
+        stage_large_file_placeholders(&dir).unwrap();
+        run_git(&dir, &["add", "."]).unwrap();
+        run_git(&dir, &["commit", "-q", "-m", "test-small"]).unwrap();
+
+        let shown = run_git(&dir, &["show", &format!("HEAD:{big_rel}")]).unwrap();
+        assert_eq!(shown, "now small");
+        assert_eq!(run_git(&dir, &["status", "--porcelain"]).unwrap(), "");
+        assert!(
+            !std::fs::read_to_string(dir.join(".gitignore"))
+                .unwrap()
+                .contains("/sub/big file.bin")
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

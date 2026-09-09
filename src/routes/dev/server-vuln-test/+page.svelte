@@ -81,11 +81,12 @@
             { action: "get_user_avatar", desc: "获取用户头像", requireAuth: true, data: { username: "PLACEHOLDER" } },
             { action: "set_user_avatar", desc: "设置用户头像", requireAuth: true, data: { username: "PLACEHOLDER", document_id: "PLACEHOLDER" } },
             { action: "change_user_groups", desc: "修改用户所属组", requireAuth: true, data: { username: "PLACEHOLDER" } },
-            { action: "change_user_permissions", desc: "修改用户权限", requireAuth: true, data: { username: "PLACEHOLDER", permissions: [] } },
+            { action: "change_user_permissions", desc: "修改用户权限", requireAuth: true, data: { username: "PLACEHOLDER", permissions: [{ permission: "PLACEHOLDER", granted: true, start_time: 0, end_time: 0 }] } },
             { action: "set_passwd", desc: "设置密码", requireAuth: false, data: { username: "PLACEHOLDER", new_passwd: "PLACEHOLDER" } },
-            { action: "manage_user_status", desc: "管理用户状态(启用/禁用)", requireAuth: true, data: { username: "PLACEHOLDER", status: "PLACEHOLDER" } },
-            { action: "block_user", desc: "封禁用户", requireAuth: true, data: { username: "PLACEHOLDER", block_types: [], target: { type: "all" } } },
+            { action: "manage_user_status", desc: "管理用户状态(active|disabled)", requireAuth: true, data: { username: "PLACEHOLDER", status: "disabled", reason: null } },
+            { action: "block_user", desc: "封禁用户", requireAuth: true, data: { username: "PLACEHOLDER", block_types: [], target: { type: "all" }, reason: null } },
             { action: "unblock_user", desc: "解封用户", requireAuth: true, data: { block_id: "PLACEHOLDER" } },
+            { action: "update_user_block", desc: "更新封禁记录理由", requireAuth: true, data: { block_id: "PLACEHOLDER", reason: null } },
             { action: "list_user_blocks", desc: "列出用户封禁记录", requireAuth: true, data: { username: "PLACEHOLDER" } },
         ]},
         { label: "👥 组管理", cmds: [
@@ -114,11 +115,15 @@
         ]},
         { label: "🧩 内置扩展", cmds: [
             { action: "server_info", desc: "获取服务器信息", requireAuth: false, data: {} },
+            { action: "diagnostics", desc: "获取服务器诊断信息(需DIAGNOSTICS权限)", requireAuth: true, data: {} },
             { action: "shutdown", desc: "关闭服务器(需要SHUTDOWN权限)", requireAuth: true, data: {} },
+        ]},
+        { label: "🐛 Debug", cmds: [
+            { action: "throw_exception", desc: "抛出测试异常(仅debug模式,需DEBUGGING权限)", requireAuth: true, data: {} },
         ]},
         { label: "🧩 OIDC SSO", cmds: [
             { action: "sso_oidc_start", desc: "启动OIDC SSO登录流程", requireAuth: false, data: {} },
-            { action: "sso_oidc_callback", desc: "OIDC SSO回调处理", requireAuth: false, data: { code: "PLACEHOLDER", state: "PLACEHOLDER" } },
+            { action: "sso_oidc_callback", desc: "OIDC SSO回调处理", requireAuth: false, data: { state: "PLACEHOLDER" } },
         ]},
     ];
 
