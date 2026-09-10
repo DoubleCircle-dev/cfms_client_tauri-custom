@@ -119,9 +119,11 @@ describe('schedules page', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: 'Create schedule' })).toBeTruthy();
     expect((screen.getByLabelText('Task type') as HTMLSelectElement).value).toBe('reports.weekly');
-    expect((screen.getByLabelText('Task payload (JSON)') as HTMLTextAreaElement).value).toBe('{}');
+    expect(screen.getByRole('tab', { name: 'Form' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('This task has no configurable payload fields.')).toBeTruthy();
 
     const createButtons = screen.getAllByRole('button', { name: 'New schedule' });
+    await waitFor(() => expect((createButtons.at(-1) as HTMLButtonElement).disabled).toBe(false));
     await fireEvent.click(createButtons.at(-1)!);
     await waitFor(() => expect(mocks.createSchedule).toHaveBeenCalledWith(expect.objectContaining({
       taskName: 'reports.weekly',

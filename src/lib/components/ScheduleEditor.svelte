@@ -12,13 +12,15 @@
     browserTimeZone,
     buildScheduleTrigger,
     isoToZonedDateTimeInput,
-    parsePayloadObject,
     ScheduleValidationError,
     toZonedDateTimeInput,
   } from '$lib/schedule-form';
+  import { buildPayloadDefaults, preparePayloadSchema } from '$lib/schedule-schema';
+  import { dialogStore } from '$lib/dialogs.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import Icon from './Icon.svelte';
   import MdSwitch from './MdSwitch.svelte';
+  import SchemaPayloadEditor from './SchemaPayloadEditor.svelte';
 
   interface Props {
     taskTypes: ScheduledTaskType[];
@@ -37,7 +39,9 @@
   }: Props = $props();
 
   let taskName = $state('');
-  let payloadText = $state('{}');
+  let payload = $state<Record<string, JsonValue>>({});
+  let payloadValid = $state(false);
+  let payloadBaseline = '{}';
   let triggerType = $state<ScheduleTriggerType>('date');
   let timezone = $state('UTC');
   let cronExpression = $state('0 8 * * 1');
@@ -46,11 +50,21 @@
   let intervalStartAt = $state('');
   let enabled = $state(true);
   let validationError = $state<string | null>(null);
-  let loadedKey = '';
+  let loadedKey = $state('');
 
   const selectedTaskType = $derived(taskTypes.find((item) => item.name === taskName) ?? null);
   const editingUnavailableTask = $derived(Boolean(schedule && !selectedTaskType));
   const formTitle = $derived(schedule ? $t('schedules.editTitle') : $t('schedules.createTitle'));
+
+  function payloadDefaults(taskType: ScheduledTaskType | null): Record<string, JsonValue> {
+    return taskType
+      ? buildPayloadDefaults(preparePayloadSchema(taskType.payload_schema))
+      : {};
+  }
+
+  function setPayload(nextPayload: Record<string, JsonValue>) {
+    payload = nextPayload;
+  }
 
   $effect(() => {
     const key = schedule ? `${schedule.id}:${schedule.revision}` : 'create';
@@ -61,7 +75,9 @@
       const defaultTimezone = browserTimeZone();
       const defaultStart = toZonedDateTimeInput(new Date(Date.now() + 5 * 60_000), defaultTimezone);
       taskName = taskTypes[0]?.name ?? '';
-      payloadText = '{}';
+      payload = payloadDefaults(taskTypes[0] ?? null);
+      payloadBaseline = JSON.stringify(payload);
+      payloadValid = false;
       triggerType = 'date';
       timezone = defaultTimezone;
       cronExpression = '0 8 * * 1';
@@ -73,7 +89,9 @@
     }
 
     taskName = schedule.task_name;
-    payloadText = JSON.stringify(schedule.payload, null, 2);
+    payload = JSON.parse(JSON.stringify(schedule.payload)) as Record<string, JsonValue>;
+    payloadBaseline = JSON.stringify(payload);
+    payloadValid = false;
     triggerType = schedule.trigger.type;
     timezone = schedule.trigger.timezone;
     cronExpression = typeof schedule.trigger.data.expression === 'string'
@@ -85,12 +103,35 @@
     enabled = schedule.enabled;
   });
 
+  async function changeTask(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    const nextTaskName = select.value;
+    if (nextTaskName === taskName) return;
+
+    if (JSON.stringify(payload) !== payloadBaseline) {
+      select.value = taskName;
+      const confirmed = await dialogStore.confirm({
+        title: $t('schedules.discardPayloadTitle'),
+        message: $t('schedules.discardPayloadMessage'),
+        confirmLabel: $t('schedules.discardPayloadAction'),
+        cancelLabel: $t('common.cancel'),
+      });
+      if (!confirmed) return;
+    }
+
+    taskName = nextTaskName;
+    const nextTaskType = taskTypes.find((item) => item.name === nextTaskName) ?? null;
+    payload = payloadDefaults(nextTaskType);
+    payloadBaseline = JSON.stringify(payload);
+    payloadValid = false;
+  }
+
   async function submit(event: SubmitEvent) {
     event.preventDefault();
     validationError = null;
     try {
       if (!taskName) throw new Error($t('schedules.taskRequired'));
-      const payload = parsePayloadObject(payloadText);
+      if (!payloadValid) throw new ScheduleValidationError('payloadSchema');
       const trigger = buildScheduleTrigger({
         type: triggerType,
         timezone,
@@ -139,7 +180,7 @@
 
   <form onsubmit={submit}>
     <label class="field-label" for="schedule-task">{$t('schedules.taskType')}</label>
-    <select id="schedule-task" bind:value={taskName} disabled={busy || editingUnavailableTask}>
+    <select id="schedule-task" value={taskName} disabled={busy || editingUnavailableTask} onchange={changeTask}>
       {#if editingUnavailableTask}
         <option value={taskName}>{taskName}</option>
       {/if}
@@ -193,7 +234,7 @@
 
     <div class="payload-heading">
       <div>
-        <label class="field-label" for="schedule-payload">{$t('schedules.payload')}</label>
+        <span class="field-label">{$t('schedules.payload')}</span>
         <p id="schedule-payload-help">{$t('schedules.payloadHelp')}</p>
       </div>
       {#if selectedTaskType}
@@ -203,14 +244,19 @@
         </details>
       {/if}
     </div>
-    <textarea
-      id="schedule-payload"
-      bind:value={payloadText}
-      disabled={busy}
-      rows="9"
-      spellcheck="false"
-      aria-describedby="schedule-payload-help"
-    ></textarea>
+    {#if selectedTaskType}
+      {#key `${loadedKey}:${taskName}`}
+        <SchemaPayloadEditor
+          schema={selectedTaskType.payload_schema}
+          bind:value={payload}
+          bind:valid={payloadValid}
+          disabled={busy}
+          onChange={setPayload}
+        />
+      {/key}
+    {:else}
+      <pre class="unavailable-payload">{JSON.stringify(payload, null, 2)}</pre>
+    {/if}
 
     <div class="enabled-row">
       <div>
@@ -228,7 +274,7 @@
       <button type="button" class="secondary-button" disabled={busy} onclick={onCancel}>
         {$t('common.cancel')}
       </button>
-      <button type="submit" class="primary-button" disabled={busy || editingUnavailableTask || !taskName}>
+      <button type="submit" class="primary-button" disabled={busy || editingUnavailableTask || !taskName || !payloadValid}>
         {#if busy}<span class="button-spinner" aria-hidden="true"></span>{/if}
         {schedule ? $t('common.save') : $t('schedules.createAction')}
       </button>
@@ -246,11 +292,10 @@
   .icon-button:hover { background: var(--color-md3-surface-container-highest); color: var(--color-md3-on-surface); }
   form { display: grid; gap: 0.75rem; padding: 1rem 1.1rem 1.25rem; }
   .field-label { color: var(--color-md3-on-surface); font-family: var(--font-md3-sans); font-size: 0.75rem; font-weight: 650; }
-  input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.84rem/1.4 var(--font-md3-sans); }
+  input, select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.84rem/1.4 var(--font-md3-sans); }
   input, select { min-height: 42px; padding: 0 0.7rem; }
-  textarea { min-height: 9rem; resize: vertical; padding: 0.7rem; font-family: var(--font-md3-mono); font-size: 0.78rem; }
-  input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-md3-primary); outline-offset: 1px; }
-  input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; opacity: 0.55; }
+  input:focus, select:focus { outline: 2px solid var(--color-md3-primary); outline-offset: 1px; }
+  input:disabled, select:disabled { cursor: not-allowed; opacity: 0.55; }
   .trigger-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 0.75rem; }
   .trigger-grid > div { display: grid; gap: 0.4rem; }
   .task-contract { display: flex; flex-wrap: wrap; gap: 0.35rem; color: var(--color-md3-on-surface-variant); font: 0.7rem var(--font-md3-sans); }
@@ -261,6 +306,7 @@
   details { position: relative; color: var(--color-md3-on-surface-variant); font: 0.75rem var(--font-md3-sans); }
   summary { cursor: pointer; color: var(--color-md3-primary-emphasis); }
   details pre { position: absolute; right: 0; z-index: 5; width: min(430px, 75vw); max-height: 260px; overflow: auto; border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.7rem; background: var(--color-md3-surface-container-high); box-shadow: 0 12px 32px rgb(0 0 0 / 0.24); color: var(--color-md3-on-surface); font: 0.72rem/1.5 var(--font-md3-mono); white-space: pre-wrap; }
+  .unavailable-payload { min-height: 9rem; overflow: auto; margin: 0; border-radius: 8px; padding: 0.7rem; background: var(--color-md3-surface-container-high); color: var(--color-md3-on-surface); font: 0.72rem/1.5 var(--font-md3-mono); white-space: pre-wrap; }
   .enabled-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--color-md3-outline); padding-top: 0.8rem; }
   .enabled-row > div { display: grid; gap: 0.15rem; }
   .enabled-row strong, .enabled-row span { font-family: var(--font-md3-sans); }
