@@ -4,6 +4,16 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.50.0
+**Released on:** 2026-09-10
+
+**Title:** Protocol Version 27
+
+### Added
+- Update to core protocol 27, adjust related tests and descriptions
+
+--- 
+
 ## v0.49.1
 **Released on:** 2026-09-08
 
