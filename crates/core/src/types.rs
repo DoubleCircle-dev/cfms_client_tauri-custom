@@ -430,7 +430,7 @@ pub struct CursorPage<T> {
     pub has_more: bool,
 }
 
-/// A user-manageable task type advertised by the protocol 26 scheduling API.
+/// A user-manageable task type advertised by the core protocol 27 scheduling API.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScheduledTaskType {
     pub name: String,
@@ -449,7 +449,7 @@ pub struct ScheduleTrigger {
     pub timezone: String,
 }
 
-/// A user-managed durable schedule returned by the protocol 26 scheduling API.
+/// A user-managed durable schedule returned by the core protocol 27 scheduling API.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Schedule {
     pub id: String,
@@ -996,7 +996,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_protocol_twenty_six_schedule_contract() {
+    fn parses_protocol_twenty_seven_schedule_contract() {
         let parsed: Schedule = serde_json::from_value(serde_json::json!({
             "id": "schedule-1",
             "task_name": "extension.report",

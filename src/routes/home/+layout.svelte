@@ -79,8 +79,7 @@
   const canViewSchedules = $derived(
     serverStateStore.connected
       && authStore.isLoggedIn
-      && authStore.permissions.includes('view_schedules')
-      && serverStateStore.extensionFlags.includes('scheduling'),
+      && authStore.permissions.includes('view_schedules'),
   );
   const isSettingsRoute = $derived(
     $page.url.pathname === '/home/settings' || $page.url.pathname.startsWith('/home/settings/'),

@@ -12,7 +12,7 @@ describe('schedule form protocol mapping', () => {
     expect(() => parsePayloadObject('{')).toThrow();
   });
 
-  it('builds each protocol 26 trigger shape', () => {
+  it('builds each protocol 27 trigger shape', () => {
     const base = {
       timezone: 'Asia/Shanghai',
       cronExpression: '',

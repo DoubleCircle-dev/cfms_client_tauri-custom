@@ -774,7 +774,7 @@ export const en = {
     title: 'Schedules',
     description: 'Create and supervise durable server work exposed by enabled extensions.',
     unavailableTitle: 'Schedules unavailable',
-    unavailableDescription: 'This server must enable scheduling, and your signed-in account needs the view schedules permission.',
+    unavailableDescription: 'Your signed-in account needs the view schedules permission.',
     listLabel: 'Server schedules',
     search: 'Search schedules',
     searchPlaceholder: 'Search this page by task, ID, or owner',

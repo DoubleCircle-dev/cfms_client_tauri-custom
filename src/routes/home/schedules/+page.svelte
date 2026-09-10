@@ -48,8 +48,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   const canView = $derived(
     serverStateStore.connected
       && authStore.isLoggedIn
-      && authStore.permissions.includes('view_schedules')
-      && serverStateStore.extensionFlags.includes('scheduling'),
+      && authStore.permissions.includes('view_schedules'),
   );
   const canManage = $derived(authStore.permissions.includes('manage_schedules'));
   const noAvailableTaskTypes = $derived(

@@ -62,7 +62,6 @@ function signIn(permissions: string[]) {
     groups: [],
   });
   serverStateStore.connected = true;
-  serverStateStore.extensionFlags = ['scheduling'];
 }
 
 beforeEach(() => {
@@ -98,7 +97,7 @@ describe('schedules page', () => {
     expect(mocks.listScheduledTaskTypes).not.toHaveBeenCalled();
   });
 
-  it('loads the protocol 26 schedule ledger and opens its inspector', async () => {
+  it('loads the core protocol 27 schedule ledger without an extension flag', async () => {
     signIn(['view_schedules']);
     render(SchedulesPage);
 

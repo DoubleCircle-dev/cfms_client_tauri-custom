@@ -1,4 +1,4 @@
-// Protocol 26 durable schedule management.
+// Core protocol 27 durable schedule management.
 
 #[tauri::command]
 pub async fn list_scheduled_task_types(

@@ -768,7 +768,7 @@ export const zh_CN = {
     title: '计划任务',
     description: '创建并监管已启用扩展所提供的持久化服务端任务。',
     unavailableTitle: '计划任务不可用',
-    unavailableDescription: '服务端必须启用调度扩展，且当前登录账户需要具有查看计划任务权限。',
+    unavailableDescription: '当前登录账户需要具有查看计划任务权限。',
     listLabel: '服务端计划任务',
     search: '搜索计划任务',
     searchPlaceholder: '在本页搜索任务、ID 或账户',
