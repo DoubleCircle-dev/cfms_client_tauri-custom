@@ -233,11 +233,8 @@
       null,
       20,
       200,
-      ({ pathParts, documents, diff }) => {
-        if (diff.newDocuments.length === 0 && diff.modifiedDocuments.length === 0) return;
-        const changedIds = new Set([...diff.newDocuments, ...diff.modifiedDocuments]);
-        for (const doc of documents) {
-          if (!changedIds.has(doc.id)) continue;
+      ({ pathParts, outdated }) => {
+        for (const doc of outdated) {
           changedMap.set(doc.id, {
             id: doc.id,
             title: doc.title,
@@ -250,17 +247,17 @@
     if (changedMap.size > 0) {
       fileUpdateTracker.enqueuePendingUpdates([...changedMap.values()]);
     }
-    if (result.changed > 0) {
+    if (result.outdated > 0) {
       notificationStore.info(
         $t('files.serverChangesDetected', {
-          values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
+          values: { changes: `${result.outdated} file${result.outdated === 1 ? '' : 's'} need update` },
         }),
         5000,
       );
     } else {
       notificationStore.success($t('files.noChangesDetected'), 2500);
     }
-    return result.changed;
+    return result.outdated;
   }
 
   /** Shared automatic-detection step used by the startup check and the

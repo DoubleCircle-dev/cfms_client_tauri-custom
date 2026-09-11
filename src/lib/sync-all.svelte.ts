@@ -41,6 +41,70 @@ export function makeDownloadPath(parts: string[]) {
 }
 
 // ---------------------------------------------------------------------------
+// Server-vs-local comparison
+//
+// The single source of truth for "does this server document still need to be
+// fetched?". Both the sync engine and the update checker go through it, so they
+// can never disagree about what counts as up to date.
+// ---------------------------------------------------------------------------
+
+/** How one server document compares with its local copy in the download root. */
+export interface LocalDocumentState {
+  doc: ServerDocumentEntry;
+  /** Path inside the download root. */
+  path: string;
+  /** SHA-256 of the local copy, or `null` when nothing is at `path` yet. */
+  localHash: string | null;
+  /** A local copy exists and its content matches the server revision. */
+  isCurrent: boolean;
+  /** A local copy exists but its content differs from the server revision. */
+  mismatched: boolean;
+}
+
+/**
+ * Compare one server directory's documents against the local download root.
+ *
+ * `compute_local_sha256` skips files it cannot read, so a path missing from the
+ * response means "never downloaded" — one backend call covers both existence and
+ * content. Throws only when the call itself fails; callers decide whether an
+ * unreadable directory should stop the run or merely be reported.
+ */
+export async function readLocalDocumentStates(
+  documents: ServerDocumentEntry[],
+  pathParts: string[],
+): Promise<LocalDocumentState[]> {
+  if (documents.length === 0) return [];
+
+  const paths = documents.map((doc) => makeDownloadPath([...pathParts, doc.title]));
+  const localHashes = await computeLocalSha256(paths);
+
+  return documents.map((doc, index) => {
+    const path = paths[index];
+    const localHash = localHashes[path] ?? null;
+    const serverHash = doc.sha256 ?? null;
+    const comparable = localHash != null && serverHash != null;
+    return {
+      doc,
+      path,
+      localHash,
+      isCurrent: comparable && localHash === serverHash,
+      mismatched: comparable && localHash !== serverHash,
+    };
+  });
+}
+
+/** Treat every document as absent locally — used when the hash pass itself fails. */
+function assumeNothingIsLocal(documents: ServerDocumentEntry[], pathParts: string[]): LocalDocumentState[] {
+  return documents.map((doc) => ({
+    doc,
+    path: makeDownloadPath([...pathParts, doc.title]),
+    localHash: null,
+    isCurrent: false,
+    mismatched: false,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Sync-all state (shared across pages)
 // ---------------------------------------------------------------------------
 
@@ -233,34 +297,30 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     // Record that this directory was successfully enumerated, so the deletion
     // step only removes files whose parent directory we actually inspected.
     walkedDirs.add(makeDownloadPath(pathParts));
-    // Compute local SHA-256 for all files in this directory
-    const filenames = resp.documents.map(d => makeDownloadPath([...pathParts, d.title]));
-    let localHashes: Record<string, string> = {};
+    // Compare against the local download root (existence + content in one call).
+    let states: LocalDocumentState[];
     try {
-      localHashes = await computeLocalSha256(filenames);
-    } catch { /* ignore */ }
+      states = await readLocalDocumentStates(resp.documents, pathParts);
+    } catch {
+      // A failing hash pass is treated as "nothing is local yet", so the sync
+      // re-fetches instead of silently skipping files it could not verify.
+      states = assumeNothingIsLocal(resp.documents, pathParts);
+    }
 
-    for (const doc of resp.documents) {
-      const downloadPath = makeDownloadPath([...pathParts, doc.title]);
+    for (const { doc, path: downloadPath, localHash, isCurrent, mismatched } of states) {
       serverPaths.add(downloadPath);
-      const localHash = localHashes[downloadPath];
-      const serverHash = doc.sha256;
-      // File is "downloaded" if SHA-256 matches
-      const isDownloaded = localHash != null && serverHash != null && localHash === serverHash;
-      // If server has no hash, fall back to file existence
-      const existsLocally = !!localHash;
-      const hasServerHash = serverHash != null;
-      // Server version differs from local copy
-      const mismatch = existsLocally && hasServerHash && localHash !== serverHash;
+      const existsLocally = localHash != null;
       // Skip strategy: leave outdated local files untouched.
-      if (mismatch && strategy === 'skip') {
+      if (mismatched && strategy === 'skip') {
         skipped++;
         continue;
       }
-      const needsDownload = !isDownloaded && (!existsLocally || mismatch || overwriteLocal || strategy === 'force_overwrite');
+      const needsDownload =
+        !isCurrent
+        && (!existsLocally || mismatched || overwriteLocal || strategy === 'force_overwrite');
 
       if (needsDownload) {
-        pendingDownloads.push({ docId: doc.id, path: downloadPath, serverHash, existsLocally });
+        pendingDownloads.push({ docId: doc.id, path: downloadPath, serverHash: doc.sha256, existsLocally });
       } else {
         skipped++;
       }

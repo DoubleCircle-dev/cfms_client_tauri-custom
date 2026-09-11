@@ -7,6 +7,7 @@
 // (stale) for visual indicators.
 
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api';
+import { readLocalDocumentStates } from '$lib/sync-all.svelte';
 
 /** How long (in ms) an item stays flagged as "recently updated" before the indicator fades. */
 const UPDATE_VISIBILITY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -178,8 +179,15 @@ class FileUpdateTracker {
   // =========================================================================
 
   /**
-   * Recursively walk the directory tree starting from `dirId` (null = root),
-   * calling `compareSnapshot` at every level.
+   * Recursively walk the directory tree starting from `dirId` (null = root).
+   *
+   * Each level is checked two ways:
+   *
+   *  * against the previous in-session listing (`compareSnapshot`) — only ever
+   *    drives the "recently updated" indicators, since those snapshots live in
+   *    memory and start empty on every page load;
+   *  * against the local download root — this is what "are there updates?" is
+   *    really asking, and what `outdated` reports.
    *
    * `listFn` should be the `listDirectory` API function.
    * `maxDepth` controls recursion depth (default 20).
@@ -194,10 +202,13 @@ class FileUpdateTracker {
       directoryId: string | null;
       pathParts: string[];
       documents: ServerDocumentEntry[];
+      /** Movement since the previous in-session listing. Indicators only. */
       diff: PollChangeResult;
+      /** Server documents missing locally or superseded by a newer revision. */
+      outdated: ServerDocumentEntry[];
     }) => void,
-  ): Promise<{ changed: number; dirs: number; docs: number }> {
-    let changedDirs = 0;
+  ): Promise<{ outdated: number; dirs: number; docs: number }> {
+    let outdatedDocs = 0;
     let checkedDirs = 0;
     let checkedDocs = 0;
 
@@ -210,14 +221,32 @@ class FileUpdateTracker {
       } catch {
         return;
       }
-      const result = this.compareSnapshot(id, resp.folders, resp.documents);
+
+      const diff = this.compareSnapshot(id, resp.folders, resp.documents);
+
+      const outdated: ServerDocumentEntry[] = [];
+      try {
+        for (const state of await readLocalDocumentStates(resp.documents, pathParts)) {
+          if (!state.isCurrent) outdated.push(state.doc);
+        }
+      } catch (err) {
+        // Never guess: a directory we could not verify contributes nothing, and
+        // says so, rather than reporting a phantom pile of updates.
+        console.warn(
+          `[cfms:check] Could not read local state for ${pathParts.join('/') || '/'}:`,
+          err,
+        );
+      }
+      outdatedDocs += outdated.length;
+
       onDirectoryDiff?.({
         directoryId: id,
         pathParts,
         documents: resp.documents,
-        diff: result,
+        diff,
+        outdated,
       });
-      if (result.summary) changedDirs++;
+
       checkedDirs += resp.folders.length;
       checkedDocs += resp.documents.length;
       for (const f of resp.folders) {
@@ -226,8 +255,8 @@ class FileUpdateTracker {
     };
 
     await walk(dirId, 0, []);
-    this.addCheckHistory(changedDirs, checkedDirs, checkedDocs);
-    return { changed: changedDirs, dirs: checkedDirs, docs: checkedDocs };
+    this.addCheckHistory(outdatedDocs, checkedDirs, checkedDocs);
+    return { outdated: outdatedDocs, dirs: checkedDirs, docs: checkedDocs };
   }
 
   /** Queue changed/new documents for user-confirmed update. */
@@ -274,15 +303,23 @@ class FileUpdateTracker {
       const MAX_DEPTH = 20;
       const DELAY_MS = 300;
       let totalChanges = 0;
+      let totalOutdated = 0;
       let totalDirs = 0;
       let totalDocs = 0;
       let totalHidden = 0;
       let totalErrors = 0;
       const startTime = performance.now();
 
+      // Download-root paths can only be reconstructed when the walk starts at
+      // the tree root. The Files page hook starts at the current folder, where
+      // the path from the root is unknown — skip the local check there rather
+      // than report paths that do not exist.
+      const scanRoot = getCurrentDirId();
+      const localCheckAvailable = scanRoot === null;
+
       console.group('%c📁 CFMS Update Check %c(devtools — recursive)', 'font-weight:bold', 'color:#888');
 
-      async function walkDir(dirId: string | null, dirLabel: string, depth: number) {
+      async function walkDir(dirId: string | null, dirLabel: string, depth: number, pathParts: string[]) {
         if (depth > MAX_DEPTH) return;
         const prefix = '  '.repeat(depth);
         await new Promise((r) => setTimeout(r, DELAY_MS));
@@ -307,6 +344,22 @@ class FileUpdateTracker {
           totalChanges++;
           console.log(`%c🔔 [%s] %s`, 'color:#ffb74d', dirLabel, result.summary);
         }
+
+        // What the update check actually acts on: files missing locally or
+        // behind the server revision. The snapshot diff above only describes
+        // movement since this session started watching the directory.
+        const outdatedIds = new Set<string>();
+        if (localCheckAvailable) {
+          try {
+            for (const state of await readLocalDocumentStates(resp.documents, pathParts)) {
+              if (!state.isCurrent) outdatedIds.add(state.doc.id);
+            }
+          } catch (err) {
+            console.warn('[cfms:check] devtools hook could not read local state:', err);
+          }
+        }
+        totalOutdated += outdatedIds.size;
+
         totalDirs += resp.folders.length;
         totalDocs += resp.documents.length;
 
@@ -322,7 +375,8 @@ class FileUpdateTracker {
         for (const d of resp.documents) {
           const stale = tracker.notUpdatedDocumentIds.has(d.id);
           const updated = tracker.recentlyUpdatedDocumentIds.has(d.id);
-          const flags = [stale ? '⚠' : '', updated ? '🆕' : ''].filter(Boolean).join(' ');
+          const outdated = outdatedIds.has(d.id);
+          const flags = [stale ? '⚠' : '', updated ? '🆕' : '', outdated ? '📥' : ''].filter(Boolean).join(' ');
           console.log(`%c%s📄 %s %c${flags}%c  %s  %s`,
             stale ? 'color:#ffb74d' : 'color:#c8e6c9', prefix, d.title, '',
             'color:#888', d.size != null ? `${(d.size / 1024).toFixed(1)} KB` : '—',
@@ -331,15 +385,19 @@ class FileUpdateTracker {
 
         for (const f of resp.folders) {
           const isDot = f.name.startsWith('.');
-          await walkDir(f.id, `${isDot ? '👻' : ''}${f.name}`, depth + 1);
+          await walkDir(f.id, `${isDot ? '👻' : ''}${f.name}`, depth + 1, [...pathParts, f.name]);
         }
         console.groupEnd();
       }
 
+      if (!localCheckAvailable) {
+        console.warn('[cfms:check] Scan starts below the root — local download state is not checked.');
+      }
+
       try {
-        await walkDir(getCurrentDirId(), getCurrentDirId() ?? '/ (root)', 0);
-        console.log('%c✅ Scan complete: %d dir(s), %d doc(s), %d change(s) in %sms',
-          'color:#4caf50;font-weight:bold', totalDirs, totalDocs, totalChanges,
+        await walkDir(scanRoot, scanRoot ?? '/ (root)', 0, []);
+        console.log('%c✅ Scan complete: %d dir(s), %d doc(s), %d snapshot change(s), %d file(s) need update in %sms',
+          'color:#4caf50;font-weight:bold', totalDirs, totalDocs, totalChanges, totalOutdated,
           (performance.now() - startTime).toFixed(0));
       } catch (err) {
         console.error('%c❌ Scan failed:', 'color:#f44336', err);
@@ -519,14 +577,18 @@ class FileUpdateTracker {
   // Check history
   // =========================================================================
 
-  /** Record a completed update check in the history log. */
-  addCheckHistory(changed: number, dirs: number, docs: number) {
+  /** Record a completed update check in the history log.
+   *
+   * `outdated` counts documents that are missing locally or behind the server
+   * revision — i.e. what a sync would fetch. It is not "what changed since the
+   * last poll", which would report nothing on the first check of a session. */
+  addCheckHistory(outdated: number, dirs: number, docs: number) {
     const entry: CheckHistoryEntry = {
       time: Date.now(),
-      changed,
+      changed: outdated,
       dirs,
       docs,
-      summary: changed > 0 ? `${changed} dir(s) changed` : 'no changes',
+      summary: outdated > 0 ? `${outdated} file(s) need update` : 'no changes',
     };
     this.checkHistory = [...this.checkHistory, entry].slice(-CHECK_HISTORY_MAX);
     this.persistCheckHistory();
