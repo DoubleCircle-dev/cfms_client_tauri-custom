@@ -35,7 +35,7 @@
     serverStateStore,
   } from '$lib/stores.svelte';
   import { fileUpdateTracker, type CheckHistoryEntry, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
-  import { syncAllFiles as runSyncAll, syncAllCoordinator } from '$lib/sync-all.svelte';
+  import { downloadQueuedFiles, makeDownloadPath, syncAllCoordinator } from '$lib/sync-all.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   let recent = $state<RecentFileRecord[]>([]);
@@ -239,6 +239,7 @@
             id: doc.id,
             title: doc.title,
             path: [...pathParts, doc.title].join('/'),
+            downloadPath: makeDownloadPath([...pathParts, doc.title]),
             sha256: doc.sha256,
           });
         }
@@ -271,8 +272,12 @@
     }
   }
 
-  /** Confirm queued updates. A preset strategy (automatic downloads) applies
-   *  silently; omitting it (manual confirm) prompts for each differing file. */
+  /** Confirm queued updates.
+   *
+   *  Downloads exactly what the last check queued — the check already walked the
+   *  tree, so re-scanning here would double the cost of every confirm. A preset
+   *  strategy (automatic downloads) applies silently; omitting it (manual
+   *  confirm) prompts once for the files that would be overwritten. */
   async function confirmQueuedUpdates(strategy?: SyncOverwriteStrategy) {
     if (queueBusy || pendingUpdates.length === 0) return;
     if (syncAllCoordinator.busy) {
@@ -283,13 +288,18 @@
     }
     queueBusy = true;
     try {
-      const result = await runSyncAll({
-        overwriteLocal: false,
-        confirmDeletes: true,
-        overwriteStrategy: strategy,
-        onStatus: (msg) => notificationStore.info(msg, 5000),
-      });
-      // Always clear once the sync ran: changed means items were applied,
+      const result = await downloadQueuedFiles(
+        pendingUpdates.map((item) => ({
+          docId: item.id,
+          path: item.downloadPath,
+          sha256: item.sha256,
+        })),
+        {
+          overwriteStrategy: strategy,
+          onStatus: (msg) => notificationStore.info(msg, 5000),
+        },
+      );
+      // Always clear once the run finished: changed means items were applied,
       // unchanged means they were verified as already current. Keeping the
       // queue in the unchanged case left a stale "confirm updates (1)" badge.
       fileUpdateTracker.clearPendingUpdates();

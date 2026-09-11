@@ -137,6 +137,122 @@ export const syncAllCoordinator = new SyncAllCoordinator();
 const DOWNLOAD_BATCH_SIZE = 25;
 const DOWNLOAD_BATCH_DELAY_MS = 2500;
 
+// ---------------------------------------------------------------------------
+// Download plumbing — shared by the full sync and the queued-update path
+// ---------------------------------------------------------------------------
+
+interface DownloadRunner {
+  /** Rate limit: pause every `DOWNLOAD_BATCH_SIZE` requests. */
+  throttle(): Promise<void>;
+  /** Fetch one document, retrying once when the server rate limits us. */
+  download(docId: string, path: string, overwrite: boolean): Promise<{ already_exists?: boolean } | null>;
+  /** Record an inaccessible server item as an empty local placeholder. */
+  createPlaceholder(relativePath: string): Promise<void>;
+}
+
+/**
+ * Rate-limited document fetcher.
+ *
+ * `getDocument` resolves as soon as the transfer is queued, so callers must not
+ * assume the file is on disk yet — see `waitForActiveDownloads`.
+ */
+function createDownloadRunner(): DownloadRunner {
+  let requestCount = 0;
+
+  async function throttle() {
+    requestCount++;
+    if (requestCount > 0 && requestCount % DOWNLOAD_BATCH_SIZE === 0) {
+      console.log(`%c[cfms:sync] Throttling — %d requests sent, pausing %ds…`, 'color:#ffb74d', requestCount, DOWNLOAD_BATCH_DELAY_MS / 1000);
+      await new Promise(r => setTimeout(r, DOWNLOAD_BATCH_DELAY_MS));
+    }
+  }
+
+  async function download(docId: string, path: string, overwrite: boolean) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await throttle();
+        return await getDocument(docId, path, undefined, overwrite);
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes('429') && attempt === 0) {
+          const match = msg.match(/retry_after_seconds["']?\s*:\s*(\d+)/);
+          const waitSec = match ? parseInt(match[1], 10) : 3;
+          console.log(`%c[cfms:sync] Rate limited, retrying in ${waitSec}s…`, 'color:#ffb74d');
+          await new Promise(r => setTimeout(r, waitSec * 1000 + 500));
+          continue;
+        }
+        throw err;
+      }
+    }
+    return null;
+  }
+
+  async function createPlaceholder(relativePath: string) {
+    if (!relativePath || relativePath === 'download') return;
+    try {
+      await createDownloadPlaceholder(relativePath);
+    } catch (err) {
+      console.warn(`%c[cfms:sync] Placeholder failed for ${relativePath}:`, 'color:#ffb74d', err);
+    }
+  }
+
+  return { throttle, download, createPlaceholder };
+}
+
+/** The overwrite prompt shown before replacing a locally modified file. */
+async function chooseOverwriteStrategy(conflictingCount: number): Promise<SyncOverwriteStrategy> {
+  const choice = await dialogStore.choose<SyncOverwriteStrategy>({
+    title: get(t)('files.syncOverwriteTitle'),
+    message: get(t)('files.syncOverwriteMessage', { values: { count: conflictingCount } }),
+    choices: [
+      { value: 'backup_rename', label: get(t)('settings.fileSync.overwriteBackup'), description: get(t)('settings.fileSync.overwriteBackupHint'), icon: 'history', intent: 'primary' },
+      { value: 'force_overwrite', label: get(t)('settings.fileSync.overwriteForce'), description: get(t)('settings.fileSync.overwriteForceHint'), icon: 'update', intent: 'danger' },
+      { value: 'skip', label: get(t)('settings.fileSync.overwriteSkip'), description: get(t)('settings.fileSync.overwriteSkipHint'), icon: 'cancel', intent: 'neutral' },
+    ],
+  });
+  return choice?.value ?? 'skip';
+}
+
+/**
+ * Resolve whether the download root is git-versioned and initialise the repo.
+ *
+ * Git tracking is an explicit user setting (Settings > File Sync); the repo is
+ * created lazily, and a failed init only disables tracking for this run — the
+ * settings toggle itself reports that failure and reverts.
+ */
+async function resolveGitTracking(override?: boolean): Promise<boolean> {
+  let hasGit = override ?? await getSyncGitTrackingEnabled().catch(() => false);
+  if (hasGit) {
+    try {
+      await downloadGitInit();
+    } catch (err) {
+      console.warn('%c[cfms:sync] Git init failed, tracking disabled for this run:', 'color:#ffb74d', err);
+      hasGit = false;
+    }
+  }
+  return hasGit;
+}
+
+/** Snapshot the download root once the transfers have landed on disk. */
+async function commitSyncSnapshot(summary: string): Promise<void> {
+  // `getDocument` resolves before the transfer finishes, so committing straight
+  // away would snapshot half-written files.
+  const activeCount = downloadStore.activeTasks.length;
+  if (activeCount > 0) {
+    console.log('%c[cfms:sync] Waiting for %d active download(s) to finish before git commit…', 'color:#4fc3f7', activeCount);
+    await waitForActiveDownloads();
+  }
+  try {
+    const commitMsg = `sync ${localTimestamp()}: ${summary}`;
+    const hash = await downloadGitCommit(commitMsg);
+    if (hash) {
+      console.log(`%c[cfms:sync] Git commit: ${hash.slice(0, 7)} — ${commitMsg}`, 'color:#a5d6a7');
+    }
+  } catch (gitErr) {
+    console.warn('%c[cfms:sync] Git tracking skipped:', 'color:#ffb74d', gitErr);
+  }
+}
+
 export interface SyncAllOptions {
   /** Overwrite existing local files even when hashes match server. Default false. */
   overwriteLocal?: boolean;
@@ -172,19 +288,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   const { onStatus, onError, onRefresh } = options;
 
   // Git version tracking is an explicit user setting (Settings > File Sync).
-  // When enabled, every sync that downloads/updates files commits a snapshot.
-  // The local repo is initialized lazily here; if init fails, tracking is
-  // silently disabled for this run (the settings toggle itself reports the
-  // failure and reverts).
-  let hasGit = options.gitTracking ?? await getSyncGitTrackingEnabled().catch(() => false);
-  if (hasGit) {
-    try {
-      await downloadGitInit();
-    } catch (err) {
-      console.warn('%c[cfms:sync] Git init failed, tracking disabled for this run:', 'color:#ffb74d', err);
-      hasGit = false;
-    }
-  }
+  const hasGit = await resolveGitTracking(options.gitTracking);
 
   // Overwrite strategy for files whose server revision differs from the local
   // copy. Git tracking implies force-overwrite (history lives in commits).
@@ -200,7 +304,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   let updated = 0;
   let deleted = 0;
   let moved = 0;
-  let requestCount = 0;
+  const runner = createDownloadRunner();
   const serverPaths = new Set<string>();          // all server file paths
   const walkedDirs = new Set<string>();           // relative dir paths that were listed successfully
   const failedDirs = new Set<string>();           // relative dir paths that failed to list (inaccessible)
@@ -210,38 +314,10 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
   const startTime = performance.now();
   console.log('%c[cfms:sync] Full recursive sync starting (throttled: %d per %ds)…', 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
 
-  async function throttleDownload() {
-    requestCount++;
-    if (requestCount > 0 && requestCount % DOWNLOAD_BATCH_SIZE === 0) {
-      console.log(`%c[cfms:sync] Throttling — %d requests sent, pausing %ds…`, 'color:#ffb74d', requestCount, DOWNLOAD_BATCH_DELAY_MS / 1000);
-      await new Promise(r => setTimeout(r, DOWNLOAD_BATCH_DELAY_MS));
-    }
-  }
-
-  async function downloadWithRetry(docId: string, path: string, overwrite: boolean): Promise<{ already_exists?: boolean } | null> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        await throttleDownload();
-        return await getDocument(docId, path, undefined, overwrite);
-      } catch (err) {
-        const msg = String(err);
-        if (msg.includes('429') && attempt === 0) {
-          const match = msg.match(/retry_after_seconds["']?\s*:\s*(\d+)/);
-          const waitSec = match ? parseInt(match[1], 10) : 3;
-          console.log(`%c[cfms:sync] Rate limited, retrying in ${waitSec}s…`, 'color:#ffb74d');
-          await new Promise(r => setTimeout(r, waitSec * 1000 + 500));
-          continue;
-        }
-        throw err;
-      }
-    }
-    return null;
-  }
-
   async function listWithRetry(dirId: string | null): Promise<{ folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] }> {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        await throttleDownload();
+        await runner.throttle();
         return await listDirectory(dirId);
       } catch (err) {
         const msg = String(err);
@@ -258,21 +334,6 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     throw new Error('listDirectory failed after retries');
   }
 
-  /**
-   * Create a same-named empty placeholder file for a server item that exists
-   * but is inaccessible (permission denied). The backend creates any missing
-   * parent directories, so nested paths never surface "os error 3". Failures
-   * are logged and ignored — a placeholder is best-effort only.
-   */
-  async function createPlaceholderSafe(relativePath: string) {
-    if (!relativePath || relativePath === 'download') return;
-    try {
-      await createDownloadPlaceholder(relativePath);
-    } catch (err) {
-      console.warn(`%c[cfms:sync] Placeholder failed for ${relativePath}:`, 'color:#ffb74d', err);
-    }
-  }
-
   async function walk(dirId: string | null, pathParts: string[]) {
     let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
     try {
@@ -286,7 +347,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
       // denied) is mirrored locally as a same-named empty placeholder file so
       // the local tree reflects the server instead of silently dropping it.
       if (isAccessDeniedError(err) && dirPath !== 'download') {
-        await createPlaceholderSafe(dirPath);
+        await runner.createPlaceholder(dirPath);
         serverPaths.add(dirPath);
         console.warn(`%c[cfms:sync] Access denied — placeholder created: ${dirPath}`, 'color:#ef9a9a');
       } else {
@@ -360,16 +421,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     if (!hasGit && strategy === null) {
       const conflicting = pendingDownloads.filter(d => d.existsLocally);
       if (conflicting.length > 0) {
-        const choice = await dialogStore.choose<SyncOverwriteStrategy>({
-          title: get(t)('files.syncOverwriteTitle'),
-          message: get(t)('files.syncOverwriteMessage', { values: { count: conflicting.length } }),
-          choices: [
-            { value: 'backup_rename', label: get(t)('settings.fileSync.overwriteBackup'), description: get(t)('settings.fileSync.overwriteBackupHint'), icon: 'history', intent: 'primary' },
-            { value: 'force_overwrite', label: get(t)('settings.fileSync.overwriteForce'), description: get(t)('settings.fileSync.overwriteForceHint'), icon: 'update', intent: 'danger' },
-            { value: 'skip', label: get(t)('settings.fileSync.overwriteSkip'), description: get(t)('settings.fileSync.overwriteSkipHint'), icon: 'cancel', intent: 'neutral' },
-          ],
-        });
-        strategy = choice?.value ?? 'skip';
+        strategy = await chooseOverwriteStrategy(conflicting.length);
         if (strategy === 'skip') {
           for (const d of conflicting) {
             const idx = pendingDownloads.indexOf(d);
@@ -496,14 +548,14 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
             }
           } catch { /* rename failed — fall through and overwrite */ }
         }
-        await downloadWithRetry(d.docId, d.path, overwrite);
+        await runner.download(d.docId, d.path, overwrite);
         if (d.existsLocally) updated++; else queued++;
       } catch (err) {
         // A document that exists on the server but cannot be downloaded
         // (permission denied) is mirrored locally as a same-named empty
         // placeholder file instead of being silently skipped.
         if (isAccessDeniedError(err)) {
-          await createPlaceholderSafe(d.path);
+          await runner.createPlaceholder(d.path);
           serverPaths.add(d.path);
           console.warn(`%c[cfms:sync] Access denied — placeholder created: ${d.path}`, 'color:#ef9a9a');
         }
@@ -530,35 +582,157 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     await onRefresh?.();
 
     // --- Git version tracking (only when the user keeps a repo in the download root) ---
-    if (changed && hasGit && (queued + updated > 0)) {
-      // Wait for async download tasks to finish writing files to disk.
-      // getDocument returns immediately — the actual download runs in the
-      // background. Without waiting, git would snapshot incomplete files.
-      const activeCount = downloadStore.activeTasks.length;
-      if (activeCount > 0) {
-        console.log('%c[cfms:sync] Waiting for %d active download(s) to finish before git commit…', 'color:#4fc3f7', activeCount);
-        await waitForActiveDownloads();
-      }
-    }
     if (changed && hasGit) {
-      try {
-        const msgParts: string[] = [];
-        if (queued > 0) msgParts.push(`+${queued}`);
-        if (updated > 0) msgParts.push(`~${updated}`);
-        if (deleted > 0) msgParts.push(`-${deleted}`);
-        if (moved > 0) msgParts.push(`→${moved}`);
-        const timestamp = localTimestamp();
-        const commitMsg = `sync ${timestamp}: ${msgParts.join(' ')}`;
-        const hash = await downloadGitCommit(commitMsg);
-        if (hash) {
-          console.log(`%c[cfms:sync] Git commit: ${hash.slice(0, 7)} — ${commitMsg}`, 'color:#a5d6a7');
-        }
-      } catch (gitErr) {
-        console.warn('%c[cfms:sync] Git tracking skipped:', 'color:#ffb74d', gitErr);
-      }
+      const msgParts: string[] = [];
+      if (queued > 0) msgParts.push(`+${queued}`);
+      if (updated > 0) msgParts.push(`~${updated}`);
+      if (deleted > 0) msgParts.push(`-${deleted}`);
+      if (moved > 0) msgParts.push(`→${moved}`);
+      await commitSyncSnapshot(msgParts.join(' '));
     }
 
     return { queued, updated, deleted, moved, skipped, changed };
+  } catch (err) {
+    const message = String(err);
+    onError?.(message);
+    notificationStore.error(message, 5000);
+    return emptyResult();
+  } finally {
+    syncAllCoordinator.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Queued updates — "Confirm Updates" after a check
+// ---------------------------------------------------------------------------
+
+/** One cached check hit: fetch this document into this path. */
+export interface QueuedDownload {
+  /** Server document id. */
+  docId: string;
+  /** Destination inside the download root, already sanitised. */
+  path: string;
+  /** Server revision hash, when the server reports one. */
+  sha256?: string | null;
+}
+
+export interface QueuedUpdateOptions {
+  /** Preset strategy (automatic downloads). Omitted → ask before overwriting. */
+  overwriteStrategy?: SyncOverwriteStrategy;
+  /** Whether the download root is versioned with git. Overrides the stored setting. */
+  gitTracking?: boolean;
+  onStatus?: (message: string) => void;
+  onError?: (message: string) => void;
+  onRefresh?: () => Promise<void> | void;
+}
+
+/**
+ * Apply a cached update check: fetch exactly the documents the check queued.
+ *
+ * This deliberately does **not** walk the server tree again. The check just did
+ * that; re-scanning turned a one-click confirm into a second full pass over the
+ * server and the local download root.
+ *
+ * Local state is re-read for the queued paths only — one call — so a file that
+ * became current after the check is not fetched twice.
+ *
+ * Deletions and server-side renames stay with `syncAllFiles`: deciding those
+ * needs the complete server tree, which is exactly what is avoided here.
+ */
+export async function downloadQueuedFiles(
+  queued: readonly QueuedDownload[],
+  options: QueuedUpdateOptions = {},
+): Promise<SyncAllResult> {
+  if (queued.length === 0) return emptyResult();
+  if (!syncAllCoordinator.acquire()) return emptyResult();
+
+  const { onStatus, onError, onRefresh } = options;
+  const runner = createDownloadRunner();
+  const backupSuffix = `+${backupTimestamp()}`;
+  const startTime = performance.now();
+
+  let downloaded = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  try {
+    const hasGit = await resolveGitTracking(options.gitTracking);
+
+    let localHashes: Record<string, string> = {};
+    try {
+      localHashes = await computeLocalSha256(queued.map(item => item.path));
+    } catch { /* unreadable pass: treat every path as absent and fetch it */ }
+
+    // Drop anything that is already current — the check may be minutes old, and
+    // the server reports no hash for some documents, in which case we fetch.
+    const outstanding = queued
+      .map(item => {
+        const localHash = localHashes[item.path] ?? null;
+        return { ...item, localHash, existsLocally: localHash != null };
+      })
+      .filter(item => !(item.localHash != null && item.sha256 != null && item.localHash === item.sha256));
+    skipped += queued.length - outstanding.length;
+
+    let strategy = options.overwriteStrategy ?? null;
+    const conflicting = outstanding.filter(item => item.existsLocally);
+    if (strategy === null) {
+      strategy = conflicting.length > 0
+        ? await chooseOverwriteStrategy(conflicting.length)
+        : 'backup_rename';
+    }
+
+    let toFetch = outstanding;
+    if (strategy === 'skip') {
+      toFetch = outstanding.filter(item => !item.existsLocally);
+      skipped += conflicting.length;
+    }
+
+    for (const item of toFetch) {
+      try {
+        let overwrite = item.existsLocally;
+        if (strategy === 'backup_rename' && item.existsLocally) {
+          // Keep the outdated copy under a timestamped name before replacing it.
+          const backupPath = `${item.path}${backupSuffix}`;
+          try {
+            if (await moveDownloadFile(item.path, backupPath)) {
+              overwrite = false;
+              console.log(`%c[cfms:sync] Backup: ${item.path} → ${backupPath}`, 'color:#ffb74d');
+            }
+          } catch { /* rename failed — fall through and overwrite */ }
+        }
+        await runner.download(item.docId, item.path, overwrite);
+        if (item.existsLocally) updated++; else downloaded++;
+      } catch (err) {
+        if (isAccessDeniedError(err)) {
+          // Exists on the server but not readable — mirror it as a placeholder
+          // rather than silently leaving a hole in the local tree.
+          await runner.createPlaceholder(item.path);
+          console.warn(`%c[cfms:sync] Access denied — placeholder created: ${item.path}`, 'color:#ef9a9a');
+        } else {
+          console.warn(`%c[cfms:sync] Failed to fetch ${item.path}:`, 'color:#f44336', err);
+        }
+      }
+    }
+
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+    const changed = downloaded + updated > 0;
+    console.log(
+      `%c[cfms:sync] Queued updates done in ${elapsed}s: ${downloaded} downloaded, ${updated} updated, ${skipped} skipped`,
+      'color:#4caf50',
+    );
+
+    if (changed) {
+      onStatus?.(get(t)('files.syncCompleted', { values: { downloaded, updated, moved: 0, deleted: 0 } }));
+    } else {
+      onStatus?.(get(t)('files.syncAllUpToDate'));
+    }
+    await onRefresh?.();
+
+    if (changed && hasGit) {
+      await commitSyncSnapshot(`+${downloaded} ~${updated}`);
+    }
+
+    return { queued: downloaded, updated, deleted: 0, moved: 0, skipped, changed };
   } catch (err) {
     const message = String(err);
     onError?.(message);

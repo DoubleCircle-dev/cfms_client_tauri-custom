@@ -174,6 +174,7 @@
   import { authStore, downloadStore, floatingProgressStore, notificationStore, serverStateStore, uploadStore } from '$lib/stores.svelte';
   import { fileUpdateTracker, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
   import {
+    downloadQueuedFiles,
     makeDownloadPath,
     syncAllCoordinator,
     syncAllFiles as runSharedSyncAll,
@@ -1327,6 +1328,7 @@
             id: doc.id,
             title: doc.title,
             path: [...pathParts, doc.title].join('/'),
+            downloadPath: makeDownloadPath([...pathParts, doc.title]),
             sha256: doc.sha256,
           });
         }
@@ -1345,13 +1347,24 @@
     error = null;
     try {
       await refreshDownloadedFileIds();
-      await runSharedSyncAll({
-        overwriteLocal,
-        confirmDeletes: true,
-        onStatus: (msg) => { status = msg; },
-        onError: (msg) => { error = msg; },
-        onRefresh: () => refreshDownloadedFileIds(),
-      });
+      // Fetch exactly what the check queued. The check already walked the tree,
+      // so re-scanning here would double the cost of every confirm; deletions and
+      // renames stay with the full "sync all files" action.
+      await downloadQueuedFiles(
+        pendingUpdates.map((item) => ({
+          docId: item.id,
+          path: item.downloadPath,
+          sha256: item.sha256,
+        })),
+        {
+          // The "overwrite" switch means "replace conflicting files without
+          // asking"; otherwise the shared prompt decides.
+          overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
+          onStatus: (msg) => { status = msg; },
+          onError: (msg) => { error = msg; },
+          onRefresh: () => refreshDownloadedFileIds(),
+        },
+      );
       fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);
