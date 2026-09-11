@@ -34,6 +34,7 @@
     type KeyboardCommand,
   } from "$lib/keyboard";
   import { supportsKeyboardShortcuts } from "$lib/platform";
+  import BrowserPreviewBadge from "$lib/dev/BrowserPreviewBadge.svelte";
   import { canOpenDeveloperConsole, developerConsoleIdentityKey } from "$lib/developer-console";
   import {
     authStore,
@@ -611,6 +612,7 @@
   <DialogHost />
   <SnackBarHost />
   <NewUpdatePrompt />
+  <BrowserPreviewBadge />
   {#if releaseHighlightsState.presentation}
     <ReleaseHighlightsWizard
       presentation={releaseHighlightsState.presentation}
