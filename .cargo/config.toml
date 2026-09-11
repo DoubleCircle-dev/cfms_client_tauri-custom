@@ -35,3 +35,28 @@ rustflags = ["-Z", "threads=8"]
 # NOTE: cargo's incremental compilation is disabled in `[profile.dev]`
 # (Cargo.toml) — sccache cannot cache incremental crates.
 rustc-wrapper = "sccache"
+
+# ---------------------------------------------------------------------------
+# Browser UI preview — WebView2 debugging port for debug runs
+# ---------------------------------------------------------------------------
+#
+# `pnpm tauri dev` drives `cargo run`, so Cargo sets this variable in the app
+# process and the debug build opens the WebView2 CDP endpoint. That lets
+# `scripts/dev-ipc-bridge.mjs` forward commands from a regular browser to the
+# real backend — see BUILD.md, "Browser UI preview".
+#
+# Why here rather than in Rust or in the window config:
+#   * `tauri build` does not run the app through Cargo, so release binaries
+#     never receive it (a `tauri.conf.json` entry or a Rust call would ship it);
+#   * `WebviewWindowBuilder::additional_browser_args` would *replace* wry's
+#     `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection` defaults,
+#     whereas WebView2 appends this variable on top of them;
+#   * Cargo sets it in the parent process, avoiding `std::env::set_var`, which
+#     is unsafe in edition 2024.
+#
+# WebView2 binds the port to the loopback interface. Cargo leaves an
+# already-set variable alone, so `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=... pnpm tauri dev`
+# still takes precedence. Change the port here and in CFMS_CDP_PORT (the relay)
+# together.
+[env]
+WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"

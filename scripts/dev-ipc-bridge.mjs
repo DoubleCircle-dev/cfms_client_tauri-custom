@@ -7,10 +7,10 @@
 // debugger, so a browser can drive the real backend with real data.
 //
 // Setup:
-//   1. start the app with the debug port open (it can only be set at launch):
-//        bash:       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 pnpm tauri dev
-//        PowerShell: $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'; pnpm tauri dev
-//   2. node scripts/dev-ipc-bridge.mjs
+//   1. start the app — debug runs open the WebView2 CDP port automatically, via
+//      the `[env]` entry in `.cargo/config.toml`:
+//        pnpm tauri dev
+//   2. node scripts/dev-ipc-bridge.mjs   (or: pnpm dev:bridge)
 //   3. open http://localhost:1909/ in a browser — the preview bridge notices the
 //      relay and forwards every command to the running app.
 //
@@ -125,8 +125,9 @@ async function ensureClient() {
       targets = await response.json();
     } catch (error) {
       throw new Error(
-        `cannot reach the WebView2 debugger on :${CDP_PORT} — start the app with `
-        + `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=${CDP_PORT} (${error.message})`,
+        `cannot reach the WebView2 debugger on :${CDP_PORT} — is "pnpm tauri dev" running? `
+        + `Debug builds open that port via [env] in .cargo/config.toml; a release build never will. `
+        + `(${error.message})`,
       );
     }
 

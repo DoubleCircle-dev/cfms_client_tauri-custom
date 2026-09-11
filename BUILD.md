@@ -150,8 +150,8 @@ only the `invoke` responder differs. It runs in one of two modes.
 the *running app* through the WebView2 CDP debugger:
 
 ```bash
-# 1. start the app with its debug port open (this can only be set at launch)
-WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 pnpm tauri dev
+# 1. start the app (the debug port is opened by Cargo's [env] in .cargo/config.toml)
+pnpm tauri dev
 
 # 2. in a second terminal, start the relay
 pnpm dev:bridge
@@ -159,7 +159,12 @@ pnpm dev:bridge
 # 3. open http://localhost:1909/ in a browser
 ```
 
-PowerShell uses `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'; pnpm tauri dev`.
+The debug build opens `--remote-debugging-port=9222` on loopback for you; that
+entry lives in `.cargo/config.toml` under `[env]`, so it applies to debug runs
+only and never reaches a release binary. Override the port there and in
+`CFMS_CDP_PORT` (relay) together, or bypass the config entirely with
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=... pnpm tauri dev`.
+
 The badge reads `预览模式 · 真实后端` while the relay is attached. Connect and
 sign in **in the app window**; the browser follows the session within a few
 seconds and then shows the same real data.
