@@ -668,6 +668,8 @@ pub fn run() {
             commands::translate_backend,
             commands::get_connection_settings,
             commands::set_connection_settings,
+            commands::get_protocol_version_settings,
+            commands::set_protocol_version_override,
             commands::get_ca_certificate_status,
             commands::update_ca_certificates,
             commands::login,

@@ -1,6 +1,6 @@
 // CFMS Client - typed Tauri IPC wrappers.
 import { invoke } from '@tauri-apps/api/core';
-import type { CaCertificateStatus, CaCertificateUpdateResult, ConnectionSettings, FileEntry } from './types';
+import type { CaCertificateStatus, CaCertificateUpdateResult, ConnectionSettings, FileEntry, ProtocolVersionSettings } from './types';
 import { loadUserPreference, saveUserPreference } from './preferences';
 
 export type RootBackButtonBehavior = 'background' | 'exit';
@@ -203,6 +203,23 @@ export async function setConnectionSettings(
   settings: ConnectionSettings,
 ): Promise<void> {
   return invoke("set_connection_settings", { settings });
+}
+
+/** Load the protocol compatibility override applied to new connections. */
+export async function getProtocolVersionSettings(): Promise<ProtocolVersionSettings> {
+  return invoke("get_protocol_version_settings");
+}
+
+/**
+ * Store (or clear) the protocol compatibility override.
+ *
+ * Passing `null` restores the protocol version range this build was compiled
+ * for, which is also the state new installations start in.
+ */
+export async function setProtocolVersionOverride(
+  version: number | null,
+): Promise<ProtocolVersionSettings> {
+  return invoke("set_protocol_version_override", { version });
 }
 
 /** Get local CA certificate store status. */

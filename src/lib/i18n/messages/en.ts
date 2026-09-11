@@ -151,6 +151,9 @@ export const en = {
     serverUnsupportedMessage:
       'The server uses protocol version {serverVersion}, but the earliest version supported by this client is {supportedBoundary}.',
     checkUpdates: 'Check for updates',
+    protocolCompatibilityHint:
+      'This server speaks an older protocol. For interoperability testing the accepted range can be relaxed on the About page.',
+    openProtocolCompatibility: 'Open protocol compatibility',
     connect: 'Connect',
     returnToConnection: 'Return to connection',
     recentAddresses: 'Recent addresses',
@@ -762,6 +765,17 @@ export const en = {
     productName: 'Confidential File Management System',
     version: 'Version',
     protocol: 'Protocol Version',
+    protocolCompatibility: 'Protocol Compatibility',
+    protocolCompatibilityHint:
+      'Picks the oldest server protocol version accepted on the next connection. This build targets version {version}; relaxing the range is meant for interoperability testing only.',
+    protocolCompatibilityAccepted: 'Accept server protocol versions',
+    protocolCompatibilityDefault: '{version} (default)',
+    protocolCompatibilityMinimum: '{version} and newer',
+    protocolCompatibilityStrict: 'Only protocol version {version} is accepted.',
+    protocolCompatibilityRelaxed:
+      'Protocol versions {min} to {max} are accepted. Some features may not work against an older server.',
+    protocolCompatibilityLoadFailed: 'Protocol compatibility settings could not be loaded.',
+    protocolCompatibilitySaveFailed: 'Protocol compatibility settings could not be saved: {error}',
     copyright: 'Copyright',
     license: 'License',
     legalInformation: 'Legal information',

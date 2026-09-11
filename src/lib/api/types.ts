@@ -641,6 +641,18 @@ export interface ConnectionSettings {
   recent_connection_addresses: string[];
 }
 
+/** Protocol compatibility override applied to new connections. */
+export interface ProtocolVersionSettings {
+  /** Wire-protocol version this build targets. */
+  clientVersion: number;
+  /** Oldest server wire-protocol version currently accepted. */
+  minAcceptedVersion: number;
+  /** Explicit override, `null` when the build default applies. */
+  overrideVersion: number | null;
+  /** Overrides the picker offers, newest first. */
+  selectableVersions: number[];
+}
+
 export interface CaCertificateStatus {
   caDir: string;
   certificateCount: number;
