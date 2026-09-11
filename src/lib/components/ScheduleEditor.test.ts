@@ -51,6 +51,25 @@ afterEach(() => {
 });
 
 describe('ScheduleEditor payload modes', () => {
+  it('keeps focus when the first character initializes a required payload field', async () => {
+    render(ScheduleEditor, {
+      props: {
+        taskTypes: [taskType('scheduled_lockdown.window')],
+        onSave: vi.fn(),
+        onCancel: vi.fn(),
+      },
+    });
+
+    const input = screen.getByLabelText(/Duration Seconds/) as HTMLInputElement;
+    input.focus();
+
+    await fireEvent.input(input, { target: { value: '6' } });
+
+    expect(document.activeElement).toBe(input);
+    expect(screen.getByLabelText(/Duration Seconds/)).toBe(input);
+    expect(input.value).toBe('6');
+  });
+
   it('creates a schema-valid payload through the guided form', async () => {
     const onSave = vi.fn();
     render(ScheduleEditor, {

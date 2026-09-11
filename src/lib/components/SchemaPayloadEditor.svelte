@@ -418,7 +418,10 @@
     {#if node.description}<p class="schema-description">{node.description}</p>{/if}
     {#if summary}<p class="constraint-summary">{summary}</p>{/if}
 
-    {#if current !== undefined && current !== null}
+    {#if current !== null && (
+      current !== undefined
+      || (required && (node.kind === 'string' || node.kind === 'integer' || node.kind === 'number'))
+    )}
       {#if node.constValue !== undefined}
         <output class="constant-value"><code>{JSON.stringify(node.constValue)}</code></output>
       {:else if node.enumValues}
@@ -438,7 +441,7 @@
         {#if (node.maxLength ?? 0) > 240}
           <textarea
             id={`payload-field-${pointer}`}
-            value={String(current)}
+            value={current === undefined ? '' : String(current)}
             maxlength={node.maxLength}
             minlength={node.minLength}
             disabled={disabled}
@@ -450,7 +453,7 @@
           <input
             id={`payload-field-${pointer}`}
             type={node.format === 'email' ? 'email' : node.format === 'uri' ? 'url' : 'text'}
-            value={String(current)}
+            value={current === undefined ? '' : String(current)}
             maxlength={node.maxLength}
             minlength={node.minLength}
             disabled={disabled}
@@ -463,7 +466,7 @@
         <input
           id={`payload-field-${pointer}`}
           type="number"
-          value={String(current)}
+          value={current === undefined ? '' : String(current)}
           min={inputMinimum(node)}
           max={inputMaximum(node)}
           step={node.kind === 'integer' ? Math.max(1, node.multipleOf ?? 1) : node.multipleOf ?? 'any'}
@@ -604,7 +607,7 @@
   input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.82rem/1.4 var(--font-md3-sans); }
   input, select { min-height: 40px; padding: 0 0.65rem; }
   textarea { min-height: 6.5rem; resize: vertical; padding: 0.65rem; }
-  input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-md3-primary); outline-offset: 1px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--color-md3-primary-emphasis, var(--color-md3-primary)); outline: none; box-shadow: inset 0 0 0 1px var(--color-md3-primary-emphasis, var(--color-md3-primary)); }
   input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--color-md3-error); }
   .schema-description, .constraint-summary, .additional-properties-note { margin: 0; color: var(--color-md3-on-surface-variant); font: 0.7rem/1.45 var(--font-md3-sans); }
   .constraint-summary { font-family: var(--font-md3-mono); }
