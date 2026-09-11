@@ -47,20 +47,37 @@ export function makeDownloadPath(parts: string[]) {
 
 // ---------------------------------------------------------------------------
 // Server-vs-local comparison
+//
+// This block is the *only* place that decides whether a local file still is the
+// revision the server holds. The update checker, the file list badges, the
+// single-file download and the batch download all call in here, so they can
+// never disagree about which files still need fetching.
 // ---------------------------------------------------------------------------
+
+/** SHA-256 of the empty byte string — the digest every zero byte file has. */
+export const EMPTY_SHA256 =
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
 /**
  * Whether a local copy is *provably* the server revision.
  *
- * A server that reports no hash cannot prove a local copy is current, so such a
- * document counts as outdated and is fetched. Keeping this rule in one exported
- * predicate is what stops the checker and the two sync modes from disagreeing.
+ * Matching digests are proof. A zero byte revision is proof too: there is
+ * exactly one empty byte string, so a zero byte server file and a zero byte
+ * local file are the same file, even though the server reports a null digest
+ * for it — uploaders skip hashing empty files, so the column stays NULL.
+ * Without that rule every empty file would look outdated on every single check
+ * and be re-fetched forever.
+ *
+ * A digest-less *non-empty* revision proves nothing, so it stays "needs
+ * download" rather than being guessed at from size or timestamp.
  */
 export function isLocalCopyCurrent(
   localHash: string | null,
   serverHash: string | null | undefined,
+  serverSize: number | null | undefined,
 ): boolean {
-  return localHash != null && serverHash != null && localHash === serverHash;
+  if (serverHash != null) return localHash === serverHash;
+  return serverSize === 0 && localHash === EMPTY_SHA256;
 }
 
 /** How one server document compares with its local copy in the download root. */
@@ -98,6 +115,30 @@ export async function readLocalDocumentStates(
   return documents.map((doc, index) => describeLocalState(doc, paths[index], localHashes[paths[index]] ?? null));
 }
 
+/** Compare a single server document against its local copy. */
+export async function readLocalDocumentState(
+  doc: ServerDocumentEntry,
+  pathParts: string[],
+): Promise<LocalDocumentState> {
+  const [state] = await readLocalDocumentStates([doc], pathParts);
+  return state;
+}
+
+/**
+ * Re-read one document's server-side revision.
+ *
+ * Callers that only hold a remembered reference (a favourite, a recent visit, a
+ * table row) have no digest to compare against, so they look the document up in
+ * its parent directory first. Returns `null` when the server no longer lists it.
+ */
+export async function loadServerDocument(
+  documentId: string,
+  parentId: string | null,
+): Promise<ServerDocumentEntry | null> {
+  const response = await listDirectory(parentId);
+  return response.documents.find((doc) => doc.id === documentId) ?? null;
+}
+
 /** Treat every document as absent locally — used when the hash pass itself fails. */
 function assumeNothingIsLocal(documents: ServerDocumentEntry[], pathParts: string[]): LocalDocumentState[] {
   return documents.map((doc) => describeLocalState(doc, makeDownloadPath([...pathParts, doc.title]), null));
@@ -115,7 +156,7 @@ function describeLocalState(
     path,
     localHash,
     existsLocally: localHash != null,
-    isCurrent: isLocalCopyCurrent(localHash, serverHash),
+    isCurrent: isLocalCopyCurrent(localHash, serverHash, doc.size),
     mismatched: localHash != null && serverHash != null && localHash !== serverHash,
   };
 }
@@ -157,7 +198,7 @@ interface DownloadRunner {
   /** Rate limit: pause every `DOWNLOAD_BATCH_SIZE` requests. */
   throttle(): Promise<void>;
   /** Fetch one document, retrying once when the server rate limits us. */
-  download(docId: string, path: string, overwrite: boolean): Promise<{ already_exists?: boolean } | null>;
+  download(docId: string, path: string): Promise<unknown>;
   /** Record an inaccessible server item as an empty local placeholder. */
   createPlaceholder(relativePath: string): Promise<void>;
 }
@@ -179,11 +220,11 @@ function createDownloadRunner(): DownloadRunner {
     }
   }
 
-  async function download(docId: string, path: string, overwrite: boolean) {
+  async function download(docId: string, path: string) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         await throttle();
-        return await getDocument(docId, path, undefined, overwrite);
+        return await getDocument(docId, path);
       } catch (err) {
         const msg = String(err);
         if (msg.includes('429') && attempt === 0) {
@@ -287,6 +328,8 @@ export interface QueuedDownload {
   path: string;
   /** Server revision hash, when the server reports one. */
   sha256?: string | null;
+  /** Server revision size, which settles zero byte revisions. */
+  size?: number | null;
 }
 
 /** One document a plan wants on disk. */
@@ -331,7 +374,7 @@ async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPl
     // The check may be minutes old, and the server reports no hash for some
     // documents — both cases are handled by the shared predicate.
     const localHash = localHashes[item.path] ?? null;
-    if (isLocalCopyCurrent(localHash, item.sha256)) {
+    if (isLocalCopyCurrent(localHash, item.sha256, item.size)) {
       plan.skipped++;
       continue;
     }
@@ -643,18 +686,18 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     // Execute downloads.
     for (const d of outstanding) {
       try {
-        let overwrite = d.existsLocally;
         if (strategy === 'backup_rename' && d.existsLocally) {
           // Keep the outdated copy under a timestamped name before replacing it.
+          // `getDocument` always truncates and rewrites the target, so moving the
+          // old copy aside *is* the overwrite policy — there is no flag to send.
           const backupPath = `${d.path}${backupSuffix}`;
           try {
             if (await moveDownloadFile(d.path, backupPath)) {
-              overwrite = false;
               console.log(`%c[cfms:sync] Backup: ${d.path} → ${backupPath}`, 'color:#ffb74d');
             }
           } catch { /* rename failed — fall through and overwrite */ }
         }
-        await runner.download(d.docId, d.path, overwrite);
+        await runner.download(d.docId, d.path);
         if (d.existsLocally) updated++; else queued++;
       } catch (err) {
         // A document that exists on the server but cannot be downloaded

@@ -69,30 +69,32 @@ export async function openLocalPath(path: string): Promise<void> {
   return invoke('open_local_path', { path });
 }
 
+/** The download task the server just created for a document. */
+export interface QueuedDocumentDownload {
+  task_id?: string;
+  file_id?: string;
+  filename: string;
+  file_path: string;
+}
+
 /** Request a document download from the CFMS server.
  *
- * Sends the `get_document` action, which creates a download task on the
- * server and adds it to the persistent local download queue.
+ * Sends the `get_document` action, which creates a download task on the server
+ * and adds it to the persistent local download queue.
  *
- * When the target file already exists on disk the backend returns
- * `already_exists: true` without contacting the server.
+ * This always contacts the server and always rewrites the target file: the
+ * backend has no "already have it" or "don't overwrite" mode. Callers that want
+ * to avoid replacing an up-to-date local copy must compare the digests first —
+ * see `readLocalDocumentState` in `$lib/sync-all.svelte`.
  */
 export async function getDocument(
   documentId: string,
   filename: string,
   batch?: DownloadBatchMetadata,
-  overwrite?: boolean,
-): Promise<{
-  task_id?: string;
-  file_id?: string;
-  filename: string;
-  file_path: string;
-  already_exists?: boolean;
-}> {
+): Promise<QueuedDocumentDownload> {
   return invoke("get_document", {
     documentId,
     filename,
-    overwrite: overwrite ?? false,
     batchId: batch?.batchId ?? null,
     batchName: batch?.batchName ?? null,
     batchRootId: batch?.batchRootId ?? null,

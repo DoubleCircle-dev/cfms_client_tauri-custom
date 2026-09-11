@@ -245,12 +245,8 @@
       return;
     }
     try {
-      const result = await getDocument(record.id, record.name);
-      if (result.already_exists) {
-        notificationStore.info($t('home.downloadAlreadyExists', { values: { name: record.name } }));
-      } else {
-        notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
-      }
+      await getDocument(record.id, record.name);
+      notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
     } catch (error) {
       notificationStore.error(formatUserFacingError(error));
     }

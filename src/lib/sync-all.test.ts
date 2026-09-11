@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerDocumentEntry } from '$lib/api';
-import { makeDownloadPath, readLocalDocumentStates, syncFiles } from './sync-all.svelte';
+import { EMPTY_SHA256, makeDownloadPath, readLocalDocumentStates, syncFiles } from './sync-all.svelte';
 
 const files = vi.hoisted(() => ({
   computeLocalSha256: vi.fn(),
@@ -37,8 +37,13 @@ vi.mock('svelte-i18n', () => ({
   },
 }));
 
-function doc(title: string, sha256: string | null = 'HASH', id = title): ServerDocumentEntry {
-  return { id, title, size: 1024, last_modified: null, sha256 };
+function doc(
+  title: string,
+  sha256: string | null = 'HASH',
+  id = title,
+  size: number | null = 1024,
+): ServerDocumentEntry {
+  return { id, title, size, last_modified: null, sha256 };
 }
 
 beforeEach(() => {
@@ -121,6 +126,31 @@ describe('readLocalDocumentStates', () => {
       ['id-2', 'x/two.txt', false],
     ]);
   });
+
+  it('accepts a zero byte revision with no server hash as current', async () => {
+    // Uploaders never hash empty files, so the server reports NULL for them.
+    // There is only one empty byte string, so the local digest alone settles it.
+    const [state] = await withLocalHashes(
+      [doc('empty.txt', null, 'e', 0)],
+      { 'empty.txt': EMPTY_SHA256 },
+    );
+
+    expect(state.isCurrent).toBe(true);
+    expect(state.existsLocally).toBe(true);
+  });
+
+  it('still fetches a zero byte revision the download root does not have', async () => {
+    const [state] = await withLocalHashes([doc('empty.txt', null, 'e', 0)], {});
+
+    expect(state.isCurrent).toBe(false);
+    expect(state.existsLocally).toBe(false);
+  });
+
+  it('does not accept a digest-less non-empty revision', async () => {
+    const [state] = await withLocalHashes([doc('a.bin', null, 'a', 4096)], { 'a.bin': 'LOCAL' });
+
+    expect(state.isCurrent).toBe(false);
+  });
 });
 
 describe('syncFiles (cached queue)', () => {
@@ -140,8 +170,8 @@ describe('syncFiles (cached queue)', () => {
     });
 
     expect(files.getDocument).toHaveBeenCalledTimes(2);
-    expect(files.getDocument).toHaveBeenCalledWith('d1', 'a/b.txt', undefined, false);
-    expect(files.getDocument).toHaveBeenCalledWith('d2', 'c.md', undefined, false);
+    expect(files.getDocument).toHaveBeenCalledWith('d1', 'a/b.txt');
+    expect(files.getDocument).toHaveBeenCalledWith('d2', 'c.md');
     expect(result.queued).toBe(2);
     expect(result.changed).toBe(true);
   });
@@ -175,7 +205,7 @@ describe('syncFiles (cached queue)', () => {
 
     expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+/));
     // Renamed away, so the download writes a new file rather than overwriting.
-    expect(files.getDocument).toHaveBeenCalledWith('d1', 'a.txt', undefined, false);
+    expect(files.getDocument).toHaveBeenCalledWith('d1', 'a.txt');
   });
 
   it('honours the configured strategy while git tracking is on', async () => {
@@ -204,7 +234,7 @@ describe('syncFiles (cached queue)', () => {
     });
 
     expect(files.getDocument).toHaveBeenCalledTimes(1);
-    expect(files.getDocument).toHaveBeenCalledWith('fresh', 'fresh.txt', undefined, false);
+    expect(files.getDocument).toHaveBeenCalledWith('fresh', 'fresh.txt');
     expect(result.skipped).toBe(1);
     expect(result.queued).toBe(1);
   });
@@ -280,7 +310,7 @@ describe('syncFiles (full server walk)', () => {
 
     const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
 
-    expect(files.getDocument).toHaveBeenCalledWith('a.txt', 'a.txt', undefined, true);
+    expect(files.getDocument).toHaveBeenCalledWith('a.txt', 'a.txt');
     expect(result.updated).toBe(1);
     expect(result.changed).toBe(true);
   });

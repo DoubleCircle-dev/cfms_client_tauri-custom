@@ -360,6 +360,9 @@ pub async fn check_downloads_exist(
 
 /// Compute SHA-256 hashes of local files in the download root.
 /// Returns a map of filename → hex-encoded SHA-256 digest.
+///
+/// Paths that cannot be read are omitted, which callers read as "not present
+/// locally": one call answers both existence and content.
 #[tauri::command]
 pub async fn compute_local_sha256(
     app_handle: tauri::AppHandle,
@@ -370,15 +373,9 @@ pub async fn compute_local_sha256(
     let mut results = std::collections::HashMap::new();
     for name in &filenames {
         let path = resolve_download_subdirectory(download_root.clone(), name)?;
-        let hash = match std::fs::read(&path) {
-            Ok(data) => {
-                use sha2::{Digest, Sha256};
-                let digest = Sha256::digest(&data);
-                hex::encode(digest)
-            }
-            Err(_) => continue,
-        };
-        results.insert(name.clone(), hash);
+        if let Ok(hash) = file_sha256(&path) {
+            results.insert(name.clone(), hash);
+        }
     }
     Ok(results)
 }

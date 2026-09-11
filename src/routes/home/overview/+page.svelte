@@ -128,13 +128,9 @@
         });
         await goto(`/home/files?${params.toString()}`);
       } else {
-        const result = await getDocument(record.id, record.name);
+        await getDocument(record.id, record.name);
         recent = await rememberVisit(scope, record);
-        if (result.already_exists) {
-          notificationStore.info($t('home.downloadAlreadyExists', { values: { name: record.name } }));
-        } else {
-          notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
-        }
+        notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
       }
     } catch (err) {
       if (isUnavailableError(err)) {
