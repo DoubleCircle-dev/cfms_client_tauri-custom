@@ -504,6 +504,7 @@ export const en = {
     ruleManagerTitle: 'Rule Manager: {name}',
     accessRulesVisualization: 'Visualization',
     sourceCode: 'Source Code',
+    accessRulesEditorLoading: 'Loading access rules editor…',
     inheritParentRules: 'Inherit rules from parent object',
     invalidAccessRulesJson: 'Invalid access rules JSON: {error}',
     ruleFormatHelp:

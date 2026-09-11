@@ -498,6 +498,7 @@ export const zh_CN = {
     ruleManagerTitle: '规则管理器：{name}',
     accessRulesVisualization: '可视化',
     sourceCode: '源码',
+    accessRulesEditorLoading: '正在加载访问规则编辑器…',
     inheritParentRules: '继承父对象规则',
     invalidAccessRulesJson: '访问规则 JSON 无效：{error}',
     ruleFormatHelp:
