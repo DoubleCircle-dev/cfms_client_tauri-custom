@@ -4,7 +4,7 @@ import '$lib/i18n';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { locale } from 'svelte-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authStore, serverStateStore } from '$lib/stores.svelte';
+import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
 import SchedulesPage from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
@@ -78,12 +78,14 @@ beforeEach(() => {
   mocks.listScheduledTaskTypes.mockResolvedValue([taskType]);
   mocks.getSchedule.mockResolvedValue(schedule);
   mocks.createSchedule.mockResolvedValue({ ...schedule, id: 'schedule-2', revision: 1 });
+  notificationStore.clear();
 });
 
 afterEach(() => {
   cleanup();
   authStore.clear();
   serverStateStore.clear();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -154,5 +156,36 @@ describe('schedules page', () => {
 
     await screen.findByText('reports.weekly');
     expect(screen.getByPlaceholderText('Search this page by task, ID, or owner').getAttribute('data-focus-ring')).toBe('delegated');
+  });
+
+  it('toggles a schedule inline without opening details or showing success feedback', async () => {
+    const updated = { ...schedule, enabled: false, revision: 3 };
+    mocks.updateSchedule.mockResolvedValue(updated);
+    const success = vi.spyOn(notificationStore, 'success');
+    signIn(['view_schedules', 'manage_schedules', 'manage_system']);
+    render(SchedulesPage);
+
+    await screen.findByText('reports.weekly');
+    await fireEvent.click(screen.getByRole('switch', { name: 'Toggle reports.weekly' }));
+
+    await waitFor(() => expect(mocks.updateSchedule).toHaveBeenCalledWith({
+      id: 'schedule-1',
+      revision: 2,
+      enabled: false,
+    }));
+    expect(screen.queryByRole('heading', { level: 2, name: 'reports.weekly' })).toBeNull();
+    expect(success).not.toHaveBeenCalled();
+  });
+
+  it('keeps failure feedback when toggling a schedule fails', async () => {
+    mocks.updateSchedule.mockRejectedValue(new Error('Unable to update schedule'));
+    const error = vi.spyOn(notificationStore, 'error');
+    signIn(['view_schedules', 'manage_schedules', 'manage_system']);
+    render(SchedulesPage);
+
+    await screen.findByText('reports.weekly');
+    await fireEvent.click(screen.getByRole('switch', { name: 'Toggle reports.weekly' }));
+
+    await waitFor(() => expect(error).toHaveBeenCalled());
   });
 });

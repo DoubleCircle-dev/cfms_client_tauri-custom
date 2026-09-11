@@ -189,14 +189,6 @@
       {/each}
     </select>
 
-    {#if selectedTaskType}
-      <div class="task-contract">
-        <span>{$t('schedules.contractVersion', { values: { version: selectedTaskType.contract_version } })}</span>
-        <span>{$t('schedules.maxAttempts', { values: { count: selectedTaskType.max_attempts } })}</span>
-        <span>{selectedTaskType.required_permission}</span>
-      </div>
-    {/if}
-
     <div class="trigger-grid">
       <div>
         <label class="field-label" for="schedule-trigger">{$t('schedules.triggerType')}</label>
@@ -298,8 +290,6 @@
   input:disabled, select:disabled { cursor: not-allowed; opacity: 0.55; }
   .trigger-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 0.75rem; }
   .trigger-grid > div { display: grid; gap: 0.4rem; }
-  .task-contract { display: flex; flex-wrap: wrap; gap: 0.35rem; color: var(--color-md3-on-surface-variant); font: 0.7rem var(--font-md3-sans); }
-  .task-contract span { border-radius: 999px; padding: 0.25rem 0.45rem; background: var(--color-md3-surface-container-high); }
   .field-help, .payload-heading p { color: var(--color-md3-on-surface-variant); font: 0.75rem/1.45 var(--font-md3-sans); }
   .payload-heading { display: flex; align-items: end; justify-content: space-between; gap: 0.75rem; margin-top: 0.25rem; }
   .payload-heading > div { display: grid; gap: 0.2rem; }

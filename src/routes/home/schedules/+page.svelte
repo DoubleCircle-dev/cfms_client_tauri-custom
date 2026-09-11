@@ -137,7 +137,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 
   function replaceSchedule(updated: Schedule) {
     schedules = schedules.map((item) => item.id === updated.id ? updated : item);
-    selected = updated;
+    if (selected?.id === updated.id) selected = updated;
   }
 
   function isConflict(error: unknown): boolean {
@@ -176,7 +176,6 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     try {
       const updated = await updateSchedule({ id: schedule.id, revision: schedule.revision, enabled });
       replaceSchedule(updated);
-      notificationStore.success(enabled ? $t('schedules.enabledSuccess') : $t('schedules.pausedSuccess'));
     } catch (error) {
       notificationStore.error(isConflict(error) ? $t('schedules.conflict') : formatUserFacingError(error));
       if (isConflict(error)) await refreshAll();

@@ -324,13 +324,6 @@
     </div>
   {/if}
 
-  {#if !validation.available}
-    <div class="editor-notice warning" role="status">
-      <Icon name="warningAmber" size="18px" />
-      <span>{$t('schedules.payloadValidationUnavailable')}</span>
-    </div>
-  {/if}
-
   {#if mode === 'form' && prepared.root}
     <div id="schedule-payload-form" role="tabpanel" class="schema-form">
       {#if (prepared.root.properties?.length ?? 0) === 0}
@@ -595,7 +588,6 @@
   .validation-state.valid { color: var(--color-md3-success); }
   .validation-state.error { color: var(--color-md3-error); }
   .editor-notice { align-items: flex-start; gap: 0.45rem; border-radius: 8px; padding: 0.55rem 0.65rem; background: var(--color-md3-surface-container-high); color: var(--color-md3-on-surface-variant); font: 0.72rem/1.45 var(--font-md3-sans); }
-  .editor-notice.warning { color: var(--color-md3-warning); }
   .schema-form { display: grid; gap: 0.8rem; }
   .schema-field { display: grid; gap: 0.38rem; min-width: 0; }
   .schema-field.field-error > .field-heading label, .schema-field.field-error > .field-heading .field-title { color: var(--color-md3-error); }
