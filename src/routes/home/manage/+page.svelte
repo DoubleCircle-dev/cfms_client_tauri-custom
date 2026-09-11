@@ -39,6 +39,7 @@
   import { authStore, notificationStore } from '$lib/stores.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
+  import AuditLogFilter from '$lib/components/AuditLogFilter.svelte';
   import CreateUserAccountDialog from '$lib/components/CreateUserAccountDialog.svelte';
   import CreateUserGroupDialog from '$lib/components/CreateUserGroupDialog.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -113,6 +114,8 @@
   let auditNextCursor = $state<string | null>(null);
   let auditCursorStack = $state<Array<string | null>>([]);
   let auditPageIndex = $state(0);
+  let auditFilters = $state<string[]>([]);
+  let auditKnownActions = $state<string[]>([]);
   const auditPageSize = 128;
 
   let loadingUsers = $state(false);
@@ -517,22 +520,53 @@
     }
   }
 
-  async function loadAuditLogPage(cursor: string | null, direction: 'reset' | 'next' | 'previous' = 'reset') {
+  function normalizeAuditActions(actions: readonly string[]) {
+    return [...new Set(actions.map((action) => action.trim()).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
+  }
+
+  async function applyAuditFilters(filters: string[]) {
+    const nextFilters = normalizeAuditActions(filters);
+    if (JSON.stringify(nextFilters) === JSON.stringify(auditFilters)) return;
+
+    auditFilters = nextFilters;
+    auditKnownActions = normalizeAuditActions([...auditKnownActions, ...nextFilters]);
+    await loadAuditLogPage(null, 'reset', nextFilters);
+  }
+
+  async function removeAuditFilter(action: string) {
+    await applyAuditFilters(auditFilters.filter((candidate) => candidate !== action));
+  }
+
+  async function loadAuditLogPage(
+    cursor: string | null,
+    direction: 'reset' | 'next' | 'previous' = 'reset',
+    filters: readonly string[] = auditFilters,
+  ) {
     if (!canViewLogs) return;
+    const requestFilters = normalizeAuditActions(filters);
+    if (direction === 'reset') {
+      auditCursorStack = [cursor];
+      auditPageIndex = 0;
+      auditNextCursor = null;
+      expandedAuditIds = new Set();
+    }
     loadingLogs = true;
     error = null;
     try {
-      const data = await viewAuditLogs(cursor, auditPageSize);
+      const data = await viewAuditLogs(cursor, auditPageSize, requestFilters);
       auditEntries = data.entries;
       auditNextCursor = data.next_cursor;
-      if (direction === 'reset') {
-        auditCursorStack = [cursor];
-        auditPageIndex = 0;
-      } else if (direction === 'next') {
+      auditKnownActions = normalizeAuditActions([
+        ...auditKnownActions,
+        ...requestFilters,
+        ...data.entries.map((entry) => entry.action),
+      ]);
+      if (direction === 'next') {
         auditCursorStack = [...auditCursorStack.slice(0, auditPageIndex + 1), cursor];
         auditPageIndex += 1;
       } else {
-        auditPageIndex = Math.max(0, auditPageIndex - 1);
+        if (direction === 'previous') auditPageIndex = Math.max(0, auditPageIndex - 1);
       }
       expandedAuditIds = new Set();
     } catch (err) {
@@ -1099,6 +1133,7 @@
     <div
       class="management-content"
       class:management-content--contained={activeTab !== 'security'}
+      class:management-content--audit={activeTab === 'logs'}
     >
       {#if activeTab === 'accounts'}
         <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-md3-outline">
@@ -1305,6 +1340,12 @@
             {$t('manage.auditLogs')}
           </h2>
           <div class="flex items-center gap-2">
+            <AuditLogFilter
+              availableActions={auditKnownActions}
+              selectedActions={auditFilters}
+              disabled={!canViewLogs || loadingLogs}
+              onApply={applyAuditFilters}
+            />
             <span class="text-xs text-md3-on-surface-variant">
               {auditDisplayRange === null
                 ? $t('manage.auditRangeEmpty')
@@ -1334,6 +1375,38 @@
           </div>
         </div>
 
+        {#if canViewLogs && auditFilters.length > 0}
+          <div class="audit-active-filters" aria-label={$t('manage.auditActiveFilters')}>
+            <span class="audit-active-filters__label">
+              <Icon name="filterList" size="16px" />
+              {$t('manage.auditFilteringBy')}
+            </span>
+            <div class="audit-filter-chips">
+              {#each auditFilters as action (action)}
+                <span class="audit-filter-chip">
+                  <code>{action}</code>
+                  <button
+                    type="button"
+                    aria-label={$t('manage.auditFilterRemove', { values: { action } })}
+                    disabled={loadingLogs}
+                    onclick={() => removeAuditFilter(action)}
+                  >
+                    <Icon name="close" size="14px" />
+                  </button>
+                </span>
+              {/each}
+            </div>
+            <button
+              type="button"
+              class="audit-filter-clear"
+              disabled={loadingLogs}
+              onclick={() => applyAuditFilters([])}
+            >
+              {$t('manage.auditFilterClearAll')}
+            </button>
+          </div>
+        {/if}
+
         {#if !canViewLogs}
           <p class="text-sm text-md3-on-surface-variant text-center py-8">
             {$t('manage.missingPermission', { values: { permission: 'view_audit_logs' } })}
@@ -1341,9 +1414,19 @@
         {:else if loadingLogs}
           {@render LoadingRow()}
         {:else if auditEntries.length === 0}
-          <p class="text-sm text-md3-on-surface-variant text-center py-8">
-            {$t('manage.noAuditLogs')}
-          </p>
+          {#if auditFilters.length > 0}
+            <div class="audit-filter-empty">
+              <span class="audit-filter-empty__icon"><Icon name="filterList" size="22px" /></span>
+              <p>{$t('manage.noAuditLogsMatchingFilters')}</p>
+              <button type="button" onclick={() => applyAuditFilters([])}>
+                {$t('manage.auditFilterClearAll')}
+              </button>
+            </div>
+          {:else}
+            <p class="text-sm text-md3-on-surface-variant text-center py-8">
+              {$t('manage.noAuditLogs')}
+            </p>
+          {/if}
         {:else}
           <div class="overflow-x-auto">
             <table class="min-w-[920px] w-full text-left text-sm">
@@ -1740,6 +1823,169 @@
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.25rem;
+  }
+
+  .management-content--audit {
+    overflow: visible;
+  }
+
+  .audit-active-filters {
+    display: flex;
+    min-height: 2.9rem;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 65%, transparent);
+    padding: 0.5rem 1rem;
+    background: color-mix(in srgb, var(--color-md3-surface-container-high) 38%, transparent);
+    font-family: var(--font-md3-sans);
+  }
+
+  .audit-active-filters__label {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .audit-filter-chips {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .audit-filter-chip {
+    display: inline-flex;
+    min-width: 0;
+    max-width: min(20rem, 100%);
+    min-height: 1.75rem;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    padding: 0.18rem 0.25rem 0.18rem 0.55rem;
+    color: var(--color-md3-on-primary-container);
+    background: var(--color-md3-primary-container);
+  }
+
+  .audit-filter-chip code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-md3-mono);
+    font-size: 0.7rem;
+  }
+
+  .audit-filter-chip button {
+    display: inline-grid;
+    width: 1.4rem;
+    height: 1.4rem;
+    flex: none;
+    place-items: center;
+    border-radius: 9999px;
+    transition: background-color 120ms ease, opacity 120ms ease;
+  }
+
+  .audit-filter-chip button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-md3-on-primary-container) 12%, transparent);
+  }
+
+  .audit-filter-chip button:disabled,
+  .audit-filter-clear:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .audit-filter-clear {
+    min-height: 1.9rem;
+    flex: none;
+    border-radius: 5px;
+    padding: 0.25rem 0.5rem;
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.7rem;
+    font-weight: 600;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .audit-filter-clear:hover:not(:disabled) {
+    color: var(--color-md3-on-surface);
+    background: var(--color-md3-surface-container-high);
+  }
+
+  .audit-filter-empty {
+    display: grid;
+    min-height: 11rem;
+    place-items: center;
+    align-content: center;
+    gap: 0.65rem;
+    padding: 2rem 1rem;
+    color: var(--color-md3-on-surface-variant);
+    text-align: center;
+    font-family: var(--font-md3-sans);
+  }
+
+  .audit-filter-empty__icon {
+    display: inline-grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    border-radius: 9999px;
+    color: var(--color-md3-primary-emphasis);
+    background: var(--color-md3-primary-container);
+  }
+
+  .audit-filter-empty p {
+    max-width: 42ch;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .audit-filter-empty button {
+    min-height: 2rem;
+    border-radius: 5px;
+    padding: 0.35rem 0.7rem;
+    color: var(--color-md3-on-primary-container);
+    background: var(--color-md3-primary-container);
+    font-size: 0.72rem;
+    font-weight: 600;
+    transition: filter 120ms ease, transform 120ms ease;
+  }
+
+  .audit-filter-empty button:hover {
+    filter: brightness(1.06);
+  }
+
+  .audit-filter-empty button:active {
+    transform: scale(0.97);
+  }
+
+  @media (pointer: coarse) {
+    .audit-filter-chip {
+      min-height: 2.5rem;
+    }
+
+    .audit-filter-chip button,
+    .audit-filter-clear,
+    .audit-filter-empty button {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .audit-filter-chip button,
+    .audit-filter-clear,
+    .audit-filter-empty button {
+      transition: none;
+    }
+
+    .audit-filter-empty button:active {
+      transform: none;
+    }
   }
   .manage-action-toggle {
     display: none;

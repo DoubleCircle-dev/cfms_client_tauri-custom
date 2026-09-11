@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import { locale } from 'svelte-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '$lib/i18n';
+import type { UpdateCheckPause } from '$lib/update-check-pause';
 import AboutPage from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   hasAvailableHighlights: vi.fn(() => false),
   appUpdateState: {
     channel: 'stable',
+    automaticCheckPause: { mode: 'active' } as UpdateCheckPause,
+    isAutomaticCheckPaused: false,
+    automaticCheckSettled: false,
     checked: false,
     checking: false,
     update: null,
@@ -27,6 +31,7 @@ const mocks = vi.hoisted(() => ({
       progress: null,
     },
     ensureChannel: vi.fn(async () => 'stable'),
+    ensureAutomaticCheckPause: vi.fn(async () => ({ mode: 'active' } as const)),
     check: vi.fn(async () => null),
     install: vi.fn(async () => {}),
   },

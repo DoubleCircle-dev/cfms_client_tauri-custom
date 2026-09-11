@@ -572,7 +572,7 @@ checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
 name = "cfms-client-tauri"
-version = "0.49.1"
+version = "0.51.1"
 dependencies = [
  "async-trait",
  "base64ct",
@@ -613,7 +613,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-core"
-version = "0.49.1"
+version = "0.51.1"
 dependencies = [
  "hex",
  "serde",
@@ -624,7 +624,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-crypto"
-version = "0.49.1"
+version = "0.51.1"
 dependencies = [
  "aes-gcm",
  "base64ct",
@@ -641,7 +641,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-service"
-version = "0.49.1"
+version = "0.51.1"
 dependencies = [
  "cfms-core",
  "cfms-crypto",
@@ -665,7 +665,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-transfer"
-version = "0.49.1"
+version = "0.51.1"
 dependencies = [
  "base64ct",
  "cfms-core",
@@ -683,7 +683,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-transport"
-version = "0.49.1"
+version = "0.51.1"
 dependencies = [
  "base64ct",
  "cfms-core",

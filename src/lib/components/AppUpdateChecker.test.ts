@@ -5,6 +5,7 @@ import { locale } from 'svelte-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '$lib/i18n';
 import type { AppUpdateMetadata, UpdateProgressSnapshot } from '$lib/updater';
+import type { UpdateCheckPause } from '$lib/update-check-pause';
 import AppUpdateChecker from './AppUpdateChecker.svelte';
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   notificationError: vi.fn(),
   appUpdateState: {
     channel: 'stable',
+    automaticCheckPause: { mode: 'active' } as UpdateCheckPause,
+    isAutomaticCheckPaused: false,
+    automaticCheckSettled: false,
     checked: false,
     checking: false,
     update: null as AppUpdateMetadata | null,
@@ -28,6 +32,7 @@ const mocks = vi.hoisted(() => ({
       progress: null,
     } as UpdateProgressSnapshot,
     ensureChannel: vi.fn(async () => 'stable'),
+    ensureAutomaticCheckPause: vi.fn(async () => ({ mode: 'active' } as const)),
     check: vi.fn(async () => null),
     install: vi.fn(async () => {}),
   },
@@ -49,6 +54,8 @@ vi.mock('$lib/stores.svelte', () => ({
 beforeEach(() => {
   locale.set('en');
   mocks.appUpdateState.checking = false;
+  mocks.appUpdateState.automaticCheckPause = { mode: 'active' };
+  mocks.appUpdateState.isAutomaticCheckPaused = false;
   mocks.appUpdateState.installing = false;
   mocks.appUpdateState.installed = false;
   mocks.appUpdateState.checked = false;
@@ -124,7 +131,7 @@ describe('AppUpdateChecker', () => {
     renderChecker(vi.fn());
 
     expect((await screen.findByRole('button', { name: 'Feature tour' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Update Channel' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Update Settings' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('announces the latest state after a completed check', () => {
@@ -132,6 +139,19 @@ describe('AppUpdateChecker', () => {
     renderChecker();
 
     expect(screen.getByText('You are on the latest version.')).toBeTruthy();
+  });
+
+  it('shows a paused automatic-check status without disabling manual checks', async () => {
+    mocks.appUpdateState.automaticCheckPause = { mode: 'indefinite' };
+    mocks.appUpdateState.isAutomaticCheckPaused = true;
+    renderChecker();
+
+    expect(screen.getByText('Automatic checks paused indefinitely')).toBeTruthy();
+    await waitFor(() => expect(mocks.appUpdateState.ensureAutomaticCheckPause).toHaveBeenCalledOnce());
+    const checkButton = screen.getByRole('button', { name: 'Check for Updates' }) as HTMLButtonElement;
+    await waitFor(() => expect(checkButton.disabled).toBe(false));
+    await fireEvent.click(checkButton);
+    expect(mocks.appUpdateState.check).toHaveBeenCalledWith({ force: true });
   });
 
   it('prioritizes installation and demotes checking when an update is available', () => {

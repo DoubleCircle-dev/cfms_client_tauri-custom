@@ -21,7 +21,7 @@ const trigger = {
 describe('schedule API', () => {
   beforeEach(() => invokeMock.mockReset());
 
-  it('maps protocol 26 reads to dedicated commands', async () => {
+  it('maps core protocol 27 reads to dedicated commands', async () => {
     invokeMock.mockResolvedValue([]);
     await listScheduledTaskTypes();
     expect(invokeMock).toHaveBeenLastCalledWith('list_scheduled_task_types');

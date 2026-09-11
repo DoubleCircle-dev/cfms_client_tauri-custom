@@ -3,6 +3,7 @@ import type { JsonValue, ScheduleTrigger, ScheduleTriggerType } from '$lib/api';
 export type ScheduleValidationCode =
   | 'payloadJson'
   | 'payloadObject'
+  | 'payloadSchema'
   | 'timezoneRequired'
   | 'timezoneInvalid'
   | 'cronRequired'
