@@ -5,7 +5,13 @@
   import { getSetting, setSetting } from '$lib/api';
   import { appUpdateState } from '$lib/app-update-state.svelte';
   import type { UpdateChannel } from '$lib/updater';
+  import {
+    ACTIVE_UPDATE_CHECK_PAUSE,
+    createUpdateCheckPause,
+    type UpdateCheckPausePreset,
+  } from '$lib/update-check-pause';
   import { createAutoSave } from '$lib/settings-autosave.svelte';
+  import { dialogStore } from '$lib/dialogs.svelte';
   import { notificationStore } from '$lib/stores.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
@@ -18,11 +24,23 @@
   let error = $state<string | null>(null);
   const autoSave = createAutoSave({
     onError: (message) => {
+      channel = appUpdateState.channel;
       error = message;
     },
   });
 
   const channelDescription = $derived($t(`settings.updates.${channel}Description`));
+  const pause = $derived(appUpdateState.automaticCheckPause);
+  const automaticChecksPaused = $derived(appUpdateState.isAutomaticCheckPaused);
+  const automaticCheckStatus = $derived.by(() => {
+    if (pause.mode === 'indefinite') return $t('settings.updates.pausedIndefinitely');
+    if (pause.mode === 'until') {
+      return $t('settings.updates.pausedUntil', {
+        values: { date: formatPauseDate(pause.until) },
+      });
+    }
+    return $t('settings.updates.automaticChecksActive');
+  });
 
   $effect(() => {
     if (!error) return;
@@ -32,9 +50,15 @@
 
   onMount(async () => {
     try {
-      const saved = await getSetting('update_channel');
+      const [saved] = await Promise.all([
+        getSetting('update_channel'),
+        appUpdateState.ensureAutomaticCheckPause(),
+      ]);
       if (saved === 'stable' || saved === 'beta' || saved === 'alpha') {
         channel = saved;
+        if (appUpdateState.channel !== saved) appUpdateState.setChannel(saved);
+      } else {
+        channel = appUpdateState.channel;
       }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -44,7 +68,7 @@
   });
 
   function applyChannel(nextChannel: UpdateChannel) {
-    if (loading || nextChannel === channel) return;
+    if (loading || autoSave.saving || nextChannel === channel) return;
     channel = nextChannel;
     error = null;
     void autoSave.run(async () => {
@@ -53,8 +77,75 @@
     });
   }
 
-  function resetChannel() {
-    applyChannel('stable');
+  async function choosePauseDuration() {
+    if (loading || autoSave.saving) return;
+
+    const result = await dialogStore.choose<UpdateCheckPausePreset>({
+      title: $t('settings.updates.pauseDialogTitle'),
+      message: $t('settings.updates.pauseDialogMessage'),
+      choices: [
+        {
+          value: 'day',
+          label: $t('settings.updates.pauseOneDay'),
+          description: $t('settings.updates.pauseOneDayHint'),
+          icon: 'calendarToday',
+        },
+        {
+          value: 'week',
+          label: $t('settings.updates.pauseSevenDays'),
+          description: $t('settings.updates.pauseSevenDaysHint'),
+          icon: 'calendarToday',
+        },
+        {
+          value: 'month',
+          label: $t('settings.updates.pauseThirtyDays'),
+          description: $t('settings.updates.pauseThirtyDaysHint'),
+          icon: 'schedule',
+        },
+        {
+          value: 'indefinite',
+          label: $t('settings.updates.pauseIndefinitely'),
+          description: $t('settings.updates.pauseIndefinitelyHint'),
+          icon: 'pauseCircle',
+        },
+      ],
+      cancelLabel: $t('common.cancel'),
+    });
+    if (!result) return;
+
+    if (result.value === 'indefinite') {
+      const confirmed = await dialogStore.confirm({
+        title: $t('settings.updates.permanentPauseTitle'),
+        message: $t('settings.updates.permanentPauseMessage'),
+        confirmLabel: $t('settings.updates.pauseIndefinitely'),
+        cancelLabel: $t('common.cancel'),
+      });
+      if (!confirmed) return;
+    }
+
+    const nextPause = createUpdateCheckPause(result.value);
+    void autoSave.run(() => appUpdateState.setAutomaticCheckPause(nextPause));
+  }
+
+  function resumeAutomaticChecks() {
+    if (loading || autoSave.saving) return;
+    void autoSave.run(() => appUpdateState.resumeAutomaticChecks());
+  }
+
+  function resetSettings() {
+    if (loading || autoSave.saving) return;
+    void autoSave.run(async () => {
+      if (channel !== 'stable') {
+        await setSetting('update_channel', 'stable');
+        channel = 'stable';
+        appUpdateState.setChannel('stable');
+      }
+      if (appUpdateState.isAutomaticCheckPaused) {
+        await appUpdateState.resumeAutomaticChecks();
+      } else {
+        await appUpdateState.setAutomaticCheckPause(ACTIVE_UPDATE_CHECK_PAUSE);
+      }
+    });
   }
 
   function handleChannelKeydown(event: KeyboardEvent) {
@@ -64,88 +155,221 @@
     });
     next?.click();
   }
+
+  function formatPauseDate(value: number): string {
+    return new Date(value).toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
 </script>
 
-<div class="workspace-page settings-page-shell channel-page">
+<div class="workspace-page settings-page-shell update-settings-page">
   <SettingsPageHeader
     title={$t('settings.updates.title')}
     description={$t('settings.updates.description')}
     icon="browserUpdated"
-    resetDisabled={loading}
-    onReset={resetChannel}
+    resetDisabled={loading || autoSave.saving}
+    onReset={resetSettings}
   />
 
-  <section class="channel-section">
-    <div class="section-heading settings-section-heading">
-      <h2>{$t('settings.updates.updateChannel')}</h2>
-      <p>{channelDescription}</p>
-    </div>
+  <div class="settings-section-list">
+    <section class="update-section settings-section" aria-labelledby="automatic-checks-heading">
+      <div class="section-heading settings-section-heading">
+        <h2 id="automatic-checks-heading">{$t('settings.updates.automaticChecks')}</h2>
+        <p>{$t('settings.updates.automaticChecksHint')}</p>
+      </div>
 
-    <div class="channel-list" role="radiogroup" tabindex="-1" aria-label={$t('settings.updates.updateChannel')} onkeydown={handleChannelKeydown}>
-      {#each channels as item}
-        <button
-          data-radio-item
-          class="channel-row"
-          class:active={channel === item}
-          role="radio"
-          aria-checked={channel === item}
-          tabindex={channel === item ? 0 : -1}
-          disabled={loading}
-          onclick={() => applyChannel(item)}
-        >
-          <span class="channel-icon">
-            <Icon name={channel === item ? 'radioChecked' : 'radioUnchecked'} size="20px" />
+      <div
+        class="automatic-check-status"
+        class:automatic-check-status--paused={automaticChecksPaused}
+        aria-live="polite"
+        aria-busy={loading || autoSave.saving}
+      >
+        <span class="status-icon" aria-hidden="true">
+          <Icon name={automaticChecksPaused ? 'pauseCircle' : 'update'} size="22px" />
+        </span>
+        <span class="status-copy">
+          <strong>{automaticCheckStatus}</strong>
+          <span>
+            {$t(automaticChecksPaused
+              ? 'settings.updates.pausedHint'
+              : 'settings.updates.automaticChecksActiveHint')}
           </span>
-          <span class="channel-copy">
-            <span class="channel-name">{$t(`settings.updates.${item}`)}</span>
-            <span class="channel-description">{$t(`settings.updates.${item}Description`)}</span>
-          </span>
+        </span>
+      </div>
+
+      <div class="section-actions">
+        {#if automaticChecksPaused}
+          <button
+            type="button"
+            class="primary-action"
+            onclick={resumeAutomaticChecks}
+            disabled={loading || autoSave.saving}
+          >
+            <Icon name="resume" size="18px" />
+            {$t('settings.updates.resumeAutomaticChecks')}
+          </button>
+          <button
+            type="button"
+            class="text-action"
+            onclick={choosePauseDuration}
+            disabled={loading || autoSave.saving}
+          >
+            <Icon name="schedule" size="18px" />
+            {$t('settings.updates.changePauseDuration')}
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="tonal-action"
+            onclick={choosePauseDuration}
+            disabled={loading || autoSave.saving}
+          >
+            <Icon name="pause" size="18px" />
+            {$t('settings.updates.pauseAutomaticChecks')}
+          </button>
+        {/if}
+      </div>
+    </section>
+
+    <section class="update-section settings-section" aria-labelledby="update-channel-heading">
+      <div class="section-heading settings-section-heading">
+        <h2 id="update-channel-heading">{$t('settings.updates.updateChannel')}</h2>
+        <p>{channelDescription}</p>
+      </div>
+
+      <div
+        class="channel-list"
+        role="radiogroup"
+        tabindex="-1"
+        aria-label={$t('settings.updates.updateChannel')}
+        onkeydown={handleChannelKeydown}
+      >
+        {#each channels as item}
+          <button
+            data-radio-item
+            type="button"
+            class="channel-row"
+            class:active={channel === item}
+            role="radio"
+            aria-checked={channel === item}
+            tabindex={channel === item ? 0 : -1}
+            disabled={loading || autoSave.saving}
+            onclick={() => applyChannel(item)}
+          >
+            <span class="channel-icon" aria-hidden="true">
+              <Icon name={channel === item ? 'radioChecked' : 'radioUnchecked'} size="20px" />
+            </span>
+            <span class="channel-copy">
+              <span class="channel-name">{$t(`settings.updates.${item}`)}</span>
+              <span class="channel-description">{$t(`settings.updates.${item}Description`)}</span>
+            </span>
+          </button>
+        {/each}
+      </div>
+
+      <div class="section-actions">
+        <button class="text-action" type="button" onclick={() => goto('/home/about')}>
+          <Icon name="update" size="18px" />
+          {$t('settings.updates.checkInAbout')}
         </button>
-      {/each}
-    </div>
-
-    <div class="actions">
-      <button class="text-action" onclick={() => goto('/home/about')}>
-        <Icon name="update" size="18px" />
-        {$t('settings.updates.checkInAbout')}
-      </button>
-    </div>
-  </section>
+      </div>
+    </section>
+  </div>
 </div>
 
 <style>
-  .channel-page {
+  .update-settings-page {
     gap: 1rem;
   }
 
-  h2 {
+  .settings-section-list {
+    display: grid;
+  }
+
+  .update-section {
+    display: grid;
+    gap: 1rem;
+    padding-block: 1.25rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
+  }
+
+  .update-section:last-child {
+    padding-bottom: 0;
+  }
+
+  h2,
+  p {
     margin: 0;
-    color: var(--color-md3-on-surface);
-    font-family: var(--font-md3-sans);
-    font-weight: 800;
-    letter-spacing: 0;
   }
 
   h2 {
-    font-size: 1rem;
+    color: var(--color-md3-on-surface);
+    font: 650 0.9375rem/1.35 var(--font-md3-sans);
   }
 
   p {
-    margin: 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.9rem;
-  }
-
-  .channel-section {
-    display: grid;
-    gap: 1.1rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
+    font-size: 0.8rem;
+    line-height: 1.5;
   }
 
   .section-heading {
     display: grid;
     gap: 0.3rem;
+  }
+
+  .automatic-check-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    min-height: 4.25rem;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--color-md3-outline) 68%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-md3-surface-container-high) 72%, transparent);
+  }
+
+  .automatic-check-status--paused {
+    border-color: color-mix(in srgb, var(--color-md3-warning) 35%, var(--color-md3-outline));
+    background: color-mix(in srgb, var(--color-md3-warning) 8%, var(--color-md3-surface-container-high));
+  }
+
+  .status-icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    color: var(--color-md3-primary-emphasis);
+    background: color-mix(in srgb, var(--color-md3-primary-emphasis) 10%, transparent);
+  }
+
+  .automatic-check-status--paused .status-icon {
+    color: var(--color-md3-warning);
+    background: color-mix(in srgb, var(--color-md3-warning) 12%, transparent);
+  }
+
+  .status-copy {
+    display: grid;
+    gap: 0.22rem;
+    min-width: 0;
+  }
+
+  .status-copy strong {
+    color: var(--color-md3-on-surface);
+    font: 650 0.875rem/1.4 var(--font-md3-sans);
+  }
+
+  .status-copy span {
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.75rem;
+    line-height: 1.5;
   }
 
   .channel-list {
@@ -180,8 +404,8 @@
   }
 
   .channel-icon {
-    color: var(--color-md3-primary-emphasis);
     flex: none;
+    color: var(--color-md3-primary-emphasis);
   }
 
   .channel-copy {
@@ -192,22 +416,23 @@
 
   .channel-name {
     color: var(--color-md3-on-surface);
-    font: 700 0.95rem var(--font-md3-sans);
+    font: 700 0.9rem/1.35 var(--font-md3-sans);
   }
 
   .channel-description {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     line-height: 1.45;
   }
 
-  .actions {
+  .section-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.6rem;
-    padding-top: 0.25rem;
+    gap: 0.55rem;
   }
 
+  .primary-action,
+  .tonal-action,
   .text-action {
     display: inline-flex;
     align-items: center;
@@ -217,20 +442,37 @@
     border-radius: 6px;
     padding: 0 0.85rem;
     font-family: var(--font-md3-sans);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 700;
     transition:
       background-color var(--motion-duration-short4) var(--motion-easing-standard),
       color var(--motion-duration-short4) var(--motion-easing-standard),
-      opacity var(--motion-duration-short4) var(--motion-easing-standard);
+      opacity var(--motion-duration-short4) var(--motion-easing-standard),
+      transform var(--motion-duration-short4) var(--motion-easing-standard);
+  }
+
+  .primary-action {
+    color: var(--color-md3-on-primary);
+    background: var(--color-md3-primary);
+  }
+
+  .tonal-action {
+    color: var(--color-md3-on-primary-container);
+    background: var(--color-md3-primary-container);
   }
 
   .text-action {
-    background: transparent;
     color: var(--color-md3-primary-emphasis);
+    background: transparent;
   }
 
-  .text-action:hover {
+  .primary-action:hover:not(:disabled),
+  .tonal-action:hover:not(:disabled) {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+  }
+
+  .text-action:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-md3-primary-emphasis) 10%, transparent);
   }
 
@@ -239,8 +481,18 @@
   }
 
   @media (max-width: 640px) {
-    .channel-page {
+    .update-settings-page {
       width: min(100%, 45rem);
+    }
+
+    .section-actions > button {
+      min-height: 2.75rem;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .section-actions > button {
+      width: 100%;
     }
   }
 </style>

@@ -131,7 +131,9 @@
   });
 
   $effect(() => {
-    const updateDecisionReady = appUpdateState.checked || appUpdateState.error !== null;
+    const updateDecisionReady = appUpdateState.automaticCheckSettled
+      || appUpdateState.checked
+      || appUpdateState.error !== null;
     if (
       !releaseHighlightsState.initialized
       || !releaseHighlightsState.autoEligible
@@ -294,8 +296,8 @@
     // Start listening for backend events.
     await initEventListeners();
 
-    // Kick off one non-blocking update check for this client session.
-    void appUpdateState.check();
+    // Resolve the device update policy, then run or schedule this session's automatic check.
+    void appUpdateState.initializeAutomaticChecks();
     void releaseHighlightsState.initialize();
 
     // Fetch initial service status.
@@ -317,6 +319,8 @@
   onMount(() => {
     if (!resetRecoveryMode) appearanceStore.init();
   });
+
+  onMount(() => () => appUpdateState.disposeAutomaticChecks());
 
   $effect(() => {
     if (resetRecoveryMode) return;
