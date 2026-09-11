@@ -1303,7 +1303,7 @@ export const zh_CN = {
       fileAutoDetectOnStartup: '启动时进行一次检测',
       fileAutoDetectOnStartupHint: '开启后，程序启动/登录时自动进行一次检测，并将差异加入待更新队列。',
       syncGitTracking: '启用 Git 版本跟踪',
-      syncGitTrackingHint: '开启时会自动在下载目录初始化仓库（失败则警告并自动关闭）。对自动和手动更新都生效：每次下载更新后都会提交一次 Git 快照；开启期间始终强制覆盖本地文件（历史版本由 Git 保存），「立即下载时的更新策略」将被禁用。',
+      syncGitTrackingHint: '开启时会自动在下载目录初始化仓库（失败则警告并自动关闭）。对自动和手动更新都生效：每次下载更新后都会提交一次 Git 快照。冲突如何处理由「更新策略」单独控制。',
     },
     connection: {
       title: '连接',
@@ -1337,12 +1337,12 @@ export const zh_CN = {
     },
     fileSync: {
       title: '文件同步',
-      description: '自动检测间隔、更新队列与本地 Git 版本跟踪',
+      description: '更新策略、自动检测间隔、更新队列与本地 Git 版本跟踪',
       gitSectionTitle: '本地 Git 版本跟踪',
       gitSectionHint: '控制同步时是否使用 Git 快照，以及无 Git 时的旧文件备份行为。',
       gitInitFailed: 'Git 仓库初始化失败，已保持关闭：{error}',
       overwriteStrategyTitle: '更新策略',
-      overwriteStrategyGitDisabled: '已启用 Git 版本跟踪：更新始终强制覆盖，历史版本由 Git 提交保存。',
+      overwriteStrategyHint: '同步遇到本地已存在的文件时如何处理；对自动下载与手动确认都生效，与 Git 版本跟踪相互独立。',
       overwriteForce: '强制覆盖',
       overwriteForceHint: '直接下载新版本覆盖本地文件，不保留旧版本。',
       overwriteBackup: '不覆盖（生成历史版本）',

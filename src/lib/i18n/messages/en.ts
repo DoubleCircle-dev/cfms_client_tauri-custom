@@ -1314,7 +1314,7 @@ export const en = {
       fileAutoDetectOnStartup: 'Detect once at program start',
       fileAutoDetectOnStartupHint: 'When on, the program runs one automatic file check after startup/login and adds detected diffs to the pending update queue.',
       syncGitTracking: 'Enable Git version tracking',
-      syncGitTrackingHint: 'Enabling initializes a repository in the download folder automatically (reverts with a warning on failure). Applies to both automatic and manual updates: every download update is committed as a Git snapshot, and local files are always force-overwritten while enabled (history lives in Git), so the immediate-download strategy below is disabled.',
+      syncGitTrackingHint: 'Enabling initializes a repository in the download folder automatically (reverts with a warning on failure). Applies to both automatic and manual updates: every download update is committed as a Git snapshot. How conflicts are handled is controlled separately by the update strategy.',
     },
     connection: {
       title: 'Connection',
@@ -1348,12 +1348,12 @@ export const en = {
     },
     fileSync: {
       title: 'File Sync',
-      description: 'Automatic check interval, update queue, and local Git version tracking',
+      description: 'Update strategy, automatic check interval, update queue, and local Git version tracking',
       gitSectionTitle: 'Local Git Version Tracking',
       gitSectionHint: 'Controls whether sync commits Git snapshots, and how outdated files are backed up without Git.',
       gitInitFailed: 'Failed to initialize the Git repository; the setting stays off: {error}',
       overwriteStrategyTitle: 'Update strategy',
-      overwriteStrategyGitDisabled: 'Git version tracking is on: updates always force-overwrite and history is kept in Git commits.',
+      overwriteStrategyHint: 'How sync handles files that already exist locally. Applies to automatic downloads and manual confirmation alike, and is independent of Git version tracking.',
       overwriteForce: 'Force overwrite',
       overwriteForceHint: 'Download the new revision and overwrite the local file without keeping the old one.',
       overwriteBackup: 'No overwrite (keep history version)',

@@ -561,11 +561,10 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
   try {
     const hasGit = await resolveGitTracking(options.gitTracking);
 
-    // Git tracking keeps history in commits, so it always overwrites without
-    // asking; otherwise a preset strategy wins over prompting.
-    let strategy: SyncOverwriteStrategy | null = hasGit
-      ? 'force_overwrite'
-      : (options.overwriteStrategy ?? null);
+    // The configured strategy always applies; only when none is set does the run
+    // ask once (or fall back to keeping a backup). Git tracking no longer forces
+    // an overwrite — it only records whatever happened in a commit.
+    let strategy: SyncOverwriteStrategy | null = options.overwriteStrategy ?? null;
 
     console.log(`%c[cfms:sync] ${queue ? 'Applying cached update check' : 'Full recursive sync'} starting (throttled: %d per %ds)…`, 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
 
@@ -672,6 +671,10 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     } else {
       onStatus?.(get(t)('files.syncAllUpToDate'));
     }
+    // `getDocument` resolves before the bytes land on disk, so the download
+    // indicators must wait for the queue to drain — otherwise every freshly
+    // fetched file is briefly reported as "not downloaded locally".
+    if (changed) await waitForActiveDownloads();
     await onRefresh?.();
 
     // --- Git version tracking (only when the user keeps a repo in the download root) ---

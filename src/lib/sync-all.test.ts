@@ -157,6 +157,20 @@ describe('syncFiles (cached queue)', () => {
     expect(files.getDocument).toHaveBeenCalledWith('d1', 'a.txt', undefined, false);
   });
 
+  it('honours the configured strategy while git tracking is on', async () => {
+    // Git tracking records the result in a commit; it must not override the
+    // strategy the user picked.
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'OLD' });
+
+    await syncFiles({
+      queue: [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
+      overwriteStrategy: 'backup_rename',
+    });
+
+    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+/));
+  });
+
   it('leaves conflicting files alone under the skip strategy but still fetches new ones', async () => {
     files.computeLocalSha256.mockResolvedValue({ 'old.txt': 'OLD' });
 
