@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerDocumentEntry } from '$lib/api';
-import { downloadQueuedFiles, makeDownloadPath, readLocalDocumentStates } from './sync-all.svelte';
+import { makeDownloadPath, readLocalDocumentStates, syncFiles } from './sync-all.svelte';
 
 const files = vi.hoisted(() => ({
   computeLocalSha256: vi.fn(),
@@ -102,19 +102,21 @@ describe('readLocalDocumentStates', () => {
   });
 });
 
-describe('downloadQueuedFiles', () => {
+describe('syncFiles (cached queue)', () => {
   it('does nothing for an empty queue', async () => {
-    const result = await downloadQueuedFiles([]);
+    const result = await syncFiles({ queue: [] });
 
     expect(files.computeLocalSha256).not.toHaveBeenCalled();
     expect(result.changed).toBe(false);
   });
 
   it('fetches exactly the queued documents, into their recorded download paths', async () => {
-    const result = await downloadQueuedFiles([
-      { docId: 'd1', path: 'a/b.txt', sha256: 'S1' },
-      { docId: 'd2', path: 'c.md', sha256: 'S2' },
-    ]);
+    const result = await syncFiles({
+      queue: [
+        { docId: 'd1', path: 'a/b.txt', sha256: 'S1' },
+        { docId: 'd2', path: 'c.md', sha256: 'S2' },
+      ],
+    });
 
     expect(files.getDocument).toHaveBeenCalledTimes(2);
     expect(files.getDocument).toHaveBeenCalledWith('d1', 'a/b.txt', undefined, false);
@@ -126,7 +128,7 @@ describe('downloadQueuedFiles', () => {
   it('never re-walks the server tree or the download root', async () => {
     // The whole point of the cached queue: confirming an update must not repeat
     // the scan the check already performed.
-    await downloadQueuedFiles([{ docId: 'd1', path: 'a.txt', sha256: 'S' }]);
+    await syncFiles({ queue: [{ docId: 'd1', path: 'a.txt', sha256: 'S' }] });
 
     expect(files.listDirectory).not.toHaveBeenCalled();
     expect(files.listDownloadFiles).not.toHaveBeenCalled();
@@ -135,7 +137,7 @@ describe('downloadQueuedFiles', () => {
   it('skips documents that became current since the check ran', async () => {
     files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'SAME' });
 
-    const result = await downloadQueuedFiles([{ docId: 'd1', path: 'a.txt', sha256: 'SAME' }]);
+    const result = await syncFiles({ queue: [{ docId: 'd1', path: 'a.txt', sha256: 'SAME' }] });
 
     expect(files.getDocument).not.toHaveBeenCalled();
     expect(result.skipped).toBe(1);
@@ -145,10 +147,10 @@ describe('downloadQueuedFiles', () => {
   it('backs up an outdated local copy before replacing it', async () => {
     files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'OLD' });
 
-    await downloadQueuedFiles(
-      [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
-      { overwriteStrategy: 'backup_rename' },
-    );
+    await syncFiles({
+      queue: [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
+      overwriteStrategy: 'backup_rename',
+    });
 
     expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+/));
     // Renamed away, so the download writes a new file rather than overwriting.
@@ -158,13 +160,13 @@ describe('downloadQueuedFiles', () => {
   it('leaves conflicting files alone under the skip strategy but still fetches new ones', async () => {
     files.computeLocalSha256.mockResolvedValue({ 'old.txt': 'OLD' });
 
-    const result = await downloadQueuedFiles(
-      [
+    const result = await syncFiles({
+      queue: [
         { docId: 'old', path: 'old.txt', sha256: 'NEW' },
         { docId: 'fresh', path: 'fresh.txt', sha256: 'F' },
       ],
-      { overwriteStrategy: 'skip' },
-    );
+      overwriteStrategy: 'skip',
+    });
 
     expect(files.getDocument).toHaveBeenCalledTimes(1);
     expect(files.getDocument).toHaveBeenCalledWith('fresh', 'fresh.txt', undefined, false);
@@ -175,7 +177,7 @@ describe('downloadQueuedFiles', () => {
   it('mirrors an inaccessible document as a placeholder instead of dropping it', async () => {
     files.getDocument.mockRejectedValue('Server returned 403: access denied');
 
-    await downloadQueuedFiles([{ docId: 'd1', path: 'secret.txt', sha256: 'S' }]);
+    await syncFiles({ queue: [{ docId: 'd1', path: 'secret.txt', sha256: 'S' }] });
 
     expect(files.createDownloadPlaceholder).toHaveBeenCalledWith('secret.txt');
   });
@@ -183,14 +185,46 @@ describe('downloadQueuedFiles', () => {
   it('commits a git snapshot only when something actually changed', async () => {
     settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
 
-    await downloadQueuedFiles([{ docId: 'd1', path: 'a.txt', sha256: 'S' }]);
+    await syncFiles({ queue: [{ docId: 'd1', path: 'a.txt', sha256: 'S' }] });
     expect(files.downloadGitCommit).toHaveBeenCalledTimes(1);
 
     files.downloadGitCommit.mockClear();
     // Already current → nothing fetched → no commit.
     files.computeLocalSha256.mockResolvedValue({ 'b.txt': 'S' });
-    await downloadQueuedFiles([{ docId: 'd2', path: 'b.txt', sha256: 'S' }]);
+    await syncFiles({ queue: [{ docId: 'd2', path: 'b.txt', sha256: 'S' }] });
     expect(files.downloadGitCommit).not.toHaveBeenCalled();
+  });
+});
+
+describe('syncFiles (full server walk)', () => {
+  /** Serve one directory holding `documents` and a download root holding `local`. */
+  function serve(documents: ServerDocumentEntry[], local: Record<string, string>) {
+    files.listDirectory.mockResolvedValue({ folders: [], documents });
+    files.computeLocalSha256.mockResolvedValue(local);
+    files.listDownloadFiles.mockResolvedValue(Object.keys(local));
+  }
+
+  it('fetches a document the server cannot prove is current, even when a local copy exists', async () => {
+    // Regression: the cached-queue path re-fetched documents the server sends no
+    // hash for, while the full walk treated them as up to date and reported
+    // "all files are up to date" without downloading anything.
+    serve([doc('a.txt', null)], { 'a.txt': 'LOCAL' });
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.getDocument).toHaveBeenCalledWith('a.txt', 'a.txt', undefined, true);
+    expect(result.updated).toBe(1);
+    expect(result.changed).toBe(true);
+  });
+
+  it('leaves a document the server proves is current alone', async () => {
+    serve([doc('a.txt', 'SAME')], { 'a.txt': 'SAME' });
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.getDocument).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(1);
+    expect(result.changed).toBe(false);
   });
 });
 

@@ -35,7 +35,7 @@
     serverStateStore,
   } from '$lib/stores.svelte';
   import { fileUpdateTracker, type CheckHistoryEntry, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
-  import { downloadQueuedFiles, makeDownloadPath, syncAllCoordinator } from '$lib/sync-all.svelte';
+  import { makeDownloadPath, syncAllCoordinator, syncFiles } from '$lib/sync-all.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   let recent = $state<RecentFileRecord[]>([]);
@@ -288,17 +288,15 @@
     }
     queueBusy = true;
     try {
-      const result = await downloadQueuedFiles(
-        pendingUpdates.map((item) => ({
+      const result = await syncFiles({
+        queue: pendingUpdates.map((item) => ({
           docId: item.id,
           path: item.downloadPath,
           sha256: item.sha256,
         })),
-        {
-          overwriteStrategy: strategy,
-          onStatus: (msg) => notificationStore.info(msg, 5000),
-        },
-      );
+        overwriteStrategy: strategy,
+        onStatus: (msg) => notificationStore.info(msg, 5000),
+      });
       // Always clear once the run finished: changed means items were applied,
       // unchanged means they were verified as already current. Keeping the
       // queue in the unchanged case left a stale "confirm updates (1)" badge.

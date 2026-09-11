@@ -173,12 +173,7 @@
   import { isMobilePlatform } from '$lib/platform';
   import { authStore, downloadStore, floatingProgressStore, notificationStore, serverStateStore, uploadStore } from '$lib/stores.svelte';
   import { fileUpdateTracker, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
-  import {
-    downloadQueuedFiles,
-    makeDownloadPath,
-    syncAllCoordinator,
-    syncAllFiles as runSharedSyncAll,
-  } from '$lib/sync-all.svelte';
+  import { makeDownloadPath, syncAllCoordinator, syncFiles } from '$lib/sync-all.svelte';
 
   type SearchResultRow =
     | { kind: 'directory'; directory: SearchDirectoryEntry }
@@ -1272,8 +1267,9 @@
       await detectAndQueueServerChanges();
       fileUpdateTracker.resetPollingCountdown();
       await refreshDownloadedFileIds();
-      await runSharedSyncAll({
-        overwriteLocal,
+      await syncFiles({
+        // The "overwrite" switch means "replace conflicting files without asking".
+        overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
         confirmDeletes: true,
         onStatus: (msg) => { status = msg; },
         onError: (msg) => { error = msg; },
@@ -1350,21 +1346,19 @@
       // Fetch exactly what the check queued. The check already walked the tree,
       // so re-scanning here would double the cost of every confirm; deletions and
       // renames stay with the full "sync all files" action.
-      await downloadQueuedFiles(
-        pendingUpdates.map((item) => ({
+      await syncFiles({
+        queue: pendingUpdates.map((item) => ({
           docId: item.id,
           path: item.downloadPath,
           sha256: item.sha256,
         })),
-        {
-          // The "overwrite" switch means "replace conflicting files without
-          // asking"; otherwise the shared prompt decides.
-          overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
-          onStatus: (msg) => { status = msg; },
-          onError: (msg) => { error = msg; },
-          onRefresh: () => refreshDownloadedFileIds(),
-        },
-      );
+        // The "overwrite" switch means "replace conflicting files without
+        // asking"; otherwise the shared prompt decides.
+        overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
+        onStatus: (msg) => { status = msg; },
+        onError: (msg) => { error = msg; },
+        onRefresh: () => refreshDownloadedFileIds(),
+      });
       fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);

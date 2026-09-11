@@ -1,9 +1,14 @@
-// CFMS Client — Shared "Sync All Files" logic.
+// CFMS Client — File sync engine.
 //
-// Used by the Files page (manual "Sync all files" button) and by the
-// Overview page (automatic sync when polling detects server changes).
-// Keeping it here means the auto-sync can run regardless of which page
-// is currently mounted.
+// Every download goes through `syncFiles`. It executes a *plan*, which comes
+// from one of two places:
+//
+//   * the whole server tree  → "sync all files"    (also reconciles deletions)
+//   * the last update check  → "confirm updates"   (no re-scan)
+//
+// Both plans are compared against the download root by the same predicate and
+// run through the same download loop, so the checker and the sync engine cannot
+// disagree about which local files need fetching.
 
 import { get } from 'svelte/store';
 import { _ as t } from 'svelte-i18n';
@@ -42,11 +47,21 @@ export function makeDownloadPath(parts: string[]) {
 
 // ---------------------------------------------------------------------------
 // Server-vs-local comparison
-//
-// The single source of truth for "does this server document still need to be
-// fetched?". Both the sync engine and the update checker go through it, so they
-// can never disagree about what counts as up to date.
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether a local copy is *provably* the server revision.
+ *
+ * A server that reports no hash cannot prove a local copy is current, so such a
+ * document counts as outdated and is fetched. Keeping this rule in one exported
+ * predicate is what stops the checker and the two sync modes from disagreeing.
+ */
+export function isLocalCopyCurrent(
+  localHash: string | null,
+  serverHash: string | null | undefined,
+): boolean {
+  return localHash != null && serverHash != null && localHash === serverHash;
+}
 
 /** How one server document compares with its local copy in the download root. */
 export interface LocalDocumentState {
@@ -55,9 +70,11 @@ export interface LocalDocumentState {
   path: string;
   /** SHA-256 of the local copy, or `null` when nothing is at `path` yet. */
   localHash: string | null;
-  /** A local copy exists and its content matches the server revision. */
+  /** A local copy occupies `path`. */
+  existsLocally: boolean;
+  /** The server proved the local copy matches its revision. */
   isCurrent: boolean;
-  /** A local copy exists but its content differs from the server revision. */
+  /** Both hashes are known and differ — the local copy was edited or is stale. */
   mismatched: boolean;
 }
 
@@ -78,44 +95,43 @@ export async function readLocalDocumentStates(
   const paths = documents.map((doc) => makeDownloadPath([...pathParts, doc.title]));
   const localHashes = await computeLocalSha256(paths);
 
-  return documents.map((doc, index) => {
-    const path = paths[index];
-    const localHash = localHashes[path] ?? null;
-    const serverHash = doc.sha256 ?? null;
-    const comparable = localHash != null && serverHash != null;
-    return {
-      doc,
-      path,
-      localHash,
-      isCurrent: comparable && localHash === serverHash,
-      mismatched: comparable && localHash !== serverHash,
-    };
-  });
+  return documents.map((doc, index) => describeLocalState(doc, paths[index], localHashes[paths[index]] ?? null));
 }
 
 /** Treat every document as absent locally — used when the hash pass itself fails. */
 function assumeNothingIsLocal(documents: ServerDocumentEntry[], pathParts: string[]): LocalDocumentState[] {
-  return documents.map((doc) => ({
+  return documents.map((doc) => describeLocalState(doc, makeDownloadPath([...pathParts, doc.title]), null));
+}
+
+/** The single place a comparison result is turned into flags. */
+function describeLocalState(
+  doc: ServerDocumentEntry,
+  path: string,
+  localHash: string | null,
+): LocalDocumentState {
+  const serverHash = doc.sha256;
+  return {
     doc,
-    path: makeDownloadPath([...pathParts, doc.title]),
-    localHash: null,
-    isCurrent: false,
-    mismatched: false,
-  }));
+    path,
+    localHash,
+    existsLocally: localHash != null,
+    isCurrent: isLocalCopyCurrent(localHash, serverHash),
+    mismatched: localHash != null && serverHash != null && localHash !== serverHash,
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Sync-all state (shared across pages)
+// Sync state (shared across pages)
 // ---------------------------------------------------------------------------
 
 class SyncAllCoordinator {
-  /** Whether a full sync is currently running (shared across all pages). */
+  /** Whether a sync is currently running (shared across all pages). */
   busy = $state(false);
 
   /**
-   * Atomically claim the sync lock. `syncAllFiles` used to do
+   * Atomically claim the sync lock. The sync used to do
    * `if (busy) return; busy = true` across an await boundary, which let two
-   * syncs interleave — the automatic-download run would then silently no-op.
+   * runs interleave — the automatic-download run would then silently no-op.
    */
   acquire(): boolean {
     if (this.busy) return false;
@@ -131,15 +147,11 @@ class SyncAllCoordinator {
 export const syncAllCoordinator = new SyncAllCoordinator();
 
 // ---------------------------------------------------------------------------
-// Sync-all implementation
+// Download plumbing
 // ---------------------------------------------------------------------------
 
 const DOWNLOAD_BATCH_SIZE = 25;
 const DOWNLOAD_BATCH_DELAY_MS = 2500;
-
-// ---------------------------------------------------------------------------
-// Download plumbing — shared by the full sync and the queued-update path
-// ---------------------------------------------------------------------------
 
 interface DownloadRunner {
   /** Rate limit: pause every `DOWNLOAD_BATCH_SIZE` requests. */
@@ -253,68 +265,92 @@ async function commitSyncSnapshot(summary: string): Promise<void> {
   }
 }
 
-export interface SyncAllOptions {
-  /** Overwrite existing local files even when hashes match server. Default false. */
-  overwriteLocal?: boolean;
-  /** Ask for confirmation before deleting stale local files. Default true. */
-  confirmDeletes?: boolean;
-  /** Whether the download root is versioned with git. Overrides the stored setting. */
-  gitTracking?: boolean;
-  /** How to handle files whose server revision differs from the local copy.
-   *  Automatic downloads pass the stored setting; manual syncs omit this and
-   *  are prompted for a choice instead. */
-  overwriteStrategy?: 'force_overwrite' | 'backup_rename' | 'skip';
-  /** Called with a status message when the sync summary is ready. */
-  onStatus?: (message: string) => void;
-  /** Called with an error message on failure. */
-  onError?: (message: string) => void;
-  /** Called when downloaded-file indicators should be refreshed. */
-  onRefresh?: () => Promise<void> | void;
+// ---------------------------------------------------------------------------
+// Plans
+//
+// A plan is everything the engine knows before it touches the disk. Building it
+// is the only part that differs between the two sync modes; executing it is
+// shared.
+// ---------------------------------------------------------------------------
+
+/** One cached check hit: fetch this document into this path. */
+export interface QueuedDownload {
+  /** Server document id. */
+  docId: string;
+  /** Destination inside the download root, already sanitised. */
+  path: string;
+  /** Server revision hash, when the server reports one. */
+  sha256?: string | null;
 }
 
-export interface SyncAllResult {
-  queued: number;
-  updated: number;
-  deleted: number;
-  moved: number;
+/** One document a plan wants on disk. */
+interface PlannedDownload {
+  docId: string;
+  path: string;
+  /** A local file already occupies `path`. */
+  existsLocally: boolean;
+  /** Server revision hash, used to recognise a renamed document. */
+  serverHash?: string | null;
+}
+
+interface SyncPlan {
+  downloads: PlannedDownload[];
+  /** Local files the server no longer has. */
+  deletions: string[];
+  /** Local files that are really the same document under a new name. */
+  moves: { from: string; to: string; download: PlannedDownload }[];
+  /** Documents left alone while planning. */
   skipped: number;
-  changed: boolean;
 }
 
-export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAllResult> {
-  if (!syncAllCoordinator.acquire()) return emptyResult();
-  const overwriteLocal = options.overwriteLocal ?? false;
-  const confirmDeletes = options.confirmDeletes ?? true;
-  const { onStatus, onError, onRefresh } = options;
+/**
+ * Plan from the cached results of the last check.
+ *
+ * The check already walked the server tree and hashed the download root, so
+ * this only hashes the queued paths — a single backend call. Deletions and
+ * renames are left to a full sync: deciding those needs the complete tree,
+ * which is exactly what this mode avoids.
+ */
+async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPlan> {
+  const plan: SyncPlan = { downloads: [], deletions: [], moves: [], skipped: 0 };
 
-  // Git version tracking is an explicit user setting (Settings > File Sync).
-  const hasGit = await resolveGitTracking(options.gitTracking);
+  let localHashes: Record<string, string> = {};
+  try {
+    localHashes = await computeLocalSha256(queued.map((item) => item.path));
+  } catch {
+    /* unreadable pass: treat every path as absent and fetch it */
+  }
 
-  // Overwrite strategy for files whose server revision differs from the local
-  // copy. Git tracking implies force-overwrite (history lives in commits).
-  // Callers pass the stored setting for automatic downloads; manual syncs omit
-  // it and are prompted below once the differing files are known.
-  let strategy: SyncOverwriteStrategy | null = hasGit
-    ? 'force_overwrite'
-    : (options.overwriteStrategy ?? null);
-  const backupSuffix = `+${backupTimestamp()}`;
+  for (const item of queued) {
+    // The check may be minutes old, and the server reports no hash for some
+    // documents — both cases are handled by the shared predicate.
+    const localHash = localHashes[item.path] ?? null;
+    if (isLocalCopyCurrent(localHash, item.sha256)) {
+      plan.skipped++;
+      continue;
+    }
+    plan.downloads.push({
+      docId: item.docId,
+      path: item.path,
+      existsLocally: localHash != null,
+      serverHash: item.sha256,
+    });
+  }
 
-  let queued = 0;
-  let skipped = 0;
-  let updated = 0;
-  let deleted = 0;
-  let moved = 0;
-  const runner = createDownloadRunner();
-  const serverPaths = new Set<string>();          // all server file paths
-  const walkedDirs = new Set<string>();           // relative dir paths that were listed successfully
-  const failedDirs = new Set<string>();           // relative dir paths that failed to list (inaccessible)
-  // Downloads are deferred until after the walk so we can detect server-side
-  // moves/renames (same content at a different path) and avoid re-downloading.
-  const pendingDownloads: { docId: string; path: string; serverHash: string | null | undefined; existsLocally: boolean }[] = [];
-  const startTime = performance.now();
-  console.log('%c[cfms:sync] Full recursive sync starting (throttled: %d per %ds)…', 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
+  return plan;
+}
 
-  async function listWithRetry(dirId: string | null): Promise<{ folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] }> {
+/**
+ * Walk the whole server tree and plan against it, including the local files the
+ * server no longer has.
+ */
+async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
+  const plan: SyncPlan = { downloads: [], deletions: [], moves: [], skipped: 0 };
+  const serverPaths = new Set<string>();  // every path the server has
+  const walkedDirs = new Set<string>();   // dirs that were listed successfully
+  const failedDirs = new Set<string>();   // dirs that could not be listed
+
+  async function listWithRetry(dirId: string | null) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         await runner.throttle();
@@ -358,7 +394,7 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     // Record that this directory was successfully enumerated, so the deletion
     // step only removes files whose parent directory we actually inspected.
     walkedDirs.add(makeDownloadPath(pathParts));
-    // Compare against the local download root (existence + content in one call).
+
     let states: LocalDocumentState[];
     try {
       states = await readLocalDocumentStates(resp.documents, pathParts);
@@ -368,24 +404,22 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
       states = assumeNothingIsLocal(resp.documents, pathParts);
     }
 
-    for (const { doc, path: downloadPath, localHash, isCurrent, mismatched } of states) {
-      serverPaths.add(downloadPath);
-      const existsLocally = localHash != null;
-      // Skip strategy: leave outdated local files untouched.
-      if (mismatched && strategy === 'skip') {
-        skipped++;
+    for (const state of states) {
+      serverPaths.add(state.path);
+      // Outdated means "the server could not prove the local copy is current" —
+      // including documents the server reports no hash for.
+      if (state.isCurrent) {
+        plan.skipped++;
         continue;
       }
-      const needsDownload =
-        !isCurrent
-        && (!existsLocally || mismatched || overwriteLocal || strategy === 'force_overwrite');
-
-      if (needsDownload) {
-        pendingDownloads.push({ docId: doc.id, path: downloadPath, serverHash: doc.sha256, existsLocally });
-      } else {
-        skipped++;
-      }
+      plan.downloads.push({
+        docId: state.doc.id,
+        path: state.path,
+        existsLocally: state.existsLocally,
+        serverHash: state.doc.sha256,
+      });
     }
+
     for (const f of resp.folders) {
       await walk(f.id, [...pathParts, f.name]);
     }
@@ -412,137 +446,197 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     }
   }
 
+  await walk(null, []);
+
+  // --- Local files the server no longer has ---
+  const allLocalFiles = await listDownloadFiles();
+  const deleteCandidates: string[] = [];
+  for (const rawPath of allLocalFiles) {
+    // Normalize separators — the backend may return '\' on Windows while
+    // serverPaths always uses '/'. Normalize here so the comparison is
+    // robust regardless of backend behavior.
+    const localPath = rawPath.replace(/\\/g, '/');
+    // Never treat git metadata as a syncable file, even if an older or
+    // external listing surfaces it — deleting from .git destroys the repo,
+    // and .gitignore keeps large downloads out of the repo.
+    if (localPath === '.git' || localPath.startsWith('.git/') || localPath === '.gitignore') continue;
+    if (serverPaths.has(localPath)) continue;
+    const parentDir = localPath.includes('/')
+      ? localPath.slice(0, localPath.lastIndexOf('/'))
+      : 'download';
+    if (shouldPreserveLocalFile(parentDir)) continue;
+    deleteCandidates.push(localPath);
+  }
+
+  // Compute SHA-256 of deletion candidates so we can detect server-side moves
+  // (same content at a different path) and avoid delete + re-download.
+  let deleteHashes: Record<string, string> = {};
+  if (deleteCandidates.length > 0) {
+    try {
+      deleteHashes = await computeLocalSha256(deleteCandidates);
+    } catch { /* ignore */ }
+  }
+
+  // Match deletion candidates against brand-new server files by content hash.
+  const newDownloads = plan.downloads.filter(d => !d.existsLocally);
+  for (const candidate of deleteCandidates) {
+    const hash = deleteHashes[candidate];
+    if (hash) {
+      const idx = newDownloads.findIndex(d => d.serverHash != null && d.serverHash === hash);
+      if (idx >= 0) {
+        const download = newDownloads.splice(idx, 1)[0];
+        plan.moves.push({ from: candidate, to: download.path, download });
+        continue;
+      }
+    }
+    plan.deletions.push(candidate);
+  }
+
+  return plan;
+}
+
+// ---------------------------------------------------------------------------
+// Execution — the one entry point
+// ---------------------------------------------------------------------------
+
+export interface SyncOptions {
+  /**
+   * Cached results from the last update check. When given, exactly those
+   * documents are fetched and the server tree is **not** walked again;
+   * deletions and renames are skipped because deciding them needs the complete
+   * tree.
+   */
+  queue?: readonly QueuedDownload[];
+  /** Ask for confirmation before deleting stale local files. Default true. */
+  confirmDeletes?: boolean;
+  /** Whether the download root is versioned with git. Overrides the stored setting. */
+  gitTracking?: boolean;
+  /**
+   * How to handle files whose server revision differs from the local copy.
+   * Automatic downloads pass the stored setting; manual syncs omit it and are
+   * prompted once instead.
+   */
+  overwriteStrategy?: SyncOverwriteStrategy;
+  /** Called with a status message when the summary is ready. */
+  onStatus?: (message: string) => void;
+  /** Called with an error message on failure. */
+  onError?: (message: string) => void;
+  /** Called when downloaded-file indicators should be refreshed. */
+  onRefresh?: () => Promise<void> | void;
+}
+
+export interface SyncAllResult {
+  queued: number;
+  updated: number;
+  deleted: number;
+  moved: number;
+  skipped: number;
+  changed: boolean;
+}
+
+/**
+ * Fetch everything the current plan says is missing or outdated.
+ *
+ * Omit `queue` to reconcile against the whole server tree (deletions and
+ * renames included); pass the cached check results to apply just those.
+ */
+export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResult> {
+  const { queue, onStatus, onError, onRefresh } = options;
+  const confirmDeletes = options.confirmDeletes ?? true;
+
+  // Nothing queued → nothing to do, and no backend call at all.
+  if (queue && queue.length === 0) return emptyResult();
+  if (!syncAllCoordinator.acquire()) return emptyResult();
+
+  const runner = createDownloadRunner();
+  const backupSuffix = `+${backupTimestamp()}`;
+  const startTime = performance.now();
+
+  let queued = 0;
+  let updated = 0;
+  let deleted = 0;
+  let moved = 0;
+  let skipped = 0;
+
   try {
-    await walk(null, []);
+    const hasGit = await resolveGitTracking(options.gitTracking);
 
-    // Manual syncs (no preset strategy, no git tracking) ask the user how to
-    // handle local files whose server revision differs. Cancelling skips the
-    // updates — the least destructive interpretation.
-    if (!hasGit && strategy === null) {
-      const conflicting = pendingDownloads.filter(d => d.existsLocally);
-      if (conflicting.length > 0) {
-        strategy = await chooseOverwriteStrategy(conflicting.length);
-        if (strategy === 'skip') {
-          for (const d of conflicting) {
-            const idx = pendingDownloads.indexOf(d);
-            if (idx >= 0) pendingDownloads.splice(idx, 1);
-            skipped++;
-          }
-        }
-      } else {
-        strategy = 'backup_rename';
-      }
+    // Git tracking keeps history in commits, so it always overwrites without
+    // asking; otherwise a preset strategy wins over prompting.
+    let strategy: SyncOverwriteStrategy | null = hasGit
+      ? 'force_overwrite'
+      : (options.overwriteStrategy ?? null);
+
+    console.log(`%c[cfms:sync] ${queue ? 'Applying cached update check' : 'Full recursive sync'} starting (throttled: %d per %ds)…`, 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
+
+    const plan = queue ? await planQueuedSync(queue) : await planServerSync(runner);
+    skipped += plan.skipped;
+
+    // Manual syncs (no preset strategy) ask once for the files they would
+    // replace. Cancelling skips them — the least destructive interpretation.
+    const conflicting = plan.downloads.filter(d => d.existsLocally);
+    if (strategy === null) {
+      strategy = conflicting.length > 0
+        ? await chooseOverwriteStrategy(conflicting.length)
+        : 'backup_rename';
     }
 
-    // --- Collect local files no longer on server ---
-    const allLocalFiles = await listDownloadFiles();
-    const deleteCandidates: string[] = [];
-    for (const rawPath of allLocalFiles) {
-      // Normalize separators — the backend may return '\' on Windows while
-      // serverPaths always uses '/'. Normalize here so the comparison is
-      // robust regardless of backend behavior.
-      const localPath = rawPath.replace(/\\/g, '/');
-      // Never treat git metadata as a syncable file, even if an older or
-      // external listing surfaces it — deleting from .git destroys the repo,
-      // and .gitignore keeps large downloads out of the repo.
-      if (localPath === '.git' || localPath.startsWith('.git/') || localPath === '.gitignore') continue;
-      if (serverPaths.has(localPath)) continue;
-      const parentDir = localPath.includes('/')
-        ? localPath.slice(0, localPath.lastIndexOf('/'))
-        : 'download';
-      if (shouldPreserveLocalFile(parentDir)) continue;
-      deleteCandidates.push(localPath);
-    }
-
-    // Compute SHA-256 of deletion candidates so we can detect server-side moves
-    // (same content at a different path) and avoid delete + re-download.
-    let deleteHashes: Record<string, string> = {};
-    if (deleteCandidates.length > 0) {
-      try {
-        deleteHashes = await computeLocalSha256(deleteCandidates);
-      } catch { /* ignore */ }
-    }
-
-    // Match deletion candidates against brand-new server files by content hash.
-    const toMove: { from: string; to: string; download: { docId: string; path: string; serverHash: string | null | undefined; existsLocally: boolean } }[] = [];
-    const toDelete: string[] = [];
-    const newDownloads = pendingDownloads.filter(d => !d.existsLocally);
-    for (const candidate of deleteCandidates) {
-      const hash = deleteHashes[candidate];
-      if (hash) {
-        const idx = newDownloads.findIndex(d => d.serverHash != null && d.serverHash === hash);
-        if (idx >= 0) {
-          const download = newDownloads.splice(idx, 1)[0];
-          toMove.push({ from: candidate, to: download.path, download });
-          continue;
-        }
-      }
-      toDelete.push(candidate);
-    }
-
-    // Remaining downloads: unmatched new files + local files that need overwriting.
-    const toDownload = [
-      ...newDownloads,
-      ...pendingDownloads.filter(d => d.existsLocally),
-    ];
+    // "Skip" leaves existing local copies alone and only fills in what is missing.
+    const outstanding = strategy === 'skip'
+      ? plan.downloads.filter(d => !d.existsLocally)
+      : [...plan.downloads];
+    skipped += plan.downloads.length - outstanding.length;
 
     // Execute moves first (non-destructive, no confirmation needed).
-    for (const plan of toMove) {
+    for (const move of plan.moves) {
       try {
-        const ok = await moveDownloadFile(plan.from, plan.to);
-        if (ok) {
+        if (await moveDownloadFile(move.from, move.to)) {
           moved++;
-          console.log(`%c[cfms:sync] Moved: ${plan.from} → ${plan.to}`, 'color:#4fc3f7');
-        } else {
-          // Source file vanished — fall back to delete + download.
-          toDelete.push(plan.from);
-          toDownload.push(plan.download);
+          console.log(`%c[cfms:sync] Moved: ${move.from} → ${move.to}`, 'color:#4fc3f7');
+          continue;
         }
-      } catch {
-        // Move failed — fall back to delete + download.
-        toDelete.push(plan.from);
-        toDownload.push(plan.download);
-      }
+      } catch { /* fall through: delete + download instead */ }
+      // Source file vanished — fall back to delete + download.
+      plan.deletions.push(move.from);
+      outstanding.push(move.download);
     }
 
     // Confirm and execute deletions.
-    if (toDelete.length > 0) {
-      const fileList = toDelete.slice(0, 8).join('\n')
-        + (toDelete.length > 8 ? `\n… +${toDelete.length - 8} more` : '');
+    if (plan.deletions.length > 0) {
+      const fileList = plan.deletions.slice(0, 8).join('\n')
+        + (plan.deletions.length > 8 ? `\n… +${plan.deletions.length - 8} more` : '');
       // With git tracking, deletions are recorded in the sync commit, so they
       // apply directly without an extra confirmation prompt.
       let confirmed = !confirmDeletes || hasGit;
       if (confirmDeletes && !hasGit) {
         confirmed = await dialogStore.confirm({
           title: get(t)('files.syncDeleteTitle'),
-          message: `${get(t)('files.syncDeleteMessage', { values: { count: toDelete.length } })}\n\n${fileList}`,
+          message: `${get(t)('files.syncDeleteMessage', { values: { count: plan.deletions.length } })}\n\n${fileList}`,
           confirmLabel: get(t)('common.delete'),
           cancelLabel: get(t)('common.cancel'),
           danger: true,
         });
       }
       if (confirmed) {
-        for (const localPath of toDelete) {
+        for (const localPath of plan.deletions) {
           try {
             await deleteDownloadFile(localPath);
-            console.log(`%c[cfms:sync] Removed: ${localPath}`, 'color:#ef9a9a');
             deleted++;
+            console.log(`%c[cfms:sync] Removed: ${localPath}`, 'color:#ef9a9a');
           } catch { /* ignore */ }
         }
       }
     }
 
     // Execute downloads.
-    for (const d of toDownload) {
+    for (const d of outstanding) {
       try {
         let overwrite = d.existsLocally;
         if (strategy === 'backup_rename' && d.existsLocally) {
-          // Preserve the outdated local copy under a timestamped name before
-          // downloading the new revision.
+          // Keep the outdated copy under a timestamped name before replacing it.
           const backupPath = `${d.path}${backupSuffix}`;
           try {
-            const renamed = await moveDownloadFile(d.path, backupPath);
-            if (renamed) {
+            if (await moveDownloadFile(d.path, backupPath)) {
               overwrite = false;
               console.log(`%c[cfms:sync] Backup: ${d.path} → ${backupPath}`, 'color:#ffb74d');
             }
@@ -556,26 +650,25 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
         // placeholder file instead of being silently skipped.
         if (isAccessDeniedError(err)) {
           await runner.createPlaceholder(d.path);
-          serverPaths.add(d.path);
           console.warn(`%c[cfms:sync] Access denied — placeholder created: ${d.path}`, 'color:#ef9a9a');
+        } else {
+          console.warn(`%c[cfms:sync] Failed to fetch ${d.path}:`, 'color:#f44336', err);
         }
       }
     }
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-    const parts: string[] = [];
-    if (queued > 0) parts.push(`${queued} downloaded`);
-    if (updated > 0) parts.push(`${updated} updated`);
-    if (deleted > 0) parts.push(`${deleted} deleted`);
-    if (moved > 0) parts.push(`${moved} moved`);
-    if (skipped > 0) parts.push(`${skipped} skipped`);
-    console.log(`%c[cfms:sync] Done in ${elapsed}s: ${parts.join(', ')}`, 'color:#4caf50');
+    const counters: string[] = [];
+    if (queued > 0) counters.push(`${queued} downloaded`);
+    if (updated > 0) counters.push(`${updated} updated`);
+    if (deleted > 0) counters.push(`${deleted} deleted`);
+    if (moved > 0) counters.push(`${moved} moved`);
+    if (skipped > 0) counters.push(`${skipped} skipped`);
+    console.log(`%c[cfms:sync] Done in ${elapsed}s: ${counters.join(', ') || 'nothing to do'}`, 'color:#4caf50');
 
     const changed = queued + updated + deleted + moved > 0;
     if (changed) {
-      onStatus?.(
-        get(t)('files.syncCompleted', { values: { downloaded: queued, updated, moved, deleted } }),
-      );
+      onStatus?.(get(t)('files.syncCompleted', { values: { downloaded: queued, updated, moved, deleted } }));
     } else {
       onStatus?.(get(t)('files.syncAllUpToDate'));
     }
@@ -592,147 +685,6 @@ export async function syncAllFiles(options: SyncAllOptions = {}): Promise<SyncAl
     }
 
     return { queued, updated, deleted, moved, skipped, changed };
-  } catch (err) {
-    const message = String(err);
-    onError?.(message);
-    notificationStore.error(message, 5000);
-    return emptyResult();
-  } finally {
-    syncAllCoordinator.release();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Queued updates — "Confirm Updates" after a check
-// ---------------------------------------------------------------------------
-
-/** One cached check hit: fetch this document into this path. */
-export interface QueuedDownload {
-  /** Server document id. */
-  docId: string;
-  /** Destination inside the download root, already sanitised. */
-  path: string;
-  /** Server revision hash, when the server reports one. */
-  sha256?: string | null;
-}
-
-export interface QueuedUpdateOptions {
-  /** Preset strategy (automatic downloads). Omitted → ask before overwriting. */
-  overwriteStrategy?: SyncOverwriteStrategy;
-  /** Whether the download root is versioned with git. Overrides the stored setting. */
-  gitTracking?: boolean;
-  onStatus?: (message: string) => void;
-  onError?: (message: string) => void;
-  onRefresh?: () => Promise<void> | void;
-}
-
-/**
- * Apply a cached update check: fetch exactly the documents the check queued.
- *
- * This deliberately does **not** walk the server tree again. The check just did
- * that; re-scanning turned a one-click confirm into a second full pass over the
- * server and the local download root.
- *
- * Local state is re-read for the queued paths only — one call — so a file that
- * became current after the check is not fetched twice.
- *
- * Deletions and server-side renames stay with `syncAllFiles`: deciding those
- * needs the complete server tree, which is exactly what is avoided here.
- */
-export async function downloadQueuedFiles(
-  queued: readonly QueuedDownload[],
-  options: QueuedUpdateOptions = {},
-): Promise<SyncAllResult> {
-  if (queued.length === 0) return emptyResult();
-  if (!syncAllCoordinator.acquire()) return emptyResult();
-
-  const { onStatus, onError, onRefresh } = options;
-  const runner = createDownloadRunner();
-  const backupSuffix = `+${backupTimestamp()}`;
-  const startTime = performance.now();
-
-  let downloaded = 0;
-  let updated = 0;
-  let skipped = 0;
-
-  try {
-    const hasGit = await resolveGitTracking(options.gitTracking);
-
-    let localHashes: Record<string, string> = {};
-    try {
-      localHashes = await computeLocalSha256(queued.map(item => item.path));
-    } catch { /* unreadable pass: treat every path as absent and fetch it */ }
-
-    // Drop anything that is already current — the check may be minutes old, and
-    // the server reports no hash for some documents, in which case we fetch.
-    const outstanding = queued
-      .map(item => {
-        const localHash = localHashes[item.path] ?? null;
-        return { ...item, localHash, existsLocally: localHash != null };
-      })
-      .filter(item => !(item.localHash != null && item.sha256 != null && item.localHash === item.sha256));
-    skipped += queued.length - outstanding.length;
-
-    let strategy = options.overwriteStrategy ?? null;
-    const conflicting = outstanding.filter(item => item.existsLocally);
-    if (strategy === null) {
-      strategy = conflicting.length > 0
-        ? await chooseOverwriteStrategy(conflicting.length)
-        : 'backup_rename';
-    }
-
-    let toFetch = outstanding;
-    if (strategy === 'skip') {
-      toFetch = outstanding.filter(item => !item.existsLocally);
-      skipped += conflicting.length;
-    }
-
-    for (const item of toFetch) {
-      try {
-        let overwrite = item.existsLocally;
-        if (strategy === 'backup_rename' && item.existsLocally) {
-          // Keep the outdated copy under a timestamped name before replacing it.
-          const backupPath = `${item.path}${backupSuffix}`;
-          try {
-            if (await moveDownloadFile(item.path, backupPath)) {
-              overwrite = false;
-              console.log(`%c[cfms:sync] Backup: ${item.path} → ${backupPath}`, 'color:#ffb74d');
-            }
-          } catch { /* rename failed — fall through and overwrite */ }
-        }
-        await runner.download(item.docId, item.path, overwrite);
-        if (item.existsLocally) updated++; else downloaded++;
-      } catch (err) {
-        if (isAccessDeniedError(err)) {
-          // Exists on the server but not readable — mirror it as a placeholder
-          // rather than silently leaving a hole in the local tree.
-          await runner.createPlaceholder(item.path);
-          console.warn(`%c[cfms:sync] Access denied — placeholder created: ${item.path}`, 'color:#ef9a9a');
-        } else {
-          console.warn(`%c[cfms:sync] Failed to fetch ${item.path}:`, 'color:#f44336', err);
-        }
-      }
-    }
-
-    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-    const changed = downloaded + updated > 0;
-    console.log(
-      `%c[cfms:sync] Queued updates done in ${elapsed}s: ${downloaded} downloaded, ${updated} updated, ${skipped} skipped`,
-      'color:#4caf50',
-    );
-
-    if (changed) {
-      onStatus?.(get(t)('files.syncCompleted', { values: { downloaded, updated, moved: 0, deleted: 0 } }));
-    } else {
-      onStatus?.(get(t)('files.syncAllUpToDate'));
-    }
-    await onRefresh?.();
-
-    if (changed && hasGit) {
-      await commitSyncSnapshot(`+${downloaded} ~${updated}`);
-    }
-
-    return { queued: downloaded, updated, deleted: 0, moved: 0, skipped, changed };
   } catch (err) {
     const message = String(err);
     onError?.(message);
