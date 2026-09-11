@@ -1267,7 +1267,7 @@
       await detectAndQueueServerChanges();
       fileUpdateTracker.resetPollingCountdown();
       await refreshDownloadedFileIds();
-      await syncFiles({
+      const result = await syncFiles({
         // The "overwrite" switch means "replace conflicting files without asking".
         overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
         confirmDeletes: true,
@@ -1275,7 +1275,8 @@
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
-      fileUpdateTracker.clearPendingUpdates();
+      // Cancelling the overwrite prompt writes nothing, so keep the queue.
+      if (!result.cancelled) fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);
     }
@@ -1346,7 +1347,7 @@
       // Fetch exactly what the check queued. The check already walked the tree,
       // so re-scanning here would double the cost of every confirm; deletions and
       // renames stay with the full "sync all files" action.
-      await syncFiles({
+      const result = await syncFiles({
         queue: pendingUpdates.map((item) => ({
           docId: item.id,
           path: item.downloadPath,
@@ -1359,7 +1360,8 @@
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
-      fileUpdateTracker.clearPendingUpdates();
+      // Cancelling the overwrite prompt writes nothing, so keep the queue.
+      if (!result.cancelled) fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);
     } finally {

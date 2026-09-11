@@ -18,8 +18,24 @@ const settings = vi.hoisted(() => ({
   getSyncGitTrackingEnabled: vi.fn(async () => false),
 }));
 
+const dialogs = vi.hoisted(() => ({
+  choose: vi.fn(),
+  confirm: vi.fn(async () => true),
+}));
+
 vi.mock('$lib/api/files', () => files);
 vi.mock('$lib/api/settings', () => settings);
+vi.mock('$lib/dialogs.svelte', () => ({ dialogStore: dialogs }));
+// The engine only needs a formatter. Initialising the real locale in a unit test
+// is noise, and formatting throws while no locale is set.
+vi.mock('svelte-i18n', () => ({
+  _: {
+    subscribe(run: (value: unknown) => void) {
+      run((key: string) => key);
+      return () => {};
+    },
+  },
+}));
 
 function doc(title: string, sha256: string | null = 'HASH', id = title): ServerDocumentEntry {
   return { id, title, size: 1024, last_modified: null, sha256 };
@@ -36,6 +52,11 @@ beforeEach(() => {
   files.createDownloadPlaceholder.mockResolvedValue(undefined);
   files.downloadGitInit.mockResolvedValue(undefined);
   files.downloadGitCommit.mockResolvedValue(null);
+
+  // Default to "cancelled": a test that unexpectedly hits the prompt aborts
+  // loudly instead of hanging on a modal nobody answers.
+  dialogs.choose.mockResolvedValue(null);
+  dialogs.confirm.mockResolvedValue(true);
 });
 
 describe('readLocalDocumentStates', () => {
@@ -194,6 +215,39 @@ describe('syncFiles (cached queue)', () => {
     await syncFiles({ queue: [{ docId: 'd1', path: 'secret.txt', sha256: 'S' }] });
 
     expect(files.createDownloadPlaceholder).toHaveBeenCalledWith('secret.txt');
+  });
+
+  it('aborts the whole run when the overwrite prompt is cancelled', async () => {
+    // A cancelled confirm must not fall back to "skip": nothing is written at
+    // all, so the caller can keep its queue and retry with another strategy.
+    files.computeLocalSha256.mockResolvedValue({ 'old.txt': 'OLD' });
+    dialogs.choose.mockResolvedValue(null);
+
+    const result = await syncFiles({
+      queue: [
+        { docId: 'old', path: 'old.txt', sha256: 'NEW' },
+        { docId: 'fresh', path: 'fresh.txt', sha256: 'F' },
+      ],
+    });
+
+    expect(dialogs.choose).toHaveBeenCalledTimes(1);
+    expect(files.getDocument).not.toHaveBeenCalled();
+    expect(files.moveDownloadFile).not.toHaveBeenCalled();
+    expect(result.cancelled).toBe(true);
+    expect(result.changed).toBe(false);
+  });
+
+  it('applies the strategy the overwrite prompt returns', async () => {
+    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'OLD' });
+    dialogs.choose.mockResolvedValue({ value: 'backup_rename' });
+
+    const result = await syncFiles({
+      queue: [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
+    });
+
+    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+/));
+    expect(result.cancelled).toBe(false);
+    expect(result.updated).toBe(1);
   });
 
   it('commits a git snapshot only when something actually changed', async () => {

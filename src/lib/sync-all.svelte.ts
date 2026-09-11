@@ -211,8 +211,14 @@ function createDownloadRunner(): DownloadRunner {
   return { throttle, download, createPlaceholder };
 }
 
-/** The overwrite prompt shown before replacing a locally modified file. */
-async function chooseOverwriteStrategy(conflictingCount: number): Promise<SyncOverwriteStrategy> {
+/**
+ * The overwrite prompt shown before replacing a locally modified file.
+ *
+ * Resolves to `null` when the user cancels, which callers treat as "abort the
+ * whole run" rather than "pick a default" — a cancelled confirm must leave the
+ * download root and the caller's queue exactly as they were.
+ */
+async function chooseOverwriteStrategy(conflictingCount: number): Promise<SyncOverwriteStrategy | null> {
   const choice = await dialogStore.choose<SyncOverwriteStrategy>({
     title: get(t)('files.syncOverwriteTitle'),
     message: get(t)('files.syncOverwriteMessage', { values: { count: conflictingCount } }),
@@ -222,7 +228,7 @@ async function chooseOverwriteStrategy(conflictingCount: number): Promise<SyncOv
       { value: 'skip', label: get(t)('settings.fileSync.overwriteSkip'), description: get(t)('settings.fileSync.overwriteSkipHint'), icon: 'cancel', intent: 'neutral' },
     ],
   });
-  return choice?.value ?? 'skip';
+  return choice?.value ?? null;
 }
 
 /**
@@ -532,6 +538,8 @@ export interface SyncAllResult {
   moved: number;
   skipped: number;
   changed: boolean;
+  /** The run stopped at the overwrite prompt — nothing was written. */
+  cancelled: boolean;
 }
 
 /**
@@ -572,12 +580,17 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     skipped += plan.skipped;
 
     // Manual syncs (no preset strategy) ask once for the files they would
-    // replace. Cancelling skips them — the least destructive interpretation.
+    // replace. Cancelling aborts the run: nothing is written and the caller
+    // keeps its queue, so the same check can still be applied later.
     const conflicting = plan.downloads.filter(d => d.existsLocally);
     if (strategy === null) {
-      strategy = conflicting.length > 0
-        ? await chooseOverwriteStrategy(conflicting.length)
-        : 'backup_rename';
+      if (conflicting.length === 0) {
+        strategy = 'backup_rename';
+      } else {
+        const chosen = await chooseOverwriteStrategy(conflicting.length);
+        if (chosen === null) return { ...emptyResult(), cancelled: true };
+        strategy = chosen;
+      }
     }
 
     // "Skip" leaves existing local copies alone and only fills in what is missing.
@@ -687,7 +700,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
       await commitSyncSnapshot(msgParts.join(' '));
     }
 
-    return { queued, updated, deleted, moved, skipped, changed };
+    return { queued, updated, deleted, moved, skipped, changed, cancelled: false };
   } catch (err) {
     const message = String(err);
     onError?.(message);
@@ -699,7 +712,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
 }
 
 function emptyResult(): SyncAllResult {
-  return { queued: 0, updated: 0, deleted: 0, moved: 0, skipped: 0, changed: false };
+  return { queued: 0, updated: 0, deleted: 0, moved: 0, skipped: 0, changed: false, cancelled: false };
 }
 
 /** Format the current local time as `YYYY-MM-DD HH:mm:ss` (local timezone). */

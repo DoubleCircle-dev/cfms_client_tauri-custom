@@ -297,6 +297,9 @@
         overwriteStrategy: strategy,
         onStatus: (msg) => notificationStore.info(msg, 5000),
       });
+      // Cancelling the overwrite prompt writes nothing, so keep the queue and
+      // let the user confirm again with another strategy.
+      if (result.cancelled) return;
       // Always clear once the run finished: changed means items were applied,
       // unchanged means they were verified as already current. Keeping the
       // queue in the unchanged case left a stale "confirm updates (1)" badge.
