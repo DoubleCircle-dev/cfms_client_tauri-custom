@@ -7,7 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && node scripts/check-focus-ring-contract.mjs",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "test": "vitest run",
     "tauri": "tauri",
@@ -17,6 +17,8 @@
     "app:version:check": "node scripts/client-version.mjs check",
     "i18n:unused": "node scripts/check-unused-i18n.mjs",
     "test:i18n-unused": "node --test scripts/check-unused-i18n.test.mjs",
+    "check:focus-styles": "node scripts/check-focus-ring-contract.mjs",
+    "test:focus-styles": "node --test scripts/check-focus-ring-contract.test.mjs",
     "app:changelog": "node scripts/release-notes.mjs changelog",
     "app:changelog:check": "node scripts/release-notes.mjs check",
     "app:release-notes": "node scripts/release-notes.mjs export"

@@ -552,8 +552,7 @@
   .task-toolbar { display: grid; min-width: 0; grid-template-columns: minmax(240px, 1fr) auto auto; align-items: center; gap: 0.65rem; }
   .search-field { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: 0.5rem; border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-medium); padding: 0 0.65rem; color: var(--explorer-text-muted); background: var(--explorer-surface-raised); transition: border-color 140ms var(--motion-easing-standard), box-shadow 140ms var(--motion-easing-standard), background-color 140ms var(--motion-easing-standard); }
   .search-field:focus-within { border-color: var(--explorer-accent); box-shadow: inset 0 0 0 1px var(--explorer-accent); }
-  .search-field input,
-  .search-field input:focus { min-width: 0; width: 100%; flex: 1; appearance: none; border: 0 !important; outline: 0; padding: 0; color: var(--explorer-text); background: transparent; box-shadow: none !important; font: 400 0.8125rem/1.4 var(--font-md3-sans); }
+  .search-field input { min-width: 0; width: 100%; flex: 1; appearance: none; border: 0 !important; outline: 0; padding: 0; color: var(--explorer-text); background: transparent; box-shadow: none !important; font: 400 0.8125rem/1.4 var(--font-md3-sans); }
   .search-field input::placeholder { color: var(--explorer-text-muted); opacity: 1; }
   .search-field button { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 999px; color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
   .search-field button:hover { color: var(--explorer-text); background: var(--explorer-surface-hover); }

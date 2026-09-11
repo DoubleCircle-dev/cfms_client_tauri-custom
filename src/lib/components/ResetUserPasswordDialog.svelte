@@ -146,7 +146,7 @@
         </span>
         <input
           id="reset-password"
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-20 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-20 text-sm text-md3-on-surface outline-none transition"
           type={visible ? 'text' : 'password'}
           placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}
           autocomplete="new-password"

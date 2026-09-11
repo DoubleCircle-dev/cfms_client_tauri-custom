@@ -77,7 +77,7 @@
         <input
           bind:this={groupNameInput}
           bind:value={groupName}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
           autocomplete="off"
           disabled={busy}
         />
@@ -92,7 +92,7 @@
         </span>
         <input
           bind:value={displayName}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
           autocomplete="off"
           disabled={busy}
           placeholder={groupName || $t('manage.displayNamePrompt')}

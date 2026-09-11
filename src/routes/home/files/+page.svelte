@@ -3780,7 +3780,6 @@
             type="text"
             class="h-9 w-48 rounded-full border border-md3-outline bg-md3-field py-1.5 pl-9 pr-9 text-sm leading-5 text-md3-on-surface
                    placeholder:text-md3-on-surface-variant
-                   focus:border-transparent focus:ring-2 focus:ring-md3-primary
                    transition-all"
             placeholder={$t('files.search')}
             bind:value={searchQuery}
@@ -4360,7 +4359,7 @@
     <form class="flex h-full min-h-0 flex-col gap-4 p-5" onsubmit={(e) => { e.preventDefault(); runServerSearch(); }}>
       <div class="grid gap-3 md:grid-cols-[1fr_auto]">
         <input
-          class="rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/25"
+          class="rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
           bind:value={searchDialog.query}
           bind:this={searchDialogInput}
           placeholder={$t('files.searchPlaceholder')}

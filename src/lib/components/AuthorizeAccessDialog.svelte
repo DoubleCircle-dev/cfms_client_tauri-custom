@@ -473,7 +473,6 @@
       box-shadow 150ms ease;
   }
 
-  .field:focus,
   .date-field:focus-within {
     border-color: var(--color-md3-primary);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-md3-primary) 25%, transparent);

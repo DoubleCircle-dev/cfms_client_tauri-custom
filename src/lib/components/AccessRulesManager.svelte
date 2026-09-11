@@ -442,7 +442,7 @@
                               >
                                 <input
                                   name="entry"
-                                  class="min-w-0 flex-1 rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/25"
+                                  class="min-w-0 flex-1 rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
                                   placeholder={type === 'rights' ? $t('files.rightNamePlaceholder') : $t('files.groupNamePlaceholder')}
                                   disabled={saving}
                                 />

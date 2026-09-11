@@ -179,7 +179,7 @@
             <Icon name="search" size="18px" />
           </span>
           <input
-            class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+            class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
             placeholder={$t('manage.searchItems')}
             bind:value={query}
             disabled={loading || saving}
@@ -195,7 +195,7 @@
             }}
           >
             <input
-              class="min-w-0 rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+              class="min-w-0 rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
               placeholder={addPlaceholder}
               bind:value={customValue}
               disabled={loading || saving}
