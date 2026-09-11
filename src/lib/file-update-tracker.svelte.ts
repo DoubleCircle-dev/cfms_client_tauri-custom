@@ -18,8 +18,14 @@ const DEFAULT_POLL_INTERVAL_MS = 60 * 60 * 1000;
 /** Keep up to this many check history records in local persistence and UI. */
 const CHECK_HISTORY_MAX = 20;
 
-/** LocalStorage key for persisted check history. */
-const CHECK_HISTORY_STORAGE_KEY = 'cfms:file-check-history:v1';
+/**
+ * LocalStorage key prefix for persisted check history.
+ *
+ * History is stored **per account** as `<prefix>:<server>:<username>`: switching
+ * server or user must not mix their logs, and a single unscoped key would report
+ * one account's directory counts inside another account's session.
+ */
+const CHECK_HISTORY_KEY_PREFIX = 'cfms:file-check-history:v1';
 
 /** Files with `last_modified` older than this are considered "not updated" (stale). */
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -62,6 +68,20 @@ export interface CheckHistoryEntry {
   summary: string;
 }
 
+/** Account a piece of per-user state belongs to. */
+export interface CheckHistoryScope {
+  serverAddress: string | null | undefined;
+  username: string | null | undefined;
+}
+
+/** Storage key for one account, or `null` while the account is unknown. */
+function checkHistoryKey(scope: CheckHistoryScope | null | undefined): string | null {
+  const serverAddress = scope?.serverAddress?.trim();
+  const username = scope?.username?.trim();
+  if (!serverAddress || !username) return null;
+  return `${CHECK_HISTORY_KEY_PREFIX}:${encodeURIComponent(serverAddress)}:${encodeURIComponent(username)}`;
+}
+
 export interface PendingUpdateItem {
   id: string;
   title: string;
@@ -99,6 +119,9 @@ class FileUpdateTracker {
   initialScanDone = false; // ensures post-login scan runs only once per session
 
   // --- check history ---
+  /** Storage key of the account whose history is currently loaded. */
+  private historyKey: string | null = null;
+
   checkHistory = $state<CheckHistoryEntry[]>([]);
 
   // --- pending update queue (diff results auto-enqueue) ---
@@ -580,6 +603,22 @@ class FileUpdateTracker {
   // Check history
   // =========================================================================
 
+  /**
+   * Point the check history at an account.
+   *
+   * Called whenever the session changes. The log is dropped when the account
+   * changes so a history entry can never be attributed to the wrong server or
+   * user. Passing an empty scope (logged out) clears the log and stops it being
+   * persisted at all.
+   */
+  useAccountScope(scope: CheckHistoryScope | null | undefined) {
+    const key = checkHistoryKey(scope);
+    if (key === this.historyKey) return;
+    this.historyKey = key;
+    this.checkHistory = [];
+    if (key) this.loadPersistedCheckHistory(key);
+  }
+
   /** Record a completed update check in the history log.
    *
    * `outdated` counts documents that are missing locally or behind the server
@@ -597,11 +636,11 @@ class FileUpdateTracker {
     this.persistCheckHistory();
   }
 
-  /** Load persisted check history from local storage. */
-  loadPersistedCheckHistory() {
+  /** Load persisted check history for one account. */
+  private loadPersistedCheckHistory(key: string) {
     if (typeof window === 'undefined') return;
     try {
-      const raw = window.localStorage.getItem(CHECK_HISTORY_STORAGE_KEY);
+      const raw = window.localStorage.getItem(key);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
@@ -622,10 +661,10 @@ class FileUpdateTracker {
   }
 
   private persistCheckHistory() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !this.historyKey) return;
     try {
       window.localStorage.setItem(
-        CHECK_HISTORY_STORAGE_KEY,
+        this.historyKey,
         JSON.stringify(this.checkHistory.slice(-CHECK_HISTORY_MAX)),
       );
     } catch {
@@ -845,7 +884,4 @@ class FileUpdateTracker {
 }
 
 export const fileUpdateTracker = new FileUpdateTracker();
-if (typeof window !== 'undefined') {
-  fileUpdateTracker.loadPersistedCheckHistory();
-}
 

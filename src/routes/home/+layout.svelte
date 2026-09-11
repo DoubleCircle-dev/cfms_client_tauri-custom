@@ -15,6 +15,7 @@
   import { canSetOwnAvatar } from '$lib/avatar-permissions';
   import { clearAuthSession, disconnect, getDocument, loadUserPreference, setLockdown } from '$lib/api';
   import { favoriteRecordsFromPreference, type FileRecord } from '$lib/file-preferences';
+  import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import AvatarPreview from '$lib/components/AvatarPreview.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
@@ -170,6 +171,16 @@
       ? `${serverStateStore.remoteAddress ?? ''}:${authStore.username}`
       : null;
     void extensionsStore.activateForAccount(scope);
+  });
+
+  // The file check history is per account: switching server or user must load
+  // that account's log instead of appending to whatever is already on screen.
+  $effect(() => {
+    const serverAddress = serverStateStore.remoteAddress;
+    const username = authStore.username;
+    fileUpdateTracker.useAccountScope(
+      authStore.isLoggedIn && username ? { serverAddress, username } : null,
+    );
   });
 
   onMount(() => {
