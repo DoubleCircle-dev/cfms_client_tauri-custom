@@ -65,7 +65,10 @@ export interface CheckHistoryEntry {
 export interface PendingUpdateItem {
   id: string;
   title: string;
+  /** Human-readable path, for display. */
   path: string;
+  /** Destination inside the download root (sanitised) — the actual write target. */
+  downloadPath: string;
   sha256?: string | null;
 }
 

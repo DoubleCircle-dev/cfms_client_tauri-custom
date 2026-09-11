@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerDocumentEntry } from '$lib/api';
-import { makeDownloadPath, readLocalDocumentStates } from './sync-all.svelte';
+import { downloadQueuedFiles, makeDownloadPath, readLocalDocumentStates } from './sync-all.svelte';
 
-const { computeLocalSha256 } = vi.hoisted(() => ({ computeLocalSha256: vi.fn() }));
-
-vi.mock('$lib/api/files', () => ({
-  computeLocalSha256,
+const files = vi.hoisted(() => ({
+  computeLocalSha256: vi.fn(),
   createDownloadPlaceholder: vi.fn(),
   deleteDownloadFile: vi.fn(),
   downloadGitCommit: vi.fn(),
@@ -16,29 +14,43 @@ vi.mock('$lib/api/files', () => ({
   moveDownloadFile: vi.fn(),
 }));
 
+const settings = vi.hoisted(() => ({
+  getSyncGitTrackingEnabled: vi.fn(async () => false),
+}));
+
+vi.mock('$lib/api/files', () => files);
+vi.mock('$lib/api/settings', () => settings);
+
 function doc(title: string, sha256: string | null = 'HASH', id = title): ServerDocumentEntry {
   return { id, title, size: 1024, last_modified: null, sha256 };
 }
 
-describe('readLocalDocumentStates', () => {
-  beforeEach(() => {
-    computeLocalSha256.mockReset();
-  });
+beforeEach(() => {
+  for (const mock of Object.values(files)) mock.mockReset();
+  settings.getSyncGitTrackingEnabled.mockReset();
+  settings.getSyncGitTrackingEnabled.mockResolvedValue(false);
 
+  files.computeLocalSha256.mockResolvedValue({});
+  files.getDocument.mockResolvedValue(null);
+  files.moveDownloadFile.mockResolvedValue(true);
+  files.createDownloadPlaceholder.mockResolvedValue(undefined);
+  files.downloadGitInit.mockResolvedValue(undefined);
+  files.downloadGitCommit.mockResolvedValue(null);
+});
+
+describe('readLocalDocumentStates', () => {
   it('does not call the backend when the directory has no documents', async () => {
     await expect(readLocalDocumentStates([], ['any'])).resolves.toEqual([]);
-    expect(computeLocalSha256).not.toHaveBeenCalled();
+    expect(files.computeLocalSha256).not.toHaveBeenCalled();
   });
 
   it('hashes exactly the download paths the sync engine uses', async () => {
-    computeLocalSha256.mockResolvedValue({});
-
     await readLocalDocumentStates([doc('read me.txt')], ['a/b', 'c']);
 
     // Sanitisation and joining must match `makeDownloadPath`, otherwise the
     // checker and the sync engine would disagree about which local file a
     // server document maps to.
-    expect(computeLocalSha256).toHaveBeenCalledWith([
+    expect(files.computeLocalSha256).toHaveBeenCalledWith([
       makeDownloadPath(['a/b', 'c', 'read me.txt']),
     ]);
   });
@@ -76,7 +88,7 @@ describe('readLocalDocumentStates', () => {
   });
 
   it('keeps each document paired with its own path', async () => {
-    computeLocalSha256.mockResolvedValue({ 'x/one.txt': 'A', 'x/two.txt': 'B' });
+    files.computeLocalSha256.mockResolvedValue({ 'x/one.txt': 'A', 'x/two.txt': 'B' });
 
     const states = await readLocalDocumentStates(
       [doc('one.txt', 'A', 'id-1'), doc('two.txt', 'OTHER', 'id-2')],
@@ -90,11 +102,103 @@ describe('readLocalDocumentStates', () => {
   });
 });
 
+describe('downloadQueuedFiles', () => {
+  it('does nothing for an empty queue', async () => {
+    const result = await downloadQueuedFiles([]);
+
+    expect(files.computeLocalSha256).not.toHaveBeenCalled();
+    expect(result.changed).toBe(false);
+  });
+
+  it('fetches exactly the queued documents, into their recorded download paths', async () => {
+    const result = await downloadQueuedFiles([
+      { docId: 'd1', path: 'a/b.txt', sha256: 'S1' },
+      { docId: 'd2', path: 'c.md', sha256: 'S2' },
+    ]);
+
+    expect(files.getDocument).toHaveBeenCalledTimes(2);
+    expect(files.getDocument).toHaveBeenCalledWith('d1', 'a/b.txt', undefined, false);
+    expect(files.getDocument).toHaveBeenCalledWith('d2', 'c.md', undefined, false);
+    expect(result.queued).toBe(2);
+    expect(result.changed).toBe(true);
+  });
+
+  it('never re-walks the server tree or the download root', async () => {
+    // The whole point of the cached queue: confirming an update must not repeat
+    // the scan the check already performed.
+    await downloadQueuedFiles([{ docId: 'd1', path: 'a.txt', sha256: 'S' }]);
+
+    expect(files.listDirectory).not.toHaveBeenCalled();
+    expect(files.listDownloadFiles).not.toHaveBeenCalled();
+  });
+
+  it('skips documents that became current since the check ran', async () => {
+    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'SAME' });
+
+    const result = await downloadQueuedFiles([{ docId: 'd1', path: 'a.txt', sha256: 'SAME' }]);
+
+    expect(files.getDocument).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(1);
+    expect(result.changed).toBe(false);
+  });
+
+  it('backs up an outdated local copy before replacing it', async () => {
+    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'OLD' });
+
+    await downloadQueuedFiles(
+      [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
+      { overwriteStrategy: 'backup_rename' },
+    );
+
+    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+/));
+    // Renamed away, so the download writes a new file rather than overwriting.
+    expect(files.getDocument).toHaveBeenCalledWith('d1', 'a.txt', undefined, false);
+  });
+
+  it('leaves conflicting files alone under the skip strategy but still fetches new ones', async () => {
+    files.computeLocalSha256.mockResolvedValue({ 'old.txt': 'OLD' });
+
+    const result = await downloadQueuedFiles(
+      [
+        { docId: 'old', path: 'old.txt', sha256: 'NEW' },
+        { docId: 'fresh', path: 'fresh.txt', sha256: 'F' },
+      ],
+      { overwriteStrategy: 'skip' },
+    );
+
+    expect(files.getDocument).toHaveBeenCalledTimes(1);
+    expect(files.getDocument).toHaveBeenCalledWith('fresh', 'fresh.txt', undefined, false);
+    expect(result.skipped).toBe(1);
+    expect(result.queued).toBe(1);
+  });
+
+  it('mirrors an inaccessible document as a placeholder instead of dropping it', async () => {
+    files.getDocument.mockRejectedValue('Server returned 403: access denied');
+
+    await downloadQueuedFiles([{ docId: 'd1', path: 'secret.txt', sha256: 'S' }]);
+
+    expect(files.createDownloadPlaceholder).toHaveBeenCalledWith('secret.txt');
+  });
+
+  it('commits a git snapshot only when something actually changed', async () => {
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+
+    await downloadQueuedFiles([{ docId: 'd1', path: 'a.txt', sha256: 'S' }]);
+    expect(files.downloadGitCommit).toHaveBeenCalledTimes(1);
+
+    files.downloadGitCommit.mockClear();
+    // Already current → nothing fetched → no commit.
+    files.computeLocalSha256.mockResolvedValue({ 'b.txt': 'S' });
+    await downloadQueuedFiles([{ docId: 'd2', path: 'b.txt', sha256: 'S' }]);
+    expect(files.downloadGitCommit).not.toHaveBeenCalled();
+  });
+});
+
 /** Run the comparison with a canned local-hash response. */
 async function withLocalHashes(
   documents: ServerDocumentEntry[],
   localHashes: Record<string, string>,
 ) {
-  computeLocalSha256.mockResolvedValue(localHashes);
+  files.computeLocalSha256.mockResolvedValue(localHashes);
   return readLocalDocumentStates(documents, []);
 }
