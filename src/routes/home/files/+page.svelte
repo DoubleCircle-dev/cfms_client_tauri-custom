@@ -1294,10 +1294,10 @@
     try {
       const result = await detectAndQueueServerChanges();
       fileUpdateTracker.resetPollingCountdown();
-      if (result.changed > 0) {
+      if (result.outdated > 0) {
         notificationStore.info(
           $t('files.serverChangesDetected', {
-            values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed (${result.dirs} sub-dirs, ${result.docs} docs)` },
+            values: { changes: `${result.outdated} file${result.outdated === 1 ? '' : 's'} need update (${result.dirs} sub-dirs, ${result.docs} docs)` },
           }),
           5000,
         );
@@ -1321,11 +1321,8 @@
       null,
       20,
       200,
-      ({ pathParts, documents, diff }) => {
-        if (diff.newDocuments.length === 0 && diff.modifiedDocuments.length === 0) return;
-        const changedIds = new Set([...diff.newDocuments, ...diff.modifiedDocuments]);
-        for (const doc of documents) {
-          if (!changedIds.has(doc.id)) continue;
+      ({ pathParts, outdated }) => {
+        for (const doc of outdated) {
           changedMap.set(doc.id, {
             id: doc.id,
             title: doc.title,
