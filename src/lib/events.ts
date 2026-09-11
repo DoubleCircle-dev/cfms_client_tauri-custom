@@ -3,7 +3,7 @@
 // Subscribes to the `cfms:event` Tauri event channel and dispatches
 // updates to the reactive stores.  Called once from `+layout.svelte`.
 
-import { listen } from "@tauri-apps/api/event";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { get } from "svelte/store";
 import { _ as t } from "svelte-i18n";
 import type { ServiceEvent, UploadProgressEvent } from "./api";
@@ -20,11 +20,31 @@ import {
 let unlisten: (() => void) | null = null;
 let unlistenUpload: (() => void) | null = null;
 
+/**
+ * Subscribe to a backend event.
+ *
+ * Hosts without a Tauri event bridge (a plain browser, and the browser preview's
+ * mock IPC) make `listen` throw *synchronously*, which would otherwise abort the
+ * caller's startup sequence.  Live updates are simply unavailable there, so the
+ * stores keep the values they were seeded with.
+ */
+async function subscribe<T>(
+  event: string,
+  handler: (payload: { payload: T }) => void,
+): Promise<UnlistenFn | null> {
+  try {
+    return await listen<T>(event, handler);
+  } catch (error) {
+    console.warn(`[cfms] Could not subscribe to "${event}"; live updates are disabled.`, error);
+    return null;
+  }
+}
+
 /** Start listening for backend `cfms:event` events. */
 export async function initEventListeners(): Promise<void> {
   if (unlisten) return; // Already initialized.
 
-  unlisten = await listen<ServiceEvent>("cfms:event", (payload) => {
+  unlisten = await subscribe<ServiceEvent>("cfms:event", (payload) => {
     const event = payload.payload;
 
     switch (event.event) {
@@ -140,7 +160,7 @@ export async function initEventListeners(): Promise<void> {
     }
   });
 
-  unlistenUpload = await listen<UploadProgressEvent>("cfms:upload-progress", (payload) => {
+  unlistenUpload = await subscribe<UploadProgressEvent>("cfms:upload-progress", (payload) => {
     const event = payload.payload;
     uploadStore.applyProgress(event);
     if (event.status === "completed") {
