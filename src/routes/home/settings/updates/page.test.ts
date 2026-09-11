@@ -7,10 +7,14 @@ import '$lib/i18n';
 import type { UpdateCheckPause } from '$lib/update-check-pause';
 import UpdatesSettingsPage from './+page.svelte';
 
+Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+  configurable: true,
+  value: vi.fn(),
+});
+
 const mocks = vi.hoisted(() => ({
   getSetting: vi.fn(),
   setSetting: vi.fn(),
-  goto: vi.fn(),
   navigateUp: vi.fn(),
   choose: vi.fn(),
   confirm: vi.fn(),
@@ -37,7 +41,6 @@ vi.mock('$lib/dialogs.svelte', () => ({
 vi.mock('$lib/stores.svelte', () => ({
   notificationStore: { error: mocks.notificationError },
 }));
-vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$app/state', () => ({
   page: { url: new URL('https://example.test/home/settings/updates') },
 }));
@@ -70,6 +73,40 @@ afterEach(() => {
 });
 
 describe('update settings pause controls', () => {
+  it('keeps manual update checks in About', async () => {
+    render(UpdatesSettingsPage);
+
+    const aboutLink = await screen.findByRole('link', { name: 'Check in About' });
+    expect(aboutLink.getAttribute('href')).toBe('/home/about');
+    expect(screen.queryByRole('button', { name: 'Check for Updates' })).toBeNull();
+    expect(screen.queryByText('0.50.0')).toBeNull();
+  });
+
+  it('persists release channel changes', async () => {
+    render(UpdatesSettingsPage);
+
+    const alpha = await screen.findByRole('radio', { name: /Alpha/ }) as HTMLButtonElement;
+    await waitFor(() => expect(alpha.disabled).toBe(false));
+    await fireEvent.click(alpha);
+
+    await waitFor(() => expect(mocks.setSetting).toHaveBeenCalledWith('update_channel', 'alpha'));
+    expect(mocks.appUpdateState.setChannel).toHaveBeenCalledWith('alpha');
+  });
+
+  it('moves and selects release channels with arrow keys', async () => {
+    render(UpdatesSettingsPage);
+
+    const stable = await screen.findByRole('radio', { name: /Stable/ }) as HTMLButtonElement;
+    const beta = screen.getByRole('radio', { name: /Beta/ }) as HTMLButtonElement;
+    await waitFor(() => expect(stable.disabled).toBe(false));
+    stable.focus();
+    await fireEvent.keyDown(stable, { key: 'ArrowDown' });
+
+    await waitFor(() => expect(mocks.setSetting).toHaveBeenCalledWith('update_channel', 'beta'));
+    expect(document.activeElement).toBe(beta);
+    expect(beta.getAttribute('aria-checked')).toBe('true');
+  });
+
   it('offers all temporary durations and persists a one-day pause', async () => {
     mocks.choose.mockResolvedValue({ value: 'day', applyToAll: false });
     render(UpdatesSettingsPage);

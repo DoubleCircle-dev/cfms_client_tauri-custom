@@ -1569,6 +1569,7 @@ export const zh_CN = {
     updates: {
       title: '更新',
       description: '管理自动更新检查和发布频道',
+      signedUpdateHint: '更新会在安装前进行验证，以帮助保护此设备。',
       currentVersion: '当前版本',
       channel: '通道',
       automaticChecks: '自动更新检查',

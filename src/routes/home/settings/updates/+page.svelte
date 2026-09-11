@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
   import { getSetting, setSetting } from '$lib/api';
   import { appUpdateState } from '$lib/app-update-state.svelte';
@@ -178,7 +177,7 @@
 
   <div class="settings-section-list">
     <section class="update-section settings-section" aria-labelledby="automatic-checks-heading">
-      <div class="section-heading settings-section-heading">
+      <div class="settings-section-heading">
         <h2 id="automatic-checks-heading">{$t('settings.updates.automaticChecks')}</h2>
         <p>{$t('settings.updates.automaticChecksHint')}</p>
       </div>
@@ -237,7 +236,7 @@
     </section>
 
     <section class="update-section settings-section" aria-labelledby="update-channel-heading">
-      <div class="section-heading settings-section-heading">
+      <div class="settings-section-heading">
         <h2 id="update-channel-heading">{$t('settings.updates.updateChannel')}</h2>
         <p>{channelDescription}</p>
       </div>
@@ -273,13 +272,18 @@
       </div>
 
       <div class="section-actions">
-        <button class="text-action" type="button" onclick={() => goto('/home/about')}>
+        <a class="text-action" href="/home/about">
           <Icon name="update" size="18px" />
           {$t('settings.updates.checkInAbout')}
-        </button>
+        </a>
       </div>
     </section>
   </div>
+
+  <p class="update-footnote">
+    <Icon name="verified" size="17px" />
+    {$t('settings.updates.signedUpdateHint')}
+  </p>
 </div>
 
 <style>
@@ -287,78 +291,35 @@
     gap: 1rem;
   }
 
-  .settings-section-list {
-    display: grid;
-  }
-
   .update-section {
     display: grid;
     gap: 1rem;
-    padding-block: 1.25rem;
-    border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
-  }
-
-  .update-section:last-child {
-    padding-bottom: 0;
-  }
-
-  h2,
-  p {
-    margin: 0;
-  }
-
-  h2 {
-    color: var(--color-md3-on-surface);
-    font: 650 0.9375rem/1.35 var(--font-md3-sans);
-  }
-
-  p {
-    color: var(--color-md3-on-surface-variant);
-    font-size: 0.8rem;
-    line-height: 1.5;
-  }
-
-  .section-heading {
-    display: grid;
-    gap: 0.3rem;
   }
 
   .automatic-check-status {
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    min-height: 4.25rem;
-    padding: 0.8rem 0.9rem;
-    border: 1px solid color-mix(in srgb, var(--color-md3-outline) 68%, transparent);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-md3-surface-container-high) 72%, transparent);
-  }
-
-  .automatic-check-status--paused {
-    border-color: color-mix(in srgb, var(--color-md3-warning) 35%, var(--color-md3-outline));
-    background: color-mix(in srgb, var(--color-md3-warning) 8%, var(--color-md3-surface-container-high));
+    min-height: 3rem;
   }
 
   .status-icon {
     display: grid;
-    place-items: center;
-    flex: none;
     width: 2rem;
     height: 2rem;
-    border-radius: 50%;
-    color: var(--color-md3-primary-emphasis);
-    background: color-mix(in srgb, var(--color-md3-primary-emphasis) 10%, transparent);
+    flex: none;
+    place-items: center;
+    color: var(--color-md3-success);
   }
 
   .automatic-check-status--paused .status-icon {
     color: var(--color-md3-warning);
-    background: color-mix(in srgb, var(--color-md3-warning) 12%, transparent);
   }
 
   .status-copy {
     display: grid;
-    gap: 0.22rem;
     min-width: 0;
+    gap: 0.2rem;
   }
 
   .status-copy strong {
@@ -392,11 +353,6 @@
 
   .channel-row:first-child {
     border-top: 0;
-  }
-
-  .channel-row:hover:not(:disabled),
-  .channel-row.active {
-    color: var(--color-md3-on-surface);
   }
 
   .channel-row:hover:not(:disabled) {
@@ -477,21 +433,33 @@
   }
 
   button:disabled {
+    cursor: not-allowed;
     opacity: 0.55;
   }
 
-  @media (max-width: 640px) {
-    .update-settings-page {
-      width: min(100%, 45rem);
-    }
+  .update-footnote {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.2rem 0.15rem;
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
 
-    .section-actions > button {
+  .update-footnote :global(.material-symbols-outlined) {
+    flex: none;
+    color: var(--color-md3-success);
+  }
+
+  @media (max-width: 640px) {
+    .section-actions > :is(button, a) {
       min-height: 2.75rem;
     }
   }
 
   @media (max-width: 420px) {
-    .section-actions > button {
+    .section-actions > :is(button, a) {
       width: 100%;
     }
   }

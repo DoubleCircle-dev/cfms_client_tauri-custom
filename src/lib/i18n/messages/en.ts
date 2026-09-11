@@ -1580,6 +1580,7 @@ export const en = {
     updates: {
       title: 'Updates',
       description: 'Manage automatic update checks and release channels',
+      signedUpdateHint: 'Updates are verified before installation to help keep this device protected.',
       currentVersion: 'Current version',
       channel: 'Channel',
       automaticChecks: 'Automatic update checks',
