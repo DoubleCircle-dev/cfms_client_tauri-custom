@@ -84,12 +84,15 @@
 
     // Run one automatic full detection at startup only when the user enabled
     // it (default off) — a sub-option of the "enable automatic checks" master
-    // switch. It runs exactly once per program start and behaves exactly like
-    // a periodic automatic check: diffs are enqueued, and they auto-download
+    // switch. It runs exactly once per login and behaves exactly like a
+    // periodic automatic check: diffs are enqueued, and they auto-download
     // immediately when the "download updates immediately" option is on.
-    if (autoFileUpdateEnabled && autoFileDetectOnStartup && !fileUpdateTracker.initialScanDone && !sessionStorage.getItem('cfms:initial-scan-done')) {
+    //
+    // The flag lives on the tracker and is per account, so signing in as
+    // somebody else within the same run gets its own check instead of being
+    // suppressed by the previous user's.
+    if (autoFileUpdateEnabled && autoFileDetectOnStartup && !fileUpdateTracker.initialScanDone) {
       fileUpdateTracker.initialScanDone = true;
-      sessionStorage.setItem('cfms:initial-scan-done', '1');
       console.log('%c[cfms:check] Startup detection after login…', 'color:#4fc3f7');
       try {
         await runAutomaticDetection();

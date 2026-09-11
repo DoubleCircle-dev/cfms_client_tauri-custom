@@ -142,7 +142,14 @@ class FileUpdateTracker {
   private pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
   lastCheckTime = $state<number>(0);
   nextCheckTime = $state<number>(0);
-  initialScanDone = false; // ensures post-login scan runs only once per session
+  /**
+   * Whether the account's one post-login check has already been spent.
+   *
+   * Scoped to the account rather than to the process: the option promises a
+   * check at start *and* at login, and signing in as somebody else within the
+   * same run is a new session for them.
+   */
+  initialScanDone = $state(false);
 
   // --- check history ---
   /** Storage key of the account whose history is currently loaded. */
@@ -692,6 +699,7 @@ class FileUpdateTracker {
     if (key === this.historyKey) return;
     this.historyKey = key;
     this.checkHistory = [];
+    this.initialScanDone = false;
     if (key) this.loadPersistedCheckHistory(key);
   }
   /**

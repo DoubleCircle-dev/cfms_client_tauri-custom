@@ -597,6 +597,14 @@ pub struct UserPreference {
     #[serde(default)]
     pub file_auto_update_auto_download: bool,
 
+    /// Whether one automatic file check runs at program start, as a sub-option
+    /// of `file_auto_update_enabled`. The preference is part of this struct on
+    /// purpose: a field the frontend sends but this type does not know is
+    /// dropped by `save_user_preference`, so the setting would silently revert
+    /// the next time anything else loaded the preferences.
+    #[serde(default)]
+    pub file_auto_detect_on_startup: bool,
+
     /// Whether the local download root is versioned with git. When true, sync
     /// force-overwrites changed files and commits the result; when false, no git
     /// commands run and outdated local files are renamed to timestamped backups
@@ -641,6 +649,7 @@ impl Default for UserPreference {
             file_auto_update_enabled: default_file_auto_update_enabled(),
             file_auto_update_interval_minutes: default_file_auto_update_interval_minutes(),
             file_auto_update_auto_download: false,
+            file_auto_detect_on_startup: false,
             sync_git_tracking_enabled: false,
             sync_overwrite_strategy: default_sync_overwrite_strategy(),
             privacy: PrivacyPreference::default(),
@@ -883,6 +892,38 @@ mod tests {
                 "end_time": null,
             })
         );
+    }
+
+    #[test]
+    fn file_sync_switches_survive_a_save_load_round_trip() {
+        // The settings page loads the preference, adds its own field, and sends
+        // the whole object back. `save_user_preference` deserialises that into
+        // `UserPreference`, and serde drops every field the struct does not
+        // declare — silently. That is how `file_auto_detect_on_startup` stayed
+        // broken: the switch moved, the write succeeded, and the value was gone
+        // by the next load. Every switch the page can send belongs here.
+        let loaded = serde_json::to_value(UserPreference::default()).unwrap();
+        let mut sent = loaded.as_object().unwrap().clone();
+        for (key, value) in [
+            ("file_auto_update_enabled", serde_json::json!(true)),
+            ("file_auto_update_interval_minutes", serde_json::json!(15)),
+            ("file_auto_update_auto_download", serde_json::json!(true)),
+            ("file_auto_detect_on_startup", serde_json::json!(true)),
+            ("sync_git_tracking_enabled", serde_json::json!(true)),
+            ("sync_overwrite_strategy", serde_json::json!("skip")),
+        ] {
+            sent.insert(key.to_string(), value);
+        }
+
+        let stored: UserPreference =
+            serde_json::from_value(serde_json::Value::Object(sent)).unwrap();
+        let reloaded = serde_json::to_value(&stored).unwrap();
+
+        assert_eq!(reloaded["file_auto_detect_on_startup"], serde_json::json!(true));
+        assert_eq!(reloaded["file_auto_update_auto_download"], serde_json::json!(true));
+        assert_eq!(reloaded["file_auto_update_interval_minutes"], serde_json::json!(15));
+        assert_eq!(reloaded["sync_git_tracking_enabled"], serde_json::json!(true));
+        assert_eq!(reloaded["sync_overwrite_strategy"], serde_json::json!("skip"));
     }
 
     #[test]
