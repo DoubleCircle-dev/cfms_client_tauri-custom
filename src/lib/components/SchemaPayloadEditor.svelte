@@ -159,10 +159,19 @@
     });
   }
 
-  function starterValue(node: VisualSchemaNode): JsonValue {
-    if (node.defaultValue !== undefined) return cloneValue(node.defaultValue);
-    if (node.constValue !== undefined) return cloneValue(node.constValue);
-    if (node.enumValues?.length) return cloneValue(node.enumValues[0]);
+  function starterValue(node: VisualSchemaNode, preferNonNull = false): JsonValue {
+    if (node.defaultValue !== undefined && (!preferNonNull || node.defaultValue !== null)) {
+      return cloneValue(node.defaultValue);
+    }
+    if (node.constValue !== undefined && (!preferNonNull || node.constValue !== null)) {
+      return cloneValue(node.constValue);
+    }
+    if (node.enumValues?.length) {
+      const enumValue = preferNonNull
+        ? node.enumValues.find((option) => option !== null)
+        : node.enumValues[0];
+      if (enumValue !== undefined) return cloneValue(enumValue);
+    }
     if (node.kind === 'object') {
       const result: Record<string, JsonValue> = {};
       for (const property of node.properties ?? []) {
@@ -401,7 +410,7 @@
               type="button"
               class="field-action"
               disabled={disabled}
-              onclick={() => setValue(path, current === null ? starterValue(node) : null)}
+              onclick={() => setValue(path, current === null ? starterValue(node, true) : null)}
             >
               {current === null ? $t('schedules.payloadUseValue') : $t('schedules.payloadSetNull')}
             </button>

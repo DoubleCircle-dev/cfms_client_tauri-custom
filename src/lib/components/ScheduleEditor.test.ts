@@ -102,6 +102,22 @@ describe('ScheduleEditor payload modes', () => {
     })));
   });
 
+  it('switches a nullable field with a null default to an editable value', async () => {
+    render(ScheduleEditor, {
+      props: {
+        taskTypes: [taskType('scheduled_lockdown.window')],
+        onSave: vi.fn(),
+        onCancel: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Use a value' }));
+
+    const reason = screen.getByLabelText(/Reason/) as HTMLTextAreaElement;
+    expect(reason.value).toBe('');
+    expect(screen.queryByText('This field is explicitly set to null.')).toBeNull();
+  });
+
   it('uses JSON mode when the schema cannot be represented without loss', async () => {
     render(ScheduleEditor, {
       props: {
