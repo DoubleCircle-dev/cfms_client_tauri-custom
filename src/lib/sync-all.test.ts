@@ -203,7 +203,7 @@ describe('syncFiles (cached queue)', () => {
       overwriteStrategy: 'backup_rename',
     });
 
-    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+/));
+    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+\d{8}-\d{6}\.bak$/));
     // Renamed away, so the download writes a new file rather than overwriting.
     expect(files.getDocument).toHaveBeenCalledWith('d1', 'a.txt');
   });
@@ -219,7 +219,7 @@ describe('syncFiles (cached queue)', () => {
       overwriteStrategy: 'backup_rename',
     });
 
-    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+/));
+    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+\d{8}-\d{6}\.bak$/));
   });
 
   it('leaves conflicting files alone under the skip strategy but still fetches new ones', async () => {
@@ -275,7 +275,7 @@ describe('syncFiles (cached queue)', () => {
       queue: [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
     });
 
-    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+/));
+    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+\d{8}-\d{6}\.bak$/));
     expect(result.cancelled).toBe(false);
     expect(result.updated).toBe(1);
   });
@@ -323,6 +323,51 @@ describe('syncFiles (full server walk)', () => {
     expect(files.getDocument).not.toHaveBeenCalled();
     expect(result.skipped).toBe(1);
     expect(result.changed).toBe(false);
+  });
+
+  it('keeps the backups it made instead of deleting them as strays', async () => {
+    // Regression: the timestamped snapshot the engine writes is never on the
+    // server, so the next full sync deleted the backup it had just created --
+    // without asking, because git tracking skips the delete confirmation.
+    serve([doc('a.txt', 'SAME')], { 'a.txt': 'SAME' });
+    files.listDownloadFiles.mockResolvedValue([
+      'a.txt',
+      'a.txt+20260912-053811.bak',
+      'a/b.txt+20260912-053811.bak',
+      // Snapshots written before the `.bak` extension existed are still the
+      // engine's own, so they must not be swept up either.
+      'a.txt+20260912-053156',
+    ]);
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.deleteDownloadFile).not.toHaveBeenCalled();
+    expect(result.deleted).toBe(0);
+  });
+
+  it('names the snapshot it keeps with a .bak extension', async () => {
+    // The extension is what the download-root .gitignore excludes, so it also
+    // decides whether the backup enters the version history.
+    serve([doc('a.txt', 'NEW')], { 'a.txt': 'OLD' });
+
+    await syncFiles({ overwriteStrategy: 'backup_rename' });
+
+    expect(files.moveDownloadFile).toHaveBeenCalledWith(
+      'a.txt',
+      expect.stringMatching(/^a\.txt\+\d{8}-\d{6}\.bak$/),
+    );
+  });
+
+  it('still deletes a local file the server no longer has', async () => {
+    serve([doc('a.txt', 'SAME')], { 'a.txt': 'SAME' });
+    files.listDownloadFiles.mockResolvedValue(['a.txt', 'gone.txt']);
+    // The server never hashed `gone.txt`, so it is not in the local map either.
+    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'SAME' });
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.deleteDownloadFile).toHaveBeenCalledWith('gone.txt');
+    expect(result.deleted).toBe(1);
   });
 });
 

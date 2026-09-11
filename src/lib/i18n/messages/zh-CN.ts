@@ -1344,7 +1344,7 @@ export const zh_CN = {
       overwriteForce: '强制覆盖',
       overwriteForceHint: '直接下载新版本覆盖本地文件，不保留旧版本。',
       overwriteBackup: '不覆盖（生成历史版本）',
-      overwriteBackupHint: '先把旧文件改名为「文件名+时间戳」保留，再下载新版本。',
+      overwriteBackupHint: '先把旧文件改名为「文件名+时间戳.bak」保留，再下载新版本；备份不会进入 Git 历史。',
       overwriteSkip: '跳过已有文件更新',
       overwriteSkipHint: '保留本地文件不变，只下载本地缺失的新文件。',
     },

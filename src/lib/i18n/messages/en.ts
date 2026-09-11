@@ -1355,7 +1355,7 @@ export const en = {
       overwriteForce: 'Force overwrite',
       overwriteForceHint: 'Download the new revision and overwrite the local file without keeping the old one.',
       overwriteBackup: 'No overwrite (keep history version)',
-      overwriteBackupHint: 'Rename the old file to "name+timestamp" first, then download the new revision.',
+      overwriteBackupHint: 'Rename the old file to "name+timestamp.bak" first, then download the new revision. Backups stay out of the Git history.',
       overwriteSkip: 'Skip updates for existing files',
       overwriteSkipHint: 'Keep local files untouched; only download files missing locally.',
     },

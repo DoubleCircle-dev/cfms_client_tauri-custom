@@ -45,6 +45,27 @@ export function makeDownloadPath(parts: string[]) {
   return safeParts.length > 0 ? safeParts.join('/') : 'download';
 }
 
+/** `<name>+YYYYMMDD-HHMMSS.bak`, the snapshot suffix `backupSuffixFor` builds. */
+const BACKUP_SUFFIX_RE = /\+\d{8}-\d{6}(\.bak)?$/;
+
+/**
+ * Whether a path is a snapshot this engine wrote before replacing a locally
+ * modified file.
+ *
+ * The whole point of the "keep the old version" strategy is that the previous
+ * revision survives. The server never lists these names, so the sync has to
+ * recognise them itself or it will clean up its own backups on the next run —
+ * silently, because git tracking skips the delete confirmation.
+ *
+ * The `.bak` extension is also what the download-root `.gitignore` excludes, so
+ * these files stay out of the version history. The bare `+timestamp` form is
+ * still matched so snapshots written before the extension existed are not
+ * mistaken for strays.
+ */
+export function isSyncBackupPath(path: string): boolean {
+  return BACKUP_SUFFIX_RE.test(path);
+}
+
 // ---------------------------------------------------------------------------
 // Server-vs-local comparison
 //
@@ -509,6 +530,11 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
     // external listing surfaces it — deleting from .git destroys the repo,
     // and .gitignore keeps large downloads out of the repo.
     if (localPath === '.git' || localPath.startsWith('.git/') || localPath === '.gitignore') continue;
+    // A snapshot this engine wrote when it replaced a locally modified file is
+    // user data, not a stray. The server will never list it, so without this
+    // rule the very next full sync deletes the backup it just made — silently,
+    // whenever git tracking skips the delete confirmation.
+    if (isSyncBackupPath(localPath)) continue;
     if (serverPaths.has(localPath)) continue;
     const parentDir = localPath.includes('/')
       ? localPath.slice(0, localPath.lastIndexOf('/'))
@@ -600,7 +626,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
   if (!syncAllCoordinator.acquire()) return emptyResult();
 
   const runner = createDownloadRunner();
-  const backupSuffix = `+${backupTimestamp()}`;
+  const backupSuffix = backupSuffixFor();
   const startTime = performance.now();
 
   let queued = 0;
@@ -770,6 +796,17 @@ function backupTimestamp(): string {
   const d = new Date();
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+/**
+ * Suffix for the snapshot written before a locally modified file is replaced.
+ *
+ * `<name>+<timestamp>.bak` keeps every run's snapshot separate, and the `.bak`
+ * extension is what the download-root `.gitignore` excludes so backups never
+ * enter the version history.
+ */
+function backupSuffixFor(): string {
+  return `+${backupTimestamp()}.bak`;
 }
 
 /** Wait until no active (pending/downloading/verifying) download tasks remain. */
