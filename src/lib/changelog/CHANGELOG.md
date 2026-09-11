@@ -4,6 +4,17 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.51.1
+**Released on:** 2026-09-11
+
+**Title:** Bugfix
+
+### Fixed
+- Enhance starterValue function to prefer non-null defaults
+- Add focus retention for required payload field initialization
+
+--- 
+
 ## v0.51.0
 **Released on:** 2026-09-11
 
