@@ -197,56 +197,25 @@
     <section class="settings-section space-y-4">
       <div class="settings-section-heading">
         <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-          {$t('settings.fileSync.overwriteStrategyTitle')}
+          {$t('settings.fileSync.gitSectionTitle')}
         </h2>
         <p class="text-xs text-md3-on-surface-variant mt-1">
-          {$t('settings.fileSync.overwriteStrategyHint')}
+          {$t('settings.fileSync.gitSectionHint')}
         </p>
       </div>
 
-      <div
-        class="space-y-2"
-        role="radiogroup"
-        aria-label={$t('settings.fileSync.overwriteStrategyTitle')}
-      >
-        {#each overwriteStrategyOptions as option}
-          <div
-            class="flex w-full items-start gap-3 px-3 py-2.5 rounded-lg text-left
-                   text-sm text-md3-on-surface border transition-all outline-none
-                   hover:bg-md3-primary-container/15
-                   {syncOverwriteStrategy === option.value
-                     ? 'border-md3-primary bg-md3-primary-container/15'
-                     : 'border-md3-outline/50 bg-md3-surface-container-high/40'}
-                   {loading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}"
-            style="font-family: var(--font-md3-sans);"
-            role="radio"
-            aria-checked={syncOverwriteStrategy === option.value}
-            aria-disabled={loading}
-            tabindex={loading ? -1 : syncOverwriteStrategy === option.value ? 0 : -1}
-            onclick={() => {
-              if (loading) return;
-              applySyncOverwriteStrategy(option.value);
-            }}
-            onkeydown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                if (loading) return;
-                applySyncOverwriteStrategy(option.value);
-              }
-            }}
-          >
-            <span class="mt-0.5 shrink-0 {syncOverwriteStrategy === option.value ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}" aria-hidden="true">
-              <Icon name={syncOverwriteStrategy === option.value ? 'radioChecked' : 'radioUnchecked'} size="22px" />
-            </span>
-            <span class="min-w-0">
-              <span class="block font-medium">{$t(option.labelKey)}</span>
-              <span class="block text-xs text-md3-on-surface-variant mt-1">
-                {$t(option.descriptionKey)}
-              </span>
-            </span>
-          </div>
-        {/each}
+      <div class="settings-row text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+        {$t('settings.behavior.syncGitTracking')}
+        <MdSwitch
+          checked={syncGitTrackingEnabled}
+          disabled={loading || gitInitBusy}
+          ariaLabel={$t('settings.behavior.syncGitTracking')}
+          onChange={applySyncGitTrackingEnabled}
+        />
       </div>
+      <p class="-mt-2 text-xs text-md3-on-surface-variant">
+        {$t('settings.behavior.syncGitTrackingHint')}
+      </p>
     </section>
 
     <section class="settings-section space-y-4">
@@ -312,31 +281,59 @@
         <p class="-mt-2 text-xs text-md3-on-surface-variant">
           {$t('settings.behavior.fileAutoUpdateAutoDownloadHint')}
         </p>
-      </div>
-    </section>
 
-    <section class="settings-section space-y-4">
-      <div class="settings-section-heading">
-        <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-          {$t('settings.fileSync.gitSectionTitle')}
-        </h2>
-        <p class="text-xs text-md3-on-surface-variant mt-1">
-          {$t('settings.fileSync.gitSectionHint')}
-        </p>
+        {#if autoFileUpdateEnabled && autoFileUpdateAutoDownload}
+          <div
+            class="ml-4 space-y-2 border-l-2 border-md3-outline/40 pl-4"
+            role="radiogroup"
+            aria-label={$t('settings.fileSync.overwriteStrategyTitle')}
+          >
+          <p class="text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+            {$t('settings.fileSync.overwriteStrategyTitle')}
+          </p>
+          <p class="text-xs text-md3-on-surface-variant">
+            {$t('settings.fileSync.overwriteStrategyHint')}
+          </p>
+          {#each overwriteStrategyOptions as option}
+            <div
+              class="flex w-full items-start gap-3 px-3 py-2.5 rounded-lg text-left
+                     text-sm text-md3-on-surface border transition-all outline-none
+                     hover:bg-md3-primary-container/15
+                     {syncOverwriteStrategy === option.value
+                       ? 'border-md3-primary bg-md3-primary-container/15'
+                       : 'border-md3-outline/50 bg-md3-surface-container-high/40'}
+                     {loading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}"
+              style="font-family: var(--font-md3-sans);"
+              role="radio"
+              aria-checked={syncOverwriteStrategy === option.value}
+              aria-disabled={loading}
+              tabindex={loading ? -1 : syncOverwriteStrategy === option.value ? 0 : -1}
+              onclick={() => {
+                if (loading) return;
+                applySyncOverwriteStrategy(option.value);
+              }}
+              onkeydown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  if (loading) return;
+                  applySyncOverwriteStrategy(option.value);
+                }
+              }}
+            >
+              <span class="mt-0.5 shrink-0 {syncOverwriteStrategy === option.value ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}" aria-hidden="true">
+                <Icon name={syncOverwriteStrategy === option.value ? 'radioChecked' : 'radioUnchecked'} size="22px" />
+              </span>
+              <span class="min-w-0">
+                <span class="block font-medium">{$t(option.labelKey)}</span>
+                <span class="block text-xs text-md3-on-surface-variant mt-1">
+                  {$t(option.descriptionKey)}
+                </span>
+              </span>
+            </div>
+          {/each}
+        </div>
+        {/if}
       </div>
-
-      <div class="settings-row text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-        {$t('settings.behavior.syncGitTracking')}
-        <MdSwitch
-          checked={syncGitTrackingEnabled}
-          disabled={loading || gitInitBusy}
-          ariaLabel={$t('settings.behavior.syncGitTracking')}
-          onChange={applySyncGitTrackingEnabled}
-        />
-      </div>
-      <p class="-mt-2 text-xs text-md3-on-surface-variant">
-        {$t('settings.behavior.syncGitTrackingHint')}
-      </p>
     </section>
   </div>
 </div>
