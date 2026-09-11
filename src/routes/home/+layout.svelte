@@ -15,6 +15,8 @@
   import { canSetOwnAvatar } from '$lib/avatar-permissions';
   import { clearAuthSession, disconnect, getDocument, loadUserPreference, setLockdown } from '$lib/api';
   import { favoriteRecordsFromPreference, type FileRecord } from '$lib/file-preferences';
+  import { deniedDocuments } from '$lib/denied-documents.svelte';
+  import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import AvatarPreview from '$lib/components/AvatarPreview.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
@@ -181,6 +183,17 @@
     void extensionsStore.activateForAccount(scope);
   });
 
+  // The file check history and the record of undownloadable documents are per
+  // account: switching server or user must load that account's own state instead
+  // of carrying the previous session's over.
+  $effect(() => {
+    const serverAddress = serverStateStore.remoteAddress;
+    const username = authStore.username;
+    const scope = authStore.isLoggedIn && username ? { serverAddress, username } : null;
+    fileUpdateTracker.useAccountScope(scope);
+    deniedDocuments.useAccountScope(scope);
+  });
+
   onMount(() => {
     const refresh = () => void refreshFavorites();
     window.addEventListener('cfms:favorites-changed', refresh);
@@ -243,12 +256,8 @@
       return;
     }
     try {
-      const result = await getDocument(record.id, record.name);
-      if (result.already_exists) {
-        notificationStore.info($t('home.downloadAlreadyExists', { values: { name: record.name } }));
-      } else {
-        notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
-      }
+      await getDocument(record.id, record.name);
+      notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
     } catch (error) {
       notificationStore.error(formatUserFacingError(error));
     }

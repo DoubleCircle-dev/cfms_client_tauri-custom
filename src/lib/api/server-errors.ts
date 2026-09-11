@@ -79,3 +79,26 @@ export function isAccessDeniedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /^\s*Access denied\s*:/i.test(message);
 }
+
+/**
+ * Whether the server refused *this document*, rather than the request itself.
+ *
+ * 403 carries both meanings. An access rule on one document arrives as
+ * `Server returned 403: ...`; a banned subnet, a rejected envelope or a closed
+ * session arrives as `connection rejected (403): ...` and refuses every request
+ * alike. A transient one is a 429 and never reaches here.
+ *
+ * The distinction matters because "this document is denied" is remembered: a
+ * document recorded under the second meaning would take the whole library out
+ * of the update check. When in doubt, answer `false` — a document that really is
+ * denied simply gets denied again on the next attempt.
+ */
+export function isDocumentAccessDenied(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (serverErrorStatus(error) === 403) {
+    // Envelope-level rejections never reach a handler, so they say nothing
+    // about the document that happened to be requested.
+    return !CORE_REJECTION_STATUS_PATTERN.test(message);
+  }
+  return /^\s*Access denied\s*:/i.test(message);
+}

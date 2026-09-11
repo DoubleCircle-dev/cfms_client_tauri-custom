@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { platform, type Platform } from '@tauri-apps/plugin-os';
 import { loadUserPreference, saveUserPreference, setAndroidContentProtected } from '$lib/api';
+import { isTauriRuntime } from '$lib/tauri-runtime';
 import type { UserPreference } from '$lib/api';
 
 const DEFAULT_SCREENSHOT_PROTECTION = true;
@@ -105,23 +106,29 @@ function normalizePreference(preferences: UserPreference) {
   return privacy.screenshot_protection_enabled;
 }
 
+function currentPlatform(): Platform | null {
+  // `platform()` throws synchronously outside the Tauri webview, so browser
+  // previews must be screened off before the native APIs are touched.
+  return isTauriRuntime() ? platform() : null;
+}
+
 function isNativeProtectionAvailable() {
-  const currentPlatform = platform();
-  return currentPlatform === 'android' || isDesktopPlatform(currentPlatform);
+  const value = currentPlatform();
+  return value === 'android' || isDesktopPlatform(value);
 }
 
 async function setNativeContentProtection(enabled: boolean) {
-  const currentPlatform = platform();
-  if (currentPlatform === 'android') {
+  const value = currentPlatform();
+  if (value === 'android') {
     await setAndroidContentProtected(enabled);
     return;
   }
 
-  if (isDesktopPlatform(currentPlatform)) {
+  if (isDesktopPlatform(value)) {
     await getCurrentWindow().setContentProtected(enabled);
   }
 }
 
-function isDesktopPlatform(value: Platform) {
+function isDesktopPlatform(value: Platform | null) {
   return value === 'windows' || value === 'macos' || value === 'linux';
 }

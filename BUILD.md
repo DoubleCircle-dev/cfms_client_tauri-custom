@@ -138,6 +138,63 @@ pnpm tauri dev         # Development mode with hot-reload
 pnpm tauri build       # Production build
 ```
 
+### Browser UI preview (no native shell)
+
+The Vite dev server also serves the frontend to a regular browser, which is
+handy for fast UI iteration. A browser has no Tauri IPC, so
+`src/hooks.client.ts` installs a dev-only bridge (`src/lib/dev/browser-preview.ts`)
+that supplies one. The pages themselves are the untouched production routes —
+only the `invoke` responder differs. It runs in one of two modes.
+
+**Live mode — real backend, real data.** The bridge forwards every command to
+the *running app* through the WebView2 CDP debugger:
+
+```bash
+# 1. start the app (the debug port is opened by Cargo's [env] in .cargo/config.toml)
+pnpm tauri dev
+
+# 2. in a second terminal, start the relay
+pnpm dev:bridge
+
+# 3. open http://localhost:1909/ in a browser
+```
+
+The debug build opens `--remote-debugging-port=9222` on loopback for you; that
+entry lives in `.cargo/config.toml` under `[env]`, so it applies to debug runs
+only and never reaches a release binary. Override the port there and in
+`CFMS_CDP_PORT` (relay) together, or bypass the config entirely with
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=... pnpm tauri dev`.
+
+The badge reads `预览模式 · 真实后端` while the relay is attached. Connect and
+sign in **in the app window**; the browser follows the session within a few
+seconds and then shows the same real data.
+
+Known limits of live mode:
+
+- Backend events cannot cross the relay, so the preview polls `get_auth_status`
+  and `get_server_state` instead. Progress bars and other streaming updates stay
+  still.
+- `Channel`-based commands (upload progress, some downloads) cannot round-trip.
+- The relay drives the same backend the app window uses, so actions taken in the
+  browser affect the app too.
+
+**Fixture mode — no relay.** Without `pnpm dev:bridge` the bridge answers from a
+small in-memory mock instead, marked by the `预览模式 · 模拟数据` badge. Enough to
+build and inspect UI; none of it is real.
+
+Notes that apply to both modes:
+
+- The bridge is inert inside the Tauri webview (the real IPC bridge wins) and in
+  production builds (`import.meta.env.DEV` is false).
+- Unmocked commands in fixture mode resolve to `null` and are reported once per
+  command in the console; the full list is also on
+  `window.__CFMS_PREVIEW_UNHANDLED__`. Add fixtures to `FIXTURES` in
+  `src/lib/dev/browser-preview.ts`.
+- Code that only exists in the native shell must guard itself with
+  `isTauriRuntime()` from `$lib/tauri-runtime` — Tauri APIs throw
+  *synchronously* (not a rejected promise) when the shell is absent.
+- The relay listens on `127.0.0.1:1910` only; it is a local development tool.
+
 ### Android
 
 ```bash

@@ -34,6 +34,7 @@
     type KeyboardCommand,
   } from "$lib/keyboard";
   import { supportsKeyboardShortcuts } from "$lib/platform";
+  import BrowserPreviewBadge from "$lib/dev/BrowserPreviewBadge.svelte";
   import { canOpenDeveloperConsole, developerConsoleIdentityKey } from "$lib/developer-console";
   import {
     authStore,
@@ -66,7 +67,9 @@
   initNavigationHistory();
 
   afterNavigate((navigation) => {
-    if (!navigation.from || navigation.from.url.pathname === navigation.to?.url.pathname) return;
+    // SvelteKit always passes a `from` object; on the first navigation its `url`
+    // is null, so `!navigation.from` alone is not enough of a guard here.
+    if (!navigation.from?.url || navigation.from.url.pathname === navigation.to?.url.pathname) return;
     void tick().then(() => {
       const heading = document.querySelector<HTMLElement>(
         '.explorer-content h1, #app-main-content main h1, #app-main-content h1',
@@ -265,9 +268,10 @@
       }
     }
 
-    // 5. If fully authenticated and on connect or login, go to home.
+    // 5. If fully authenticated and still on an entry route (connect, login or
+    //    the root placeholder), go to home.
     if (serverStateStore.connected && authStore.isLoggedIn && !authStore.postLoginPending) {
-      if (path === "/connect" || path === "/login") {
+      if (path === "/connect" || path === "/login" || path === "/") {
         goto("/home/overview", { replaceState: true });
         return;
       }
@@ -624,6 +628,7 @@
   <DialogHost />
   <SnackBarHost />
   <NewUpdatePrompt />
+  <BrowserPreviewBadge />
   {#if releaseHighlightsState.presentation}
     <ReleaseHighlightsWizard
       presentation={releaseHighlightsState.presentation}

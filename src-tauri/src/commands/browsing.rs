@@ -360,6 +360,9 @@ pub async fn check_downloads_exist(
 
 /// Compute SHA-256 hashes of local files in the download root.
 /// Returns a map of filename → hex-encoded SHA-256 digest.
+///
+/// Paths that cannot be read are omitted, which callers read as "not present
+/// locally": one call answers both existence and content.
 #[tauri::command]
 pub async fn compute_local_sha256(
     app_handle: tauri::AppHandle,
@@ -370,15 +373,9 @@ pub async fn compute_local_sha256(
     let mut results = std::collections::HashMap::new();
     for name in &filenames {
         let path = resolve_download_subdirectory(download_root.clone(), name)?;
-        let hash = match std::fs::read(&path) {
-            Ok(data) => {
-                use sha2::{Digest, Sha256};
-                let digest = Sha256::digest(&data);
-                hex::encode(digest)
-            }
-            Err(_) => continue,
-        };
-        results.insert(name.clone(), hash);
+        if let Ok(hash) = file_sha256(&path) {
+            results.insert(name.clone(), hash);
+        }
     }
     Ok(results)
 }
@@ -570,6 +567,12 @@ pub async fn download_git_commit(
     // stages their real bytes).
     stage_large_file_placeholders(&download_root)?;
 
+    // Snapshots written by the sync before it replaced a locally modified file
+    // are user data, not history: keep them out of the repo so a `git add .`
+    // never records them. The rule is re-asserted on every commit because the
+    // repository may predate it.
+    ensure_gitignore_line(&download_root, BACKUP_IGNORE_PATTERN)?;
+
     // Stage all remaining changes (small files, renames, deletions, and the
     // `.gitignore` rules for large files).
     run_git(&download_root, &["add", "."])?;
@@ -606,6 +609,11 @@ pub async fn download_git_commit(
 /// stays on disk while the repo records a same-named placeholder (description
 /// + SHA-256) in its place.
 const LARGE_FILE_THRESHOLD_BYTES: u64 = 100 * 1024 * 1024; // 100 MiB
+
+/// `.gitignore` rule keeping pre-update snapshots out of the version history.
+/// Matches `<name>+YYYYMMDD-HHMMSS.bak` at any depth, which is exactly what the
+/// frontend writes when it replaces a locally modified file.
+const BACKUP_IGNORE_PATTERN: &str = "*.bak";
 
 /// Recursively collect every regular file under `root` whose size is at or
 /// above `threshold`, returning its absolute path and byte size. Git
@@ -670,9 +678,9 @@ fn gitignore_escape(rel: &str) -> String {
     out
 }
 
-/// Ensure `.gitignore` at the repo root contains an anchored rule ignoring
-/// `rel`. Returns whether a new rule was appended.
-fn ensure_gitignored(root: &std::path::Path, rel: &str) -> Result<bool, String> {
+/// Ensure `.gitignore` at the repo root contains `line` verbatim. Returns
+/// whether the line was appended.
+fn ensure_gitignore_line(root: &std::path::Path, line: &str) -> Result<bool, String> {
     let ignore_path = root.join(".gitignore");
     let existing = if ignore_path.exists() {
         std::fs::read_to_string(&ignore_path)
@@ -680,7 +688,6 @@ fn ensure_gitignored(root: &std::path::Path, rel: &str) -> Result<bool, String> 
     } else {
         String::new()
     };
-    let line = format!("/{}", gitignore_escape(rel));
     if existing.lines().any(|l| l == line) {
         return Ok(false);
     }
@@ -688,11 +695,17 @@ fn ensure_gitignored(root: &std::path::Path, rel: &str) -> Result<bool, String> 
     if !updated.is_empty() && !updated.ends_with('\n') {
         updated.push('\n');
     }
-    updated.push_str(&line);
+    updated.push_str(line);
     updated.push('\n');
     std::fs::write(&ignore_path, updated)
         .map_err(|e| format!("Failed to write .gitignore: {e}"))?;
     Ok(true)
+}
+
+/// Ensure `.gitignore` at the repo root contains an anchored rule ignoring
+/// `rel`. Returns whether a new rule was appended.
+fn ensure_gitignored(root: &std::path::Path, rel: &str) -> Result<bool, String> {
+    ensure_gitignore_line(root, &format!("/{}", gitignore_escape(rel)))
 }
 
 /// Build the placeholder text recorded in git for a file that is intentionally
@@ -935,6 +948,25 @@ mod large_file_placeholder_tests {
         assert_eq!(contents.lines().count(), 2);
         assert!(contents.lines().any(|l| l == "/big file.bin"));
         assert!(contents.lines().any(|l| l == "/other.bin"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_gitignore_line_writes_a_bare_pattern_and_repeats_are_noops() {
+        let dir = std::env::temp_dir().join(format!(
+            "cfms-gitignore-pattern-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // A pattern must be written verbatim, not anchored like a path rule.
+        assert!(ensure_gitignore_line(&dir, BACKUP_IGNORE_PATTERN).unwrap());
+        assert!(!ensure_gitignore_line(&dir, BACKUP_IGNORE_PATTERN).unwrap());
+
+        let contents = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert_eq!(contents.lines().collect::<Vec<_>>(), vec!["*.bak"]);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

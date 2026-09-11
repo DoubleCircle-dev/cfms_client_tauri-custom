@@ -1,6 +1,7 @@
 import { loadAppearancePreference, saveAppearancePreference } from '$lib/api';
 import type { AppearancePreference } from '$lib/api';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isTauriRuntime } from '$lib/tauri-runtime';
 import {
   DEFAULT_APPEARANCE,
   normalizeAppearance,
@@ -99,8 +100,11 @@ class AppearanceStore {
     root.dataset.colorSchemePreference = this.preference.color_scheme;
     root.dataset.reduceMotion = String(reduceMotion);
     root.style.colorScheme = this.resolvedColorScheme;
+    // Browser previews have no native window; `getCurrentWindow()` throws
+    // synchronously there, so it cannot be handled with `.catch()` alone.
+    if (!isTauriRuntime()) return;
     void getCurrentWindow().setTheme(this.resolvedColorScheme).catch(() => {
-      /* Browser previews do not expose a native Tauri window. */
+      /* The native window may be gone while the webview is tearing down. */
     });
   }
 }

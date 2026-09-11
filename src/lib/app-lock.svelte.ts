@@ -10,6 +10,7 @@ import {
   setSetting,
 } from './api';
 import { isMobilePlatform } from './platform';
+import { isTauriRuntime } from './tauri-runtime';
 
 const SETTINGS_KEY = 'app_lock_settings_v1';
 const PIN_ITERATIONS = 180_000;
@@ -641,10 +642,7 @@ async function shouldUseAndroidPasskeys() {
 }
 
 function isAndroidRuntime() {
-  return browser
-    && typeof window !== 'undefined'
-    && '__TAURI_INTERNALS__' in window
-    && /Android/i.test(navigator.userAgent);
+  return isTauriRuntime() && /Android/i.test(navigator.userAgent);
 }
 
 function createAndroidPasskeyRegistrationRequest(displayName: string, existingCredentialIds: string[]) {
