@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isAccessDeniedError,
+  isDocumentAccessDenied,
   isLockdownError,
   serverErrorData,
   serverErrorMessage,
@@ -32,6 +33,27 @@ describe('server errors', () => {
   it('recognizes both directory and document access-denied formats', () => {
     expect(isAccessDeniedError('Server returned 403: permission denied')).toBe(true);
     expect(isAccessDeniedError(new Error('Access denied: permission denied'))).toBe(true);
+  });
+
+  it('separates a refused document from a refused request', () => {
+    // Only the first kind means "this document has no download permission".
+    expect(isDocumentAccessDenied('Server returned 403: permission denied')).toBe(true);
+    expect(isDocumentAccessDenied(new Error('Access denied: permission denied'))).toBe(true);
+
+    // Envelope-level 403s refuse the whole session, so they say nothing about
+    // whichever document happened to be requested.
+    expect(isDocumentAccessDenied('connection rejected (403): ip not permitted')).toBe(false);
+    expect(isDocumentAccessDenied('server rejected request (403): denied')).toBe(false);
+  });
+
+  it('never mistakes a transient failure for a denied document', () => {
+    // Rate limits and capacity are 429/503; treating one as "no permission"
+    // would remember it and quietly drop a reachable file from every later
+    // update check.
+    expect(isDocumentAccessDenied('Server returned 429: Too many requests')).toBe(false);
+    expect(isDocumentAccessDenied('Server returned 503: busy')).toBe(false);
+    expect(isDocumentAccessDenied('Failed to create stream for get_document')).toBe(false);
+    expect(isDocumentAccessDenied('Server returned 404: not found')).toBe(false);
   });
 
   it('keeps structured metadata out of user-facing error text', () => {

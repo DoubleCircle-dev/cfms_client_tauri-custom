@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerDocumentEntry } from '$lib/api';
+import { deniedDocuments } from './denied-documents.svelte';
 import { EMPTY_SHA256, makeDownloadPath, readLocalDocumentStates, syncFiles } from './sync-all.svelte';
 
 const files = vi.hoisted(() => ({
+  checkDownloadsExist: vi.fn(),
   computeLocalSha256: vi.fn(),
   createDownloadPlaceholder: vi.fn(),
   deleteDownloadFile: vi.fn(),
@@ -21,6 +23,7 @@ const settings = vi.hoisted(() => ({
 const dialogs = vi.hoisted(() => ({
   choose: vi.fn(),
   confirm: vi.fn(async () => true),
+  resolveConflicts: vi.fn(),
 }));
 
 vi.mock('$lib/api/files', () => files);
@@ -52,6 +55,7 @@ beforeEach(() => {
   settings.getSyncGitTrackingEnabled.mockResolvedValue(false);
 
   files.computeLocalSha256.mockResolvedValue({});
+  files.checkDownloadsExist.mockResolvedValue([]);
   files.getDocument.mockResolvedValue(null);
   files.moveDownloadFile.mockResolvedValue(true);
   files.createDownloadPlaceholder.mockResolvedValue(undefined);
@@ -61,6 +65,7 @@ beforeEach(() => {
   // Default to "cancelled": a test that unexpectedly hits the prompt aborts
   // loudly instead of hanging on a modal nobody answers.
   dialogs.choose.mockResolvedValue(null);
+  dialogs.resolveConflicts.mockResolvedValue(null);
   dialogs.confirm.mockResolvedValue(true);
 });
 
@@ -247,11 +252,47 @@ describe('syncFiles (cached queue)', () => {
     expect(files.createDownloadPlaceholder).toHaveBeenCalledWith('secret.txt');
   });
 
-  it('aborts the whole run when the overwrite prompt is cancelled', async () => {
+  it('records a denied document so the check stops offering it', async () => {
+    deniedDocuments.clearAll();
+    files.getDocument.mockRejectedValue('Server returned 403: access denied');
+
+    const result = await syncFiles({ queue: [{ docId: 'd1', path: 'secret.txt', sha256: 'S' }] });
+
+    expect(result.denied).toBe(1);
+    // Nothing was written, so the run must not claim it changed anything.
+    expect(result.changed).toBe(false);
+    expect(deniedDocuments.isDenied('d1')).toBe(true);
+  });
+
+  it('keeps an existing placeholder instead of recreating it', async () => {
+    deniedDocuments.clearAll();
+    files.getDocument.mockRejectedValue('Server returned 403: access denied');
+    files.checkDownloadsExist.mockResolvedValue(['secret.txt']);
+
+    await syncFiles({ queue: [{ docId: 'd1', path: 'secret.txt', sha256: 'S' }] });
+
+    expect(files.createDownloadPlaceholder).not.toHaveBeenCalled();
+  });
+
+  it('does nothing at all for an empty queue', async () => {
+    // Recovery from a refusal is the check's job, not the sync's: the sync has
+    // no way to know whether the permission changed, and guessing would turn an
+    // every-run retry into a background download nobody asked for.
+    deniedDocuments.clearAll();
+    deniedDocuments.mark({ docId: 'd1', path: 'secret.txt' });
+
+    const result = await syncFiles({ queue: [] });
+
+    expect(files.getDocument).not.toHaveBeenCalled();
+    expect(result.queued).toBe(0);
+    expect(result.denied).toBe(0);
+  });
+
+  it('aborts the whole run when the conflict dialog is dismissed', async () => {
     // A cancelled confirm must not fall back to "skip": nothing is written at
     // all, so the caller can keep its queue and retry with another strategy.
     files.computeLocalSha256.mockResolvedValue({ 'old.txt': 'OLD' });
-    dialogs.choose.mockResolvedValue(null);
+    dialogs.resolveConflicts.mockResolvedValue(null);
 
     const result = await syncFiles({
       queue: [
@@ -260,24 +301,39 @@ describe('syncFiles (cached queue)', () => {
       ],
     });
 
-    expect(dialogs.choose).toHaveBeenCalledTimes(1);
+    expect(dialogs.resolveConflicts).toHaveBeenCalledTimes(1);
+    // Only the real conflict is offered; a missing file has nothing to decide.
+    const options = dialogs.resolveConflicts.mock.calls[0][0] as {
+      items: { id: string; label: string }[];
+    };
+    expect(options.items).toEqual([{ id: 'old', label: 'old.txt' }]);
     expect(files.getDocument).not.toHaveBeenCalled();
     expect(files.moveDownloadFile).not.toHaveBeenCalled();
     expect(result.cancelled).toBe(true);
     expect(result.changed).toBe(false);
   });
 
-  it('applies the strategy the overwrite prompt returns', async () => {
-    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'OLD' });
-    dialogs.choose.mockResolvedValue({ value: 'backup_rename' });
+  it('applies one strategy per file when the dialog returns several', async () => {
+    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'OLD', 'b.txt': 'OLD' });
+    dialogs.resolveConflicts.mockResolvedValue(new Map([
+      ['d1', 'force_overwrite'],
+      ['d2', 'skip'],
+    ]));
 
     const result = await syncFiles({
-      queue: [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
+      queue: [
+        { docId: 'd1', path: 'a.txt', sha256: 'NEW' },
+        { docId: 'd2', path: 'b.txt', sha256: 'NEW' },
+      ],
     });
 
-    expect(files.moveDownloadFile).toHaveBeenCalledWith('a.txt', expect.stringMatching(/^a\.txt\+\d{8}-\d{6}\.bak$/));
+    // The file answered "overwrite" is replaced in place, with no backup.
+    expect(files.moveDownloadFile).not.toHaveBeenCalled();
+    expect(files.getDocument).toHaveBeenCalledTimes(1);
+    expect(files.getDocument).toHaveBeenCalledWith('d1', 'a.txt');
     expect(result.cancelled).toBe(false);
     expect(result.updated).toBe(1);
+    expect(result.skipped).toBe(1);
   });
 
   it('commits a git snapshot only when something actually changed', async () => {

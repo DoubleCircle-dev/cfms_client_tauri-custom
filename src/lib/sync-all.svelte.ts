@@ -13,6 +13,7 @@
 import { get } from 'svelte/store';
 import { _ as t } from 'svelte-i18n';
 import {
+  checkDownloadsExist,
   computeLocalSha256,
   createDownloadPlaceholder,
   deleteDownloadFile,
@@ -23,9 +24,10 @@ import {
   listDownloadFiles,
   moveDownloadFile,
 } from '$lib/api/files';
-import { isAccessDeniedError } from '$lib/api/server-errors';
+import { isDocumentAccessDenied } from '$lib/api/server-errors';
 import { getSyncGitTrackingEnabled, type SyncOverwriteStrategy } from '$lib/api/settings';
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api/types';
+import { deniedDocuments } from '$lib/denied-documents.svelte';
 import { dialogStore } from '$lib/dialogs.svelte';
 import { downloadStore, notificationStore } from '$lib/stores.svelte';
 
@@ -262,35 +264,82 @@ function createDownloadRunner(): DownloadRunner {
   }
 
   async function createPlaceholder(relativePath: string) {
-    if (!relativePath || relativePath === 'download') return;
-    try {
-      await createDownloadPlaceholder(relativePath);
-    } catch (err) {
-      console.warn(`%c[cfms:sync] Placeholder failed for ${relativePath}:`, 'color:#ffb74d', err);
-    }
+    await ensureDownloadPlaceholder(relativePath);
   }
 
   return { throttle, download, createPlaceholder };
 }
 
 /**
- * The overwrite prompt shown before replacing a locally modified file.
+ * Mirror an inaccessible document as the same-named placeholder the local tree
+ * shows in its place.
  *
- * Resolves to `null` when the user cancels, which callers treat as "abort the
- * whole run" rather than "pick a default" — a cancelled confirm must leave the
- * download root and the caller's queue exactly as they were.
+ * Nothing is asked of the server when the stand-in is already there — which is
+ * the usual case, since a refused document is re-tested on every check and most
+ * answers end where the previous one did. Asking first also keeps the call
+ * idempotent for callers that cannot tell a fresh placeholder from an old one.
+ *
+ * Returns whether a file had to be created.
  */
-async function chooseOverwriteStrategy(conflictingCount: number): Promise<SyncOverwriteStrategy | null> {
-  const choice = await dialogStore.choose<SyncOverwriteStrategy>({
+export async function ensureDownloadPlaceholder(path: string): Promise<boolean> {
+  if (!path || path === 'download') return false;
+  try {
+    if ((await checkDownloadsExist([path])).includes(path)) return false;
+  } catch (err) {
+    // Could not ask — let the backend create-or-keep the file itself.
+    console.warn(`%c[cfms:sync] Could not check for a placeholder at ${path}:`, 'color:#ffb74d', err);
+  }
+  try {
+    await createDownloadPlaceholder(path);
+    return true;
+  } catch (err) {
+    console.warn(`%c[cfms:sync] Placeholder failed for ${path}:`, 'color:#ffb74d', err);
+    return false;
+  }
+}
+
+/**
+ * Ask how to handle the files a manual sync would replace.
+ *
+ * Resolves to one answer per document, or `null` when the user backs out — which
+ * callers treat as "abort the whole run" rather than "pick a default", because a
+ * cancelled confirm must leave the download root and the caller's queue exactly
+ * as they were.
+ */
+async function defaultConflictResolver(
+  conflicts: readonly ConflictItem[],
+): Promise<ReadonlyMap<string, SyncOverwriteStrategy> | null> {
+  const result = await dialogStore.resolveConflicts<SyncOverwriteStrategy>({
     title: get(t)('files.syncOverwriteTitle'),
-    message: get(t)('files.syncOverwriteMessage', { values: { count: conflictingCount } }),
-    choices: [
-      { value: 'backup_rename', label: get(t)('settings.fileSync.overwriteBackup'), description: get(t)('settings.fileSync.overwriteBackupHint'), icon: 'history', intent: 'primary' },
-      { value: 'force_overwrite', label: get(t)('settings.fileSync.overwriteForce'), description: get(t)('settings.fileSync.overwriteForceHint'), icon: 'update', intent: 'danger' },
-      { value: 'skip', label: get(t)('settings.fileSync.overwriteSkip'), description: get(t)('settings.fileSync.overwriteSkipHint'), icon: 'cancel', intent: 'neutral' },
+    message: get(t)('files.syncOverwriteMessage', { values: { count: conflicts.length } }),
+    items: conflicts.map(item => ({ id: item.docId, label: item.path })),
+    defaultStrategy: 'backup_rename',
+    listLabel: get(t)('files.syncConflictListLabel', { values: { count: conflicts.length } }),
+    confirmLabel: get(t)('files.syncConflictApply'),
+    cancelLabel: get(t)('common.cancel'),
+    strategies: [
+      {
+        value: 'backup_rename',
+        label: get(t)('settings.fileSync.overwriteBackup'),
+        allLabel: get(t)('files.syncConflictAllBackup'),
+        icon: 'history',
+      },
+      {
+        value: 'force_overwrite',
+        label: get(t)('settings.fileSync.overwriteForce'),
+        allLabel: get(t)('files.syncConflictAllOverwrite'),
+        icon: 'update',
+        intent: 'danger',
+      },
+      {
+        value: 'skip',
+        label: get(t)('settings.fileSync.overwriteSkip'),
+        allLabel: get(t)('files.syncConflictAllSkip'),
+        icon: 'cancel',
+      },
     ],
   });
-  return choice?.value ?? null;
+  return result;
 }
 
 /**
@@ -452,7 +501,10 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
       // A folder that exists on the server but is inaccessible (permission
       // denied) is mirrored locally as a same-named empty placeholder file so
       // the local tree reflects the server instead of silently dropping it.
-      if (isAccessDeniedError(err) && dirPath !== 'download') {
+      // Again, only a refusal aimed at this folder counts: an envelope-level
+      // rejection would otherwise litter the tree with stand-ins for the whole
+      // library.
+      if (isDocumentAccessDenied(err) && dirPath !== 'download') {
         await runner.createPlaceholder(dirPath);
         serverPaths.add(dirPath);
         console.warn(`%c[cfms:sync] Access denied — placeholder created: ${dirPath}`, 'color:#ef9a9a');
@@ -482,6 +534,11 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
         plan.skipped++;
         continue;
       }
+      // A document already known to be refused is not planned at all: the check
+      // that builds this plan asks the server again, so an updated answer
+      // arrives as an ordinary queued update and never as a placeholder that
+      // looks like a conflict.
+      if (deniedDocuments.isDenied(state.doc.id)) continue;
       plan.downloads.push({
         docId: state.doc.id,
         path: state.path,
@@ -592,12 +649,40 @@ export interface SyncOptions {
    * prompted once instead.
    */
   overwriteStrategy?: SyncOverwriteStrategy;
+  /**
+   * Per-document decisions, taking precedence over `overwriteStrategy`.
+   *
+   * This is what the conflict dialog fills in when the user gives individual
+   * files different answers; anything absent falls back to the single strategy.
+   */
+  strategies?: ReadonlyMap<string, SyncOverwriteStrategy>;
+  /**
+   * Resolve the conflicts a manual run found, returning a strategy per document
+   * or `null` to abort.
+   *
+   * The engine stays free of UI: the caller decides how the question is asked,
+   * and the built-in prompt is only the default.
+   */
+  resolveConflicts?: (conflicts: readonly ConflictItem[]) => Promise<ReadonlyMap<string, SyncOverwriteStrategy> | null>;
   /** Called with a status message when the summary is ready. */
-  onStatus?: (message: string) => void;
+  /**
+   * Progress and outcome messages. `level` is part of the message rather than
+   * something the caller infers from the text: only the sync knows whether a
+   * run went through cleanly, and every page has to show the same words in the
+   * same colour.
+   */
+  onStatus?: (message: string, level: 'success' | 'warning') => void;
   /** Called with an error message on failure. */
   onError?: (message: string) => void;
   /** Called when downloaded-file indicators should be refreshed. */
   onRefresh?: () => Promise<void> | void;
+}
+
+/** A local file the run would replace, as the conflict dialog needs to show it. */
+export interface ConflictItem {
+  docId: string;
+  /** Download-root-relative path, which is also the display path. */
+  path: string;
 }
 
 export interface SyncAllResult {
@@ -606,9 +691,21 @@ export interface SyncAllResult {
   deleted: number;
   moved: number;
   skipped: number;
+  /** Documents the server refused to hand over; nothing was written. */
+  denied: number;
   changed: boolean;
   /** The run stopped at the overwrite prompt — nothing was written. */
   cancelled: boolean;
+}
+
+/**
+ * Mirror an inaccessible document as the same-named placeholder the local tree
+ * shows in its place, and say whether the stand-in had to be created — the
+ * caller reports that as a write, and a stand-in that was already there is not
+ * one.
+ */
+async function ensurePlaceholder(path: string): Promise<boolean> {
+  return ensureDownloadPlaceholder(path);
 }
 
 /**
@@ -621,7 +718,10 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
   const { queue, onStatus, onError, onRefresh } = options;
   const confirmDeletes = options.confirmDeletes ?? true;
 
-  // Nothing queued → nothing to do, and no backend call at all.
+  // Nothing queued → nothing to do, and no backend call at all. Documents the
+  // server refuses are not retried here: the check that builds the plan asks
+  // the server which of them are readable now, so a restored permission turns
+  // into an ordinary queued update rather than a blind download attempt.
   if (queue && queue.length === 0) return emptyResult();
   if (!syncAllCoordinator.acquire()) return emptyResult();
 
@@ -634,6 +734,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
   let deleted = 0;
   let moved = 0;
   let skipped = 0;
+  let denied = 0;
 
   try {
     const hasGit = await resolveGitTracking(options.gitTracking);
@@ -648,24 +749,33 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     const plan = queue ? await planQueuedSync(queue) : await planServerSync(runner);
     skipped += plan.skipped;
 
-    // Manual syncs (no preset strategy) ask once for the files they would
-    // replace. Cancelling aborts the run: nothing is written and the caller
-    // keeps its queue, so the same check can still be applied later.
+    // Manual syncs (no preset strategy) ask for the files they would replace.
+    // Cancelling aborts the run: nothing is written and the caller keeps its
+    // queue, so the same check can still be applied later.
     const conflicting = plan.downloads.filter(d => d.existsLocally);
-    if (strategy === null) {
+    let perDocument = options.strategies ?? null;
+    if (strategy === null && perDocument === null) {
       if (conflicting.length === 0) {
         strategy = 'backup_rename';
       } else {
-        const chosen = await chooseOverwriteStrategy(conflicting.length);
-        if (chosen === null) return { ...emptyResult(), cancelled: true };
-        strategy = chosen;
+        const resolve = options.resolveConflicts ?? defaultConflictResolver;
+        perDocument = await resolve(conflicting.map(d => ({ docId: d.docId, path: d.path })));
+        if (perDocument === null) return { ...emptyResult(), cancelled: true };
+        // A run that resolved per file still needs an answer for the files that
+        // need no decision — "keep the old copy" is exactly what they want.
+        strategy = 'backup_rename';
       }
     }
 
-    // "Skip" leaves existing local copies alone and only fills in what is missing.
-    const outstanding = strategy === 'skip'
-      ? plan.downloads.filter(d => !d.existsLocally)
-      : [...plan.downloads];
+    /** The decision that applies to one planned download. */
+    const decisionFor = (d: PlannedDownload): SyncOverwriteStrategy =>
+      perDocument?.get(d.docId) ?? strategy ?? 'backup_rename';
+
+    // "Skip" leaves existing local copies alone and only fills in what is
+    // missing.
+    const outstanding = plan.downloads.filter(
+      d => decisionFor(d) !== 'skip' || !d.existsLocally,
+    );
     skipped += plan.downloads.length - outstanding.length;
 
     // Execute moves first (non-destructive, no confirmation needed).
@@ -712,7 +822,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     // Execute downloads.
     for (const d of outstanding) {
       try {
-        if (strategy === 'backup_rename' && d.existsLocally) {
+        if (decisionFor(d) === 'backup_rename' && d.existsLocally) {
           // Keep the outdated copy under a timestamped name before replacing it.
           // `getDocument` always truncates and rewrites the target, so moving the
           // old copy aside *is* the overwrite policy — there is no flag to send.
@@ -724,14 +834,28 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
           } catch { /* rename failed — fall through and overwrite */ }
         }
         await runner.download(d.docId, d.path);
+        // The bytes are on their way, so whatever stood in for them before is
+        // gone: forget the denial or the next check would keep ignoring it.
+        deniedDocuments.clear(d.docId);
         if (d.existsLocally) updated++; else queued++;
       } catch (err) {
         // A document that exists on the server but cannot be downloaded
         // (permission denied) is mirrored locally as a same-named empty
-        // placeholder file instead of being silently skipped.
-        if (isAccessDeniedError(err)) {
-          await runner.createPlaceholder(d.path);
-          console.warn(`%c[cfms:sync] Access denied — placeholder created: ${d.path}`, 'color:#ef9a9a');
+        // placeholder file instead of being silently skipped. Recording it is
+        // what stops this same failure from being offered as an update forever.
+        //
+        // Only a refusal aimed at *this document* qualifies: a rate limit, a
+        // dropped session or a banned subnet fails every request alike, and
+        // mirroring those would fill the download root with stand-ins for files
+        // that are perfectly reachable.
+        if (isDocumentAccessDenied(err)) {
+          const created = await ensurePlaceholder(d.path);
+          deniedDocuments.mark({ docId: d.docId, path: d.path });
+          denied++;
+          console.warn(
+            `%c[cfms:sync] Access denied — placeholder ${created ? 'created' : 'kept'}: ${d.path}`,
+            'color:#ef9a9a',
+          );
         } else {
           console.warn(`%c[cfms:sync] Failed to fetch ${d.path}:`, 'color:#f44336', err);
         }
@@ -745,13 +869,18 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     if (deleted > 0) counters.push(`${deleted} deleted`);
     if (moved > 0) counters.push(`${moved} moved`);
     if (skipped > 0) counters.push(`${skipped} skipped`);
+    if (denied > 0) counters.push(`${denied} denied`);
     console.log(`%c[cfms:sync] Done in ${elapsed}s: ${counters.join(', ') || 'nothing to do'}`, 'color:#4caf50');
 
     const changed = queued + updated + deleted + moved > 0;
     if (changed) {
-      onStatus?.(get(t)('files.syncCompleted', { values: { downloaded: queued, updated, moved, deleted } }));
+      onStatus?.(get(t)('files.syncCompleted', { values: { downloaded: queued, updated, moved, deleted } }), 'success');
+    } else if (denied > 0) {
+      // Saying "everything is up to date" while a document was refused would be
+      // a lie the user cannot act on; name the reason instead.
+      onStatus?.(get(t)('files.syncAllDenied', { values: { count: denied } }), 'warning');
     } else {
-      onStatus?.(get(t)('files.syncAllUpToDate'));
+      onStatus?.(get(t)('files.syncAllUpToDate'), 'success');
     }
     // `getDocument` resolves before the bytes land on disk, so the download
     // indicators must wait for the queue to drain — otherwise every freshly
@@ -769,7 +898,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
       await commitSyncSnapshot(msgParts.join(' '));
     }
 
-    return { queued, updated, deleted, moved, skipped, changed, cancelled: false };
+    return { queued, updated, deleted, moved, skipped, denied, changed, cancelled: false };
   } catch (err) {
     const message = String(err);
     onError?.(message);
@@ -781,7 +910,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
 }
 
 function emptyResult(): SyncAllResult {
-  return { queued: 0, updated: 0, deleted: 0, moved: 0, skipped: 0, changed: false, cancelled: false };
+  return { queued: 0, updated: 0, deleted: 0, moved: 0, skipped: 0, denied: 0, changed: false, cancelled: false };
 }
 
 /** Format the current local time as `YYYY-MM-DD HH:mm:ss` (local timezone). */

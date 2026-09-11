@@ -34,7 +34,12 @@
     notificationStore,
     serverStateStore,
   } from '$lib/stores.svelte';
-  import { fileUpdateTracker, type CheckHistoryEntry, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
+  import {
+    fileUpdateTracker,
+    type CheckHistoryEntry,
+    type CheckHistoryItemKind,
+    type PendingUpdateItem,
+  } from '$lib/file-update-tracker.svelte';
   import { makeDownloadPath, syncAllCoordinator, syncFiles } from '$lib/sync-all.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
@@ -187,8 +192,62 @@
   const lastCheckResult = $derived(checkHistory[0] ?? null);
   const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
 
+  /**
+   * History rows, with runs of uneventful checks folded together.
+   *
+   * A periodic checker logs every run, so an idle afternoon buries the two
+   * entries that mattered under a column of identical "no changes" lines. Only
+   * *adjacent* entries merge: a gap in the middle means something happened
+   * between them, and folding across it would misreport when it happened.
+   */
+  type HistoryRow =
+    | { kind: 'entry'; entry: CheckHistoryEntry }
+    | { kind: 'quiet'; entries: CheckHistoryEntry[] };
+
+  const historyRows = $derived.by<HistoryRow[]>(() => {
+    const rows: HistoryRow[] = [];
+    for (const entry of checkHistory) {
+      const last = rows[rows.length - 1];
+      if (entry.changed === 0) {
+        if (last?.kind === 'quiet') last.entries.push(entry);
+        else rows.push({ kind: 'quiet', entries: [entry] });
+        continue;
+      }
+      rows.push({ kind: 'entry', entry });
+    }
+    return rows;
+  });
+
+  /** Records whose file list the user opened. */
+  let expandedHistory = $state<Set<number>>(new Set());
+
+  function toggleHistoryRow(time: number) {
+    const next = new Set(expandedHistory);
+    if (!next.delete(time)) next.add(time);
+    expandedHistory = next;
+  }
+
   function formatCheckTime(ts: number) {
     return new Date(ts).toLocaleString();
+  }
+
+  /** Short label for why a record flagged one document. */
+  function historyKindLabel(kind: CheckHistoryItemKind) {
+    switch (kind) {
+      case 'added': return $t('files.checkKindAdded');
+      case 'modified': return $t('files.checkKindModified');
+      case 'denied': return $t('files.checkKindDenied');
+      default: return $t('files.checkKindUnverifiable');
+    }
+  }
+
+  /** Time span of a folded row, oldest first. */
+  function quietRange(entries: CheckHistoryEntry[]) {
+    const newest = entries[0];
+    const oldest = entries[entries.length - 1];
+    return newest === oldest
+      ? formatCheckTime(newest.time)
+      : `${formatCheckTime(oldest.time)} — ${formatCheckTime(newest.time)}`;
   }
 
   let checkBusy = $state(false);
@@ -244,11 +303,18 @@
     if (changedMap.size > 0) {
       fileUpdateTracker.enqueuePendingUpdates([...changedMap.values()]);
     }
+    // Denied documents are reported too — leaving them out would make a check
+    // that found nothing usable look like a clean bill of health.
+    const parts: string[] = [];
     if (result.outdated > 0) {
+      parts.push(`${result.outdated} file${result.outdated === 1 ? '' : 's'} need update`);
+    }
+    if (result.denied > 0) {
+      parts.push($t('files.checkHistoryDenied', { values: { count: result.denied } }));
+    }
+    if (parts.length > 0) {
       notificationStore.info(
-        $t('files.serverChangesDetected', {
-          values: { changes: `${result.outdated} file${result.outdated === 1 ? '' : 's'} need update` },
-        }),
+        $t('files.serverChangesDetected', { values: { changes: parts.join(', ') } }),
         5000,
       );
     } else {
@@ -291,7 +357,10 @@
           sha256: item.sha256,
         })),
         overwriteStrategy: strategy,
-        onStatus: (msg) => notificationStore.info(msg, 5000),
+        // Same wording as the Files page, same colour: the sync says how it
+        // went, and the page only decides how loudly to show it.
+        onStatus: (msg, level) =>
+          level === 'warning' ? notificationStore.warning(msg, 5000) : notificationStore.success(msg, 5000),
       });
       // Cancelling the overwrite prompt writes nothing, so keep the queue and
       // let the user confirm again with another strategy.
@@ -439,13 +508,85 @@
         {/if}
       </div>
       <div class="check-history-list">
-        {#each checkHistory.slice(0, 20) as entry (entry.time)}
-          <div class="check-history-row">
-            <span class="check-history-icon">{entry.changed > 0 ? '🔔' : '✅'}</span>
-            <span class="check-history-time">{formatCheckTime(entry.time)}</span>
-            <span class="check-history-summary">{entry.summary}</span>
-            <span class="check-history-meta">{entry.dirs} 子目录, {entry.docs} 文档</span>
-          </div>
+        {#each historyRows.slice(0, 20) as row, index (`${row.kind}:${index}`)}
+          {#if row.kind === 'quiet'}
+            <div class="check-history-row" class:has-detail={row.entries[0].items.length > 0}>
+              <button
+                type="button"
+                class="check-history-main"
+                disabled={row.entries[0].items.length === 0}
+                onclick={() => toggleHistoryRow(row.entries[0].time)}
+              >
+                <span class="check-history-icon">✅</span>
+                <span class="check-history-time">{quietRange(row.entries)}</span>
+                <span class="check-history-summary">
+                  {row.entries.length > 1
+                    ? $t('files.checkHistoryMerged', { values: { count: row.entries.length } })
+                    : row.entries[0].summary}
+                </span>
+                <span class="check-history-meta">
+                  {row.entries[0].dirs} 子目录, {row.entries[0].docs} 文档
+                </span>
+              </button>
+              {#if row.entries[0].items.length > 0}
+                <div class="check-history-files" class:open={expandedHistory.has(row.entries[0].time)}>
+                  <span class="check-history-files-title">
+                    {$t('files.checkHistoryFilesTitle')}
+                  </span>
+                  {#each row.entries[0].items as item (item.id)}
+                    <span class="check-history-file">
+                      <span class="check-history-file-kind" data-kind={item.kind}>
+                        {historyKindLabel(item.kind)}
+                      </span>
+                      <span class="check-history-file-path" title={item.path}>{item.path}</span>
+                    </span>
+                  {/each}
+                  {#if row.entries[0].hidden > 0}
+                    <span class="check-history-file-more">+{row.entries[0].hidden}</span>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="check-history-row" class:has-detail={row.entry.items.length > 0}>
+              <button
+                type="button"
+                class="check-history-main"
+                disabled={row.entry.items.length === 0}
+                onclick={() => toggleHistoryRow(row.entry.time)}
+              >
+                <span class="check-history-icon">🔔</span>
+                <span class="check-history-time">{formatCheckTime(row.entry.time)}</span>
+                <span class="check-history-summary">{row.entry.summary}</span>
+                {#if row.entry.denied > 0}
+                  <span class="check-history-denied">
+                    🔒 {$t('files.checkHistoryDenied', { values: { count: row.entry.denied } })}
+                  </span>
+                {/if}
+                <span class="check-history-meta">
+                  {row.entry.dirs} 子目录, {row.entry.docs} 文档
+                </span>
+              </button>
+              {#if row.entry.items.length > 0}
+                <div class="check-history-files" class:open={expandedHistory.has(row.entry.time)}>
+                  <span class="check-history-files-title">
+                    {$t('files.checkHistoryFilesTitle')}
+                  </span>
+                  {#each row.entry.items as item (item.id)}
+                    <span class="check-history-file">
+                      <span class="check-history-file-kind" data-kind={item.kind}>
+                        {historyKindLabel(item.kind)}
+                      </span>
+                      <span class="check-history-file-path" title={item.path}>{item.path}</span>
+                    </span>
+                  {/each}
+                  {#if row.entry.hidden > 0}
+                    <span class="check-history-file-more">+{row.entry.hidden}</span>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/if}
         {/each}
       </div>
     </section>
@@ -572,12 +713,28 @@
 
   .check-history-row {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.35rem 0.4rem;
+    flex-direction: column;
     border-radius: 4px;
     font-size: 0.78rem;
     color: var(--explorer-text-muted);
+  }
+
+  .check-history-main {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .check-history-main:disabled {
+    cursor: default;
   }
 
   .check-history-row:hover {
@@ -600,8 +757,73 @@
     flex: 1;
   }
 
+  .check-history-denied {
+    flex: none;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-md3-error, #d93025) 15%, transparent);
+    color: var(--color-md3-error, #d93025);
+    font-size: 0.7rem;
+  }
+
   .check-history-meta {
     flex: none;
+    font-size: 0.7rem;
+    opacity: 0.7;
+  }
+
+  .check-history-files {
+    display: none;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin: 0 0.4rem 0.4rem 2.1rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--explorer-border);
+  }
+
+  .check-history-files.open {
+    display: flex;
+  }
+
+  .check-history-files-title {
+    font-size: 0.7rem;
+    opacity: 0.7;
+  }
+
+  .check-history-file {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .check-history-file-kind {
+    flex: none;
+    min-width: 3.4rem;
+    font-size: 0.68rem;
+    opacity: 0.85;
+  }
+
+  .check-history-file-kind[data-kind='added'] {
+    color: var(--color-md3-primary);
+  }
+
+  .check-history-file-kind[data-kind='modified'] {
+    color: var(--color-md3-warning, #f09d00);
+  }
+
+  .check-history-file-kind[data-kind='denied'] {
+    color: var(--color-md3-error, #d93025);
+  }
+
+  .check-history-file-path {
+    overflow: hidden;
+    color: var(--explorer-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .check-history-file-more {
     font-size: 0.7rem;
     opacity: 0.7;
   }

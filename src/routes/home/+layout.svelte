@@ -15,6 +15,7 @@
   import { canSetOwnAvatar } from '$lib/avatar-permissions';
   import { clearAuthSession, disconnect, getDocument, loadUserPreference, setLockdown } from '$lib/api';
   import { favoriteRecordsFromPreference, type FileRecord } from '$lib/file-preferences';
+  import { deniedDocuments } from '$lib/denied-documents.svelte';
   import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import AvatarPreview from '$lib/components/AvatarPreview.svelte';
@@ -173,14 +174,15 @@
     void extensionsStore.activateForAccount(scope);
   });
 
-  // The file check history is per account: switching server or user must load
-  // that account's log instead of appending to whatever is already on screen.
+  // The file check history and the record of undownloadable documents are per
+  // account: switching server or user must load that account's own state instead
+  // of carrying the previous session's over.
   $effect(() => {
     const serverAddress = serverStateStore.remoteAddress;
     const username = authStore.username;
-    fileUpdateTracker.useAccountScope(
-      authStore.isLoggedIn && username ? { serverAddress, username } : null,
-    );
+    const scope = authStore.isLoggedIn && username ? { serverAddress, username } : null;
+    fileUpdateTracker.useAccountScope(scope);
+    deniedDocuments.useAccountScope(scope);
   });
 
   onMount(() => {

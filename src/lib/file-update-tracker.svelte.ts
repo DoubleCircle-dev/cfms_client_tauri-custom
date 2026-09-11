@@ -7,7 +7,12 @@
 // (stale) for visual indicators.
 
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api';
-import { readLocalDocumentStates } from '$lib/sync-all.svelte';
+import { deniedDocuments } from '$lib/denied-documents.svelte';
+import {
+  ensureDownloadPlaceholder,
+  makeDownloadPath,
+  readLocalDocumentStates,
+} from '$lib/sync-all.svelte';
 
 /** How long (in ms) an item stays flagged as "recently updated" before the indicator fades. */
 const UPDATE_VISIBILITY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -17,6 +22,9 @@ const DEFAULT_POLL_INTERVAL_MS = 60 * 60 * 1000;
 
 /** Keep up to this many check history records in local persistence and UI. */
 const CHECK_HISTORY_MAX = 20;
+
+/** Keep up to this many file names inside one check record. */
+const CHECK_HISTORY_ITEM_MAX = 50;
 
 /**
  * LocalStorage key prefix for persisted check history.
@@ -60,12 +68,30 @@ interface UpdateEntry {
   timestamp: number;
 }
 
+/** Why a check flagged one document. */
+export type CheckHistoryItemKind = 'added' | 'modified' | 'unverifiable' | 'denied';
+
+/** One document a check flagged, kept so the record can name it later. */
+export interface CheckHistoryItem {
+  id: string;
+  title: string;
+  /** Download-root-relative path, which is what the user recognises. */
+  path: string;
+  kind: CheckHistoryItemKind;
+}
+
 export interface CheckHistoryEntry {
   time: number;
   changed: number;
   dirs: number;
   docs: number;
   summary: string;
+  /** The flagged documents, capped at `CHECK_HISTORY_ITEM_MAX`. */
+  items: CheckHistoryItem[];
+  /** How many more were flagged than `items` holds. */
+  hidden: number;
+  /** Documents the server refuses to hand over. */
+  denied: number;
 }
 
 /** Account a piece of per-user state belongs to. */
@@ -232,11 +258,16 @@ class FileUpdateTracker {
       diff: PollChangeResult;
       /** Server documents missing locally or superseded by a newer revision. */
       outdated: ServerDocumentEntry[];
+      /** Documents the server refuses to hand over. */
+      denied: ServerDocumentEntry[];
     }) => void,
-  ): Promise<{ outdated: number; dirs: number; docs: number }> {
+  ): Promise<{ outdated: number; denied: number; dirs: number; docs: number }> {
     let outdatedDocs = 0;
+    let deniedDocs = 0;
     let checkedDirs = 0;
     let checkedDocs = 0;
+    const findings: CheckHistoryItem[] = [];
+    let hidden = 0;
 
     const walk = async (id: string | null, depth: number, pathParts: string[]): Promise<void> => {
       if (depth > maxDepth) return;
@@ -251,9 +282,45 @@ class FileUpdateTracker {
       const diff = this.compareSnapshot(id, resp.folders, resp.documents);
 
       const outdated: ServerDocumentEntry[] = [];
+      const denied: ServerDocumentEntry[] = [];
+      const record = (doc: ServerDocumentEntry, kind: CheckHistoryItemKind) => {
+        if (findings.length < CHECK_HISTORY_ITEM_MAX) {
+          findings.push({
+            id: doc.id,
+            title: doc.title,
+            path: makeDownloadPath([...pathParts, doc.title]),
+            kind,
+          });
+        } else {
+          hidden += 1;
+        }
+      };
       try {
         for (const state of await readLocalDocumentStates(resp.documents, pathParts)) {
-          if (!state.isCurrent) outdated.push(state.doc);
+          if (state.isCurrent) continue;
+          const path = makeDownloadPath([...pathParts, state.doc.title]);
+          // Asking costs one metadata round trip and answers with the same
+          // access rule that would block the download, so a refused document is
+          // never offered as an update — not even the first time it is seen.
+          // The answer is re-taken on every check, so restored access is picked
+          // up on its own; nothing is excluded for good. This is cheaper than
+          // the download it replaces, so it needs no pacing of its own: the
+          // per-directory delay already paced the walk.
+          if (await deniedDocuments.probeDocumentAccess(state.doc.id)) {
+            deniedDocuments.clear(state.doc.id);
+            outdated.push(state.doc);
+            record(state.doc, state.mismatched ? 'modified' : state.existsLocally ? 'unverifiable' : 'added');
+            continue;
+          }
+          deniedDocuments.mark({ docId: state.doc.id, path });
+          // A refused document still has a place in the local tree: the same
+          // name, kept as a stand-in, so the folder mirrors the server and the
+          // user can see what they are missing. The write happens here because
+          // this is where the refusal is discovered — such a document is never
+          // queued for download, so no later step could create it.
+          await ensureDownloadPlaceholder(path);
+          denied.push(state.doc);
+          record(state.doc, 'denied');
         }
       } catch (err) {
         // Never guess: a directory we could not verify contributes nothing, and
@@ -264,6 +331,7 @@ class FileUpdateTracker {
         );
       }
       outdatedDocs += outdated.length;
+      deniedDocs += denied.length;
 
       onDirectoryDiff?.({
         directoryId: id,
@@ -271,6 +339,7 @@ class FileUpdateTracker {
         documents: resp.documents,
         diff,
         outdated,
+        denied,
       });
 
       checkedDirs += resp.folders.length;
@@ -281,8 +350,15 @@ class FileUpdateTracker {
     };
 
     await walk(dirId, 0, []);
-    this.addCheckHistory(outdatedDocs, checkedDirs, checkedDocs);
-    return { outdated: outdatedDocs, dirs: checkedDirs, docs: checkedDocs };
+    this.addCheckHistory({
+      outdated: outdatedDocs,
+      denied: deniedDocs,
+      dirs: checkedDirs,
+      docs: checkedDocs,
+      items: findings,
+      hidden,
+    });
+    return { outdated: outdatedDocs, denied: deniedDocs, dirs: checkedDirs, docs: checkedDocs };
   }
 
   /** Queue changed/new documents for user-confirmed update. */
@@ -618,19 +694,35 @@ class FileUpdateTracker {
     this.checkHistory = [];
     if (key) this.loadPersistedCheckHistory(key);
   }
-
-  /** Record a completed update check in the history log.
+  /**
+   * Record a completed update check in the history log.
    *
    * `outdated` counts documents that are missing locally or behind the server
    * revision — i.e. what a sync would fetch. It is not "what changed since the
-   * last poll", which would report nothing on the first check of a session. */
-  addCheckHistory(outdated: number, dirs: number, docs: number) {
+   * last poll", which would report nothing on the first check of a session.
+   *
+   * `items` names those documents, so a record can answer "which files?" long
+   * after the check that found them. It is capped: the log keeps twenty records,
+   * and a first sync of a large tree can flag thousands of files.
+   */
+  addCheckHistory(result: {
+    outdated: number;
+    denied: number;
+    dirs: number;
+    docs: number;
+    items: CheckHistoryItem[];
+    hidden: number;
+  }) {
+    const { outdated, denied, dirs, docs, items, hidden } = result;
     const entry: CheckHistoryEntry = {
       time: Date.now(),
       changed: outdated,
       dirs,
       docs,
       summary: outdated > 0 ? `${outdated} file(s) need update` : 'no changes',
+      items: items.slice(0, CHECK_HISTORY_ITEM_MAX),
+      hidden,
+      denied,
     };
     this.checkHistory = [...this.checkHistory, entry].slice(-CHECK_HISTORY_MAX);
     this.persistCheckHistory();
@@ -652,6 +744,15 @@ class FileUpdateTracker {
           dirs: Number(it.dirs ?? 0),
           docs: Number(it.docs ?? 0),
           summary: String(it.summary ?? ''),
+          items: Array.isArray(it.items)
+            ? it.items
+                .filter((item: unknown): item is CheckHistoryItem =>
+                  !!item && typeof (item as CheckHistoryItem).id === 'string'
+                  && typeof (item as CheckHistoryItem).path === 'string')
+                .slice(0, CHECK_HISTORY_ITEM_MAX)
+            : [],
+          hidden: Number(it.hidden ?? 0),
+          denied: Number(it.denied ?? 0),
         }))
         .slice(-CHECK_HISTORY_MAX);
       this.checkHistory = restored;
