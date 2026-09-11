@@ -232,6 +232,8 @@
   let fileTableResetKey = $state(0);
   let error = $state<string | null>(null);
   let status = $state<string | null>(null);
+  /** How the pending status message should be shown — see the effect below. */
+  let statusLevel = $state<'success' | 'warning'>('success');
   let searchQuery = $state('');
   let searchInput = $state<HTMLInputElement | null>(null);
   let searchDialogInput = $state<HTMLInputElement | null>(null);
@@ -542,7 +544,9 @@
   const canGoToParent = $derived(directoryAccessDenied !== null || parentTargetId !== undefined);
   $effect(() => {
     if (!status) return;
-    notificationStore.success(status);
+    const level = statusLevel;
+    if (level === 'warning') notificationStore.warning(status);
+    else notificationStore.success(status);
     status = null;
   });
 
@@ -1268,7 +1272,7 @@
         // The "overwrite" switch means "replace conflicting files without asking".
         overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
         confirmDeletes: true,
-        onStatus: (msg) => { status = msg; },
+        onStatus: (msg, level) => { statusLevel = level; status = msg; },
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
@@ -1289,10 +1293,19 @@
     try {
       const result = await detectAndQueueServerChanges();
       fileUpdateTracker.resetPollingCountdown();
+      // Denied documents are reported alongside the updates: a check that found
+      // nothing to fetch but was refused some files is not "no changes".
+      const parts: string[] = [];
       if (result.outdated > 0) {
+        parts.push(`${result.outdated} file${result.outdated === 1 ? '' : 's'} need update`);
+      }
+      if (result.denied > 0) {
+        parts.push($t('files.checkHistoryDenied', { values: { count: result.denied } }));
+      }
+      if (parts.length > 0) {
         notificationStore.info(
           $t('files.serverChangesDetected', {
-            values: { changes: `${result.outdated} file${result.outdated === 1 ? '' : 's'} need update (${result.dirs} sub-dirs, ${result.docs} docs)` },
+            values: { changes: `${parts.join(', ')} (${result.dirs} sub-dirs, ${result.docs} docs)` },
           }),
           5000,
         );
@@ -1353,7 +1366,7 @@
         // The "overwrite" switch means "replace conflicting files without
         // asking"; otherwise the shared prompt decides.
         overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
-        onStatus: (msg) => { status = msg; },
+        onStatus: (msg, level) => { statusLevel = level; status = msg; },
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
