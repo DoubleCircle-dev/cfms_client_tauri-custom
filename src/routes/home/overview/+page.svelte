@@ -310,7 +310,7 @@
     // that found nothing usable look like a clean bill of health.
     const parts: string[] = [];
     if (result.outdated > 0) {
-      parts.push(`${result.outdated} file${result.outdated === 1 ? '' : 's'} need update`);
+      parts.push($t('files.checkHistoryUpdates', { values: { count: result.outdated } }));
     }
     if (result.denied > 0) {
       parts.push($t('files.checkHistoryDenied', { values: { count: result.denied } }));
@@ -506,7 +506,9 @@
         {/if}
         {#if lastCheckResult}
           <span class="check-history-badge" class:has-changes={lastCheckResult.changed > 0}>
-            {lastCheckResult.changed > 0 ? `🔔 ${lastCheckResult.changed} 处变化` : '✅ 无变化'}
+            {lastCheckResult.changed > 0
+              ? `🔔 ${$t('files.checkHistoryBadgeChanges', { values: { count: lastCheckResult.changed } })}`
+              : `✅ ${$t('files.checkHistoryBadgeNone')}`}
           </span>
         {/if}
       </div>
@@ -525,10 +527,10 @@
                 <span class="check-history-summary">
                   {row.entries.length > 1
                     ? $t('files.checkHistoryMerged', { values: { count: row.entries.length } })
-                    : row.entries[0].summary}
+                    : $t('files.checkHistoryNoChanges')}
                 </span>
                 <span class="check-history-meta">
-                  {row.entries[0].dirs} 子目录, {row.entries[0].docs} 文档
+                  {$t('files.checkHistoryScope', { values: { dirs: row.entries[0].dirs, docs: row.entries[0].docs } })}
                 </span>
               </button>
               {#if row.entries[0].items.length > 0}
@@ -560,14 +562,16 @@
               >
                 <span class="check-history-icon">🔔</span>
                 <span class="check-history-time">{formatCheckTime(row.entry.time)}</span>
-                <span class="check-history-summary">{row.entry.summary}</span>
+                <span class="check-history-summary">
+                  {$t('files.checkHistoryUpdates', { values: { count: row.entry.changed } })}
+                </span>
                 {#if row.entry.denied > 0}
                   <span class="check-history-denied">
                     🔒 {$t('files.checkHistoryDenied', { values: { count: row.entry.denied } })}
                   </span>
                 {/if}
                 <span class="check-history-meta">
-                  {row.entry.dirs} 子目录, {row.entry.docs} 文档
+                  {$t('files.checkHistoryScope', { values: { dirs: row.entry.dirs, docs: row.entry.docs } })}
                 </span>
               </button>
               {#if row.entry.items.length > 0}

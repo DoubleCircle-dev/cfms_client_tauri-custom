@@ -654,9 +654,30 @@
         snapshot.folders,
         snapshot.documents,
       );
-      if (changeResult.summary) {
+      // The tracker reports counts, not prose: a summary built there would be
+      // frozen in whatever language happened to be active when it ran.
+      const changes: string[] = [];
+      if (changeResult.newDocuments.length > 0) {
+        changes.push($t('files.serverChangesNewFiles', { values: { count: changeResult.newDocuments.length } }));
+      }
+      if (changeResult.modifiedDocuments.length > 0) {
+        changes.push($t('files.serverChangesModifiedFiles', { values: { count: changeResult.modifiedDocuments.length } }));
+      }
+      if (changeResult.deletedDocuments.length > 0) {
+        changes.push($t('files.serverChangesDeletedFiles', { values: { count: changeResult.deletedDocuments.length } }));
+      }
+      if (changeResult.newFolders.length > 0) {
+        changes.push($t('files.serverChangesNewFolders', { values: { count: changeResult.newFolders.length } }));
+      }
+      if (changeResult.modifiedFolders.length > 0) {
+        changes.push($t('files.serverChangesModifiedFolders', { values: { count: changeResult.modifiedFolders.length } }));
+      }
+      if (changeResult.deletedFolders.length > 0) {
+        changes.push($t('files.serverChangesDeletedFolders', { values: { count: changeResult.deletedFolders.length } }));
+      }
+      if (changes.length > 0) {
         notificationStore.info(
-          $t('files.serverChangesDetected', { values: { changes: changeResult.summary } }),
+          $t('files.serverChangesDetected', { values: { changes: changes.join(', ') } }),
           5000,
         );
       }
@@ -1297,15 +1318,18 @@
       // nothing to fetch but was refused some files is not "no changes".
       const parts: string[] = [];
       if (result.outdated > 0) {
-        parts.push(`${result.outdated} file${result.outdated === 1 ? '' : 's'} need update`);
+        parts.push($t('files.checkHistoryUpdates', { values: { count: result.outdated } }));
       }
       if (result.denied > 0) {
         parts.push($t('files.checkHistoryDenied', { values: { count: result.denied } }));
       }
+      const scope = $t('files.checkHistoryScope', {
+        values: { dirs: result.dirs, docs: result.docs },
+      });
       if (parts.length > 0) {
         notificationStore.info(
           $t('files.serverChangesDetected', {
-            values: { changes: `${parts.join(', ')} (${result.dirs} sub-dirs, ${result.docs} docs)` },
+            values: { changes: `${parts.join(', ')} (${scope})` },
           }),
           5000,
         );

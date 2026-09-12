@@ -58,8 +58,6 @@ export interface PollChangeResult {
   newFolders: string[];
   modifiedFolders: string[];
   deletedFolders: string[];
-  /** Human-readable summary of changes. */
-  summary: string | null;
 }
 
 interface UpdateEntry {
@@ -85,7 +83,6 @@ export interface CheckHistoryEntry {
   changed: number;
   dirs: number;
   docs: number;
-  summary: string;
   /** The flagged documents, capped at `CHECK_HISTORY_ITEM_MAX`. */
   items: CheckHistoryItem[];
   /** How many more were flagged than `items` holds. */
@@ -449,9 +446,20 @@ class FileUpdateTracker {
         }
 
         const result = tracker.compareSnapshot(dirId, resp.folders, resp.documents);
-        if (result.summary) {
+        const touched = result.newDocuments.length + result.modifiedDocuments.length
+          + result.deletedDocuments.length + result.newFolders.length
+          + result.modifiedFolders.length + result.deletedFolders.length;
+        if (touched > 0) {
           totalChanges++;
-          console.log(`%c🔔 [%s] %s`, 'color:#ffb74d', dirLabel, result.summary);
+          // A dev-console line, so it stays English: the UI composes its own
+          // wording from these counts, in whatever language is active.
+          console.log(
+            `%c🔔 [%s] %d new, %d modified, %d deleted`,
+            'color:#ffb74d', dirLabel,
+            result.newDocuments.length + result.newFolders.length,
+            result.modifiedDocuments.length + result.modifiedFolders.length,
+            result.deletedDocuments.length + result.deletedFolders.length,
+          );
         }
 
         // What the update check actually acts on: files missing locally or
@@ -557,7 +565,6 @@ class FileUpdateTracker {
         newFolders: [],
         modifiedFolders: [],
         deletedFolders: [],
-        summary: null,
       };
     }
 
@@ -584,23 +591,9 @@ class FileUpdateTracker {
       if (directoryId) this.markFolderHasUpdates(directoryId);
     }
 
-    // Build human-readable summary
-    const parts: string[] = [];
-    if (diff.newDocuments.length) parts.push(`${diff.newDocuments.length} new file(s)`);
-    if (diff.modifiedDocuments.length) parts.push(`${diff.modifiedDocuments.length} modified file(s)`);
-    if (diff.deletedDocuments.length) parts.push(`${diff.deletedDocuments.length} deleted file(s)`);
-    if (diff.newFolders.length) parts.push(`${diff.newFolders.length} new folder(s)`);
-    if (diff.modifiedFolders.length) parts.push(`${diff.modifiedFolders.length} modified folder(s)`);
-    if (diff.deletedFolders.length) parts.push(`${diff.deletedFolders.length} deleted folder(s)`);
-
-    const result: PollChangeResult = {
-      ...diff,
-      summary: parts.length > 0 ? parts.join(', ') : null,
-    };
-
     this.updateStaleTracking(currentFolders, currentDocuments, directoryId);
 
-    return result;
+    return diff;
   }
 
   /** Forget cached snapshots (e.g. on logout). */
@@ -722,12 +715,13 @@ class FileUpdateTracker {
     hidden: number;
   }) {
     const { outdated, denied, dirs, docs, items, hidden } = result;
+    // Counts only: the log is persisted, and a wording frozen at check time
+    // would stay in the language the check happened to run in.
     const entry: CheckHistoryEntry = {
       time: Date.now(),
       changed: outdated,
       dirs,
       docs,
-      summary: outdated > 0 ? `${outdated} file(s) need update` : 'no changes',
       items: items.slice(0, CHECK_HISTORY_ITEM_MAX),
       hidden,
       denied,
@@ -751,7 +745,6 @@ class FileUpdateTracker {
           changed: Number(it.changed ?? 0),
           dirs: Number(it.dirs ?? 0),
           docs: Number(it.docs ?? 0),
-          summary: String(it.summary ?? ''),
           items: Array.isArray(it.items)
             ? it.items
                 .filter((item: unknown): item is CheckHistoryItem =>
@@ -875,7 +868,7 @@ class FileUpdateTracker {
   private diffSnapshots(
     prev: DirectorySnapshot,
     curr: DirectorySnapshot,
-  ): Omit<PollChangeResult, 'summary'> {
+  ): PollChangeResult {
     const newDocuments: string[] = [];
     const modifiedDocuments: string[] = [];
     const deletedDocuments: string[] = [];
