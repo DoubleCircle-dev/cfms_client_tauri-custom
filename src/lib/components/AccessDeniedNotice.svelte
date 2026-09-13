@@ -1,11 +1,36 @@
 <script lang="ts">
+  import { _ as t } from 'svelte-i18n';
   import Icon from '$lib/components/Icon.svelte';
+  import type { Capability, PermissionExplanation } from '$lib/permission-explainer';
+
+  /**
+   * Literal keys, so the unused-message checker keeps seeing them.
+   */
+  const CAPABILITY_LABELS: Record<Capability, string> = {
+    view: 'files.permissionCapabilityView',
+    download: 'files.permissionCapabilityDownload',
+    modify: 'files.permissionCapabilityModify',
+    delete: 'files.permissionCapabilityDelete',
+  };
+
+  const STATE_LABELS = {
+    granted: 'files.permissionStateGranted',
+    denied: 'files.permissionStateDenied',
+    unverified: 'files.permissionStateUnverified',
+  } as const;
+
+  const STATE_ICONS = {
+    granted: 'check',
+    denied: 'close',
+    unverified: 'help',
+  } as const;
 
   let {
     title,
     description,
     subject = '',
     details = [],
+    explanation = null,
     actionLabel = '',
     presentation = 'page',
     onAction,
@@ -14,10 +39,14 @@
     description: string;
     subject?: string;
     details?: Array<{ label: string; value: string }>;
+    /** Optional permission breakdown behind the refusal. */
+    explanation?: PermissionExplanation | null;
     actionLabel?: string;
     presentation?: 'page' | 'dialog';
     onAction?: () => void;
   } = $props();
+
+  let whyExpanded = $state(false);
 </script>
 
 <section
@@ -54,6 +83,111 @@
         </div>
       {/each}
     </dl>
+  {/if}
+
+  {#if explanation}
+    <section class="permission-panel" aria-label={$t('files.permissionPanelTitle')}>
+      <h3 class="permission-panel-title">{$t('files.permissionStateTitle')}</h3>
+
+      <ul class="permission-capabilities">
+        {#each explanation.rows as row (row.capability)}
+          <li class="permission-capability permission-capability--{row.state}">
+            <span class="permission-capability-icon" aria-hidden="true">
+              <Icon name={STATE_ICONS[row.state]} size="15px" />
+            </span>
+            <span class="permission-capability-label">
+              {$t(CAPABILITY_LABELS[row.capability])}
+              {#if row.accessType}
+                <code class="permission-capability-type">{row.accessType}</code>
+              {/if}
+            </span>
+            <span class="permission-capability-state">
+              {$t(STATE_LABELS[row.state])}
+            </span>
+          </li>
+        {/each}
+      </ul>
+
+      <div class="permission-source">
+        <span class="permission-source-label">{$t('files.permissionSourceTitle')}</span>
+        <span class="permission-source-value">
+          {#if explanation.groups.length > 0}
+            {$t('files.permissionSourceGroups')}: {explanation.groups.join(' · ')}
+          {:else}
+            {$t('files.permissionSourceOwn')}
+          {/if}
+        </span>
+      </div>
+
+      <p class="permission-source-note">
+        {#if explanation.denialKind === 'object-rule'}
+          {$t('files.permissionDeniedByObjectRule')}
+        {:else if explanation.denialKind === 'account-permission'}
+          {$t('files.permissionDeniedByAccount')}
+        {:else}
+          {$t('files.permissionSourceServerControlled')}
+        {/if}
+      </p>
+
+      <button
+        type="button"
+        class="permission-why"
+        aria-expanded={whyExpanded}
+        onclick={() => (whyExpanded = !whyExpanded)}
+      >
+        <Icon name="help" size="16px" />
+        <span>{$t('files.permissionWhy')}</span>
+        <Icon name={whyExpanded ? 'expandLess' : 'expandMore'} size="16px" />
+      </button>
+
+      {#if whyExpanded}
+        <div class="permission-why-body">
+          {#if explanation.serverMissing.length > 0}
+            <p class="permission-why-row">
+              <span class="permission-why-key">{$t('files.permissionYouLack')}</span>
+              <code>{explanation.serverMissing.join(', ')}</code>
+            </p>
+          {/if}
+
+          {#each explanation.rows as row (row.capability)}
+            {#if row.capability === explanation.refused}
+              {#if row.accessType}
+                <p class="permission-why-row">
+                  <span class="permission-why-key">{$t('files.permissionRequires')}</span>
+                  <code>{row.accessType}</code>
+                </p>
+              {/if}
+              {#if row.granted.length > 0}
+                <p class="permission-why-row">
+                  <span class="permission-why-key">{$t('files.permissionYouHave')}</span>
+                  <code>{row.granted.join(', ')}</code>
+                </p>
+              {/if}
+              {#if row.missing.length > 0 && explanation.serverMissing.length === 0}
+                <p class="permission-why-row">
+                  <span class="permission-why-key">{$t('files.permissionYouLack')}</span>
+                  <code>{row.missing.join(', ')}</code>
+                </p>
+              {/if}
+              {#if row.permissions.length === 0 && explanation.serverMissing.length === 0 && !row.accessType}
+                <p class="permission-why-note">{$t('files.permissionNoClientEvidence')}</p>
+              {/if}
+            {/if}
+          {/each}
+
+          {#if explanation.blockedByObjectRule}
+            <p class="permission-why-note">{$t('files.permissionBlockedByObjectRule')}</p>
+          {/if}
+
+          {#if explanation.serverMessage}
+            <p class="permission-why-row">
+              <span class="permission-why-key">{$t('files.permissionServerSaid')}</span>
+              <span class="permission-why-server">{explanation.serverMessage}</span>
+            </p>
+          {/if}
+        </div>
+      {/if}
+    </section>
   {/if}
 
   {#if actionLabel && onAction}
@@ -227,6 +361,138 @@
   .access-denied-notice--dialog .access-denied-action:active {
     background: color-mix(in srgb, var(--color-md3-primary) 82%, black);
   }
+
+  /* ---------------------------------------------------------------------
+   * Permission panel — the evidence behind the refusal
+   * --------------------------------------------------------------------- */
+
+  .permission-panel {
+    display: grid;
+    width: min(100%, 30rem);
+    gap: 0.6rem;
+    border-top: 1px solid var(--color-md3-outline);
+    padding: 1rem 0.1rem 0;
+    text-align: left;
+  }
+
+  .permission-panel-title {
+    margin: 0;
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .permission-capabilities {
+    display: grid;
+    gap: 0.15rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .permission-capability {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.6rem;
+    border-radius: var(--explorer-radius-small, 5px);
+    padding: 0.3rem 0.4rem;
+    font-size: 0.82rem;
+  }
+
+  .permission-capability-icon {
+    display: grid;
+    place-items: center;
+    color: var(--color-md3-on-surface-variant);
+  }
+
+  .permission-capability--granted .permission-capability-icon {
+    color: var(--color-md3-success, var(--color-md3-primary));
+  }
+
+  .permission-capability--denied .permission-capability-icon {
+    color: var(--color-md3-error, var(--color-md3-primary));
+  }
+
+  .permission-capability-label { color: var(--color-md3-on-surface); }
+
+  .permission-capability-type {
+    margin-left: 0.4rem;
+    color: var(--color-md3-on-surface-variant);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.7rem;
+  }
+
+  .permission-capability-state {
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.72rem;
+  }
+
+  .permission-source {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0.85rem;
+    font-size: 0.78rem;
+  }
+
+  .permission-source-label { color: var(--color-md3-on-surface-variant); }
+  .permission-source-value { color: var(--color-md3-on-surface); overflow-wrap: anywhere; }
+
+  .permission-source-note {
+    margin: 0;
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .permission-why {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    align-self: start;
+    border: 1px solid var(--color-md3-outline);
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    color: var(--color-md3-primary-emphasis, var(--color-md3-primary));
+    background: transparent;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .permission-why:hover { background: color-mix(in srgb, var(--color-md3-primary) 10%, transparent); }
+
+  .permission-why-body {
+    display: grid;
+    gap: 0.4rem;
+    border-radius: var(--explorer-radius-medium, 8px);
+    padding: 0.7rem 0.75rem;
+    background: color-mix(in srgb, var(--color-md3-on-surface) 6%, transparent);
+    font-size: 0.76rem;
+    line-height: 1.55;
+  }
+
+  .permission-why-row {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: 0.6rem;
+    margin: 0;
+  }
+
+  .permission-why-key { color: var(--color-md3-on-surface-variant); }
+
+  .permission-why-row code {
+    color: var(--color-md3-on-surface);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.74rem;
+    overflow-wrap: anywhere;
+  }
+
+  .permission-why-server { color: var(--color-md3-on-surface); overflow-wrap: anywhere; }
+
+  .permission-why-note { margin: 0; color: var(--color-md3-on-surface-variant); }
 
   @keyframes access-denied-enter {
     from { opacity: 0; transform: translateY(10px) scale(0.985); }

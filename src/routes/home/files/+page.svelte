@@ -136,7 +136,14 @@
     DirectoryRequestTimeoutError,
   } from '$lib/files/directory-load-controller';
   import { canSearchFiles } from '$lib/files/search-permissions';
-  import { isAccessDeniedError, serverAvailability, serverErrorStatus } from '$lib/api/server-errors';
+  import {
+    isAccessDeniedError,
+    serverAvailability,
+    serverErrorData,
+    serverErrorMessage,
+    serverErrorStatus,
+  } from '$lib/api/server-errors';
+  import { explainPermissionDenial, type Capability } from '$lib/permission-explainer';
   import {
     fileManagerShortcutFor,
     isFindShortcut,
@@ -275,7 +282,19 @@
   let detailsOpen = $state(false);
   let detailModel = $state<FileDetailModel | null>(null);
   let detailRequestId = 0;
-  let documentAccessDenied = $state<{ name: string; id: string; accessedAt: number } | null>(null);
+  /**
+   * A refused document operation, plus whatever the refusal carried: the
+   * capability so the dialog can name what was refused, and the server's own
+   * wording so the explanation never has to invent one.
+   */
+  let documentAccessDenied = $state<{
+    name: string;
+    id: string;
+    accessedAt: number;
+    capability: Capability | null;
+    serverMessage: string | null;
+    serverPayload: Record<string, unknown> | null;
+  } | null>(null);
   let addressBar = $state<{
     beginEdit: () => Promise<void>;
     finishEdit: () => void;
@@ -499,6 +518,21 @@
   });
   const searchPreviewHasQuery = $derived(searchQuery.trim().length > 0);
   const hasSearchPermission = $derived(canSearchFiles(authStore.permissions));
+  /**
+   * Listing a directory was refused, so `view` is the capability the server
+   * rejected. Naming it — and saying whether the account holds anything that
+   * covers it — is the difference between "access denied" and knowing what to
+   * ask an administrator for.
+   */
+  const directoryDeniedExplanation = $derived(
+    directoryAccessDenied
+      ? explainPermissionDenial({
+          capability: 'view',
+          permissions: authStore.permissions,
+          groups: authStore.groups,
+        })
+      : null,
+  );
   const canUseServerSearch = $derived(hasSearchPermission && !searchDeniedByServer);
   const searchPreviewCanSearch = $derived(
     canUseServerSearch
@@ -1576,7 +1610,16 @@
       await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
     } catch (e) {
       if (isAccessDeniedError(e)) {
-        documentAccessDenied = { name: doc.title, id: doc.id, accessedAt: Date.now() };
+        // The server refused to hand this document over: "download" is the
+        // capability to explain.
+        documentAccessDenied = {
+          name: doc.title,
+          id: doc.id,
+          accessedAt: Date.now(),
+          capability: 'download',
+          serverMessage: serverErrorMessage(e),
+          serverPayload: serverErrorData(e),
+        };
       } else {
         error = String(e);
       }
@@ -1601,7 +1644,17 @@
       }
     } catch (openError) {
       if (isAccessDeniedError(openError)) {
-        documentAccessDenied = { name: doc.title, id: doc.id, accessedAt: Date.now() };
+        // Opening the local copy is refused by this client's own file ACL, not
+        // by a server permission, so there is nothing about permissions to
+        // explain here — the plain notice is the honest answer.
+        documentAccessDenied = {
+          name: doc.title,
+          id: doc.id,
+          accessedAt: Date.now(),
+          capability: null,
+          serverMessage: null,
+          serverPayload: null,
+        };
       } else {
         error = formatError(openError);
       }
@@ -4459,6 +4512,7 @@
       <AccessDeniedNotice
         title={$t('files.directoryAccessDeniedTitle')}
         description={$t('files.directoryAccessDeniedDescription')}
+        explanation={directoryDeniedExplanation}
         actionLabel={$t('files.returnToPreviousDirectory')}
         onAction={handleReturnFromDeniedDirectory}
       />
@@ -4862,6 +4916,9 @@
     documentName={documentAccessDenied.name}
     documentId={documentAccessDenied.id}
     accessedAt={documentAccessDenied.accessedAt}
+    capability={documentAccessDenied.capability}
+    serverMessage={documentAccessDenied.serverMessage}
+    serverPayload={documentAccessDenied.serverPayload}
     onClose={() => (documentAccessDenied = null)}
   />
 {/if}

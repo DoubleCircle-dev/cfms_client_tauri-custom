@@ -237,7 +237,22 @@ async fn download_document_to(
     .await?;
 
     if resp.code == 403 {
-        return Err(format!("Access denied: {}", resp.message));
+        // Keep the status, the server's wording and any structured payload:
+        // when the server names the permission it refused on, the denial panel
+        // can explain the refusal instead of only repeating it. The
+        // "Access denied" prefix is only added when the server did not say it
+        // itself, so the panel does not end up reading "Access denied: Access
+        // denied"; the status above is what the frontend classifies on.
+        let message = if resp.message.to_lowercase().contains("denied") {
+            resp.message.clone()
+        } else {
+            format!("Access denied: {}", resp.message)
+        };
+        return Err(format_server_error_parts(
+            403,
+            &message,
+            &resp.data,
+        ));
     }
     if resp.code == 404 {
         return Err("Document not found on server".to_string());
