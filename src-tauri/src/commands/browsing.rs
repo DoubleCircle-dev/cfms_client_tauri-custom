@@ -185,17 +185,10 @@ pub async fn get_document(
     let task_id = server_task.task_id;
     let supports_resume = server_task.supports_resume;
 
-    // Build a local download path.  Use the Tauri download directory when
-    // available; otherwise fall back to the app data directory.
-    let download_root = app_handle
-        .path()
-        .resolve("downloads", tauri::path::BaseDirectory::Download)
-        .unwrap_or_else(|_| {
-            app_handle
-                .path()
-                .resolve("downloads", tauri::path::BaseDirectory::AppData)
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        });
+    // Build a local download path from the same download root the local file
+    // checks and the "open downloaded file" command use, so a configured
+    // external storage location stays consistent across all of them.
+    let download_root = resolve_download_root(&app_handle, &state).await?;
 
     // Ensure the download directory exists.
     let _ = std::fs::create_dir_all(&download_root);

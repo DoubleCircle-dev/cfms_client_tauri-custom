@@ -572,6 +572,7 @@ export const en = {
     properties: 'Properties',
     documentDetails: 'Document Details',
     directoryDetails: 'Directory Details',
+    openedLocally: 'Opened {name} with the default application.',
     documentId: 'Document ID',
     documentTitle: 'Document title',
     directoryId: 'Directory ID',

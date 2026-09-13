@@ -22,6 +22,7 @@
     getDownloadTasks,
     checkDownloadsExist,
     computeLocalSha256,
+    openDownloadedDocument,
     getRevision,
     inspectUploadDirectoryConflicts,
     createDirectory,
@@ -1464,7 +1465,13 @@
       icon: 'info',
       compact: true,
       active: detailsOpen,
-      run: () => { detailsOpen = !detailsOpen; },
+      run: () => {
+        if (detailsOpen) {
+          detailsOpen = false;
+          return;
+        }
+        detailsOpen = true;
+      },
     },
     {
       id: 'trash',
@@ -1489,10 +1496,15 @@
 
   // --- Download ---
 
+  /** Path of a document relative to the local download root. */
+  function documentDownloadPath(doc: ServerDocumentEntry) {
+    const pathParts = breadcrumbSegments.map(s => s.label);
+    return pathParts.length > 0 ? makeDownloadPath([...pathParts, doc.title]) : doc.title;
+  }
+
   async function handleDownload(doc: ServerDocumentEntry) {
     try {
-      const pathParts = breadcrumbSegments.map(s => s.label);
-      const downloadPath = pathParts.length > 0 ? makeDownloadPath([...pathParts, doc.title]) : doc.title;
+      const downloadPath = documentDownloadPath(doc);
 
       // Get server SHA-256 — from doc if available, otherwise fetch via listDirectory
       let serverHash = doc.sha256 ?? null;
@@ -1534,6 +1546,34 @@
     }
   }
 
+  /**
+   * Open a document with the system default application when it is already
+   * downloaded locally; queue a download when it is not.
+   *
+   * This mirrors the file-sync model: the client keeps a local mirror of the
+   * folder, so a file that already exists there is opened straight from disk
+   * instead of being rendered inside the WebView.
+   */
+  async function handleOpenOrDownload(doc: ServerDocumentEntry) {
+    try {
+      const opened = await openDownloadedDocument(documentDownloadPath(doc));
+      if (opened) {
+        status = $t('files.openedLocally', { values: { name: doc.title } });
+        await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
+        return;
+      }
+    } catch (openError) {
+      if (isAccessDeniedError(openError)) {
+        documentAccessDenied = { name: doc.title, id: doc.id, accessedAt: Date.now() };
+      } else {
+        error = formatError(openError);
+      }
+      return;
+    }
+
+    await handleDownload(doc);
+  }
+
   function handleDocumentClick(event: MouseEvent, doc: ServerDocumentEntry) {
     if (coarsePointer && !selectMode) {
       void handleDownload(doc);
@@ -1551,7 +1591,7 @@
   }
 
   function handleDocumentActivate(doc: ServerDocumentEntry) {
-    if (!coarsePointer && !selectMode) void handleDownload(doc);
+    if (!coarsePointer && !selectMode) void handleOpenOrDownload(doc);
   }
 
   function handleFolderActivate(folder: ServerDirectoryEntry) {
