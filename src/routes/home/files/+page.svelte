@@ -1626,48 +1626,10 @@
     }
   }
 
-  /**
-   * Open a document with the system default application when it is already
-   * downloaded locally; queue a download when it is not.
-   *
-   * This mirrors the file-sync model: the client keeps a local mirror of the
-   * folder, so a file that already exists there is opened straight from disk
-   * instead of being rendered inside the WebView.
-   */
-  async function handleOpenOrDownload(doc: ServerDocumentEntry) {
-    try {
-      const opened = await openDownloadedDocument(documentDownloadPath(doc));
-      if (opened) {
-        status = $t('files.openedLocally', { values: { name: doc.title } });
-        await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
-        return;
-      }
-    } catch (openError) {
-      if (isAccessDeniedError(openError)) {
-        // Opening the local copy is refused by this client's own file ACL, not
-        // by a server permission, so there is nothing about permissions to
-        // explain here — the plain notice is the honest answer.
-        documentAccessDenied = {
-          name: doc.title,
-          id: doc.id,
-          accessedAt: Date.now(),
-          capability: null,
-          serverMessage: null,
-          serverPayload: null,
-        };
-      } else {
-        error = formatError(openError);
-      }
-      return;
-    }
-
-    await handleDownload(doc);
-  }
-
-  /** Toolbar entry point for `handleOpenOrDownload` (also the touch-device path). */
+  /** Toolbar entry point for the verified open (also the touch-device path). */
   function handleOpenSelected() {
     if (totalSelected !== 1 || !selectedDocument) return;
-    void handleOpenOrDownload(selectedDocument);
+    void handleOpenVerified(selectedDocument);
   }
 
   /** Statuses after which a download task will not advance on its own. */
@@ -1716,27 +1678,53 @@
   }
 
   /**
-   * Open a document from a double click, once the local copy is known to be the
-   * server's revision.
+   * Open a document, once the local copy is known to be the server's revision.
    *
    * Opening whatever happens to sit at the download path would present a stale
    * or locally edited file as the server's revision without saying so, so a
    * digest mismatch — or a file that is simply absent — is downloaded first and
-   * opened when the transfer lands. The toolbar's open action deliberately
-   * skips this check (see `handleOpenSelected`): someone reaching for "open"
-   * wants the copy they already have, not a transfer.
+   * opened when the transfer lands.
+   *
+   * Reached by double click and by the toolbar's open action, which is also the
+   * path touch devices use — they have no double click, they select and press
+   * that button. The app's file-sync model is what makes the check affordable:
+   * the download root is a local mirror, so the common case is a digest that
+   * already matches and an open that costs one backend call.
    */
   async function handleOpenVerified(doc: ServerDocumentEntry) {
     const pathParts = breadcrumbSegments.map((segment) => segment.label);
     const path = makeDownloadPath([...pathParts, doc.title]);
 
-    const openLocalCopy = async () => {
-      // Same path the download writes to, so a freshly fetched file is what
-      // gets opened.
-      if (!(await openDownloadedDocument(documentDownloadPath(doc)))) return false;
+    /**
+     * Open the local copy and report what happened.
+     *
+     * A refused open is this client's own file ACL, not a server permission, so
+     * it is reported without the permission breakdown — that panel would point
+     * the user at an administrator for something no grant can fix.
+     */
+    const openLocalCopy = async (): Promise<'opened' | 'missing' | 'failed'> => {
+      try {
+        // Same path the download writes to, so a freshly fetched file is what
+        // gets opened.
+        if (!(await openDownloadedDocument(documentDownloadPath(doc)))) return 'missing';
+      } catch (openError) {
+        if (isAccessDeniedError(openError)) {
+          documentAccessDenied = {
+            name: doc.title,
+            id: doc.id,
+            accessedAt: Date.now(),
+            capability: null,
+            serverMessage: null,
+            serverPayload: null,
+          };
+        } else {
+          error = formatError(openError);
+        }
+        return 'failed';
+      }
       status = $t('files.openedLocally', { values: { name: doc.title } });
       await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
-      return true;
+      return 'opened';
     };
 
     try {
@@ -1750,7 +1738,11 @@
         ? await readLocalDocumentState(current, pathParts).catch(() => null)
         : null;
 
-      if (state?.isCurrent && (await openLocalCopy())) return;
+      if (state?.isCurrent) {
+        // A failure here is already reported; only a missing file is worth
+        // falling through to a fetch.
+        if (await openLocalCopy() !== 'missing') return;
+      }
 
       status = $t('files.downloadingBeforeOpen', { values: { name: doc.title } });
       const queued = await getDocument(doc.id, path);
@@ -1771,8 +1763,10 @@
         : null;
 
       if (verified?.isCurrent) {
-        if (await openLocalCopy()) return;
-        status = $t('files.missingAfterDownload', { values: { name: doc.title } });
+        const result = await openLocalCopy();
+        if (result === 'missing') {
+          status = $t('files.missingAfterDownload', { values: { name: doc.title } });
+        }
         return;
       }
 
