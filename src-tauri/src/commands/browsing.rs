@@ -297,9 +297,10 @@ fn format_download_task_request_error(error: cfms_core::Error) -> String {
 #[tauri::command]
 pub async fn ensure_download_subdirectory(
     app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
     relative_path: String,
 ) -> Result<String, String> {
-    let download_root = download_root(&app_handle)?;
+    let download_root = resolve_download_root(&app_handle, &state).await?;
     let directory_path = resolve_download_subdirectory(download_root, &relative_path)?;
     std::fs::create_dir_all(&directory_path)
         .map_err(|e| format!("Failed to create download directory: {e}"))?;
