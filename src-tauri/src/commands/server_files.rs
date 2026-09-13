@@ -192,7 +192,40 @@ pub async fn read_server_document(
     state: tauri::State<'_, AppHandleState>,
     document_id: String,
 ) -> Result<ServerTextFile, String> {
-    let (conn, username, token) = get_connection_auth(&state).await?;
+    let temp_dir = tempfile::tempdir()
+        .map_err(|e| format!("Failed to create temporary directory: {e}"))?;
+    let dest = temp_dir.path().join("chat.txt");
+    download_document_to(&state, &document_id, &dest).await?;
+
+    let size = std::fs::metadata(&dest)
+        .map_err(|e| format!("Failed to stat downloaded file: {e}"))?
+        .len();
+    let file = std::fs::File::open(&dest)
+        .map_err(|e| format!("Failed to open downloaded file: {e}"))?;
+    let mut buf = Vec::new();
+    file.take(MAX_READ_BYTES + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("Failed to read downloaded file: {e}"))?;
+
+    let truncated = buf.len() as u64 > MAX_READ_BYTES;
+    buf.truncate(MAX_READ_BYTES as usize);
+    let content = String::from_utf8_lossy(&buf).into_owned();
+
+    Ok(ServerTextFile {
+        content,
+        size,
+        truncated,
+    })
+}
+
+/// Download a server document into `dest` through the encrypted transfer
+/// protocol. Shared by the text reader and the file preview commands.
+async fn download_document_to(
+    state: &AppHandleState,
+    document_id: &str,
+    dest: &Path,
+) -> Result<(), String> {
+    let (conn, username, token) = get_connection_auth(state).await?;
 
     let resp = send_action_request(
         &conn,
@@ -219,11 +252,6 @@ pub async fn read_server_document(
         .to_string();
 
     let transfer_conn = create_transfer_connection(&state.inner).await?;
-
-    let temp_dir = tempfile::tempdir()
-        .map_err(|e| format!("Failed to create temporary directory: {e}"))?;
-    let dest = temp_dir.path().join("chat.txt");
-
     let progress = |_phase: cfms_core::DownloadPhase,
                     _progress: f64,
                     _message: &str,
@@ -237,31 +265,38 @@ pub async fn read_server_document(
     let result = cfms_transfer::download::receive(
         &transfer_conn,
         &task_id,
-        &dest,
+        dest,
         max_chunk_size,
         &progress,
     )
     .await;
     transfer_conn.close().await;
     result.map_err(|e| format!("Document download failed: {e}"))?;
+    Ok(())
+}
 
-    let size = std::fs::metadata(&dest)
-        .map_err(|e| format!("Failed to stat downloaded file: {e}"))?
-        .len();
-    let file = std::fs::File::open(&dest)
-        .map_err(|e| format!("Failed to open downloaded file: {e}"))?;
-    let mut buf = Vec::new();
-    file.take(MAX_READ_BYTES + 1)
-        .read_to_end(&mut buf)
-        .map_err(|e| format!("Failed to read downloaded file: {e}"))?;
+/// Open a file inside the local download root with the system default
+/// application.
+///
+/// Returns `false` when the file has not been downloaded yet, so the caller
+/// can queue a download instead. The download root resolves exactly like
+/// `check_downloads_exist`, so a file reported as present locally is the file
+/// that gets opened.
+#[tauri::command]
+pub async fn open_downloaded_document(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    relative_path: String,
+) -> Result<bool, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let file_path = resolve_download_subdirectory(download_root, &relative_path)?;
+    if !file_path.is_file() {
+        return Ok(false);
+    }
 
-    let truncated = buf.len() as u64 > MAX_READ_BYTES;
-    buf.truncate(MAX_READ_BYTES as usize);
-    let content = String::from_utf8_lossy(&buf).into_owned();
-
-    Ok(ServerTextFile {
-        content,
-        size,
-        truncated,
-    })
+    app_handle
+        .opener()
+        .open_path(file_path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|e| format!("Failed to open file: {e}"))?;
+    Ok(true)
 }

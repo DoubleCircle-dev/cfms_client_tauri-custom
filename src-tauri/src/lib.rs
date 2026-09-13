@@ -701,6 +701,7 @@ pub fn run() {
             commands::read_server_document,
             commands::scan_local_chatbox,
             commands::open_local_path,
+            commands::open_downloaded_document,
             commands::create_directory,
             commands::delete_directory,
             commands::delete_document,

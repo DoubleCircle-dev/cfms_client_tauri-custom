@@ -20,6 +20,7 @@
     classifyUploadPath,
     getDocument,
     getDownloadTasks,
+    openDownloadedDocument,
     getRevision,
     inspectUploadDirectoryConflicts,
     createDirectory,
@@ -1506,7 +1507,21 @@
       icon: 'info',
       compact: true,
       active: detailsOpen,
-      run: () => { detailsOpen = !detailsOpen; },
+      run: () => {
+        if (detailsOpen) {
+          detailsOpen = false;
+          return;
+        }
+        detailsOpen = true;
+      },
+    },
+    {
+      id: 'open',
+      label: $t('files.openLocal'),
+      icon: 'openInNew',
+      compact: true,
+      disabled: batchBusy || totalSelected !== 1 || !selectedDocument,
+      run: handleOpenSelected,
     },
     {
       id: 'trash',
@@ -1530,6 +1545,11 @@
   });
 
   // --- Download ---
+
+  /** Path of a document relative to the local download root. */
+  function documentDownloadPath(doc: ServerDocumentEntry) {
+    return makeDownloadPath([...breadcrumbSegments.map(s => s.label), doc.title]);
+  }
 
   async function handleDownload(doc: ServerDocumentEntry) {
     try {
@@ -1563,11 +1583,43 @@
     }
   }
 
-  function handleDocumentClick(event: MouseEvent, doc: ServerDocumentEntry) {
-    if (coarsePointer && !selectMode) {
-      void handleDownload(doc);
+  /**
+   * Open a document with the system default application when it is already
+   * downloaded locally; queue a download when it is not.
+   *
+   * This mirrors the file-sync model: the client keeps a local mirror of the
+   * folder, so a file that already exists there is opened straight from disk
+   * instead of being rendered inside the WebView.
+   */
+  async function handleOpenOrDownload(doc: ServerDocumentEntry) {
+    try {
+      const opened = await openDownloadedDocument(documentDownloadPath(doc));
+      if (opened) {
+        status = $t('files.openedLocally', { values: { name: doc.title } });
+        await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
+        return;
+      }
+    } catch (openError) {
+      if (isAccessDeniedError(openError)) {
+        documentAccessDenied = { name: doc.title, id: doc.id, accessedAt: Date.now() };
+      } else {
+        error = formatError(openError);
+      }
       return;
     }
+
+    await handleDownload(doc);
+  }
+
+  /** Toolbar entry point for `handleOpenOrDownload` (also the touch-device path). */
+  function handleOpenSelected() {
+    if (totalSelected !== 1 || !selectedDocument) return;
+    void handleOpenOrDownload(selectedDocument);
+  }
+
+  function handleDocumentClick(event: MouseEvent, doc: ServerDocumentEntry) {
+    // Selecting on tap (instead of downloading immediately) keeps the toolbar
+    // "open" action usable on touch devices, where there is no double click.
     selectRow(event, 'document', doc.id);
   }
 
@@ -1580,7 +1632,7 @@
   }
 
   function handleDocumentActivate(doc: ServerDocumentEntry) {
-    if (!coarsePointer && !selectMode) void handleDownload(doc);
+    if (!coarsePointer && !selectMode) void handleOpenOrDownload(doc);
   }
 
   function handleFolderActivate(folder: ServerDirectoryEntry) {

@@ -179,59 +179,15 @@ pub async fn get_document(
     batch_created_at: Option<i64>,
     batch_estimated_total: Option<u32>,
 ) -> Result<serde_json::Value, String> {
-    let conn = {
-        let c = state.inner.conn.read().await;
-        c.clone()
-    }
-    .ok_or_else(|| "Not connected to a server".to_string())?;
+    let server_task = download_queue::request_server_download_task(&state.inner, &document_id)
+        .await
+        .map_err(format_download_task_request_error)?;
+    let task_id = server_task.task_id;
+    let supports_resume = server_task.supports_resume;
 
-    let username = {
-        let u = state.inner.username.read().await;
-        u.clone()
-    }
-    .ok_or_else(|| "Not logged in".to_string())?;
-
-    let token = {
-        let t = state.inner.token.read().await;
-        t.clone()
-    }
-    .ok_or_else(|| "Not logged in".to_string())?;
-
-    let resp = send_action_request(
-        &conn,
-        "get_document",
-        serde_json::json!({"document_id": document_id}),
-        &username,
-        &token,
-    )
-    .await?;
-
-    // Handle 403 (Access Denied)
-    if resp.code == 403 {
-        return Err(format_server_response_error(&resp));
-    }
-
-    // Handle 404 (Not Found)
-    if resp.code == 404 {
-        return Err(format_server_response_error(&resp));
-    }
-
-    if resp.code != 200 {
-        return Err(format_server_response_error(&resp));
-    }
-
-    // Extract task data from the server response.
-    let task_data = &resp.data["task_data"];
-    let task_id = task_data["task_id"]
-        .as_str()
-        .ok_or_else(|| "Server response missing task_id".to_string())?
-        .to_string();
-    let _start_time = task_data["start_time"].as_f64().unwrap_or(0.0);
-    let _end_time = task_data["end_time"].as_f64().unwrap_or(0.0);
-    let supports_resume = task_data["supports_resume"].as_bool().unwrap_or(false);
-
-    // Build a local download path, respecting the user's external storage
-    // preference when configured.
+    // Build a local download path from the same download root the local file
+    // checks and the "open downloaded file" command use, so a configured
+    // external storage location stays consistent across all of them.
     let download_root = resolve_download_root(&app_handle, &state).await?;
 
     // Ensure the download directory exists.
@@ -296,10 +252,45 @@ pub async fn get_document(
 fn download_display_filename(path_or_name: &str) -> String {
     path_or_name
         .split(['/', '\\'])
-        .filter(|part| !part.is_empty())
-        .next_back()
+        .rfind(|part| !part.is_empty())
         .unwrap_or(path_or_name)
         .to_string()
+}
+
+/// Render a failed `get_document` request, keeping the structured server error
+/// fields (rate limit scope, retry delay, claim status) that the frontend uses
+/// to explain why a download could not be queued.
+fn format_download_task_request_error(error: cfms_core::Error) -> String {
+    match error {
+        cfms_core::Error::Server {
+            code,
+            message,
+            scope,
+            limit,
+            retry_after_seconds,
+            task_status,
+            retryable,
+        } => {
+            let mut data = serde_json::Map::new();
+            if let Some(scope) = scope {
+                data.insert("scope".into(), scope.into());
+            }
+            if let Some(limit) = limit {
+                data.insert("limit".into(), limit.into());
+            }
+            if let Some(seconds) = retry_after_seconds {
+                data.insert("retry_after_seconds".into(), seconds.into());
+            }
+            if let Some(task_status) = task_status {
+                data.insert("task_status".into(), task_status.into());
+            }
+            if let Some(retryable) = retryable {
+                data.insert("retryable".into(), retryable.into());
+            }
+            format_server_error_parts(code, &message, &serde_json::Value::Object(data))
+        }
+        error => error.to_string(),
+    }
 }
 
 /// Create a subdirectory under the local download root.
@@ -338,6 +329,7 @@ fn resolve_download_subdirectory(
 }
 
 // ---------------------------------------------------------------------------
+
 // Local download file management
 // ---------------------------------------------------------------------------
 
@@ -427,11 +419,6 @@ pub async fn move_download_file(
 /// Parent directories are created first, so nested relative paths never fail
 /// with "path not found" (os error 3) — a placeholder at `a/b.txt` still works
 /// when `a/` does not exist yet.
-///
-/// The sync flow uses this to mirror server items that exist but are
-/// inaccessible (permission denied): a same-named empty file occupies the
-/// item's relative path so the local tree reflects the server instead of
-/// silently dropping the folder/file.
 #[tauri::command]
 pub async fn create_download_placeholder(
     app_handle: tauri::AppHandle,

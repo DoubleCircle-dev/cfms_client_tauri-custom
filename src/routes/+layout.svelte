@@ -90,7 +90,7 @@
   // Lockdown override route.
   const LOCKDOWN_ROUTE = "/lockdown";
   // Home routes that are intentionally reachable from /connect before login.
-  const PUBLIC_HOME_ROUTES = ["/home/about", "/home/settings"];
+  const PUBLIC_HOME_ROUTES = ["/home/about", "/home/settings", "/home/tools"];
   // Auth-protected route prefix.
   const HOME_PREFIX = "/home";
 
