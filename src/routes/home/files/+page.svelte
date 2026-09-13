@@ -1670,6 +1670,134 @@
     void handleOpenOrDownload(selectedDocument);
   }
 
+  /** Statuses after which a download task will not advance on its own. */
+  const FINISHED_DOWNLOAD_STATUSES: ReadonlySet<string> = new Set([
+    'completed',
+    'failed',
+    'cancelled',
+  ]);
+
+  /** How long a double click waits for its transfer before giving up. */
+  const OPEN_AFTER_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
+  /**
+   * How long to wait for the backend to announce the task it just queued.
+   *
+   * Progress arrives as events, so a task that is never announced cannot be
+   * waited on — without this the double click would sit on "downloading…" for
+   * the whole timeout before saying anything.
+   */
+  const DOWNLOAD_TASK_ANNOUNCE_GRACE_MS = 30 * 1000;
+
+  /** Resolve after `ms`; the download store is fed by backend events. */
+  function waitForNextPoll(ms: number) {
+    return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  /**
+   * Wait for one queued download to reach a terminal status.
+   *
+   * Polling the download store needs no extra subscription and costs nothing:
+   * the store is updated by backend events already. `null` means the wait ran
+   * out, or the backend did not hand back a task id — either way the caller
+   * falls back to checking the digest rather than the status.
+   */
+  async function waitForDownloadOutcome(taskId: string | undefined): Promise<string | null> {
+    if (!taskId) return null;
+    const startedAt = Date.now();
+    const deadline = Date.now() + OPEN_AFTER_DOWNLOAD_TIMEOUT_MS;
+    for (;;) {
+      const task = downloadStore.tasks.get(taskId);
+      if (task && FINISHED_DOWNLOAD_STATUSES.has(task.status)) return task.status;
+      if (!task && Date.now() - startedAt > DOWNLOAD_TASK_ANNOUNCE_GRACE_MS) return null;
+      if (Date.now() >= deadline) return null;
+      await waitForNextPoll(250);
+    }
+  }
+
+  /**
+   * Open a document from a double click, once the local copy is known to be the
+   * server's revision.
+   *
+   * Opening whatever happens to sit at the download path would present a stale
+   * or locally edited file as the server's revision without saying so, so a
+   * digest mismatch — or a file that is simply absent — is downloaded first and
+   * opened when the transfer lands. The toolbar's open action deliberately
+   * skips this check (see `handleOpenSelected`): someone reaching for "open"
+   * wants the copy they already have, not a transfer.
+   */
+  async function handleOpenVerified(doc: ServerDocumentEntry) {
+    const pathParts = breadcrumbSegments.map((segment) => segment.label);
+    const path = makeDownloadPath([...pathParts, doc.title]);
+
+    const openLocalCopy = async () => {
+      // Same path the download writes to, so a freshly fetched file is what
+      // gets opened.
+      if (!(await openDownloadedDocument(documentDownloadPath(doc)))) return false;
+      status = $t('files.openedLocally', { values: { name: doc.title } });
+      await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
+      return true;
+    };
+
+    try {
+      // The row's entry may predate the newest revision, so re-read it from the
+      // parent directory before comparing digests: without a digest nothing can
+      // be proven current, and unproven means fetch.
+      const current = doc.sha256 != null
+        ? doc
+        : await loadServerDocument(doc.id, currentFolderId).catch(() => null);
+      const state = current
+        ? await readLocalDocumentState(current, pathParts).catch(() => null)
+        : null;
+
+      if (state?.isCurrent && (await openLocalCopy())) return;
+
+      status = $t('files.downloadingBeforeOpen', { values: { name: doc.title } });
+      const queued = await getDocument(doc.id, path);
+      const outcome = await waitForDownloadOutcome(queued.task_id);
+      const task = queued.task_id ? downloadStore.tasks.get(queued.task_id) : undefined;
+
+      if (outcome === 'failed' || outcome === 'cancelled') {
+        error = task?.error?.trim()
+          || $t('files.downloadFailedBeforeOpen', { values: { name: doc.title } });
+        return;
+      }
+
+      // The transfer reported success, or never reported a task at all. Confirm
+      // the digest instead of trusting the status alone — that check is the
+      // whole point of taking this path.
+      const verified = current
+        ? await readLocalDocumentState(current, pathParts).catch(() => null)
+        : null;
+
+      if (verified?.isCurrent) {
+        if (await openLocalCopy()) return;
+        status = $t('files.missingAfterDownload', { values: { name: doc.title } });
+        return;
+      }
+
+      // Either the transfer is still running, or it finished without leaving a
+      // copy that can be proven current. Both mean "do not open this silently".
+      status = $t(
+        outcome === 'completed' ? 'files.cannotOpenAfterDownload' : 'files.downloadStillRunning',
+        { values: { name: doc.title } },
+      );
+    } catch (e) {
+      if (isAccessDeniedError(e)) {
+        documentAccessDenied = {
+          name: doc.title,
+          id: doc.id,
+          accessedAt: Date.now(),
+          capability: 'download',
+          serverMessage: serverErrorMessage(e),
+          serverPayload: serverErrorData(e),
+        };
+      } else {
+        error = formatError(e);
+      }
+    }
+  }
+
   function handleDocumentClick(event: MouseEvent, doc: ServerDocumentEntry) {
     // Selecting on tap (instead of downloading immediately) keeps the toolbar
     // "open" action usable on touch devices, where there is no double click.
@@ -1685,7 +1813,7 @@
   }
 
   function handleDocumentActivate(doc: ServerDocumentEntry) {
-    if (!coarsePointer && !selectMode) void handleOpenOrDownload(doc);
+    if (!coarsePointer && !selectMode) void handleOpenVerified(doc);
   }
 
   function handleFolderActivate(folder: ServerDirectoryEntry) {
