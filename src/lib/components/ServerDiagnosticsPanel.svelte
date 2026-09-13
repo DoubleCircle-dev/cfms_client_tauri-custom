@@ -34,6 +34,10 @@
   function booleanLabel(value: boolean): string {
     return value ? $t('common.enabled') : $t('common.disabled');
   }
+
+  function availabilityLabel(value: boolean): string {
+    return value ? $t('diagnostics.available') : $t('diagnostics.degraded');
+  }
 </script>
 
 <section class="diagnostics-section" aria-label={$t('diagnostics.title')} aria-busy={loading}>
@@ -96,6 +100,11 @@
           <div><dt>{$t('diagnostics.caching')}</dt><dd>{diagnostics.providers.caching}</dd></div>
           <div><dt>{$t('diagnostics.eventBus')}</dt><dd>{diagnostics.providers.event_bus}</dd></div>
           <div><dt>{$t('diagnostics.rateLimit')}</dt><dd>{diagnostics.providers.rate_limit}</dd></div>
+          <div><dt>{$t('diagnostics.scheduling')}</dt><dd>{diagnostics.providers.scheduling}</dd></div>
+          <div><dt>{$t('diagnostics.schedulingHealth')}</dt><dd class="human-readable">{availabilityLabel(diagnostics.scheduling.available)}</dd></div>
+          {#if diagnostics.scheduling.detail}
+            <div class="wide-row"><dt>{$t('diagnostics.schedulingDetail')}</dt><dd class="human-readable">{diagnostics.scheduling.detail}</dd></div>
+          {/if}
         </dl>
       </section>
 

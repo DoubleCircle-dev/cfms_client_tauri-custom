@@ -39,7 +39,7 @@
 </script>
 
 <span
-  class="material-symbols-outlined select-none inline-flex items-center justify-center leading-none {className}"
+  class="material-symbols-outlined select-none inline-flex items-center justify-center overflow-hidden leading-none {className}"
   style="font-size: {iconSize}; width: {iconSize}; height: {iconSize}; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
   aria-hidden="true"
   data-icon={name}

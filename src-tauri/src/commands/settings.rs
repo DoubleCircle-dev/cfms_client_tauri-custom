@@ -121,6 +121,42 @@ pub async fn set_connection_settings(
     Ok(())
 }
 
+/// Load the protocol compatibility override applied to new connections.
+#[tauri::command]
+pub async fn get_protocol_version_settings(
+    state: tauri::State<'_, AppHandleState>,
+) -> Result<ProtocolVersionSettingsDto, String> {
+    Ok(ProtocolVersionSettingsDto::load(&state.settings))
+}
+
+/// Store (or clear) the protocol compatibility override.
+///
+/// Passing `None`, or the build's own protocol version, clears the override so
+/// the compiled-in compatibility range applies again.
+#[tauri::command]
+pub async fn set_protocol_version_override(
+    state: tauri::State<'_, AppHandleState>,
+    version: Option<u32>,
+) -> Result<ProtocolVersionSettingsDto, String> {
+    let selected = version.filter(|version| *version != cfms_core::constants::PROTOCOL_VERSION);
+
+    if let Some(version) = selected
+        && !cfms_core::constants::SELECTABLE_PROTOCOL_VERSIONS.contains(&version)
+    {
+        return Err(format!(
+            "Unsupported protocol version override: {version}"
+        ));
+    }
+
+    let stored = selected.map(|version| version.to_string()).unwrap_or_default();
+    state
+        .settings
+        .set(PROTOCOL_VERSION_OVERRIDE_KEY, &stored)
+        .map_err(|e| format!("Failed to write protocol version override: {e}"))?;
+
+    Ok(ProtocolVersionSettingsDto::load(&state.settings))
+}
+
 #[tauri::command]
 pub async fn get_ca_certificate_status(
     app_handle: tauri::AppHandle,

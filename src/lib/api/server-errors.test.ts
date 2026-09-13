@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isAccessDeniedError,
+  isDocumentAccessDenied,
   isLockdownError,
   serverErrorData,
   serverErrorMessage,
@@ -14,6 +15,8 @@ describe('server errors', () => {
     expect(serverErrorStatus('Server returned 403: permission denied')).toBe(403);
     expect(serverErrorStatus(new Error('(404) missing'))).toBe(404);
     expect(serverErrorStatus('Login failed: (4003) User account is not active')).toBe(4003);
+    expect(serverErrorStatus('server rejected request (429): slow down')).toBe(429);
+    expect(serverErrorStatus('connection rejected (503): at capacity')).toBe(503);
   });
 
   it('extracts structured server error data without exposing it as display copy', () => {
@@ -30,6 +33,27 @@ describe('server errors', () => {
   it('recognizes both directory and document access-denied formats', () => {
     expect(isAccessDeniedError('Server returned 403: permission denied')).toBe(true);
     expect(isAccessDeniedError(new Error('Access denied: permission denied'))).toBe(true);
+  });
+
+  it('separates a refused document from a refused request', () => {
+    // Only the first kind means "this document has no download permission".
+    expect(isDocumentAccessDenied('Server returned 403: permission denied')).toBe(true);
+    expect(isDocumentAccessDenied(new Error('Access denied: permission denied'))).toBe(true);
+
+    // Envelope-level 403s refuse the whole session, so they say nothing about
+    // whichever document happened to be requested.
+    expect(isDocumentAccessDenied('connection rejected (403): ip not permitted')).toBe(false);
+    expect(isDocumentAccessDenied('server rejected request (403): denied')).toBe(false);
+  });
+
+  it('never mistakes a transient failure for a denied document', () => {
+    // Rate limits and capacity are 429/503; treating one as "no permission"
+    // would remember it and quietly drop a reachable file from every later
+    // update check.
+    expect(isDocumentAccessDenied('Server returned 429: Too many requests')).toBe(false);
+    expect(isDocumentAccessDenied('Server returned 503: busy')).toBe(false);
+    expect(isDocumentAccessDenied('Failed to create stream for get_document')).toBe(false);
+    expect(isDocumentAccessDenied('Server returned 404: not found')).toBe(false);
   });
 
   it('keeps structured metadata out of user-facing error text', () => {
@@ -61,6 +85,10 @@ describe('server errors', () => {
     expect(serverAvailability(
       'Server returned 429: slow down\nCFMS_ERROR_DATA:{"retry_after_seconds":8}',
     )).toEqual({ kind: 'rate_limited', retryAfterSeconds: 8 });
+    expect(serverAvailability('server rejected request (429): slow down')).toEqual({
+      kind: 'rate_limited',
+      retryAfterSeconds: null,
+    });
     expect(serverAvailability('Server returned 503: busy')).toEqual({
       kind: 'server_busy',
       retryAfterSeconds: null,

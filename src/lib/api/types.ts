@@ -163,6 +163,59 @@ export interface CursorPage<T> extends CursorPageMeta {
   items: T[];
 }
 
+export type ScheduleTriggerType = 'cron' | 'date' | 'interval';
+
+export interface ScheduleTrigger {
+  type: ScheduleTriggerType;
+  data: Record<string, JsonValue>;
+  timezone: string;
+}
+
+export interface ScheduledTaskType {
+  name: string;
+  contract_version: number;
+  required_permission: string;
+  payload_schema: Record<string, JsonValue>;
+  max_attempts: number;
+}
+
+export type ScheduleStatus = 'active' | 'completed' | 'failed' | 'deleted';
+
+export interface Schedule {
+  id: string;
+  task_name: string;
+  task_contract_version: number;
+  task_available: boolean;
+  payload: Record<string, JsonValue>;
+  trigger: ScheduleTrigger;
+  enabled: boolean;
+  status: ScheduleStatus;
+  revision: number;
+  next_run_at: number | null;
+  active_execution_id: string | null;
+  pending_scheduled_for: number | null;
+  created_by: string | null;
+  created_at: number;
+  updated_by: string | null;
+  updated_at: number;
+}
+
+export interface ScheduleCreateInput {
+  taskName: string;
+  payload: Record<string, JsonValue>;
+  trigger: ScheduleTrigger;
+  enabled: boolean;
+}
+
+export interface ScheduleUpdateInput {
+  id: string;
+  revision: number;
+  taskName?: string;
+  payload?: Record<string, JsonValue>;
+  trigger?: ScheduleTrigger;
+  enabled?: boolean;
+}
+
 /** Response data for the list_directory server action. */
 export interface ListDirectoryResponse {
   folders: ServerDirectoryEntry[];
@@ -558,6 +611,12 @@ export interface ServerDiagnostics {
     caching: string;
     event_bus: string;
     rate_limit: string;
+    scheduling: string;
+  };
+  scheduling: {
+    available: boolean;
+    mode: string;
+    detail: string | null;
   };
   extensions: Array<{
     identifier: string;
@@ -580,6 +639,18 @@ export interface ConnectionSettings {
   client_key_path: string;
   remember_connection_addresses: boolean;
   recent_connection_addresses: string[];
+}
+
+/** Protocol compatibility override applied to new connections. */
+export interface ProtocolVersionSettings {
+  /** Wire-protocol version this build targets. */
+  clientVersion: number;
+  /** Oldest server wire-protocol version currently accepted. */
+  minAcceptedVersion: number;
+  /** Explicit override, `null` when the build default applies. */
+  overrideVersion: number | null;
+  /** Overrides the picker offers, newest first. */
+  selectableVersions: number[];
 }
 
 export interface CaCertificateStatus {

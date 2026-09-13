@@ -7,6 +7,12 @@
 // (stale) for visual indicators.
 
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api';
+import { deniedDocuments } from '$lib/denied-documents.svelte';
+import {
+  ensureDownloadPlaceholder,
+  makeDownloadPath,
+  readLocalDocumentStates,
+} from '$lib/sync-all.svelte';
 
 /** How long (in ms) an item stays flagged as "recently updated" before the indicator fades. */
 const UPDATE_VISIBILITY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -17,8 +23,17 @@ const DEFAULT_POLL_INTERVAL_MS = 60 * 60 * 1000;
 /** Keep up to this many check history records in local persistence and UI. */
 const CHECK_HISTORY_MAX = 20;
 
-/** LocalStorage key for persisted check history. */
-const CHECK_HISTORY_STORAGE_KEY = 'cfms:file-check-history:v1';
+/** Keep up to this many file names inside one check record. */
+const CHECK_HISTORY_ITEM_MAX = 50;
+
+/**
+ * LocalStorage key prefix for persisted check history.
+ *
+ * History is stored **per account** as `<prefix>:<server>:<username>`: switching
+ * server or user must not mix their logs, and a single unscoped key would report
+ * one account's directory counts inside another account's session.
+ */
+const CHECK_HISTORY_KEY_PREFIX = 'cfms:file-check-history:v1';
 
 /** Files with `last_modified` older than this are considered "not updated" (stale). */
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -43,8 +58,6 @@ export interface PollChangeResult {
   newFolders: string[];
   modifiedFolders: string[];
   deletedFolders: string[];
-  /** Human-readable summary of changes. */
-  summary: string | null;
 }
 
 interface UpdateEntry {
@@ -53,18 +66,52 @@ interface UpdateEntry {
   timestamp: number;
 }
 
+/** Why a check flagged one document. */
+export type CheckHistoryItemKind = 'added' | 'modified' | 'unverifiable' | 'denied';
+
+/** One document a check flagged, kept so the record can name it later. */
+export interface CheckHistoryItem {
+  id: string;
+  title: string;
+  /** Download-root-relative path, which is what the user recognises. */
+  path: string;
+  kind: CheckHistoryItemKind;
+}
+
 export interface CheckHistoryEntry {
   time: number;
   changed: number;
   dirs: number;
   docs: number;
-  summary: string;
+  /** The flagged documents, capped at `CHECK_HISTORY_ITEM_MAX`. */
+  items: CheckHistoryItem[];
+  /** How many more were flagged than `items` holds. */
+  hidden: number;
+  /** Documents the server refuses to hand over. */
+  denied: number;
+}
+
+/** Account a piece of per-user state belongs to. */
+export interface CheckHistoryScope {
+  serverAddress: string | null | undefined;
+  username: string | null | undefined;
+}
+
+/** Storage key for one account, or `null` while the account is unknown. */
+function checkHistoryKey(scope: CheckHistoryScope | null | undefined): string | null {
+  const serverAddress = scope?.serverAddress?.trim();
+  const username = scope?.username?.trim();
+  if (!serverAddress || !username) return null;
+  return `${CHECK_HISTORY_KEY_PREFIX}:${encodeURIComponent(serverAddress)}:${encodeURIComponent(username)}`;
 }
 
 export interface PendingUpdateItem {
   id: string;
   title: string;
+  /** Human-readable path, for display. */
   path: string;
+  /** Destination inside the download root (sanitised) — the actual write target. */
+  downloadPath: string;
   sha256?: string | null;
 }
 
@@ -92,9 +139,19 @@ class FileUpdateTracker {
   private pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
   lastCheckTime = $state<number>(0);
   nextCheckTime = $state<number>(0);
-  initialScanDone = false; // ensures post-login scan runs only once per session
+  /**
+   * Whether the account's one post-login check has already been spent.
+   *
+   * Scoped to the account rather than to the process: the option promises a
+   * check at start *and* at login, and signing in as somebody else within the
+   * same run is a new session for them.
+   */
+  initialScanDone = $state(false);
 
   // --- check history ---
+  /** Storage key of the account whose history is currently loaded. */
+  private historyKey: string | null = null;
+
   checkHistory = $state<CheckHistoryEntry[]>([]);
 
   // --- pending update queue (diff results auto-enqueue) ---
@@ -178,8 +235,15 @@ class FileUpdateTracker {
   // =========================================================================
 
   /**
-   * Recursively walk the directory tree starting from `dirId` (null = root),
-   * calling `compareSnapshot` at every level.
+   * Recursively walk the directory tree starting from `dirId` (null = root).
+   *
+   * Each level is checked two ways:
+   *
+   *  * against the previous in-session listing (`compareSnapshot`) — only ever
+   *    drives the "recently updated" indicators, since those snapshots live in
+   *    memory and start empty on every page load;
+   *  * against the local download root — this is what "are there updates?" is
+   *    really asking, and what `outdated` reports.
    *
    * `listFn` should be the `listDirectory` API function.
    * `maxDepth` controls recursion depth (default 20).
@@ -194,12 +258,20 @@ class FileUpdateTracker {
       directoryId: string | null;
       pathParts: string[];
       documents: ServerDocumentEntry[];
+      /** Movement since the previous in-session listing. Indicators only. */
       diff: PollChangeResult;
+      /** Server documents missing locally or superseded by a newer revision. */
+      outdated: ServerDocumentEntry[];
+      /** Documents the server refuses to hand over. */
+      denied: ServerDocumentEntry[];
     }) => void,
-  ): Promise<{ changed: number; dirs: number; docs: number }> {
-    let changedDirs = 0;
+  ): Promise<{ outdated: number; denied: number; dirs: number; docs: number }> {
+    let outdatedDocs = 0;
+    let deniedDocs = 0;
     let checkedDirs = 0;
     let checkedDocs = 0;
+    const findings: CheckHistoryItem[] = [];
+    let hidden = 0;
 
     const walk = async (id: string | null, depth: number, pathParts: string[]): Promise<void> => {
       if (depth > maxDepth) return;
@@ -210,14 +282,70 @@ class FileUpdateTracker {
       } catch {
         return;
       }
-      const result = this.compareSnapshot(id, resp.folders, resp.documents);
+
+      const diff = this.compareSnapshot(id, resp.folders, resp.documents);
+
+      const outdated: ServerDocumentEntry[] = [];
+      const denied: ServerDocumentEntry[] = [];
+      const record = (doc: ServerDocumentEntry, kind: CheckHistoryItemKind) => {
+        if (findings.length < CHECK_HISTORY_ITEM_MAX) {
+          findings.push({
+            id: doc.id,
+            title: doc.title,
+            path: makeDownloadPath([...pathParts, doc.title]),
+            kind,
+          });
+        } else {
+          hidden += 1;
+        }
+      };
+      try {
+        for (const state of await readLocalDocumentStates(resp.documents, pathParts)) {
+          if (state.isCurrent) continue;
+          const path = makeDownloadPath([...pathParts, state.doc.title]);
+          // Asking costs one metadata round trip and answers with the same
+          // access rule that would block the download, so a refused document is
+          // never offered as an update — not even the first time it is seen.
+          // The answer is re-taken on every check, so restored access is picked
+          // up on its own; nothing is excluded for good. This is cheaper than
+          // the download it replaces, so it needs no pacing of its own: the
+          // per-directory delay already paced the walk.
+          if (await deniedDocuments.probeDocumentAccess(state.doc.id)) {
+            deniedDocuments.clear(state.doc.id);
+            outdated.push(state.doc);
+            record(state.doc, state.mismatched ? 'modified' : state.existsLocally ? 'unverifiable' : 'added');
+            continue;
+          }
+          deniedDocuments.mark({ docId: state.doc.id, path });
+          // A refused document still has a place in the local tree: the same
+          // name, kept as a stand-in, so the folder mirrors the server and the
+          // user can see what they are missing. The write happens here because
+          // this is where the refusal is discovered — such a document is never
+          // queued for download, so no later step could create it.
+          await ensureDownloadPlaceholder(path);
+          denied.push(state.doc);
+          record(state.doc, 'denied');
+        }
+      } catch (err) {
+        // Never guess: a directory we could not verify contributes nothing, and
+        // says so, rather than reporting a phantom pile of updates.
+        console.warn(
+          `[cfms:check] Could not read local state for ${pathParts.join('/') || '/'}:`,
+          err,
+        );
+      }
+      outdatedDocs += outdated.length;
+      deniedDocs += denied.length;
+
       onDirectoryDiff?.({
         directoryId: id,
         pathParts,
         documents: resp.documents,
-        diff: result,
+        diff,
+        outdated,
+        denied,
       });
-      if (result.summary) changedDirs++;
+
       checkedDirs += resp.folders.length;
       checkedDocs += resp.documents.length;
       for (const f of resp.folders) {
@@ -226,8 +354,15 @@ class FileUpdateTracker {
     };
 
     await walk(dirId, 0, []);
-    this.addCheckHistory(changedDirs, checkedDirs, checkedDocs);
-    return { changed: changedDirs, dirs: checkedDirs, docs: checkedDocs };
+    this.addCheckHistory({
+      outdated: outdatedDocs,
+      denied: deniedDocs,
+      dirs: checkedDirs,
+      docs: checkedDocs,
+      items: findings,
+      hidden,
+    });
+    return { outdated: outdatedDocs, denied: deniedDocs, dirs: checkedDirs, docs: checkedDocs };
   }
 
   /** Queue changed/new documents for user-confirmed update. */
@@ -274,15 +409,23 @@ class FileUpdateTracker {
       const MAX_DEPTH = 20;
       const DELAY_MS = 300;
       let totalChanges = 0;
+      let totalOutdated = 0;
       let totalDirs = 0;
       let totalDocs = 0;
       let totalHidden = 0;
       let totalErrors = 0;
       const startTime = performance.now();
 
+      // Download-root paths can only be reconstructed when the walk starts at
+      // the tree root. The Files page hook starts at the current folder, where
+      // the path from the root is unknown — skip the local check there rather
+      // than report paths that do not exist.
+      const scanRoot = getCurrentDirId();
+      const localCheckAvailable = scanRoot === null;
+
       console.group('%c📁 CFMS Update Check %c(devtools — recursive)', 'font-weight:bold', 'color:#888');
 
-      async function walkDir(dirId: string | null, dirLabel: string, depth: number) {
+      async function walkDir(dirId: string | null, dirLabel: string, depth: number, pathParts: string[]) {
         if (depth > MAX_DEPTH) return;
         const prefix = '  '.repeat(depth);
         await new Promise((r) => setTimeout(r, DELAY_MS));
@@ -303,10 +446,37 @@ class FileUpdateTracker {
         }
 
         const result = tracker.compareSnapshot(dirId, resp.folders, resp.documents);
-        if (result.summary) {
+        const touched = result.newDocuments.length + result.modifiedDocuments.length
+          + result.deletedDocuments.length + result.newFolders.length
+          + result.modifiedFolders.length + result.deletedFolders.length;
+        if (touched > 0) {
           totalChanges++;
-          console.log(`%c🔔 [%s] %s`, 'color:#ffb74d', dirLabel, result.summary);
+          // A dev-console line, so it stays English: the UI composes its own
+          // wording from these counts, in whatever language is active.
+          console.log(
+            `%c🔔 [%s] %d new, %d modified, %d deleted`,
+            'color:#ffb74d', dirLabel,
+            result.newDocuments.length + result.newFolders.length,
+            result.modifiedDocuments.length + result.modifiedFolders.length,
+            result.deletedDocuments.length + result.deletedFolders.length,
+          );
         }
+
+        // What the update check actually acts on: files missing locally or
+        // behind the server revision. The snapshot diff above only describes
+        // movement since this session started watching the directory.
+        const outdatedIds = new Set<string>();
+        if (localCheckAvailable) {
+          try {
+            for (const state of await readLocalDocumentStates(resp.documents, pathParts)) {
+              if (!state.isCurrent) outdatedIds.add(state.doc.id);
+            }
+          } catch (err) {
+            console.warn('[cfms:check] devtools hook could not read local state:', err);
+          }
+        }
+        totalOutdated += outdatedIds.size;
+
         totalDirs += resp.folders.length;
         totalDocs += resp.documents.length;
 
@@ -322,7 +492,8 @@ class FileUpdateTracker {
         for (const d of resp.documents) {
           const stale = tracker.notUpdatedDocumentIds.has(d.id);
           const updated = tracker.recentlyUpdatedDocumentIds.has(d.id);
-          const flags = [stale ? '⚠' : '', updated ? '🆕' : ''].filter(Boolean).join(' ');
+          const outdated = outdatedIds.has(d.id);
+          const flags = [stale ? '⚠' : '', updated ? '🆕' : '', outdated ? '📥' : ''].filter(Boolean).join(' ');
           console.log(`%c%s📄 %s %c${flags}%c  %s  %s`,
             stale ? 'color:#ffb74d' : 'color:#c8e6c9', prefix, d.title, '',
             'color:#888', d.size != null ? `${(d.size / 1024).toFixed(1)} KB` : '—',
@@ -331,15 +502,19 @@ class FileUpdateTracker {
 
         for (const f of resp.folders) {
           const isDot = f.name.startsWith('.');
-          await walkDir(f.id, `${isDot ? '👻' : ''}${f.name}`, depth + 1);
+          await walkDir(f.id, `${isDot ? '👻' : ''}${f.name}`, depth + 1, [...pathParts, f.name]);
         }
         console.groupEnd();
       }
 
+      if (!localCheckAvailable) {
+        console.warn('[cfms:check] Scan starts below the root — local download state is not checked.');
+      }
+
       try {
-        await walkDir(getCurrentDirId(), getCurrentDirId() ?? '/ (root)', 0);
-        console.log('%c✅ Scan complete: %d dir(s), %d doc(s), %d change(s) in %sms',
-          'color:#4caf50;font-weight:bold', totalDirs, totalDocs, totalChanges,
+        await walkDir(scanRoot, scanRoot ?? '/ (root)', 0, []);
+        console.log('%c✅ Scan complete: %d dir(s), %d doc(s), %d snapshot change(s), %d file(s) need update in %sms',
+          'color:#4caf50;font-weight:bold', totalDirs, totalDocs, totalChanges, totalOutdated,
           (performance.now() - startTime).toFixed(0));
       } catch (err) {
         console.error('%c❌ Scan failed:', 'color:#f44336', err);
@@ -390,7 +565,6 @@ class FileUpdateTracker {
         newFolders: [],
         modifiedFolders: [],
         deletedFolders: [],
-        summary: null,
       };
     }
 
@@ -417,23 +591,9 @@ class FileUpdateTracker {
       if (directoryId) this.markFolderHasUpdates(directoryId);
     }
 
-    // Build human-readable summary
-    const parts: string[] = [];
-    if (diff.newDocuments.length) parts.push(`${diff.newDocuments.length} new file(s)`);
-    if (diff.modifiedDocuments.length) parts.push(`${diff.modifiedDocuments.length} modified file(s)`);
-    if (diff.deletedDocuments.length) parts.push(`${diff.deletedDocuments.length} deleted file(s)`);
-    if (diff.newFolders.length) parts.push(`${diff.newFolders.length} new folder(s)`);
-    if (diff.modifiedFolders.length) parts.push(`${diff.modifiedFolders.length} modified folder(s)`);
-    if (diff.deletedFolders.length) parts.push(`${diff.deletedFolders.length} deleted folder(s)`);
-
-    const result: PollChangeResult = {
-      ...diff,
-      summary: parts.length > 0 ? parts.join(', ') : null,
-    };
-
     this.updateStaleTracking(currentFolders, currentDocuments, directoryId);
 
-    return result;
+    return diff;
   }
 
   /** Forget cached snapshots (e.g. on logout). */
@@ -519,24 +679,62 @@ class FileUpdateTracker {
   // Check history
   // =========================================================================
 
-  /** Record a completed update check in the history log. */
-  addCheckHistory(changed: number, dirs: number, docs: number) {
+  /**
+   * Point the check history at an account.
+   *
+   * Called whenever the session changes. The log is dropped when the account
+   * changes so a history entry can never be attributed to the wrong server or
+   * user. Passing an empty scope (logged out) clears the log and stops it being
+   * persisted at all.
+   */
+  useAccountScope(scope: CheckHistoryScope | null | undefined) {
+    const key = checkHistoryKey(scope);
+    if (key === this.historyKey) return;
+    this.historyKey = key;
+    this.checkHistory = [];
+    this.initialScanDone = false;
+    if (key) this.loadPersistedCheckHistory(key);
+  }
+  /**
+   * Record a completed update check in the history log.
+   *
+   * `outdated` counts documents that are missing locally or behind the server
+   * revision — i.e. what a sync would fetch. It is not "what changed since the
+   * last poll", which would report nothing on the first check of a session.
+   *
+   * `items` names those documents, so a record can answer "which files?" long
+   * after the check that found them. It is capped: the log keeps twenty records,
+   * and a first sync of a large tree can flag thousands of files.
+   */
+  addCheckHistory(result: {
+    outdated: number;
+    denied: number;
+    dirs: number;
+    docs: number;
+    items: CheckHistoryItem[];
+    hidden: number;
+  }) {
+    const { outdated, denied, dirs, docs, items, hidden } = result;
+    // Counts only: the log is persisted, and a wording frozen at check time
+    // would stay in the language the check happened to run in.
     const entry: CheckHistoryEntry = {
       time: Date.now(),
-      changed,
+      changed: outdated,
       dirs,
       docs,
-      summary: changed > 0 ? `${changed} dir(s) changed` : 'no changes',
+      items: items.slice(0, CHECK_HISTORY_ITEM_MAX),
+      hidden,
+      denied,
     };
     this.checkHistory = [...this.checkHistory, entry].slice(-CHECK_HISTORY_MAX);
     this.persistCheckHistory();
   }
 
-  /** Load persisted check history from local storage. */
-  loadPersistedCheckHistory() {
+  /** Load persisted check history for one account. */
+  private loadPersistedCheckHistory(key: string) {
     if (typeof window === 'undefined') return;
     try {
-      const raw = window.localStorage.getItem(CHECK_HISTORY_STORAGE_KEY);
+      const raw = window.localStorage.getItem(key);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
@@ -547,7 +745,15 @@ class FileUpdateTracker {
           changed: Number(it.changed ?? 0),
           dirs: Number(it.dirs ?? 0),
           docs: Number(it.docs ?? 0),
-          summary: String(it.summary ?? ''),
+          items: Array.isArray(it.items)
+            ? it.items
+                .filter((item: unknown): item is CheckHistoryItem =>
+                  !!item && typeof (item as CheckHistoryItem).id === 'string'
+                  && typeof (item as CheckHistoryItem).path === 'string')
+                .slice(0, CHECK_HISTORY_ITEM_MAX)
+            : [],
+          hidden: Number(it.hidden ?? 0),
+          denied: Number(it.denied ?? 0),
         }))
         .slice(-CHECK_HISTORY_MAX);
       this.checkHistory = restored;
@@ -557,10 +763,10 @@ class FileUpdateTracker {
   }
 
   private persistCheckHistory() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !this.historyKey) return;
     try {
       window.localStorage.setItem(
-        CHECK_HISTORY_STORAGE_KEY,
+        this.historyKey,
         JSON.stringify(this.checkHistory.slice(-CHECK_HISTORY_MAX)),
       );
     } catch {
@@ -662,7 +868,7 @@ class FileUpdateTracker {
   private diffSnapshots(
     prev: DirectorySnapshot,
     curr: DirectorySnapshot,
-  ): Omit<PollChangeResult, 'summary'> {
+  ): PollChangeResult {
     const newDocuments: string[] = [];
     const modifiedDocuments: string[] = [];
     const deletedDocuments: string[] = [];
@@ -780,7 +986,4 @@ class FileUpdateTracker {
 }
 
 export const fileUpdateTracker = new FileUpdateTracker();
-if (typeof window !== 'undefined') {
-  fileUpdateTracker.loadPersistedCheckHistory();
-}
 

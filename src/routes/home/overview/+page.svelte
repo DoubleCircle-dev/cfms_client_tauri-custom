@@ -34,8 +34,13 @@
     notificationStore,
     serverStateStore,
   } from '$lib/stores.svelte';
-  import { fileUpdateTracker, type CheckHistoryEntry, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
-  import { syncAllFiles as runSyncAll, syncAllCoordinator } from '$lib/sync-all.svelte';
+  import {
+    fileUpdateTracker,
+    type CheckHistoryEntry,
+    type CheckHistoryItemKind,
+    type PendingUpdateItem,
+  } from '$lib/file-update-tracker.svelte';
+  import { makeDownloadPath, syncAllCoordinator, syncFiles } from '$lib/sync-all.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   let recent = $state<RecentFileRecord[]>([]);
@@ -79,12 +84,15 @@
 
     // Run one automatic full detection at startup only when the user enabled
     // it (default off) — a sub-option of the "enable automatic checks" master
-    // switch. It runs exactly once per program start and behaves exactly like
-    // a periodic automatic check: diffs are enqueued, and they auto-download
+    // switch. It runs exactly once per login and behaves exactly like a
+    // periodic automatic check: diffs are enqueued, and they auto-download
     // immediately when the "download updates immediately" option is on.
-    if (autoFileUpdateEnabled && autoFileDetectOnStartup && !fileUpdateTracker.initialScanDone && !sessionStorage.getItem('cfms:initial-scan-done')) {
+    //
+    // The flag lives on the tracker and is per account, so signing in as
+    // somebody else within the same run gets its own check instead of being
+    // suppressed by the previous user's.
+    if (autoFileUpdateEnabled && autoFileDetectOnStartup && !fileUpdateTracker.initialScanDone) {
       fileUpdateTracker.initialScanDone = true;
-      sessionStorage.setItem('cfms:initial-scan-done', '1');
       console.log('%c[cfms:check] Startup detection after login…', 'color:#4fc3f7');
       try {
         await runAutomaticDetection();
@@ -128,13 +136,9 @@
         });
         await goto(`/home/files?${params.toString()}`);
       } else {
-        const result = await getDocument(record.id, record.name);
+        await getDocument(record.id, record.name);
         recent = await rememberVisit(scope, record);
-        if (result.already_exists) {
-          notificationStore.info($t('home.downloadAlreadyExists', { values: { name: record.name } }));
-        } else {
-          notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
-        }
+        notificationStore.success($t('home.downloadQueued', { values: { name: record.name } }));
       }
     } catch (err) {
       if (isUnavailableError(err)) {
@@ -191,8 +195,62 @@
   const lastCheckResult = $derived(checkHistory[0] ?? null);
   const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
 
+  /**
+   * History rows, with runs of uneventful checks folded together.
+   *
+   * A periodic checker logs every run, so an idle afternoon buries the two
+   * entries that mattered under a column of identical "no changes" lines. Only
+   * *adjacent* entries merge: a gap in the middle means something happened
+   * between them, and folding across it would misreport when it happened.
+   */
+  type HistoryRow =
+    | { kind: 'entry'; entry: CheckHistoryEntry }
+    | { kind: 'quiet'; entries: CheckHistoryEntry[] };
+
+  const historyRows = $derived.by<HistoryRow[]>(() => {
+    const rows: HistoryRow[] = [];
+    for (const entry of checkHistory) {
+      const last = rows[rows.length - 1];
+      if (entry.changed === 0) {
+        if (last?.kind === 'quiet') last.entries.push(entry);
+        else rows.push({ kind: 'quiet', entries: [entry] });
+        continue;
+      }
+      rows.push({ kind: 'entry', entry });
+    }
+    return rows;
+  });
+
+  /** Records whose file list the user opened. */
+  let expandedHistory = $state<Set<number>>(new Set());
+
+  function toggleHistoryRow(time: number) {
+    const next = new Set(expandedHistory);
+    if (!next.delete(time)) next.add(time);
+    expandedHistory = next;
+  }
+
   function formatCheckTime(ts: number) {
     return new Date(ts).toLocaleString();
+  }
+
+  /** Short label for why a record flagged one document. */
+  function historyKindLabel(kind: CheckHistoryItemKind) {
+    switch (kind) {
+      case 'added': return $t('files.checkKindAdded');
+      case 'modified': return $t('files.checkKindModified');
+      case 'denied': return $t('files.checkKindDenied');
+      default: return $t('files.checkKindUnverifiable');
+    }
+  }
+
+  /** Time span of a folded row, oldest first. */
+  function quietRange(entries: CheckHistoryEntry[]) {
+    const newest = entries[0];
+    const oldest = entries[entries.length - 1];
+    return newest === oldest
+      ? formatCheckTime(newest.time)
+      : `${formatCheckTime(oldest.time)} — ${formatCheckTime(newest.time)}`;
   }
 
   let checkBusy = $state(false);
@@ -233,15 +291,13 @@
       null,
       20,
       200,
-      ({ pathParts, documents, diff }) => {
-        if (diff.newDocuments.length === 0 && diff.modifiedDocuments.length === 0) return;
-        const changedIds = new Set([...diff.newDocuments, ...diff.modifiedDocuments]);
-        for (const doc of documents) {
-          if (!changedIds.has(doc.id)) continue;
+      ({ pathParts, outdated }) => {
+        for (const doc of outdated) {
           changedMap.set(doc.id, {
             id: doc.id,
             title: doc.title,
             path: [...pathParts, doc.title].join('/'),
+            downloadPath: makeDownloadPath([...pathParts, doc.title]),
             sha256: doc.sha256,
           });
         }
@@ -250,17 +306,24 @@
     if (changedMap.size > 0) {
       fileUpdateTracker.enqueuePendingUpdates([...changedMap.values()]);
     }
-    if (result.changed > 0) {
+    // Denied documents are reported too — leaving them out would make a check
+    // that found nothing usable look like a clean bill of health.
+    const parts: string[] = [];
+    if (result.outdated > 0) {
+      parts.push($t('files.checkHistoryUpdates', { values: { count: result.outdated } }));
+    }
+    if (result.denied > 0) {
+      parts.push($t('files.checkHistoryDenied', { values: { count: result.denied } }));
+    }
+    if (parts.length > 0) {
       notificationStore.info(
-        $t('files.serverChangesDetected', {
-          values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed` },
-        }),
+        $t('files.serverChangesDetected', { values: { changes: parts.join(', ') } }),
         5000,
       );
     } else {
       notificationStore.success($t('files.noChangesDetected'), 2500);
     }
-    return result.changed;
+    return result.outdated;
   }
 
   /** Shared automatic-detection step used by the startup check and the
@@ -274,8 +337,12 @@
     }
   }
 
-  /** Confirm queued updates. A preset strategy (automatic downloads) applies
-   *  silently; omitting it (manual confirm) prompts for each differing file. */
+  /** Confirm queued updates.
+   *
+   *  Downloads exactly what the last check queued — the check already walked the
+   *  tree, so re-scanning here would double the cost of every confirm. A preset
+   *  strategy (automatic downloads) applies silently; omitting it (manual
+   *  confirm) prompts once for the files that would be overwritten. */
   async function confirmQueuedUpdates(strategy?: SyncOverwriteStrategy) {
     if (queueBusy || pendingUpdates.length === 0) return;
     if (syncAllCoordinator.busy) {
@@ -286,13 +353,22 @@
     }
     queueBusy = true;
     try {
-      const result = await runSyncAll({
-        overwriteLocal: false,
-        confirmDeletes: true,
+      const result = await syncFiles({
+        queue: pendingUpdates.map((item) => ({
+          docId: item.id,
+          path: item.downloadPath,
+          sha256: item.sha256,
+        })),
         overwriteStrategy: strategy,
-        onStatus: (msg) => notificationStore.info(msg, 5000),
+        // Same wording as the Files page, same colour: the sync says how it
+        // went, and the page only decides how loudly to show it.
+        onStatus: (msg, level) =>
+          level === 'warning' ? notificationStore.warning(msg, 5000) : notificationStore.success(msg, 5000),
       });
-      // Always clear once the sync ran: changed means items were applied,
+      // Cancelling the overwrite prompt writes nothing, so keep the queue and
+      // let the user confirm again with another strategy.
+      if (result.cancelled) return;
+      // Always clear once the run finished: changed means items were applied,
       // unchanged means they were verified as already current. Keeping the
       // queue in the unchanged case left a stale "confirm updates (1)" badge.
       fileUpdateTracker.clearPendingUpdates();
@@ -430,18 +506,94 @@
         {/if}
         {#if lastCheckResult}
           <span class="check-history-badge" class:has-changes={lastCheckResult.changed > 0}>
-            {lastCheckResult.changed > 0 ? `🔔 ${lastCheckResult.changed} 处变化` : '✅ 无变化'}
+            {lastCheckResult.changed > 0
+              ? `🔔 ${$t('files.checkHistoryBadgeChanges', { values: { count: lastCheckResult.changed } })}`
+              : `✅ ${$t('files.checkHistoryBadgeNone')}`}
           </span>
         {/if}
       </div>
       <div class="check-history-list">
-        {#each checkHistory.slice(0, 20) as entry (entry.time)}
-          <div class="check-history-row">
-            <span class="check-history-icon">{entry.changed > 0 ? '🔔' : '✅'}</span>
-            <span class="check-history-time">{formatCheckTime(entry.time)}</span>
-            <span class="check-history-summary">{entry.summary}</span>
-            <span class="check-history-meta">{entry.dirs} 子目录, {entry.docs} 文档</span>
-          </div>
+        {#each historyRows.slice(0, 20) as row, index (`${row.kind}:${index}`)}
+          {#if row.kind === 'quiet'}
+            <div class="check-history-row" class:has-detail={row.entries[0].items.length > 0}>
+              <button
+                type="button"
+                class="check-history-main"
+                disabled={row.entries[0].items.length === 0}
+                onclick={() => toggleHistoryRow(row.entries[0].time)}
+              >
+                <span class="check-history-icon">✅</span>
+                <span class="check-history-time">{quietRange(row.entries)}</span>
+                <span class="check-history-summary">
+                  {row.entries.length > 1
+                    ? $t('files.checkHistoryMerged', { values: { count: row.entries.length } })
+                    : $t('files.checkHistoryNoChanges')}
+                </span>
+                <span class="check-history-meta">
+                  {$t('files.checkHistoryScope', { values: { dirs: row.entries[0].dirs, docs: row.entries[0].docs } })}
+                </span>
+              </button>
+              {#if row.entries[0].items.length > 0}
+                <div class="check-history-files" class:open={expandedHistory.has(row.entries[0].time)}>
+                  <span class="check-history-files-title">
+                    {$t('files.checkHistoryFilesTitle')}
+                  </span>
+                  {#each row.entries[0].items as item (item.id)}
+                    <span class="check-history-file">
+                      <span class="check-history-file-kind" data-kind={item.kind}>
+                        {historyKindLabel(item.kind)}
+                      </span>
+                      <span class="check-history-file-path" title={item.path}>{item.path}</span>
+                    </span>
+                  {/each}
+                  {#if row.entries[0].hidden > 0}
+                    <span class="check-history-file-more">+{row.entries[0].hidden}</span>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="check-history-row" class:has-detail={row.entry.items.length > 0}>
+              <button
+                type="button"
+                class="check-history-main"
+                disabled={row.entry.items.length === 0}
+                onclick={() => toggleHistoryRow(row.entry.time)}
+              >
+                <span class="check-history-icon">🔔</span>
+                <span class="check-history-time">{formatCheckTime(row.entry.time)}</span>
+                <span class="check-history-summary">
+                  {$t('files.checkHistoryUpdates', { values: { count: row.entry.changed } })}
+                </span>
+                {#if row.entry.denied > 0}
+                  <span class="check-history-denied">
+                    🔒 {$t('files.checkHistoryDenied', { values: { count: row.entry.denied } })}
+                  </span>
+                {/if}
+                <span class="check-history-meta">
+                  {$t('files.checkHistoryScope', { values: { dirs: row.entry.dirs, docs: row.entry.docs } })}
+                </span>
+              </button>
+              {#if row.entry.items.length > 0}
+                <div class="check-history-files" class:open={expandedHistory.has(row.entry.time)}>
+                  <span class="check-history-files-title">
+                    {$t('files.checkHistoryFilesTitle')}
+                  </span>
+                  {#each row.entry.items as item (item.id)}
+                    <span class="check-history-file">
+                      <span class="check-history-file-kind" data-kind={item.kind}>
+                        {historyKindLabel(item.kind)}
+                      </span>
+                      <span class="check-history-file-path" title={item.path}>{item.path}</span>
+                    </span>
+                  {/each}
+                  {#if row.entry.hidden > 0}
+                    <span class="check-history-file-more">+{row.entry.hidden}</span>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/if}
         {/each}
       </div>
     </section>
@@ -568,12 +720,28 @@
 
   .check-history-row {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.35rem 0.4rem;
+    flex-direction: column;
     border-radius: 4px;
     font-size: 0.78rem;
     color: var(--explorer-text-muted);
+  }
+
+  .check-history-main {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .check-history-main:disabled {
+    cursor: default;
   }
 
   .check-history-row:hover {
@@ -596,8 +764,73 @@
     flex: 1;
   }
 
+  .check-history-denied {
+    flex: none;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-md3-error, #d93025) 15%, transparent);
+    color: var(--color-md3-error, #d93025);
+    font-size: 0.7rem;
+  }
+
   .check-history-meta {
     flex: none;
+    font-size: 0.7rem;
+    opacity: 0.7;
+  }
+
+  .check-history-files {
+    display: none;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin: 0 0.4rem 0.4rem 2.1rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--explorer-border);
+  }
+
+  .check-history-files.open {
+    display: flex;
+  }
+
+  .check-history-files-title {
+    font-size: 0.7rem;
+    opacity: 0.7;
+  }
+
+  .check-history-file {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .check-history-file-kind {
+    flex: none;
+    min-width: 3.4rem;
+    font-size: 0.68rem;
+    opacity: 0.85;
+  }
+
+  .check-history-file-kind[data-kind='added'] {
+    color: var(--color-md3-primary);
+  }
+
+  .check-history-file-kind[data-kind='modified'] {
+    color: var(--color-md3-warning, #f09d00);
+  }
+
+  .check-history-file-kind[data-kind='denied'] {
+    color: var(--color-md3-error, #d93025);
+  }
+
+  .check-history-file-path {
+    overflow: hidden;
+    color: var(--explorer-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .check-history-file-more {
     font-size: 0.7rem;
     opacity: 0.7;
   }

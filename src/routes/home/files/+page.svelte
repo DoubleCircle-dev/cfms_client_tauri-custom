@@ -20,8 +20,6 @@
     classifyUploadPath,
     getDocument,
     getDownloadTasks,
-    checkDownloadsExist,
-    computeLocalSha256,
     openDownloadedDocument,
     getRevision,
     inspectUploadDirectoryConflicts,
@@ -79,6 +77,7 @@
     isDownloadBatchStop,
     markDownloadBatchFailed,
     markDownloadBatchQueued,
+    setDownloadBatchRateLimitWaiting,
     setDownloadBatchPhase,
     waitForDownloadBatchResume,
   } from '$lib/download-batch-control';
@@ -137,7 +136,7 @@
     DirectoryRequestTimeoutError,
   } from '$lib/files/directory-load-controller';
   import { canSearchFiles } from '$lib/files/search-permissions';
-  import { isAccessDeniedError, serverErrorStatus } from '$lib/api/server-errors';
+  import { isAccessDeniedError, serverAvailability, serverErrorStatus } from '$lib/api/server-errors';
   import {
     fileManagerShortcutFor,
     isFindShortcut,
@@ -174,9 +173,12 @@
   import { authStore, downloadStore, floatingProgressStore, notificationStore, serverStateStore, uploadStore } from '$lib/stores.svelte';
   import { fileUpdateTracker, type PendingUpdateItem } from '$lib/file-update-tracker.svelte';
   import {
+    loadServerDocument,
     makeDownloadPath,
+    readLocalDocumentState,
+    readLocalDocumentStates,
     syncAllCoordinator,
-    syncAllFiles as runSharedSyncAll,
+    syncFiles,
   } from '$lib/sync-all.svelte';
 
   type SearchResultRow =
@@ -193,6 +195,7 @@
   const SEARCH_PREVIEW_DEBOUNCE_MS = 120;
   const SEARCH_PREVIEW_SCROLL_THRESHOLD = 72;
   const SORT_FIELDS: SortField[] = ['name', 'modified', 'size'];
+  const MAX_BATCH_RATE_LIMIT_RETRIES = 3;
 
   type DirectoryLoadPhase = 'idle' | 'initial-loading' | 'loading-more' | 'complete' | 'partial-error';
 
@@ -212,7 +215,7 @@
   };
 
   type DownloadQueueItem = {
-    document: Pick<ServerDocumentEntry, 'id' | 'title'>;
+    document: ServerDocumentEntry;
     pathParts: string[];
   };
 
@@ -230,6 +233,8 @@
   let fileTableResetKey = $state(0);
   let error = $state<string | null>(null);
   let status = $state<string | null>(null);
+  /** How the pending status message should be shown — see the effect below. */
+  let statusLevel = $state<'success' | 'warning'>('success');
   let searchQuery = $state('');
   let searchInput = $state<HTMLInputElement | null>(null);
   let searchDialogInput = $state<HTMLInputElement | null>(null);
@@ -540,7 +545,9 @@
   const canGoToParent = $derived(directoryAccessDenied !== null || parentTargetId !== undefined);
   $effect(() => {
     if (!status) return;
-    notificationStore.success(status);
+    const level = statusLevel;
+    if (level === 'warning') notificationStore.warning(status);
+    else notificationStore.success(status);
     status = null;
   });
 
@@ -648,9 +655,30 @@
         snapshot.folders,
         snapshot.documents,
       );
-      if (changeResult.summary) {
+      // The tracker reports counts, not prose: a summary built there would be
+      // frozen in whatever language happened to be active when it ran.
+      const changes: string[] = [];
+      if (changeResult.newDocuments.length > 0) {
+        changes.push($t('files.serverChangesNewFiles', { values: { count: changeResult.newDocuments.length } }));
+      }
+      if (changeResult.modifiedDocuments.length > 0) {
+        changes.push($t('files.serverChangesModifiedFiles', { values: { count: changeResult.modifiedDocuments.length } }));
+      }
+      if (changeResult.deletedDocuments.length > 0) {
+        changes.push($t('files.serverChangesDeletedFiles', { values: { count: changeResult.deletedDocuments.length } }));
+      }
+      if (changeResult.newFolders.length > 0) {
+        changes.push($t('files.serverChangesNewFolders', { values: { count: changeResult.newFolders.length } }));
+      }
+      if (changeResult.modifiedFolders.length > 0) {
+        changes.push($t('files.serverChangesModifiedFolders', { values: { count: changeResult.modifiedFolders.length } }));
+      }
+      if (changeResult.deletedFolders.length > 0) {
+        changes.push($t('files.serverChangesDeletedFolders', { values: { count: changeResult.deletedFolders.length } }));
+      }
+      if (changes.length > 0) {
         notificationStore.info(
-          $t('files.serverChangesDetected', { values: { changes: changeResult.summary } }),
+          $t('files.serverChangesDetected', { values: { changes: changes.join(', ') } }),
           5000,
         );
       }
@@ -1184,9 +1212,18 @@
 
   // --- File sync tracking (SHA-256 based, does NOT rely on download task DB) ---
   let persistedDownloadedIds = $state<Set<string>>(new Set());
+  let persistedDivergedIds = $state<Set<string>>(new Set());
   let overwriteLocal = $state(false);
 
-  /** Verify which documents are already downloaded by comparing SHA-256 hashes. */
+  /**
+   * Classify the current directory with the shared comparison.
+   *
+   * `isCurrent`          → the local copy *is* the server revision.
+   * `existsLocally` only → a local copy is there but is not that revision.
+   *
+   * Both sets come from the same read, so the table markers and the update
+   * checker can never tell the user two different things.
+   */
   async function refreshDownloadedFileIds() {
     const ids = new Set<string>();
     try {
@@ -1196,33 +1233,19 @@
       }
     } catch { /* ignore */ }
 
+    const diverged = new Set<string>();
     if (documents.length > 0) {
       try {
-        // Build full relative paths (matching how downloads are stored)
         const pathParts = breadcrumbSegments.map(s => s.label);
-        const docPaths = documents.map(d =>
-          pathParts.length > 0 ? makeDownloadPath([...pathParts, d.title]) : d.title
-        );
-        const docByPath = new Map(docPaths.map((p, i) => [p, documents[i]]));
-
-        // Try SHA-256 first, fall back to file existence
-        const hashes = await computeLocalSha256(docPaths);
-        const existing = await checkDownloadsExist(docPaths);
-
-        for (const [filepath, doc] of docByPath) {
-          const localHash = hashes[filepath];
-          const serverHash = doc.sha256;
-          if (localHash && serverHash && localHash === serverHash) {
-            ids.add(doc.id);
-          } else if (existing.includes(filepath) && !serverHash) {
-            // Exists locally but server has no hash — assume downloaded
-            ids.add(doc.id);
-          }
+        for (const state of await readLocalDocumentStates(documents, pathParts)) {
+          if (state.isCurrent) ids.add(state.doc.id);
+          else if (state.existsLocally) diverged.add(state.doc.id);
         }
       } catch { /* ignore */ }
     }
 
     persistedDownloadedIds = ids;
+    persistedDivergedIds = diverged;
   }
 
   const downloadedFileIds = $derived.by(() => {
@@ -1233,31 +1256,28 @@
     return ids;
   });
 
-  /** Files never downloaded locally */
-  const undownloadedDocIds = $derived.by(() => {
+  /** Files with a local copy that is not the server revision. */
+  const outdatedDocIds = $derived(persistedDivergedIds);
+
+  /** Files this client has no verified local copy of — exactly what a sync
+   *  would fetch, so the count matches the update checker's. */
+  const needsSyncDocIds = $derived.by(() => {
     const ids = new Set<string>();
     for (const doc of documents) {
       if (!downloadedFileIds.has(doc.id)) ids.add(doc.id);
     }
     return ids;
   });
+  const needsSyncCount = $derived(needsSyncDocIds.size);
 
-  /** Files where server version may differ from local (no SHA-256 match available) */
-  const outdatedDocIds = $derived.by(() => {
+  /** Files that are neither verified nor present locally. */
+  const undownloadedDocIds = $derived.by(() => {
     const ids = new Set<string>();
     for (const doc of documents) {
-      if (!downloadedFileIds.has(doc.id)) continue;
-      // Mark as outdated if server doesn't provide SHA-256 for comparison
-      if (!doc.sha256) ids.add(doc.id);
+      if (!downloadedFileIds.has(doc.id) && !persistedDivergedIds.has(doc.id)) ids.add(doc.id);
     }
     return ids;
   });
-
-  /** Files that need syncing (undownloaded or outdated) */
-  const needsSyncDocIds = $derived.by(() => {
-    return new Set([...undownloadedDocIds, ...outdatedDocIds]);
-  });
-  const needsSyncCount = $derived(needsSyncDocIds.size);
   const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
   let queueBusy = $state(false);
 
@@ -1270,14 +1290,16 @@
       await detectAndQueueServerChanges();
       fileUpdateTracker.resetPollingCountdown();
       await refreshDownloadedFileIds();
-      await runSharedSyncAll({
-        overwriteLocal,
+      const result = await syncFiles({
+        // The "overwrite" switch means "replace conflicting files without asking".
+        overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
         confirmDeletes: true,
-        onStatus: (msg) => { status = msg; },
+        onStatus: (msg, level) => { statusLevel = level; status = msg; },
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
-      fileUpdateTracker.clearPendingUpdates();
+      // Cancelling the overwrite prompt writes nothing, so keep the queue.
+      if (!result.cancelled) fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);
     }
@@ -1293,10 +1315,22 @@
     try {
       const result = await detectAndQueueServerChanges();
       fileUpdateTracker.resetPollingCountdown();
-      if (result.changed > 0) {
+      // Denied documents are reported alongside the updates: a check that found
+      // nothing to fetch but was refused some files is not "no changes".
+      const parts: string[] = [];
+      if (result.outdated > 0) {
+        parts.push($t('files.checkHistoryUpdates', { values: { count: result.outdated } }));
+      }
+      if (result.denied > 0) {
+        parts.push($t('files.checkHistoryDenied', { values: { count: result.denied } }));
+      }
+      const scope = $t('files.checkHistoryScope', {
+        values: { dirs: result.dirs, docs: result.docs },
+      });
+      if (parts.length > 0) {
         notificationStore.info(
           $t('files.serverChangesDetected', {
-            values: { changes: `${result.changed} director${result.changed === 1 ? 'y' : 'ies'} changed (${result.dirs} sub-dirs, ${result.docs} docs)` },
+            values: { changes: `${parts.join(', ')} (${scope})` },
           }),
           5000,
         );
@@ -1320,15 +1354,13 @@
       null,
       20,
       200,
-      ({ pathParts, documents, diff }) => {
-        if (diff.newDocuments.length === 0 && diff.modifiedDocuments.length === 0) return;
-        const changedIds = new Set([...diff.newDocuments, ...diff.modifiedDocuments]);
-        for (const doc of documents) {
-          if (!changedIds.has(doc.id)) continue;
+      ({ pathParts, outdated }) => {
+        for (const doc of outdated) {
           changedMap.set(doc.id, {
             id: doc.id,
             title: doc.title,
             path: [...pathParts, doc.title].join('/'),
+            downloadPath: makeDownloadPath([...pathParts, doc.title]),
             sha256: doc.sha256,
           });
         }
@@ -1347,14 +1379,24 @@
     error = null;
     try {
       await refreshDownloadedFileIds();
-      await runSharedSyncAll({
-        overwriteLocal,
-        confirmDeletes: true,
-        onStatus: (msg) => { status = msg; },
+      // Fetch exactly what the check queued. The check already walked the tree,
+      // so re-scanning here would double the cost of every confirm; deletions and
+      // renames stay with the full "sync all files" action.
+      const result = await syncFiles({
+        queue: pendingUpdates.map((item) => ({
+          docId: item.id,
+          path: item.downloadPath,
+          sha256: item.sha256,
+        })),
+        // The "overwrite" switch means "replace conflicting files without
+        // asking"; otherwise the shared prompt decides.
+        overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
+        onStatus: (msg, level) => { statusLevel = level; status = msg; },
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
-      fileUpdateTracker.clearPendingUpdates();
+      // Cancelling the overwrite prompt writes nothing, so keep the queue.
+      if (!result.cancelled) fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);
     } finally {
@@ -1498,43 +1540,30 @@
 
   /** Path of a document relative to the local download root. */
   function documentDownloadPath(doc: ServerDocumentEntry) {
-    const pathParts = breadcrumbSegments.map(s => s.label);
-    return pathParts.length > 0 ? makeDownloadPath([...pathParts, doc.title]) : doc.title;
+    return makeDownloadPath([...breadcrumbSegments.map(s => s.label), doc.title]);
   }
 
   async function handleDownload(doc: ServerDocumentEntry) {
     try {
-      const downloadPath = documentDownloadPath(doc);
+      const pathParts = breadcrumbSegments.map(s => s.label);
+      const path = makeDownloadPath([...pathParts, doc.title]);
 
-      // Get server SHA-256 — from doc if available, otherwise fetch via listDirectory
-      let serverHash = doc.sha256 ?? null;
-      if (!serverHash) {
-        try {
-          const resp = await listDirectory(currentFolderId);
-          const refreshed = resp.documents.find(d => d.id === doc.id);
-          serverHash = refreshed?.sha256 ?? null;
-        } catch { /* proceed without hash */ }
-      }
+      // The row's entry may predate the newest revision, so re-read it from the
+      // parent directory before deciding. Falling back to the row leaves the
+      // comparison without a digest, which answers "not current" — the right
+      // default when the user explicitly asked for this file.
+      const current = doc.sha256 != null
+        ? doc
+        : await loadServerDocument(doc.id, currentFolderId).catch(() => null);
 
-      let localHash: string | null = null;
-      if (serverHash) {
-        try {
-          const hashes = await computeLocalSha256([downloadPath]);
-          localHash = hashes[downloadPath] ?? null;
-        } catch { /* proceed */ }
-      }
+      const state = current
+        ? await readLocalDocumentState(current, pathParts).catch(() => null)
+        : null;
 
-      // Decide whether to skip, download, or overwrite
-      if (serverHash && localHash && localHash === serverHash) {
-        // Content matches — skip
+      if (state?.isCurrent) {
         status = $t('files.fileAlreadyUpToDate');
       } else {
-        // Content differs or can't verify — download/overwrite
-        const needsOverwrite = overwriteLocal || (serverHash != null && localHash != null);
-        const result = await getDocument(doc.id, downloadPath, undefined, needsOverwrite);
-        if (result.already_exists && !needsOverwrite) {
-          status = $t('files.downloadAlreadyExists');
-        }
+        await getDocument(doc.id, path);
       }
       await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
     } catch (e) {
@@ -2641,6 +2670,7 @@
     let queued = 0;
     let failed = 0;
     let skipped = 0;
+    let rateLimited = 0;
 
     try {
       const items: DownloadQueueItem[] = selectedDocuments.map((document) => ({
@@ -2655,10 +2685,12 @@
           const result = await collectDirectoryDownloadItems(folder, [folder.name], controller.signal, batch.batchId);
           items.push(...result.items);
           failed += result.failed;
+          rateLimited += result.rateLimited;
         } catch (e) {
           if (isDownloadBatchStop(e)) throw e;
           failed += 1;
-          markDownloadBatchFailed(batch.batchId);
+          if (serverAvailability(e)?.kind === 'rate_limited') rateLimited += 1;
+          markDownloadBatchFailed(batch.batchId, e);
         }
       }
 
@@ -2667,20 +2699,21 @@
       queued += result.queued;
       failed += result.failed;
       skipped += result.skipped;
+      rateLimited += result.rateLimited;
 
       const parts: string[] = [];
       if (queued > 0) parts.push($t('files.batchDownloadQueued', { values: { count: queued } }));
       if (skipped > 0) parts.push($t('files.batchDownloadSkippedExists', { values: { count: skipped } }));
       if (parts.length > 0) status = parts.join('  ');
       if (failed > 0) {
-        error = $t('files.batchDownloadPartialFailed', { values: { count: failed } });
+        error = batchDownloadFailureText(failed, rateLimited);
       }
       if (queued > 0 && failed === 0) clearSelection();
     } catch (e) {
       if (isDownloadBatchStop(e)) {
         status = $t('files.batchDownloadStopped');
       } else {
-        error = String(e);
+        error = formatError(e);
       }
     } finally {
       finishDownloadBatch(controller);
@@ -2702,18 +2735,19 @@
       const queued = queuedResult.queued;
       const failed = collected.failed + queuedResult.failed;
       const skipped = queuedResult.skipped;
+      const rateLimited = collected.rateLimited + queuedResult.rateLimited;
       const parts: string[] = [];
       if (queued > 0) parts.push($t('files.batchDownloadQueued', { values: { count: queued } }));
       if (skipped > 0) parts.push($t('files.batchDownloadSkippedExists', { values: { count: skipped } }));
       if (parts.length > 0) status = parts.join('  ');
       if (failed > 0) {
-        error = $t('files.batchDownloadPartialFailed', { values: { count: failed } });
+        error = batchDownloadFailureText(failed, rateLimited);
       }
     } catch (e) {
       if (isDownloadBatchStop(e)) {
         status = $t('files.batchDownloadStopped');
       } else {
-        error = String(e);
+        error = formatError(e);
       }
     } finally {
       finishDownloadBatch(controller);
@@ -2722,15 +2756,25 @@
   }
 
   async function queueDocumentDownload(
-    doc: Pick<ServerDocumentEntry, 'id' | 'title'>,
+    doc: ServerDocumentEntry,
     pathParts: string[],
     signal: AbortSignal,
     batch?: DownloadBatchMetadata,
   ): Promise<'queued' | 'skipped'> {
     await waitForDownloadBatchResume(signal);
-    const result = await getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]), batch, overwriteLocal);
+    // A batch download used to queue every document it walked past, so a folder
+    // that was already fully downloaded was transferred again in full. Apply the
+    // same digest check the update checker uses before spending a request; an
+    // unreadable download root leaves the state unknown, and unknown means fetch.
+    const state = await readLocalDocumentState(doc, pathParts).catch(() => null);
+    if (state?.isCurrent) return 'skipped';
+    await runBatchRateLimitedRequest(
+      () => getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]), batch),
+      signal,
+      batch?.batchId,
+    );
     await waitForDownloadBatchResume(signal);
-    return result.already_exists ? 'skipped' : 'queued';
+    return 'queued';
   }
 
   async function collectDirectoryDownloadItems(
@@ -2738,19 +2782,25 @@
     pathParts: string[],
     signal: AbortSignal,
     batchId?: string,
-  ): Promise<{ items: DownloadQueueItem[]; failed: number }> {
+  ): Promise<{ items: DownloadQueueItem[]; failed: number; rateLimited: number }> {
     await waitForDownloadBatchResume(signal);
-    const response = await listDirectory(folder.id);
+    const response = await runBatchRateLimitedRequest(
+      () => listDirectory(folder.id),
+      signal,
+      batchId,
+    );
     await waitForDownloadBatchResume(signal);
     const items: DownloadQueueItem[] = [];
     let failed = 0;
+    let rateLimited = 0;
     const downloadPath = makeDownloadPath(pathParts);
 
     try {
       await ensureDownloadSubdirectory(downloadPath);
-    } catch {
+    } catch (e) {
       failed += 1;
-      if (batchId) markDownloadBatchFailed(batchId);
+      if (serverAvailability(e)?.kind === 'rate_limited') rateLimited += 1;
+      if (batchId) markDownloadBatchFailed(batchId, e);
     }
 
     for (const doc of response.documents) {
@@ -2767,14 +2817,16 @@
         const result = await collectDirectoryDownloadItems(child, [...pathParts, child.name], signal, batchId);
         items.push(...result.items);
         failed += result.failed;
+        rateLimited += result.rateLimited;
       } catch (e) {
         if (isDownloadBatchStop(e)) throw e;
         failed += 1;
-        if (batchId) markDownloadBatchFailed(batchId);
+        if (serverAvailability(e)?.kind === 'rate_limited') rateLimited += 1;
+        if (batchId) markDownloadBatchFailed(batchId, e);
       }
     }
 
-    return { items, failed };
+    return { items, failed, rateLimited };
   }
 
   async function handleDeleteRevision(revision: RevisionEntry) {
@@ -2801,18 +2853,20 @@
     items: DownloadQueueItem[],
     signal: AbortSignal,
     batch: DownloadBatchMetadata,
-  ): Promise<{ queued: number; failed: number; skipped: number }> {
+  ): Promise<{ queued: number; failed: number; skipped: number; rateLimited: number }> {
     let queued = 0;
     let failed = 0;
     let skipped = 0;
-    const queuedBatch = {
-      ...batch,
-      batchEstimatedTotal: items.length,
-    };
+    let rateLimited = 0;
 
     for (const item of items) {
       await waitForDownloadBatchResume(signal);
       try {
+        // Only persist work that actually entered the queue in the durable
+        // estimate. The live snapshot still carries the discovered total while
+        // queueing, but a rejected item must not leave the completed batch at a
+        // permanently misleading partial percentage.
+        const queuedBatch = { ...batch, batchEstimatedTotal: queued + 1 };
         const result = await queueDocumentDownload(item.document, item.pathParts, signal, queuedBatch);
         if (result === 'skipped') {
           skipped += 1;
@@ -2823,11 +2877,76 @@
       } catch (e) {
         if (isDownloadBatchStop(e)) throw e;
         failed += 1;
-        markDownloadBatchFailed(batch.batchId);
+        if (serverAvailability(e)?.kind === 'rate_limited') rateLimited += 1;
+        markDownloadBatchFailed(batch.batchId, e);
       }
     }
 
-    return { queued, failed, skipped };
+    return { queued, failed, skipped, rateLimited };
+  }
+
+  function batchDownloadFailureText(failed: number, rateLimited: number) {
+    if (rateLimited <= 0) {
+      return $t('files.batchDownloadPartialFailed', { values: { count: failed } });
+    }
+    const other = Math.max(0, failed - rateLimited);
+    return other > 0
+      ? $t('files.batchDownloadRateLimitedMixed', { values: { rateLimited, other } })
+      : $t('files.batchDownloadRateLimited', { values: { count: rateLimited } });
+  }
+
+  async function runBatchRateLimitedRequest<T>(
+    request: () => Promise<T>,
+    signal: AbortSignal,
+    batchId?: string,
+  ): Promise<T> {
+    let retryCount = 0;
+
+    while (true) {
+      await waitForDownloadBatchResume(signal);
+      try {
+        const result = await request();
+        if (batchId) setDownloadBatchRateLimitWaiting(batchId, false);
+        if (retryCount > 0) status = null;
+        return result;
+      } catch (requestError) {
+        const availability = serverAvailability(requestError);
+        if (availability?.kind !== 'rate_limited' || retryCount >= MAX_BATCH_RATE_LIMIT_RETRIES) {
+          if (batchId) setDownloadBatchRateLimitWaiting(batchId, false);
+          if (retryCount > 0) status = null;
+          throw requestError;
+        }
+
+        retryCount += 1;
+        const seconds = availability.retryAfterSeconds ?? Math.min(2 ** (retryCount - 1), 8);
+        if (batchId) setDownloadBatchRateLimitWaiting(batchId, true);
+        status = $t('files.batchDownloadRateLimitWaiting', { values: { seconds } });
+        try {
+          await waitForBatchRetryDelay(seconds * 1000, signal);
+        } finally {
+          if (batchId) setDownloadBatchRateLimitWaiting(batchId, false);
+        }
+      }
+    }
+  }
+
+  function waitForBatchRetryDelay(delayMs: number, signal: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Folder download queueing stopped.', 'AbortError'));
+        return;
+      }
+      const complete = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const timeout = window.setTimeout(complete, delayMs);
+      const abort = () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException('Folder download queueing stopped.', 'AbortError'));
+      };
+      signal.addEventListener('abort', abort, { once: true });
+    });
   }
 
   function createDownloadBatchMetadata(name: string, rootId: string | null): DownloadBatchMetadata {
@@ -3955,33 +4074,26 @@
       () => currentFolderId,
     );
 
-    // Debug hook: `await __cfms_debug_sync__()` — inspect SHA-256 sync state
+    // Debug hook: `await __cfms_debug_sync__()` — show what the shared
+    // comparison decided for every file in the current directory.
     (window as any).__cfms_debug_sync__ = async () => {
       console.group('%c🔧 Sync Debug (SHA-256)', 'font-weight:bold;color:#4fc3f7');
       try {
         const completed = await getDownloadTasks('completed');
         console.log('getDownloadTasks("completed") returned %d tasks (DB fallback only):', completed.length);
-
         console.log('persistedDownloadedIds size:', persistedDownloadedIds.size);
 
-        // Compute local SHA-256 for current directory
-        const filenames = documents.map(d => d.title);
-        console.log('Computing local SHA-256 for %d files…', filenames.length);
-        const localHashes = await computeLocalSha256(filenames);
-        console.log('Local hashes computed:', Object.keys(localHashes).length);
-
+        const pathParts = breadcrumbSegments.map(s => s.label);
+        const states = await readLocalDocumentStates(documents, pathParts);
         console.log('Current directory documents:');
-        for (const doc of documents) {
-          const localHash = localHashes[doc.title];
-          const serverHash = doc.sha256;
-          const match = localHash && serverHash && localHash === serverHash;
+        for (const state of states) {
           console.log(
-            `  %c${match ? '✅' : localHash ? '🔄' : '⬇'} %c%s %cserver:%s local:%s`,
-            match ? 'color:#4caf50' : localHash ? 'color:#ffb74d' : 'color:#f44336',
-            '', doc.title,
+            `  %c${state.isCurrent ? '✅' : state.existsLocally ? '🔄' : '⬇'} %c%s %cserver:%s local:%s`,
+            state.isCurrent ? 'color:#4caf50' : state.existsLocally ? 'color:#ffb74d' : 'color:#f44336',
+            '', state.doc.title,
             'color:#888',
-            serverHash ? serverHash.slice(0, 12) + '…' : 'NULL',
-            localHash ? localHash.slice(0, 12) + '…' : 'NULL',
+            state.doc.sha256 ? state.doc.sha256.slice(0, 12) + '…' : `NULL(size=${state.doc.size})`,
+            state.localHash ? state.localHash.slice(0, 12) + '…' : 'NULL',
           );
         }
       } catch (err) {

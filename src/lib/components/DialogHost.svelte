@@ -10,6 +10,8 @@
   let applyChoiceToAll = $state(false);
   let lastDialogId = $state<number | null>(null);
   let inputElement = $state<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  /** item id → strategy value, for the conflict dialog. */
+  let conflictChoices = $state<Record<string, string>>({});
 
   $effect(() => {
     const request = dialogStore.current;
@@ -17,6 +19,9 @@
     lastDialogId = request.id;
     inputValue = request.defaultValue;
     applyChoiceToAll = false;
+    conflictChoices = Object.fromEntries(
+      request.conflictItems.map((item) => [item.id, request.conflictDefaultStrategy]),
+    );
     tick().then(() => {
       inputElement?.focus();
       if (request.kind === 'prompt' && request.selectOnOpen) {
@@ -24,6 +29,17 @@
       }
     });
   });
+
+  /** Fill every row at once — the shortcut the per-file answers sit on top of. */
+  function applyStrategyToAll(value: string) {
+    const request = dialogStore.current;
+    if (!request) return;
+    conflictChoices = Object.fromEntries(request.conflictItems.map((item) => [item.id, value]));
+  }
+
+  function setConflictStrategy(id: string, value: string) {
+    conflictChoices = { ...conflictChoices, [id]: value };
+  }
 
   function close() {
     dialogStore.resolve(dialogStore.current?.kind === 'confirm' ? false : null);
@@ -36,6 +52,12 @@
       dialogStore.resolve(true);
     } else if (request.kind === 'choice') {
       dialogStore.resolve(null);
+    } else if (request.kind === 'conflicts') {
+      const strategies = new Map<string, string>();
+      for (const item of request.conflictItems) {
+        strategies.set(item.id, conflictChoices[item.id] ?? request.conflictDefaultStrategy);
+      }
+      dialogStore.resolve({ strategies });
     } else {
       dialogStore.resolve(inputValue);
     }
@@ -49,13 +71,22 @@
 {#if dialogStore.current}
   <ModalFrame
     title={dialogStore.current.title}
-    maxWidth={dialogStore.current.multiline ? 'max-w-2xl' : dialogStore.current.kind === 'choice' ? 'max-w-xl' : 'max-w-md'}
+    maxWidth={dialogStore.current.kind === 'conflicts'
+      ? 'max-w-2xl'
+      : dialogStore.current.multiline ? 'max-w-2xl' : dialogStore.current.kind === 'choice' ? 'max-w-xl' : 'max-w-md'}
     closeLabel={$t('common.close')}
     onClose={close}
   >
-    <form class={dialogStore.current.kind === 'choice' ? 'choice-dialog' : 'space-y-5 p-5'} onsubmit={(event) => { event.preventDefault(); submit(); }}>
+    <form
+      class={dialogStore.current.kind === 'conflicts'
+        ? 'conflict-dialog'
+        : dialogStore.current.kind === 'choice' ? 'choice-dialog' : 'space-y-5 p-5'}
+      onsubmit={(event) => { event.preventDefault(); submit(); }}
+    >
       <p class={dialogStore.current.kind === 'choice'
         ? 'choice-dialog-message whitespace-pre-line'
+        : dialogStore.current.kind === 'conflicts'
+        ? 'conflict-dialog-message whitespace-pre-line'
         : 'whitespace-pre-line text-sm leading-6 text-md3-on-surface-variant'}>{dialogStore.current.message}</p>
 
       {#if dialogStore.current.kind === 'prompt'}
@@ -139,7 +170,59 @@
         </div>
       {/if}
 
-      <div class={dialogStore.current.kind === 'choice' ? 'choice-footer' : 'flex justify-end gap-3 border-t border-md3-outline pt-4'}>
+      {#if dialogStore.current.kind === 'conflicts'}
+        <section class="conflict-body">
+          <div class="conflict-bulk" role="group" aria-label={dialogStore.current.title}>
+            {#each dialogStore.current.conflictStrategies as strategy (strategy.value)}
+              <button
+                type="button"
+                data-focus-ring="delegated"
+                data-intent={strategy.intent ?? 'neutral'}
+                class="conflict-bulk-btn"
+                onclick={() => applyStrategyToAll(strategy.value)}
+              >
+                <Icon name={strategy.icon ?? 'block'} size="16px" />
+                <span>{strategy.allLabel}</span>
+              </button>
+            {/each}
+          </div>
+
+          {#if dialogStore.current.conflictListLabel}
+            <div class="conflict-list-label">{dialogStore.current.conflictListLabel}</div>
+          {/if}
+
+          <div class="conflict-list">
+            {#each dialogStore.current.conflictItems as item (item.id)}
+              <div class="conflict-row">
+                <span class="conflict-row-copy">
+                  <span class="conflict-row-path" title={item.label}>{item.label}</span>
+                  {#if item.meta}
+                    <span class="conflict-row-meta">{item.meta}</span>
+                  {/if}
+                </span>
+                <select
+                  class="conflict-select"
+                  data-focus-ring="delegated"
+                  aria-label={item.label}
+                  value={conflictChoices[item.id] ?? dialogStore.current.conflictDefaultStrategy}
+                  onchange={(event) =>
+                    setConflictStrategy(item.id, (event.currentTarget as HTMLSelectElement).value)}
+                >
+                  {#each dialogStore.current.conflictStrategies as strategy (strategy.value)}
+                    <option value={strategy.value}>{strategy.label}</option>
+                  {/each}
+                </select>
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      <div class={dialogStore.current.kind === 'choice'
+        ? 'choice-footer'
+        : dialogStore.current.kind === 'conflicts'
+        ? 'conflict-footer'
+        : 'flex justify-end gap-3 border-t border-md3-outline pt-4'}>
         {#if dialogStore.current.kind === 'choice' && dialogStore.current.applyToAllLabel}
           <label class="choice-apply-all">
             <input
@@ -497,5 +580,119 @@
     .choice-action:hover :global(.choice-action-arrow) {
       transform: none;
     }
+  }
+
+  /* --- Per-file conflict resolution ------------------------------------- */
+
+  .conflict-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem 1rem;
+  }
+
+  .conflict-dialog-message {
+    max-width: 68ch;
+    margin: 0;
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .conflict-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .conflict-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .conflict-bulk-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--color-md3-outline);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-md3-on-surface);
+    font-size: 0.78rem;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  .conflict-bulk-btn:hover {
+    background: var(--color-md3-surface-container-high);
+  }
+
+  .conflict-bulk-btn[data-intent='danger'] {
+    color: var(--color-md3-error);
+    border-color: color-mix(in srgb, var(--color-md3-error) 45%, transparent);
+  }
+
+  .conflict-list-label {
+    font-size: 0.75rem;
+    color: var(--color-md3-on-surface-variant);
+  }
+
+  .conflict-list {
+    max-height: min(52vh, 26rem);
+    overflow-y: auto;
+    border: 1px solid var(--color-md3-outline-variant);
+    border-radius: var(--explorer-radius-medium, 8px);
+    background: color-mix(in srgb, var(--color-md3-surface-container-high) 44%, transparent);
+  }
+
+  .conflict-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .conflict-row + .conflict-row {
+    border-top: 1px solid color-mix(in srgb, var(--color-md3-outline-variant) 70%, transparent);
+  }
+
+  .conflict-row-copy {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .conflict-row-path {
+    overflow: hidden;
+    color: var(--color-md3-on-surface);
+    font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .conflict-row-meta {
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.7rem;
+  }
+
+  .conflict-select {
+    flex: none;
+    max-width: 12rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--color-md3-outline);
+    border-radius: var(--explorer-radius-small, 4px);
+    background: var(--color-md3-surface-container);
+    color: var(--color-md3-on-surface);
+    font-size: 0.75rem;
+  }
+
+  .conflict-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
   }
 </style>

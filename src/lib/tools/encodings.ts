@@ -9,7 +9,13 @@
 
 // The bundled iconv-lite relies on Node's `buffer`; install the browser
 // polyfill before it evaluates so the encoding tool works inside WebView2.
-import { Buffer } from 'buffer';
+//
+// `buffer` is a CommonJS package. Vite's dev pre-bundling exposes it with a
+// default export (the `module.exports` object) rather than a named `Buffer`
+// export, so destructure from the default import instead of using a named
+// import (which throws "does not provide an export named 'Buffer'").
+import bufferModule from 'buffer';
+const { Buffer } = bufferModule;
 
 import iconv from 'iconv-lite';
 

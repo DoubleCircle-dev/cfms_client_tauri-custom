@@ -550,7 +550,7 @@ pub fn run() {
                 service_manager: sm,
             });
 
-            let main_window_config = app
+            let mut main_window_config = app
                 .config()
                 .app
                 .windows
@@ -558,6 +558,14 @@ pub fn run() {
                 .find(|config| config.label == "main")
                 .cloned()
                 .ok_or_else(|| std::io::Error::other("Main window configuration is missing"))?;
+
+            // Dev builds: make the window obviously non-production by suffixing
+            // the title with "-dev".
+            #[cfg(debug_assertions)]
+            {
+                main_window_config.title.push_str("-dev");
+            }
+
             tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?.build()?;
 
             // Dev mode: auto-open the vulnerability testing tool in a separate window.
@@ -660,6 +668,8 @@ pub fn run() {
             commands::translate_backend,
             commands::get_connection_settings,
             commands::set_connection_settings,
+            commands::get_protocol_version_settings,
+            commands::set_protocol_version_override,
             commands::get_ca_certificate_status,
             commands::update_ca_certificates,
             commands::login,
@@ -748,6 +758,12 @@ pub fn run() {
             commands::change_group_permissions,
             commands::view_audit_logs,
             commands::server_diagnostics,
+            commands::list_scheduled_task_types,
+            commands::list_schedules,
+            commands::get_schedule,
+            commands::create_schedule,
+            commands::update_schedule,
+            commands::delete_schedule,
             commands::list_user_keys,
             commands::get_user_key,
             commands::delete_user_key,

@@ -433,6 +433,46 @@ pub struct CursorPage<T> {
     pub has_more: bool,
 }
 
+/// A user-manageable task type advertised by the core protocol 27 scheduling API.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScheduledTaskType {
+    pub name: String,
+    pub contract_version: u64,
+    pub required_permission: String,
+    pub payload_schema: serde_json::Value,
+    pub max_attempts: u32,
+}
+
+/// Trigger definition shared by schedule creation, updates, and responses.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScheduleTrigger {
+    #[serde(rename = "type")]
+    pub trigger_type: String,
+    pub data: serde_json::Value,
+    pub timezone: String,
+}
+
+/// A user-managed durable schedule returned by the core protocol 27 scheduling API.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Schedule {
+    pub id: String,
+    pub task_name: String,
+    pub task_contract_version: u64,
+    pub task_available: bool,
+    pub payload: serde_json::Value,
+    pub trigger: ScheduleTrigger,
+    pub enabled: bool,
+    pub status: String,
+    pub revision: u64,
+    pub next_run_at: Option<f64>,
+    pub active_execution_id: Option<String>,
+    pub pending_scheduled_for: Option<f64>,
+    pub created_by: Option<String>,
+    pub created_at: f64,
+    pub updated_by: Option<String>,
+    pub updated_at: f64,
+}
+
 /// A mixed directory-listing item returned by protocol v15.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -478,6 +518,7 @@ pub struct ServerDiagnostics {
     pub component_versions: std::collections::BTreeMap<String, String>,
     pub database: ServerDiagnosticDatabase,
     pub providers: ServerDiagnosticProviders,
+    pub scheduling: ServerDiagnosticScheduling,
     pub extensions: Vec<ServerDiagnosticExtension>,
     pub extension_flags: Vec<String>,
     pub lockdown: ServerDiagnosticLockdown,
@@ -513,6 +554,14 @@ pub struct ServerDiagnosticProviders {
     pub caching: String,
     pub event_bus: String,
     pub rate_limit: String,
+    pub scheduling: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerDiagnosticScheduling {
+    pub available: bool,
+    pub mode: String,
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -597,6 +646,14 @@ pub struct UserPreference {
     #[serde(default)]
     pub file_auto_update_auto_download: bool,
 
+    /// Whether one automatic file check runs at program start, as a sub-option
+    /// of `file_auto_update_enabled`. The preference is part of this struct on
+    /// purpose: a field the frontend sends but this type does not know is
+    /// dropped by `save_user_preference`, so the setting would silently revert
+    /// the next time anything else loaded the preferences.
+    #[serde(default)]
+    pub file_auto_detect_on_startup: bool,
+
     /// Whether the local download root is versioned with git. When true, sync
     /// force-overwrites changed files and commits the result; when false, no git
     /// commands run and outdated local files are renamed to timestamped backups
@@ -641,6 +698,7 @@ impl Default for UserPreference {
             file_auto_update_enabled: default_file_auto_update_enabled(),
             file_auto_update_interval_minutes: default_file_auto_update_interval_minutes(),
             file_auto_update_auto_download: false,
+            file_auto_detect_on_startup: false,
             sync_git_tracking_enabled: false,
             sync_overwrite_strategy: default_sync_overwrite_strategy(),
             privacy: PrivacyPreference::default(),
@@ -886,6 +944,38 @@ mod tests {
     }
 
     #[test]
+    fn file_sync_switches_survive_a_save_load_round_trip() {
+        // The settings page loads the preference, adds its own field, and sends
+        // the whole object back. `save_user_preference` deserialises that into
+        // `UserPreference`, and serde drops every field the struct does not
+        // declare — silently. That is how `file_auto_detect_on_startup` stayed
+        // broken: the switch moved, the write succeeded, and the value was gone
+        // by the next load. Every switch the page can send belongs here.
+        let loaded = serde_json::to_value(UserPreference::default()).unwrap();
+        let mut sent = loaded.as_object().unwrap().clone();
+        for (key, value) in [
+            ("file_auto_update_enabled", serde_json::json!(true)),
+            ("file_auto_update_interval_minutes", serde_json::json!(15)),
+            ("file_auto_update_auto_download", serde_json::json!(true)),
+            ("file_auto_detect_on_startup", serde_json::json!(true)),
+            ("sync_git_tracking_enabled", serde_json::json!(true)),
+            ("sync_overwrite_strategy", serde_json::json!("skip")),
+        ] {
+            sent.insert(key.to_string(), value);
+        }
+
+        let stored: UserPreference =
+            serde_json::from_value(serde_json::Value::Object(sent)).unwrap();
+        let reloaded = serde_json::to_value(&stored).unwrap();
+
+        assert_eq!(reloaded["file_auto_detect_on_startup"], serde_json::json!(true));
+        assert_eq!(reloaded["file_auto_update_auto_download"], serde_json::json!(true));
+        assert_eq!(reloaded["file_auto_update_interval_minutes"], serde_json::json!(15));
+        assert_eq!(reloaded["sync_git_tracking_enabled"], serde_json::json!(true));
+        assert_eq!(reloaded["sync_overwrite_strategy"], serde_json::json!("skip"));
+    }
+
+    #[test]
     fn list_directory_preserves_unknown_document_size() {
         let raw = r#"{
             "folders": [],
@@ -971,8 +1061,10 @@ mod tests {
                 "storage": "local",
                 "caching": "memory",
                 "event_bus": "local",
-                "rate_limit": "memory"
+                "rate_limit": "memory",
+                "scheduling": "local"
             },
+            "scheduling": { "available": true, "mode": "local", "detail": null },
             "extensions": [
                 { "identifier": "builtin", "name": "Built-in", "version": "0.5.0" }
             ],
@@ -985,6 +1077,42 @@ mod tests {
         assert_eq!(parsed.server.protocol_version, 22);
         assert_eq!(parsed.component_versions["pydantic"], "2.13.4");
         assert_eq!(parsed.extensions[0].identifier, "builtin");
+        assert!(parsed.scheduling.available);
+    }
+
+    #[test]
+    fn parses_protocol_twenty_seven_schedule_contract() {
+        let parsed: Schedule = serde_json::from_value(serde_json::json!({
+            "id": "schedule-1",
+            "task_name": "extension.report",
+            "task_contract_version": 2,
+            "task_available": true,
+            "payload": { "format": "pdf" },
+            "trigger": {
+                "type": "interval",
+                "data": {
+                    "seconds": 3600,
+                    "start_at": "2026-09-08T00:00:00+00:00"
+                },
+                "timezone": "UTC"
+            },
+            "enabled": true,
+            "status": "active",
+            "revision": 3,
+            "next_run_at": 1_788_825_600.0,
+            "active_execution_id": null,
+            "pending_scheduled_for": null,
+            "created_by": "admin",
+            "created_at": 1_788_822_000.0,
+            "updated_by": "admin",
+            "updated_at": 1_788_822_100.0
+        }))
+        .unwrap();
+
+        assert_eq!(parsed.id, "schedule-1");
+        assert_eq!(parsed.trigger.trigger_type, "interval");
+        assert_eq!(parsed.trigger.data["seconds"], 3600);
+        assert_eq!(parsed.revision, 3);
     }
 
     #[test]

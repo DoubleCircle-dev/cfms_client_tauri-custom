@@ -17,6 +17,7 @@ import {
   setLockdown,
   unlockAuthLockouts,
   updateUserBlock,
+  viewAuditLogs,
 } from './admin';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
@@ -160,6 +161,22 @@ describe('admin API', () => {
     expect(invokeMock).toHaveBeenLastCalledWith('update_user_block', {
       blockId: 'block-1',
       reason: null,
+    });
+  });
+
+  it('passes exact audit action filters through Tauri IPC and normalizes page defaults', async () => {
+    invokeMock.mockResolvedValue({ entries: [{ id: 'audit-1', action: 'login' }] });
+
+    await expect(viewAuditLogs('cursor-1', 50, ['login', 'extension_action'])).resolves.toMatchObject({
+      entries: [{ id: 'audit-1', action: 'login' }],
+      page_size: 50,
+      next_cursor: null,
+      has_more: false,
+    });
+    expect(invokeMock).toHaveBeenCalledWith('view_audit_logs', {
+      cursor: 'cursor-1',
+      pageSize: 50,
+      filters: ['login', 'extension_action'],
     });
   });
 

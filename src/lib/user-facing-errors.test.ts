@@ -16,6 +16,9 @@ describe('user-facing server errors', () => {
     expect(formatUserFacingError(
       'Server returned 429: slow down\nCFMS_ERROR_DATA:{"retry_after_seconds":12}',
     )).toBe('Too many requests. Try again in 12 seconds.');
+    expect(formatUserFacingError('server rejected request (429): slow down')).toBe(
+      'Too many requests. Try again in a moment.',
+    );
   });
 
   it('formats server capacity responses in Chinese', async () => {

@@ -455,6 +455,20 @@
             >
               {$t('connect.checkUpdates')}
             </button>
+          {:else}
+            <p class="text-xs text-md3-on-surface-variant">
+              {$t('connect.protocolCompatibilityHint')}
+            </p>
+            <button
+              type="button"
+              class="w-full py-2 rounded-full font-medium
+                     bg-md3-tertiary text-md3-on-tertiary
+                     hover:brightness-110 transition-all text-sm"
+              style="font-family: var(--font-md3-sans);"
+              onclick={goToAbout}
+            >
+              {$t('connect.openProtocolCompatibility')}
+            </button>
           {/if}
         </div>
       {/if}

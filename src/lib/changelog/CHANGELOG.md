@@ -4,6 +4,75 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.51.1
+**Released on:** 2026-09-11
+
+**Title:** Bugfix
+
+### Fixed
+- Enhance starterValue function to prefer non-null defaults
+- Add focus retention for required payload field initialization
+
+--- 
+
+## v0.51.0
+**Released on:** 2026-09-11
+
+**Title:** Improved UI and New Code Editor
+
+### Added
+- Add signed update hint to update settings and improve accessibility
+- Implement automatic update check pause functionality
+- Integrate JsonCodeEditor for source rules and add loading message
+- Implement audit log filtering component and functionality
+- Remove unused contract version and max attempts display from ScheduleEditor, update related tests and notifications
+- Implement dynamic theming and syntax highlighting
+- Add schema-driven payload editor
+
+--- 
+
+## v0.50.0
+**Released on:** 2026-09-10
+
+**Title:** Protocol Version 27
+
+### Added
+- Update to core protocol 27, adjust related tests and descriptions
+
+--- 
+
+## v0.49.1
+**Released on:** 2026-09-08
+
+**Title:** Bugfix
+
+### Added
+- Enhance schedule creation with availability checks and tooltips fix: adjust font-family order for material symbols style: update icon component for better overflow handling test: add tests for schedule page button states and search input focus
+
+--- 
+
+## v0.49.0
+**Released on:** 2026-09-08
+
+**Title:** Add protocol 26 schedule workspace
+
+### Added
+- Add protocol 26 schedule workspace
+- Adapt client to protocol 26 scheduling API
+- Improve DownloadTaskGroupHeader with enhanced action handling and state management in tests
+
+--- 
+
+## v0.48.0
+**Released on:** 2026-08-26
+
+**Title:** Better Interaction Support for Rate Limiting
+
+### Added
+- Enhance download task management with rate limit handling and user feedback
+
+--- 
+
 ## v0.47.0
 **Released on:** 2026-08-25
 
