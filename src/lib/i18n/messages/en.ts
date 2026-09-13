@@ -580,6 +580,7 @@ export const en = {
     documentDetails: 'Document Details',
     directoryDetails: 'Directory Details',
     openedLocally: 'Opened {name} with the default application.',
+    openLocal: 'Open file',
     documentId: 'Document ID',
     documentTitle: 'Document title',
     directoryId: 'Directory ID',

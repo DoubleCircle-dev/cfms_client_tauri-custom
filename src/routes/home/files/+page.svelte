@@ -1516,6 +1516,14 @@
       },
     },
     {
+      id: 'open',
+      label: $t('files.openLocal'),
+      icon: 'openInNew',
+      compact: true,
+      disabled: batchBusy || totalSelected !== 1 || !selectedDocument,
+      run: handleOpenSelected,
+    },
+    {
       id: 'trash',
       label: $t('workspace.recycleBin'),
       icon: 'deleteSweep',
@@ -1603,11 +1611,15 @@
     await handleDownload(doc);
   }
 
+  /** Toolbar entry point for `handleOpenOrDownload` (also the touch-device path). */
+  function handleOpenSelected() {
+    if (totalSelected !== 1 || !selectedDocument) return;
+    void handleOpenOrDownload(selectedDocument);
+  }
+
   function handleDocumentClick(event: MouseEvent, doc: ServerDocumentEntry) {
-    if (coarsePointer && !selectMode) {
-      void handleDownload(doc);
-      return;
-    }
+    // Selecting on tap (instead of downloading immediately) keeps the toolbar
+    // "open" action usable on touch devices, where there is no double click.
     selectRow(event, 'document', doc.id);
   }
 

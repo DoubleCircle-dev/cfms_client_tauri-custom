@@ -573,6 +573,7 @@ export const zh_CN = {
     documentDetails: '文档详情',
     directoryDetails: '目录详情',
     openedLocally: '已用系统默认应用打开 {name}。',
+    openLocal: '打开文件',
     documentId: '文档 ID',
     documentTitle: '文档标题',
     directoryId: '目录 ID',
