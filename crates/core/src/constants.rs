@@ -8,17 +8,65 @@
 // Protocol version
 // ---------------------------------------------------------------------------
 /// Exact wire-protocol version required by this client.
-pub const PROTOCOL_VERSION: u32 = 25;
+pub const PROTOCOL_VERSION: u32 = 27;
 
 /// Oldest wire-protocol version supported by this client.
+///
+/// This is the compiled-in floor.  The protocol compatibility picker on the
+/// about page may relax it down to
+/// [`LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION`] for testing.
 pub const MIN_SUPPORTED_PROTOCOL_VERSION: u32 = PROTOCOL_VERSION;
 
 /// Newest wire-protocol version supported by this client.
 pub const MAX_SUPPORTED_PROTOCOL_VERSION: u32 = PROTOCOL_VERSION;
 
+/// Oldest wire-protocol version this client can still interoperate with when a
+/// compatibility override relaxes [`MIN_SUPPORTED_PROTOCOL_VERSION`].
+///
+/// Every server response is parsed through the same code paths regardless of
+/// the advertised protocol version, so lowering the accepted floor down to this
+/// value only relaxes the handshake gate.  It exists for interoperability
+/// testing against older servers and never changes the build default.
+pub const LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION: u32 = 20;
+
+/// Wire-protocol versions offered by the protocol compatibility picker,
+/// newest first.
+pub const SELECTABLE_PROTOCOL_VERSIONS: &[u32] = &[
+    PROTOCOL_VERSION,
+    26,
+    25,
+    24,
+    22,
+    LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION,
+];
+
 /// Return whether a server wire-protocol version is compatible with this client.
 pub const fn is_supported_protocol_version(version: u32) -> bool {
-    version == PROTOCOL_VERSION
+    is_supported_protocol_version_within(version, MIN_SUPPORTED_PROTOCOL_VERSION)
+}
+
+/// Return whether `version` is compatible with this client when the oldest
+/// accepted wire-protocol version is relaxed to `min_accepted`.
+///
+/// Versions newer than [`MAX_SUPPORTED_PROTOCOL_VERSION`] are never accepted,
+/// so an override can only widen compatibility towards older servers.
+pub const fn is_supported_protocol_version_within(version: u32, min_accepted: u32) -> bool {
+    version >= min_accepted && version <= MAX_SUPPORTED_PROTOCOL_VERSION
+}
+
+/// Normalize a stored compatibility override into an effective oldest-accepted
+/// wire-protocol version.
+///
+/// Returns `None` when `raw` is absent or is neither one of
+/// [`SELECTABLE_PROTOCOL_VERSIONS`] nor actually below the build default, so a
+/// corrupted or tampered setting can never widen compatibility unintentionally.
+pub fn normalize_min_protocol_version_override(raw: Option<u32>) -> Option<u32> {
+    let raw = raw?;
+    if raw < MIN_SUPPORTED_PROTOCOL_VERSION && SELECTABLE_PROTOCOL_VERSIONS.contains(&raw) {
+        Some(raw)
+    } else {
+        None
+    }
 }
 
 /// Protocol 25 conclusion codes returned when a file task cannot be claimed.
@@ -94,8 +142,10 @@ pub const DOWNLOAD_CHUNK_SIZE_OPTIONS: [u32; 8] = [
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_SUPPORTED_PROTOCOL_VERSION, MIN_SUPPORTED_PROTOCOL_VERSION,
-        is_supported_protocol_version,
+        LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION, MAX_SUPPORTED_PROTOCOL_VERSION,
+        MIN_SUPPORTED_PROTOCOL_VERSION, PROTOCOL_VERSION, SELECTABLE_PROTOCOL_VERSIONS,
+        is_supported_protocol_version, is_supported_protocol_version_within,
+        normalize_min_protocol_version_override,
     };
 
     #[test]
@@ -119,9 +169,60 @@ mod tests {
     }
 
     #[test]
-    fn supports_only_protocol_twenty_five() {
-        assert!(is_supported_protocol_version(25));
-        assert!(!is_supported_protocol_version(24));
+    fn supports_only_protocol_twenty_seven() {
+        assert!(is_supported_protocol_version(27));
         assert!(!is_supported_protocol_version(26));
+        assert!(!is_supported_protocol_version(28));
+    }
+
+    #[test]
+    fn relaxing_the_floor_accepts_older_protocol_versions() {
+        for version in LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION..=MAX_SUPPORTED_PROTOCOL_VERSION {
+            assert!(is_supported_protocol_version_within(
+                version,
+                LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION
+            ));
+        }
+
+        assert!(!is_supported_protocol_version_within(
+            LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION - 1,
+            LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION
+        ));
+    }
+
+    #[test]
+    fn relaxing_the_floor_never_accepts_newer_protocol_versions() {
+        assert!(!is_supported_protocol_version_within(
+            MAX_SUPPORTED_PROTOCOL_VERSION + 1,
+            LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION
+        ));
+    }
+
+    #[test]
+    fn selectable_versions_are_unique_and_start_at_the_build_target() {
+        assert_eq!(SELECTABLE_PROTOCOL_VERSIONS[0], PROTOCOL_VERSION);
+
+        let mut sorted = SELECTABLE_PROTOCOL_VERSIONS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), SELECTABLE_PROTOCOL_VERSIONS.len());
+
+        assert!(SELECTABLE_PROTOCOL_VERSIONS.contains(&LEGACY_MIN_SUPPORTED_PROTOCOL_VERSION));
+    }
+
+    #[test]
+    fn override_accepts_only_selectable_versions_below_the_build_target() {
+        assert_eq!(
+            normalize_min_protocol_version_override(Some(25)),
+            Some(25)
+        );
+        assert_eq!(
+            normalize_min_protocol_version_override(Some(PROTOCOL_VERSION)),
+            None
+        );
+        // Not selectable, so it must not widen compatibility.
+        assert_eq!(normalize_min_protocol_version_override(Some(21)), None);
+        assert_eq!(normalize_min_protocol_version_override(Some(19)), None);
+        assert_eq!(normalize_min_protocol_version_override(None), None);
     }
 }

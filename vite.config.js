@@ -38,6 +38,17 @@ export default defineConfig(async () => ({
       // performs the CJS→ESM interop that raw serving does not.
       "buffer",
       "iconv-lite",
+      // The schedule workspace editors pull these in on their own routes.
+      "@cfworker/json-schema",
+      "@codemirror/autocomplete",
+      "@codemirror/commands",
+      "@codemirror/lang-json",
+      "@codemirror/language",
+      "@codemirror/lint",
+      "@codemirror/search",
+      "@codemirror/state",
+      "@codemirror/view",
+      "@lezer/highlight",
       "@tanstack/svelte-virtual",
       "@tauri-apps/api/app",
       "@tauri-apps/api/core",

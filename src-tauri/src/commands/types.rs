@@ -10,6 +10,64 @@ pub struct ConnectionSettingsDto {
     pub recent_connection_addresses: Vec<String>,
 }
 
+// ---------------------------------------------------------------------------
+// Protocol compatibility override
+// ---------------------------------------------------------------------------
+
+/// Device-level key holding the protocol compatibility override.
+pub const PROTOCOL_VERSION_OVERRIDE_KEY: &str = "protocol_version_override";
+
+/// Protocol compatibility state consumed by the about page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolVersionSettingsDto {
+    /// Wire-protocol version this build targets.
+    pub client_version: u32,
+    /// Oldest server wire-protocol version currently accepted.
+    pub min_accepted_version: u32,
+    /// Explicit compatibility override, `None` when the build default applies.
+    pub override_version: Option<u32>,
+    /// Overrides the picker offers, newest first.
+    pub selectable_versions: Vec<u32>,
+}
+
+/// Read the stored protocol compatibility override.
+///
+/// Values that are absent, unparsable, or outside the selectable set are
+/// treated as "no override" so a corrupted row cannot widen compatibility.
+pub fn read_protocol_version_override(
+    settings: &cfms_service::db::settings::SettingsStore,
+) -> Option<u32> {
+    let raw = settings
+        .get(PROTOCOL_VERSION_OVERRIDE_KEY)
+        .ok()
+        .flatten()?;
+    cfms_core::constants::normalize_min_protocol_version_override(raw.trim().parse::<u32>().ok())
+}
+
+/// Oldest server wire-protocol version this client currently accepts.
+///
+/// Falls back to [`cfms_core::constants::MIN_SUPPORTED_PROTOCOL_VERSION`], which
+/// keeps every build strict unless a compatibility override is stored.
+pub fn effective_min_protocol_version(
+    settings: &cfms_service::db::settings::SettingsStore,
+) -> u32 {
+    read_protocol_version_override(settings)
+        .unwrap_or(cfms_core::constants::MIN_SUPPORTED_PROTOCOL_VERSION)
+}
+
+impl ProtocolVersionSettingsDto {
+    /// Build the response payload from persisted device settings.
+    pub fn load(settings: &cfms_service::db::settings::SettingsStore) -> Self {
+        Self {
+            client_version: cfms_core::constants::PROTOCOL_VERSION,
+            min_accepted_version: effective_min_protocol_version(settings),
+            override_version: read_protocol_version_override(settings),
+            selectable_versions: cfms_core::constants::SELECTABLE_PROTOCOL_VERSIONS.to_vec(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaCertificateStatusDto {

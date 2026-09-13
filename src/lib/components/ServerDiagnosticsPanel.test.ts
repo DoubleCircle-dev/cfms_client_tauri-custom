@@ -42,7 +42,9 @@ const diagnostics = {
     caching: 'memory',
     event_bus: 'local',
     rate_limit: 'memory',
+    scheduling: 'local',
   },
+  scheduling: { available: true, mode: 'local', detail: null },
   extensions: [{ identifier: 'builtin', name: 'Built-in', version: '0.5.0' }],
   extension_flags: ['documents'],
   lockdown: { enabled: false, reason: null },
@@ -66,6 +68,7 @@ describe('ServerDiagnosticsPanel', () => {
     expect(screen.getByText('0.5.0.260812_alpha')).toBeTruthy();
     expect(screen.getByText('CPython 3.14.6')).toBeTruthy();
     expect(screen.getByText('sqlite · pysqlite')).toBeTruthy();
+    expect(screen.getByText('Available')).toBeTruthy();
     expect(screen.getByText('2.13.4')).toBeTruthy();
     expect(screen.getByText('Built-in')).toBeTruthy();
     expect(screen.getByText('documents')).toBeTruthy();
@@ -96,7 +99,7 @@ describe('ServerDiagnosticsPanel', () => {
 
     expect(await screen.findByText('计划维护')).toBeTruthy();
     const humanReadableValues = [...container.querySelectorAll('dd.human-readable')];
-    expect(humanReadableValues).toHaveLength(3);
+    expect(humanReadableValues).toHaveLength(4);
     expect(humanReadableValues.every((element) => element.tagName === 'DD')).toBe(true);
     expect(humanReadableValues.map((element) => element.textContent)).toContain('计划维护');
   });

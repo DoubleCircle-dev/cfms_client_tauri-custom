@@ -78,6 +78,11 @@
       && authStore.isLoggedIn
       && authStore.permissions.includes('diagnostics'),
   );
+  const canViewSchedules = $derived(
+    serverStateStore.connected
+      && authStore.isLoggedIn
+      && authStore.permissions.includes('view_schedules'),
+  );
   const isSettingsRoute = $derived(
     $page.url.pathname === '/home/settings' || $page.url.pathname.startsWith('/home/settings/'),
   );
@@ -116,6 +121,9 @@
   ]);
 
   const bottomNavigation = $derived<WorkspaceNavItem[]>([
+    ...(canViewSchedules
+      ? [{ id: 'schedules', label: $t('workspace.schedules'), href: '/home/schedules', icon: 'schedules' as const, exact: true }]
+      : []),
     ...(isAdmin
       ? [{ id: 'manage', label: $t('workspace.administration'), href: '/home/manage', icon: 'adminPanelSettings' as const }]
       : []),
@@ -146,6 +154,7 @@
     if (path === '/home/tools') return $t('tools.title');
     if (path === '/home/chat') return $t('chat.title');
     if (path === '/home/manage') return $t('workspace.administration');
+    if (path === '/home/schedules') return $t('workspace.schedules');
     if (path === '/home/more') return $t('workspace.account');
     if (path === '/home/diagnostics') return $t('workspace.diagnostics');
     if (path === '/home/about') return $t('workspace.about');
@@ -718,7 +727,7 @@
   .explorer-nav-empty { padding: 0.3rem 0.55rem; color: var(--explorer-text-muted); font-size: 0.7rem; line-height: 1.4; }
   .explorer-nav-loading { padding: 0.5rem; }
   .explorer-content { position: relative; min-width: 0; flex: 1; overflow: hidden; background: var(--explorer-background); }
-  .explorer-route-view { height: 100%; min-height: 0; overflow-y: auto; animation: route-enter 160ms ease-out; }
+  .explorer-route-view { height: 100%; min-height: 0; overflow-y: auto; container-type: inline-size; animation: route-enter 160ms ease-out; }
   .explorer-drawer-scrim { display: none; }
 
   @keyframes route-enter { from { opacity: 0; } to { opacity: 1; } }

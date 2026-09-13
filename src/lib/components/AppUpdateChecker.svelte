@@ -67,6 +67,16 @@
       ? $t('settings.updates.downloadAndOpenInstaller')
       : $t('settings.updates.downloadAndInstall'),
   );
+  const automaticCheckPauseLabel = $derived.by(() => {
+    const pause = appUpdateState.automaticCheckPause;
+    if (pause.mode === 'indefinite') return $t('settings.updates.pausedIndefinitely');
+    if (pause.mode === 'until') {
+      return $t('settings.updates.pausedUntil', {
+        values: { date: formatPauseDate(pause.until) },
+      });
+    }
+    return null;
+  });
 
   $effect(() => {
     if (!status) return;
@@ -88,7 +98,10 @@
 
   onMount(async () => {
     try {
-      await appUpdateState.ensureChannel();
+      await Promise.all([
+        appUpdateState.ensureChannel(),
+        appUpdateState.ensureAutomaticCheckPause(),
+      ]);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -132,6 +145,16 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleString();
+  }
+
+  function formatPauseDate(value: number): string {
+    return new Date(value).toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   function createUpdateNotificationCopy(): UpdateNotificationCopy {
@@ -209,6 +232,11 @@
             <span class="inline-status status-success">
               <Icon name="checkCircle" size="18px" />
               {$t('settings.updates.latest')}
+            </span>
+          {:else if automaticCheckPauseLabel}
+            <span class="inline-status status-warning">
+              <Icon name="pauseCircle" size="18px" />
+              {automaticCheckPauseLabel}
             </span>
           {:else}
             <span class="inline-status status-neutral">{$t('about.updateNotChecked')}</span>
@@ -298,7 +326,7 @@
 
     <button class="text-action" onclick={() => goto('/home/settings/updates')} disabled={appUpdateState.checking || appUpdateState.installing}>
       <Icon name="settings" size="18px" />
-      {$t('settings.updates.configureChannel')}
+      {$t('settings.updates.configureUpdates')}
     </button>
 
     {#if onOpenFeatureTour}

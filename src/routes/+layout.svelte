@@ -136,7 +136,9 @@
   });
 
   $effect(() => {
-    const updateDecisionReady = appUpdateState.checked || appUpdateState.error !== null;
+    const updateDecisionReady = appUpdateState.automaticCheckSettled
+      || appUpdateState.checked
+      || appUpdateState.error !== null;
     if (
       !releaseHighlightsState.initialized
       || !releaseHighlightsState.autoEligible
@@ -315,8 +317,20 @@
       console.warn("[cfms] Failed to query local IP address(es)", err);
     }
 
-    // Kick off one non-blocking update check for this client session.
-    void appUpdateState.check();
+    // Diagnostic: log the local host IP addresses to the DevTools console.
+    try {
+      const localIps = await getLocalIpAddresses();
+      if (localIps.length > 0) {
+        console.info(`[cfms] Local IP address(es): ${localIps.join(", ")}`);
+      } else {
+        console.warn("[cfms] Unable to determine local IP address(es)");
+      }
+    } catch (err) {
+      console.warn("[cfms] Failed to query local IP address(es)", err);
+    }
+
+    // Resolve the device update policy, then run or schedule this session's automatic check.
+    void appUpdateState.initializeAutomaticChecks();
     void releaseHighlightsState.initialize();
 
     // Fetch initial service status.
@@ -338,6 +352,8 @@
   onMount(() => {
     if (!resetRecoveryMode) appearanceStore.init();
   });
+
+  onMount(() => () => appUpdateState.disposeAutomaticChecks());
 
   $effect(() => {
     if (resetRecoveryMode) return;

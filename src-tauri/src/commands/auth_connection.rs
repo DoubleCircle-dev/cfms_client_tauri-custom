@@ -552,7 +552,10 @@ pub fn quit_application(app_handle: tauri::AppHandle) {
 /// should direct the user to update the client.
 ///
 /// If the server's protocol version is lower than the supported range the connection is also
-/// closed — the server is too old and the client cannot downgrade.
+/// closed — the server is too old and the client cannot downgrade.  The
+/// protocol compatibility override stored by the diagnostic settings can relax
+/// that lower bound for interoperability testing; the upper bound is fixed at
+/// build time.
 ///
 /// # Returns
 ///
@@ -730,11 +733,25 @@ pub async fn connect(
     // --- Protocol version compatibility check ---
     //
     // Mirrors the Python reference's protocol-version gate in
-    // `ConnectFormController.action_connect`.
-    let min_supported_protocol = cfms_core::constants::MIN_SUPPORTED_PROTOCOL_VERSION;
+    // `ConnectFormController.action_connect`, except that the oldest accepted
+    // version may be relaxed by the protocol compatibility override stored on
+    // the about page.  The newest accepted version is always the build target.
+    let build_min_protocol = cfms_core::constants::MIN_SUPPORTED_PROTOCOL_VERSION;
+    let min_supported_protocol = effective_min_protocol_version(&state.settings);
     let max_supported_protocol = cfms_core::constants::MAX_SUPPORTED_PROTOCOL_VERSION;
 
-    if !cfms_core::constants::is_supported_protocol_version(server_info.protocol_version) {
+    if min_supported_protocol < build_min_protocol {
+        tracing::warn!(
+            "Protocol compatibility override active: accepting server protocol versions \
+             {min_supported_protocol}..={max_supported_protocol}, build target is \
+             {build_min_protocol}"
+        );
+    }
+
+    if !cfms_core::constants::is_supported_protocol_version_within(
+        server_info.protocol_version,
+        min_supported_protocol,
+    ) {
         // Tear down — cannot communicate with this server.
         state.connect_attempts.unregister(attempt_id);
         conn.close().await;

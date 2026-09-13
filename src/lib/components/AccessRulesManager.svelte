@@ -20,6 +20,7 @@
   } from '$lib/access-rules';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import JsonCodeEditor from '$lib/components/JsonCodeEditor.svelte';
   import MdSwitch from '$lib/components/MdSwitch.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
 
@@ -85,6 +86,11 @@
     }
 
     activeView = view;
+  }
+
+  function changeSource(value: string) {
+    sourceText = value;
+    sourceError = null;
   }
 
   function setActiveOperation(operation: AccessOperation) {
@@ -496,14 +502,17 @@
     </div>
   {:else}
     <div class="min-h-0 flex-1 overflow-auto p-5">
-      <textarea
-        class="h-[54vh] w-full resize-none rounded-lg border bg-md3-field p-3 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/25 {sourceError ? 'border-md3-error' : 'border-md3-outline'}"
-        style="font-family: var(--font-md3-mono);"
-        bind:value={sourceText}
-        disabled={saving}
-      ></textarea>
+      <div class="access-rules-source-editor" class:has-error={sourceError !== null}>
+        <JsonCodeEditor
+          value={sourceText}
+          disabled={saving}
+          ariaLabel={$t('files.accessRules')}
+          loadingLabel={$t('files.accessRulesEditorLoading')}
+          onChange={changeSource}
+        />
+      </div>
       {#if sourceError}
-        <p class="mt-2 text-xs text-md3-error">
+        <p class="mt-2 text-xs text-md3-error" role="alert">
           {$t('files.invalidAccessRulesJson', { values: { error: sourceError } })}
         </p>
       {/if}
@@ -632,5 +641,16 @@
     color: var(--color-md3-on-surface);
     padding: 0.25rem 0.55rem;
     outline: none;
+  }
+
+  .access-rules-source-editor :global(.cm-editor),
+  .access-rules-source-editor :global(.editor-loading),
+  .access-rules-source-editor :global(textarea) {
+    height: 54vh;
+    min-height: 12rem;
+  }
+
+  .access-rules-source-editor.has-error :global(.code-editor) {
+    border-color: var(--color-md3-error);
   }
 </style>
