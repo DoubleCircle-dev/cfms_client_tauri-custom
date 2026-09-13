@@ -914,6 +914,34 @@
     scrollbar-gutter: stable;
   }
 
+  /* The workspace scrollbar is 4px wide and almost transparent; in a dialog
+     whose content overflows, the user has to be able to tell that there is
+     more to read, so the content area gets a visible one. */
+  .modal-content {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-md3-on-surface-variant) 60%, transparent) transparent;
+  }
+
+  .modal-content::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .modal-content::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .modal-content::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: color-mix(in srgb, var(--color-md3-on-surface-variant) 55%, transparent);
+  }
+
+  .modal-content::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--color-md3-on-surface-variant) 78%, transparent);
+  }
+
   :global(.modal-positioner--sized .modal-content > *),
   :global(.modal-positioner--maximized .modal-content > *) {
     height: 100% !important;

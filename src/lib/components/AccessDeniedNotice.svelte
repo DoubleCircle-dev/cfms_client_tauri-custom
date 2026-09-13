@@ -210,7 +210,10 @@
     width: 100%;
     min-height: 100%;
     align-items: center;
+    /* `safe` keeps the top of a too-tall notice reachable once the container
+       scrolls, instead of centring the overflow out of view. */
     justify-content: center;
+    justify-content: safe center;
     flex-direction: column;
     gap: 1.05rem;
     padding: 3rem 1.5rem;

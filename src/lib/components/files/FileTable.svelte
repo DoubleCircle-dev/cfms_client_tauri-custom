@@ -997,7 +997,29 @@
     min-width: var(--file-table-content-width);
     min-height: 100%;
   }
-  .file-table-empty-overlay { position: absolute; z-index: 6; inset: 36px 0 0; display: flex; min-height: 0; align-items: stretch; justify-content: stretch; overflow: hidden; background: var(--explorer-background); }
+  /* Scrollable: the empty state can be taller than the viewport once it
+     carries a permission breakdown, and clipping it would hide the very
+     explanation the user came for. */
+  .file-table-empty-overlay { position: absolute; z-index: 6; inset: 36px 0 0; display: flex; min-height: 0; align-items: stretch; justify-content: stretch; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; background: var(--explorer-background); }
+
+  /* Visible scroll affordance: the 4px workspace scrollbar is easy to miss on
+     a full-page message that no longer fits. */
+  .file-table-empty-overlay {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--explorer-text-muted) 60%, transparent) transparent;
+  }
+
+  .file-table-empty-overlay::-webkit-scrollbar { width: 10px; }
+  .file-table-empty-overlay::-webkit-scrollbar-track { background: transparent; }
+  .file-table-empty-overlay::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: color-mix(in srgb, var(--explorer-text-muted) 55%, transparent);
+  }
+  .file-table-empty-overlay::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--explorer-text-muted) 78%, transparent);
+  }
   .file-table-grid { display: grid; grid-template-columns: 28px var(--file-name-width, minmax(240px, 1fr)) var(--file-modified-width, 168px) var(--file-type-width, 112px) var(--file-size-width, 100px); align-items: center; gap: 0.55rem; }
   .file-table-header { position: sticky; top: 0; z-index: 10; min-height: 36px; border-bottom: 1px solid var(--explorer-border-strong); padding: 0 0.7rem; color: var(--explorer-text); background: var(--explorer-surface-raised); font-size: 0.75rem; }
   .file-table-column-header { position: relative; display: flex; min-width: 0; height: 100%; align-items: center; border-right: 1px solid var(--explorer-border); }
