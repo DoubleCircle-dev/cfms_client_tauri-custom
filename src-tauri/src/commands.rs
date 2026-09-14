@@ -38,6 +38,9 @@ use crate::{AppHandleState, UploadInterruption};
 const UPDATE_RELEASES_API: &str =
     "https://api.github.com/repos/cfms-dev/cfms_client_tauri/releases";
 const UPDATE_USER_AGENT: &str = "cfms-client-tauri-updater";
+const UPDATE_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+const UPDATE_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const UPDATE_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 const CA_CERT_API_URL: &str = "https://api.github.com/repos/cfms-dev/ca/contents/";
 const CA_MANIFEST_FILENAME: &str = ".manifest.json";
 const MAX_RECENT_CONNECTION_ADDRESSES: usize = 5;

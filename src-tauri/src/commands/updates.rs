@@ -618,6 +618,7 @@ async fn find_update_release(
         .get(UPDATE_RELEASES_API)
         .header(reqwest::header::USER_AGENT, UPDATE_USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .timeout(UPDATE_CHECK_TIMEOUT)
         .send()
         .await
         .map_err(|e| format!("Failed to fetch release list: {e}"))?
@@ -652,7 +653,10 @@ fn updater_proxy_url(state: &tauri::State<'_, AppHandleState>) -> Result<Option<
 }
 
 fn update_http_client(proxy_url: Option<&url::Url>) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder().user_agent(UPDATE_USER_AGENT);
+    let mut builder = update_http_client_builder()
+        .user_agent(UPDATE_USER_AGENT)
+        .connect_timeout(UPDATE_CONNECT_TIMEOUT)
+        .read_timeout(UPDATE_READ_TIMEOUT);
     if let Some(proxy_url) = proxy_url {
         let proxy = reqwest::Proxy::all(proxy_url.as_str())
             .map_err(|e| format!("Failed to configure updater proxy: {e}"))?;
@@ -661,6 +665,27 @@ fn update_http_client(proxy_url: Option<&url::Url>) -> Result<reqwest::Client, S
     builder
         .build()
         .map_err(|e| format!("Failed to initialize updater HTTP client: {e}"))
+}
+
+fn update_http_client_builder() -> reqwest::ClientBuilder {
+    #[cfg(target_os = "android")]
+    {
+        // reqwest 0.13's default rustls verifier delegates to Android and must
+        // be initialized with JVM/context references before the first TLS
+        // handshake. Tauri does not perform that initialization for custom
+        // reqwest clients, so the command task panics and its IPC invocation
+        // never settles. Use the same bundled Mozilla roots as the transport
+        // layer; this is also the behavior the updater had with reqwest 0.12.
+        let mut root_store = rustls::RootCertStore::empty();
+        root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        let tls = rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+        return reqwest::Client::builder().tls_backend_preconfigured(tls);
+    }
+
+    #[cfg(not(target_os = "android"))]
+    reqwest::Client::builder()
 }
 
 fn describe_update_proxy(proxy_url: Option<&url::Url>) -> String {

@@ -605,6 +605,7 @@ dependencies = [
  "tracing",
  "unic-langid",
  "url",
+ "webpki-roots 1.0.9",
  "winreg 0.56.0",
  "zeroize",
 ]
