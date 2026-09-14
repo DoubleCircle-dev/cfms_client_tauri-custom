@@ -175,7 +175,7 @@
             {targetType === 'directory' ? $t('manage.directoryId') : $t('manage.documentId')}
           </span>
           <input
-            class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+            class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
             placeholder={targetType === 'directory' ? $t('manage.directoryIdPlaceholder') : $t('manage.documentIdPlaceholder')}
             bind:value={targetId}
             disabled={busy}
@@ -192,7 +192,7 @@
         rows="3"
         placeholder={$t('manage.blockReasonPlaceholder')}
         disabled={busy}
-        class="w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/25 disabled:opacity-50"
+        class="w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition disabled:opacity-50"
       ></textarea>
       <span class="text-xs text-md3-on-surface-variant">
         {$t('manage.blockReasonHelp', { values: { count: 1024 - reason.length } })}
@@ -217,7 +217,7 @@
           <label>
             <span class="mb-1.5 block text-xs font-medium text-md3-on-surface-variant">{$t('manage.expiryDate')}</span>
             <input
-              class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+              class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
               type="date"
               bind:value={expiryDate}
               disabled={busy}
@@ -226,7 +226,7 @@
           <label>
             <span class="mb-1.5 block text-xs font-medium text-md3-on-surface-variant">{$t('manage.expiryTime')}</span>
             <input
-              class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+              class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
               type="time"
               bind:value={expiryTime}
               disabled={busy}

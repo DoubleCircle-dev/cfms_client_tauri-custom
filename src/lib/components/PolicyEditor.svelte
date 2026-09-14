@@ -86,7 +86,6 @@
            {error ? 'border-md3-error' : 'border-md3-outline'}
            bg-md3-field text-md3-on-surface
            placeholder:text-md3-on-surface-variant
-           focus:ring-2 focus:ring-md3-primary focus:border-transparent
            resize-y transition-colors"
     style="font-family: var(--font-md3-mono);"
     bind:value={edited}

@@ -1563,7 +1563,7 @@
             <span class="font-medium">
               {activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonLabel') : $t('manage.disableReasonLabel')}
             </span>
-            <textarea bind:value={accountDisableReason} maxlength="1024" rows="3" placeholder={$t('manage.disableReasonPlaceholder')} class="w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/25 disabled:opacity-50" disabled={busyKey !== null}></textarea>
+            <textarea bind:value={accountDisableReason} maxlength="1024" rows="3" placeholder={$t('manage.disableReasonPlaceholder')} class="w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition disabled:opacity-50" disabled={busyKey !== null}></textarea>
             <span class="text-xs text-md3-on-surface-variant">
               {activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonHelp') : $t('manage.reasonOptional')}
             </span>

@@ -286,7 +286,6 @@
   .field-label { color: var(--color-md3-on-surface); font-family: var(--font-md3-sans); font-size: 0.75rem; font-weight: 650; }
   input, select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.84rem/1.4 var(--font-md3-sans); }
   input, select { min-height: 42px; padding: 0 0.7rem; }
-  input:focus, select:focus { outline: 2px solid var(--color-md3-primary); outline-offset: 1px; }
   input:disabled, select:disabled { cursor: not-allowed; opacity: 0.55; }
   .trigger-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 0.75rem; }
   .trigger-grid > div { display: grid; gap: 0.4rem; }

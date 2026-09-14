@@ -211,9 +211,7 @@
   }
 
   .lockdown-reason-entry input:focus {
-    border-color: var(--explorer-accent);
     background: var(--explorer-surface-raised);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--explorer-accent) 18%, transparent);
   }
 
   .lockdown-reason-entry input:disabled {

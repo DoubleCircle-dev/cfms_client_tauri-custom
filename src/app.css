@@ -522,18 +522,26 @@ html[data-theme="light"] :where(.explorer-shell, .workspace-palette) {
   outline-offset: -2px;
 }
 
-/* Text-entry controls use the same high-contrast indicator as keyboard
-   navigation. Keeping it inside the control prevents clipped rings in
-   scrollable and overflow-hidden containers, while replacing component-level
-   Tailwind rings avoids stacked focus colours. */
-:where(input, textarea, select):not([data-focus-ring="delegated"]):focus {
-  border-color: var(--color-md3-primary-emphasis, var(--color-md3-primary));
-  outline: none;
-  box-shadow: inset 0 0 0 1px var(--color-md3-primary-emphasis, var(--color-md3-primary));
+/* Native fields have exactly one focus-ring owner. This rule is deliberately
+   authoritative: component-scoped CSS and Tailwind focus utilities must not
+   add a second outline or shadow. Composite fields opt out with
+   data-focus-ring="delegated" and draw their indicator on the wrapper. */
+:where(input, textarea, select) {
+  --cfms-field-focus-color: var(--color-md3-primary-emphasis, var(--color-md3-primary));
 }
 
-:where([data-focus-ring="delegated"]):focus {
-  outline: none;
+:where(input, textarea, select)[aria-invalid="true"] {
+  --cfms-field-focus-color: var(--color-md3-error);
+}
+
+:root :where(input, textarea, select):not([data-focus-ring="delegated"]):focus {
+  border-color: var(--cfms-field-focus-color) !important;
+  outline: none !important;
+  box-shadow: inset 0 0 0 1px var(--cfms-field-focus-color) !important;
+}
+
+:root :where([data-focus-ring="delegated"]):focus {
+  outline: none !important;
 }
 
 [data-programmatic-focus="true"]:focus,
