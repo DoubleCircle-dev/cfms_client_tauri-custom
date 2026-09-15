@@ -596,8 +596,7 @@
     box-shadow: inset 0 0 0 1px var(--explorer-accent);
   }
 
-  .scope-field input,
-  .scope-field input:focus {
+  .scope-field input {
     min-width: 0;
     width: 100%;
     flex: 1;

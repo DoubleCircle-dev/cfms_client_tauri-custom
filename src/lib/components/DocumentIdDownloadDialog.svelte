@@ -71,7 +71,7 @@
           placeholder={$t('tasks.downloadByIdPlaceholder')}
           aria-describedby="document-id-download-description{error ? ' document-id-download-error' : ''}"
           aria-invalid={error ? 'true' : undefined}
-          class="document-id-input w-full rounded-xl border border-md3-outline bg-md3-field px-3 py-2.5 font-mono text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+          class="document-id-input w-full rounded-xl border border-md3-outline bg-md3-field px-3 py-2.5 font-mono text-sm text-md3-on-surface outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
           bind:value={documentId}
           disabled={busy}
         />
