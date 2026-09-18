@@ -252,6 +252,19 @@
           </button>
         {/if}
 
+        {#if entry.action}
+          <button
+            class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold opacity-90 transition hover:bg-white/20 hover:opacity-100"
+            onclick={(event) => {
+              event.stopPropagation();
+              entry.action.run();
+              notificationStore.remove(entry.id);
+            }}
+          >
+            {entry.action.label}
+          </button>
+        {/if}
+
         <button
           class="shrink-0 rounded-full p-0.5 opacity-75 transition hover:bg-white/10 hover:opacity-100"
           aria-label="Close"

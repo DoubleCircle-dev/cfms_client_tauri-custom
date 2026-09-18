@@ -524,6 +524,19 @@
     persistJson(ROOM_NAMES_KEY, roomNames);
   }
 
+  function clearUserNameOverride(userId: string) {
+    const copy = { ...userNames };
+    delete copy[userId];
+    userNames = copy;
+  }
+
+  function isUserNameOverridden(userId: string): boolean {
+    const current = userNames[userId];
+    // Only counts when the stored name differs from the shipped default; a
+    // decoded real name happens to equal its default and is not an override.
+    return current !== undefined && current !== DEFAULT_USER_NAMES[userId];
+  }
+
   function renameUser(userId: string) {
     const current = userNames[userId] ?? '';
     const next = window.prompt($t('chat.userNamePrompt'), current);
@@ -531,9 +544,7 @@
     if (next.trim()) {
       userNames = { ...userNames, [userId]: next.trim() };
     } else {
-      const copy = { ...userNames };
-      delete copy[userId];
-      userNames = copy;
+      clearUserNameOverride(userId);
     }
     persistJson(USER_NAMES_KEY, userNames);
   }
@@ -774,6 +785,16 @@
                   >
                     {displayName(message.user)}
                   </button>
+                  {#if isUserNameOverridden(message.user)}
+                    <button
+                      type="button"
+                      class="chat-user-name-reset"
+                      title={$t('chat.restoreUserName')}
+                      onclick={() => clearUserNameOverride(message.user)}
+                    >
+                      <Icon name="restore" size="14px" />
+                    </button>
+                  {/if}
                   <span class="chat-msg-time">{message.time}</span>
                 </div>
                 <div class="chat-bubble" style:background={colors.bg} style:border-color={colors.strip}>
@@ -1168,6 +1189,29 @@
 
   .chat-user-name:hover {
     color: var(--explorer-accent);
+  }
+
+  .chat-user-name-reset {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 50%;
+    color: var(--explorer-text-muted);
+    background: transparent;
+    font-size: 0.7rem;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: background-color 90ms ease, color 90ms ease, opacity 90ms ease;
+  }
+
+  .chat-user-name-reset:hover {
+    color: var(--explorer-accent);
+    background: color-mix(in srgb, var(--explorer-accent) 12%, transparent);
+    opacity: 1;
   }
 
   .chat-msg-time {

@@ -67,6 +67,9 @@ function renderTable(
       hiddenItemIds: new Set<string>(),
       undownloadedDocumentIds: new Set<string>(),
       outdatedDocumentIds: new Set<string>(),
+      openingInProgressDocumentIds: new Set<string>(),
+      openingInProgressProgress: new Map<string, number>(),
+      onCancelOpenDocument: vi.fn(),
     },
   });
 

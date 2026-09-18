@@ -56,6 +56,9 @@
     hiddenItemIds,
     undownloadedDocumentIds,
     outdatedDocumentIds,
+    openingInProgressDocumentIds,
+    openingInProgressProgress,
+    onCancelOpenDocument,
     loading,
     folders,
     documents,
@@ -91,6 +94,9 @@
     hiddenItemIds: Set<string>;
     undownloadedDocumentIds: Set<string>;
     outdatedDocumentIds: Set<string>;
+    openingInProgressDocumentIds: Set<string>;
+    openingInProgressProgress: Map<string, number>;
+    onCancelOpenDocument: (documentId: string) => void;
     loading: boolean;
     folders: ServerDirectoryEntry[];
     documents: ServerDocumentEntry[];
@@ -264,6 +270,11 @@
   function rowStyle(virtualItem: VirtualItem | null) {
     if (!virtualItem) return '';
     return `position:absolute;top:0;left:0;width:100%;height:${virtualItem.size}px;transform:translateY(${virtualItem.start}px);`;
+  }
+
+  function rowOpeningStyle(documentId: string): string {
+    const progress = openingInProgressProgress.get(documentId);
+    return progress != null ? `--opening-progress:${Math.round(progress * 100)}%` : '';
   }
 
   function isBlankInteraction(event: MouseEvent) {
@@ -936,9 +947,10 @@
                   class:file-table-row--dragged={isDragged(row)}
                   class:file-table-row--recently-updated={recentlyUpdatedDocumentIds.has(row.document.id)}
                   class:file-table-row--not-updated={notUpdatedDocumentIds.has(row.document.id)}
+                  class:file-table-row--opening={openingInProgressDocumentIds.has(row.document.id)}
                   aria-pressed={isSelected(row)}
                   tabindex={activeRowKey === rowKey(row) ? 0 : -1}
-                  style={rowStyle(rendered.virtualItem)}
+                  style={rowStyle(rendered.virtualItem) + rowOpeningStyle(row.document.id)}
                   onclick={(event) => handleRowClick(event, row)}
                   ondblclick={() => onDocumentActivate(row.document)}
                   onkeydown={(event) => handleKeyboardNavigation(event, row, rendered.index)}
@@ -955,8 +967,31 @@
                     data-not-updated={notUpdatedDocumentIds.has(row.document.id) ? '' : undefined}
                     data-not-downloaded={undownloadedDocumentIds.has(row.document.id) ? '' : undefined}
                     data-outdated={outdatedDocumentIds.has(row.document.id) ? '' : undefined}
-                    title={recentlyUpdatedDocumentIds.has(row.document.id) ? recentlyUpdatedTooltip : notUpdatedDocumentIds.has(row.document.id) ? notUpdatedTooltip : outdatedDocumentIds.has(row.document.id) ? '服务器有更新版本' : undownloadedDocumentIds.has(row.document.id) ? '未下载到本地' : undefined}
-                  >{row.document.title}</span>
+                    data-opening={openingInProgressDocumentIds.has(row.document.id) ? '' : undefined}
+                    title={openingInProgressDocumentIds.has(row.document.id)
+                      ? $t('files.openInProgress', { values: { percent: Math.round((openingInProgressProgress.get(row.document.id) ?? 0) * 100) } })
+                      : recentlyUpdatedDocumentIds.has(row.document.id)
+                        ? recentlyUpdatedTooltip
+                        : notUpdatedDocumentIds.has(row.document.id)
+                          ? notUpdatedTooltip
+                          : outdatedDocumentIds.has(row.document.id)
+                            ? '服务器有更新版本'
+                            : undownloadedDocumentIds.has(row.document.id)
+                              ? '未下载到本地'
+                              : undefined}
+                  >
+                    {row.document.title}
+                    {#if openingInProgressDocumentIds.has(row.document.id)}
+                      <span
+                        class="file-table-opening-cancel"
+                        title={$t('files.cancelOpening')}
+                        onclick={(event) => {
+                          event.stopPropagation();
+                          onCancelOpenDocument(row.document.id);
+                        }}
+                      >✕</span>
+                    {/if}
+                  </span>
                   <span class="file-table-modified">{formatDate(row.document.last_modified)}</span>
                   <span class="file-table-type">{documentTypeLabel(row.document.title)}</span>
                   <span class="file-table-size">{formatBytes(row.document.size)}</span>
@@ -1041,6 +1076,20 @@
   .file-table-row--recently-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--explorer-accent); content: ''; opacity: 0.7; }
   .file-table-row--not-updated { position: relative; }
   .file-table-row--not-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--color-md3-warning, #f09d00); content: ''; opacity: 0.6; }
+  .file-table-row--opening { position: relative; }
+  .file-table-row--opening::after {
+    position: absolute; bottom: 0; left: 0; height: 2px; background: var(--explorer-accent); content: '';
+    width: var(--opening-progress, 0%);
+    transition: width 120ms linear;
+  }
+  .file-table-name[data-opening] { color: var(--explorer-accent); }
+  .file-table-opening-cancel {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-left: 4px; width: 16px; height: 16px; border-radius: 50%;
+    font-size: 11px; font-style: normal; line-height: 1; cursor: pointer;
+    opacity: 0.8; transition: background-color 90ms ease, opacity 90ms ease;
+  }
+  .file-table-opening-cancel:hover { background: color-mix(in srgb, var(--explorer-accent) 14%, transparent); opacity: 1; }
   .file-table-name[data-recently-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--explorer-accent); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.85; }
   .file-table-name[data-not-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--color-md3-warning, #f09d00); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.7; }
   .file-table-name[data-not-downloaded] { opacity: 0.65; font-style: italic; }

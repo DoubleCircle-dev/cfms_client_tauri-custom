@@ -14,6 +14,9 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import { _ as t } from 'svelte-i18n';
   import {
+    cancelDownload,
+  } from '$lib/api/downloads';
+  import {
     listDirectory,
     listDirectoryPage,
     loadUserPreference,
@@ -240,6 +243,14 @@
   let fileTableResetKey = $state(0);
   let error = $state<string | null>(null);
   let status = $state<string | null>(null);
+  /** Documents that are currently being opened — the verify-then-open path may
+   * have to download first, so this maps each document id to the task id that
+   * is being waited on. Drives the in-row progress marker and the cancel entry
+   * point, and is what makes a second open on the same row idempotent. */
+  let openingInProgress = $state<Map<string, string>>(new Map());
+  /** Progress of the tasks above, 0..1. Kept by task id because a single task
+   * may be waited on by more than one entry point. */
+  let openingProgress = $state<Map<string, number>>(new Map());
   /** How the pending status message should be shown — see the effect below. */
   let statusLevel = $state<'success' | 'warning'>('success');
   let searchQuery = $state('');
@@ -1236,6 +1247,12 @@
   const notUpdatedDocIds = $derived(fileUpdateTracker.notUpdatedDocumentIds);
   const notUpdatedFldIds = $derived(fileUpdateTracker.notUpdatedFolderIds);
   const notUpdatedTooltip = $derived($t('files.notUpdatedTooltip'));
+  const openingDocIds = $derived(new Set(openingInProgress.keys()));
+  const openingDocProgress = $derived(
+    new Map(
+      [...openingInProgress].map(([docId, taskId]) => [docId, openingProgress.get(taskId) ?? 0]),
+    ),
+  );
 
   // Auto-refresh download status when directory content changes (navigation or scan)
   $effect(() => {
@@ -1656,6 +1673,28 @@
     return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
   }
 
+  // Drop an in-flight open as soon as its underlying task stops, so the row
+  // marker and the cancel entry point outlive the transfer by at most one
+  // poll interval instead of lingering until the five-minute timeout.
+  $effect(() => {
+    downloadStore.tasks;
+    const finished = new Set(
+      [...downloadStore.tasks.values()]
+        .filter((task) => FINISHED_DOWNLOAD_STATUSES.has(task.status))
+        .map((task) => task.task_id),
+    );
+    const nextOpenings = new Map(openingInProgress);
+    for (const [docId, taskId] of nextOpenings) {
+      if (finished.has(taskId)) nextOpenings.delete(docId);
+    }
+    openingInProgress = nextOpenings;
+    const nextProgress = new Map(openingProgress);
+    for (const taskId of nextProgress.keys()) {
+      if (finished.has(taskId)) nextProgress.delete(taskId);
+    }
+    openingProgress = nextProgress;
+  });
+
   /**
    * Wait for one queued download to reach a terminal status.
    *
@@ -1664,17 +1703,35 @@
    * out, or the backend did not hand back a task id — either way the caller
    * falls back to checking the digest rather than the status.
    */
-  async function waitForDownloadOutcome(taskId: string | undefined): Promise<string | null> {
+  async function waitForDownloadOutcome(
+    taskId: string | undefined,
+    onTick?: (task: DownloadTaskDto) => void,
+  ): Promise<string | null> {
     if (!taskId) return null;
     const startedAt = Date.now();
     const deadline = Date.now() + OPEN_AFTER_DOWNLOAD_TIMEOUT_MS;
     for (;;) {
       const task = downloadStore.tasks.get(taskId);
+      if (task) onTick?.(task);
       if (task && FINISHED_DOWNLOAD_STATUSES.has(task.status)) return task.status;
       if (!task && Date.now() - startedAt > DOWNLOAD_TASK_ANNOUNCE_GRACE_MS) return null;
       if (Date.now() >= deadline) return null;
       await waitForNextPoll(250);
     }
+  }
+
+  /**
+   * An active transfer for a file, if one is already running.
+   *
+   * The open path reuses it instead of starting a second transfer: two would
+   * write the same local path and both wait on timers that outlive each other.
+   */
+  function activeTaskForFile(fileId: string): DownloadTaskDto | undefined {
+    return [...downloadStore.tasks.values()].find(
+      (task) =>
+        task.file_id === fileId
+        && ['pending', 'scheduled', 'downloading', 'decrypting', 'verifying'].includes(task.status),
+    );
   }
 
   /**
@@ -1694,6 +1751,12 @@
   async function handleOpenVerified(doc: ServerDocumentEntry) {
     const pathParts = breadcrumbSegments.map((segment) => segment.label);
     const path = makeDownloadPath([...pathParts, doc.title]);
+    // Offered whenever an open could not finish silently, so the user can see
+    // the transfer that the row marker is waiting on.
+    const viewTransfers = {
+      label: $t('files.viewTransfers'),
+      run: () => void goto('/home/tasks'),
+    };
 
     /**
      * Open the local copy and report what happened.
@@ -1702,7 +1765,7 @@
      * it is reported without the permission breakdown — that panel would point
      * the user at an administrator for something no grant can fix.
      */
-    const openLocalCopy = async (): Promise<'opened' | 'missing' | 'failed'> => {
+    const openLocalCopy = async (fromDownload: boolean): Promise<'opened' | 'missing' | 'failed'> => {
       try {
         // Same path the download writes to, so a freshly fetched file is what
         // gets opened.
@@ -1722,7 +1785,9 @@
         }
         return 'failed';
       }
-      status = $t('files.openedLocally', { values: { name: doc.title } });
+      status = fromDownload
+        ? $t('files.openedAfterDownload', { values: { name: doc.title } })
+        : $t('files.openedLocally', { values: { name: doc.title } });
       await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
       return 'opened';
     };
@@ -1741,17 +1806,51 @@
       if (state?.isCurrent) {
         // A failure here is already reported; only a missing file is worth
         // falling through to a fetch.
-        if (await openLocalCopy() !== 'missing') return;
+        if (await openLocalCopy(false) !== 'missing') return;
       }
 
-      status = $t('files.downloadingBeforeOpen', { values: { name: doc.title } });
-      const queued = await getDocument(doc.id, path);
-      const outcome = await waitForDownloadOutcome(queued.task_id);
-      const task = queued.task_id ? downloadStore.tasks.get(queued.task_id) : undefined;
+      if (state?.existsLocally) {
+        // The local copy is present but is not the server revision, so fetching
+        // replaces it. Say so instead of silently replacing something the user
+        // may have edited in place — the digest check's whole point is not to
+        // pass off a stale or edited copy as the server's revision, and quietly
+        // overwriting the user's own edits would defeat that.
+        if (!(await dialogStore.confirm({
+          title: $t('files.confirmOpenOverwrite'),
+          message: $t('files.openOverwriteConfirmMessage', { values: { name: doc.title } }),
+          confirmLabel: $t('common.download'),
+          cancelLabel: $t('common.cancel'),
+        }))) return;
+      }
+
+      // A second open on the same document must not start a second transfer:
+      // two would write the same local path and both wait on timers that
+      // outlive each other, so reuse an active task for this file instead.
+      const existing = activeTaskForFile(doc.id);
+      let taskId = existing?.task_id;
+      if (!taskId) {
+        status = state?.existsLocally
+          ? $t('files.downloadingBeforeOpenDiffer', { values: { name: doc.title } })
+          : $t('files.downloadingBeforeOpenMissing', { values: { name: doc.title } });
+        taskId = (await getDocument(doc.id, path)).task_id;
+      }
+      if (taskId) {
+        openingInProgress.set(doc.id, taskId);
+        openingProgress.set(taskId, downloadStore.tasks.get(taskId)?.progress ?? 0);
+      }
+
+      const outcome = await waitForDownloadOutcome(taskId, (task) => {
+        openingProgress.set(task.task_id, task.progress);
+      });
+      const task = taskId ? downloadStore.tasks.get(taskId) : undefined;
 
       if (outcome === 'failed' || outcome === 'cancelled') {
-        error = task?.error?.trim()
-          || $t('files.downloadFailedBeforeOpen', { values: { name: doc.title } });
+        notificationStore.warning(
+          task?.error?.trim()
+            || $t('files.downloadFailedBeforeOpen', { values: { name: doc.title } }),
+          5000,
+          { action: viewTransfers },
+        );
         return;
       }
 
@@ -1763,18 +1862,26 @@
         : null;
 
       if (verified?.isCurrent) {
-        const result = await openLocalCopy();
+        const result = await openLocalCopy(true);
         if (result === 'missing') {
-          status = $t('files.missingAfterDownload', { values: { name: doc.title } });
+          notificationStore.warning(
+            $t('files.missingAfterDownload', { values: { name: doc.title } }),
+            5000,
+            { action: viewTransfers },
+          );
         }
         return;
       }
 
       // Either the transfer is still running, or it finished without leaving a
       // copy that can be proven current. Both mean "do not open this silently".
-      status = $t(
-        outcome === 'completed' ? 'files.cannotOpenAfterDownload' : 'files.downloadStillRunning',
-        { values: { name: doc.title } },
+      notificationStore.warning(
+        $t(
+          outcome === 'completed' ? 'files.cannotOpenAfterDownload' : 'files.downloadStillRunning',
+          { values: { name: doc.title } },
+        ),
+        5000,
+        { action: viewTransfers },
       );
     } catch (e) {
       if (isAccessDeniedError(e)) {
@@ -1790,6 +1897,14 @@
         error = formatError(e);
       }
     }
+  }
+
+  function handleCancelOpenDocument(docId: string) {
+    const taskId = openingInProgress.get(docId);
+    if (!taskId) return;
+    // The backend stops the transfer and the task moves to 'cancelled'; the
+    // row marker is cleared by the effect below, which watches the task map.
+    void cancelDownload(taskId);
   }
 
   function handleDocumentClick(event: MouseEvent, doc: ServerDocumentEntry) {
@@ -1866,7 +1981,9 @@
     if (event.key === 'Enter') {
       event.preventDefault();
       if (row.kind === 'folder') void handleNavigate(row.folder.id, row.folder.name);
-      else void handleDownload(row.document);
+      // Same verify-then-open path as a double click, so keyboard users are
+      // not handed a stale or locally edited copy as the server's revision.
+      else void handleOpenVerified(row.document);
       return;
     }
 
@@ -1930,6 +2047,27 @@
     else if (selectedDocument) await handleRenameDocument(selectedDocument);
   }
 
+  /**
+   * The local-copy status of a document, as a details-pane row.
+   *
+   * Shown next to the server metadata so the user can see, before trying to
+   * open anything, whether the local mirror is the server revision, an older
+   * one, or simply absent. A read failure yields no row rather than a guess.
+   */
+  async function localCopyDetailRow(doc: ServerDocumentEntry): Promise<FileDetailRow | null> {
+    const pathParts = breadcrumbSegments.map((segment) => segment.label);
+    const state = await readLocalDocumentState(doc, pathParts).catch(() => null);
+    if (!state) return null;
+    return {
+      label: $t('files.localCopyStatus'),
+      value: state.isCurrent
+        ? $t('files.localCopyCurrent')
+        : state.existsLocally
+          ? $t('files.localCopyDiffer')
+          : $t('files.localCopyMissing'),
+    };
+  }
+
   async function loadSelectionDetails() {
     const requestId = ++detailRequestId;
     if (totalSelected === 0) {
@@ -1969,12 +2107,14 @@
       } else if (selectedDocument) {
         const info = await getDocumentInfo(selectedDocument.id);
         if (requestId !== detailRequestId) return;
+        const localCopyRow = await localCopyDetailRow(selectedDocument);
         detailModel = {
           title: info.title ?? selectedDocument.title,
           subtitle: $t('files.document'),
           icon: 'filePresent',
           rows: [
             { label: $t('files.documentId'), value: info.document_id ?? selectedDocument.id },
+            ...(localCopyRow ? [localCopyRow] : []),
             { label: $t('files.size'), value: formatBytes(info.size ?? selectedDocument.size) },
             { label: $t('files.created'), value: formatDate(info.created_time ?? null) },
             { label: $t('files.modified'), value: formatDate(info.last_modified ?? selectedDocument.last_modified) },
@@ -4674,6 +4814,9 @@
       hiddenItemIds={hiddenItemIds}
       undownloadedDocumentIds={undownloadedDocIds}
       outdatedDocumentIds={outdatedDocIds}
+      openingInProgressDocumentIds={openingDocIds}
+      openingInProgressProgress={openingDocProgress}
+      onCancelOpenDocument={handleCancelOpenDocument}
     />
     <ExplorerDetailsPane
       open={detailsOpen}
