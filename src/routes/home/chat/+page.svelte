@@ -792,7 +792,7 @@
                       title={$t('chat.restoreUserName')}
                       onclick={() => clearUserNameOverride(message.user)}
                     >
-                      <Icon name="restore" size="14px" />
+                      <Icon name="undo" size="14px" />
                     </button>
                   {/if}
                   <span class="chat-msg-time">{message.time}</span>
