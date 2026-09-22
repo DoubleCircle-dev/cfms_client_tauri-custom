@@ -119,7 +119,7 @@
         <input
           bind:this={usernameInput}
           bind:value={username}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
           autocomplete="username"
           disabled={busy}
         />
@@ -134,7 +134,7 @@
         </span>
         <input
           bind:value={nickname}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
           autocomplete="off"
           disabled={busy}
           placeholder={username || $t('manage.nickname')}
@@ -151,7 +151,7 @@
         <input
           bind:value={password}
           type={passwordVisible ? 'text' : 'password'}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-20 text-sm text-md3-on-surface outline-none transition focus:border-md3-primary focus:ring-2 focus:ring-md3-primary/30"
+          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-20 text-sm text-md3-on-surface outline-none transition"
           autocomplete="new-password"
           disabled={busy}
         />

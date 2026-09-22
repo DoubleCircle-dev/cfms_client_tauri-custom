@@ -192,7 +192,6 @@
             class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-md3-outline
                    bg-md3-field text-md3-on-surface text-sm
                    placeholder:text-md3-on-surface-variant
-                   focus:ring-2 focus:ring-md3-primary focus:border-transparent
                    transition-colors"
             placeholder={$t('dialog.changePassword.currentPasswordPlaceholder')}
             bind:value={oldPassword}
@@ -230,7 +229,6 @@
             class="w-full pl-10 pr-20 py-2.5 rounded-xl border border-md3-outline
                    bg-md3-field text-md3-on-surface text-sm
                    placeholder:text-md3-on-surface-variant
-                   focus:ring-2 focus:ring-md3-primary focus:border-transparent
                    transition-colors"
             placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}
             bind:value={newPassword}

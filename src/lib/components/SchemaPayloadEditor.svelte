@@ -616,7 +616,6 @@
   input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.82rem/1.4 var(--font-md3-sans); }
   input, select { min-height: 40px; padding: 0 0.65rem; }
   textarea { min-height: 6.5rem; resize: vertical; padding: 0.65rem; }
-  input:focus, select:focus, textarea:focus { border-color: var(--color-md3-primary-emphasis, var(--color-md3-primary)); outline: none; box-shadow: inset 0 0 0 1px var(--color-md3-primary-emphasis, var(--color-md3-primary)); }
   input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--color-md3-error); }
   .schema-description, .constraint-summary, .additional-properties-note { margin: 0; color: var(--color-md3-on-surface-variant); font: 0.7rem/1.45 var(--font-md3-sans); }
   .constraint-summary { font-family: var(--font-md3-mono); }

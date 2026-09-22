@@ -343,8 +343,7 @@
     box-shadow: inset 0 0 0 1px var(--color-md3-primary);
   }
 
-  .search-field input,
-  .search-field input:focus {
+  .search-field input {
     min-width: 0;
     border: 0 !important;
     outline: 0;

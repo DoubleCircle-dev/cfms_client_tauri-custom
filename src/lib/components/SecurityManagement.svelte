@@ -487,7 +487,6 @@
   .editor-form { display: grid; gap: 1rem; padding: 1.25rem; }
   .editor-form label { display: grid; gap: 0.38rem; color: var(--color-md3-on-surface); font: 500 0.78rem/1.4 var(--font-md3-sans); }
   .editor-form input, .editor-form textarea { width: 100%; border: 1px solid var(--color-md3-outline); border-radius: 0.55rem; padding: 0.62rem 0.72rem; color: var(--color-md3-on-surface); background: var(--color-md3-field); font: 400 0.78rem/1.4 var(--font-md3-sans); outline: none; transition: border-color 120ms ease, box-shadow 120ms ease; }
-  .editor-form input:focus, .editor-form textarea:focus { border-color: var(--color-md3-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-md3-primary) 22%, transparent); }
   .editor-form textarea { resize: vertical; }
   .editor-form small { color: var(--color-md3-on-surface-variant); font-size: 0.68rem; font-weight: 400; }
   .expiry-panel { display: grid; gap: 0.85rem; border: 1px solid color-mix(in srgb, var(--color-md3-outline) 70%, transparent); border-radius: 0.65rem; padding: 0.8rem; }

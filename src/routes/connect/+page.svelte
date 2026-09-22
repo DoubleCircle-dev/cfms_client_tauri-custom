@@ -336,7 +336,7 @@
               class="server-address-input min-w-0 flex-1 bg-transparent
                      text-md3-on-surface text-sm
                      placeholder:text-md3-on-surface-variant
-                     focus:outline-none transition-colors"
+                     transition-colors"
               class:pr-3.5={!canShowRecentAddresses}
               class:pr-2={canShowRecentAddresses}
               placeholder="localhost:5104"

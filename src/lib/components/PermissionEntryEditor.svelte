@@ -412,11 +412,6 @@
     transition: border-color 120ms ease, box-shadow 120ms ease;
   }
 
-  input:focus {
-    border-color: var(--color-md3-primary);
-    box-shadow: inset 0 0 0 1px var(--color-md3-primary);
-  }
-
   .field-error input {
     border-color: var(--color-md3-error);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-md3-error) 35%, transparent);
