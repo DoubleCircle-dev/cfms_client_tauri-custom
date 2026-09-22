@@ -257,7 +257,7 @@
             class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold opacity-90 transition hover:bg-white/20 hover:opacity-100"
             onclick={(event) => {
               event.stopPropagation();
-              entry.action.run();
+              entry.action?.run();
               notificationStore.remove(entry.id);
             }}
           >
