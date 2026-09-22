@@ -16,6 +16,7 @@
   import {
     cancelDownload,
   } from '$lib/api/downloads';
+  import type { DownloadTaskDto } from '$lib/api/types';
   import {
     listDirectory,
     listDirectoryPage,
@@ -171,7 +172,7 @@
     type ResolvedNodePathSegment,
   } from '$lib/files/node-path';
   import type { IconName } from '$lib/icons';
-  import type { CommandAction, FileDetailModel } from '$lib/explorer/types';
+  import type { CommandAction, FileDetailModel, FileDetailRow } from '$lib/explorer/types';
   import {
     fileSelectionKey,
     isAllVisibleSelected,
@@ -1676,23 +1677,33 @@
   // Drop an in-flight open as soon as its underlying task stops, so the row
   // marker and the cancel entry point outlive the transfer by at most one
   // poll interval instead of lingering until the five-minute timeout.
+  //
+  // Reassign only when a row was actually dropped. This effect reads the maps
+  // it writes, so assigning a fresh Map on every run would re-invalidate it and
+  // spin forever, freezing the page with `loading` stuck true and every command
+  // disabled. Reassigning a new Map is also the only thing that makes a change
+  // visible at all: `$state` does not track in-place Map mutations.
   $effect(() => {
-    downloadStore.tasks;
-    const finished = new Set(
+    const finishedTaskIds = new Set(
       [...downloadStore.tasks.values()]
         .filter((task) => FINISHED_DOWNLOAD_STATUSES.has(task.status))
         .map((task) => task.task_id),
     );
-    const nextOpenings = new Map(openingInProgress);
-    for (const [docId, taskId] of nextOpenings) {
-      if (finished.has(taskId)) nextOpenings.delete(docId);
+    if (finishedTaskIds.size === 0) return;
+    if (openingInProgress.size > 0) {
+      const nextOpenings = new Map(openingInProgress);
+      for (const [docId, taskId] of nextOpenings) {
+        if (finishedTaskIds.has(taskId)) nextOpenings.delete(docId);
+      }
+      if (nextOpenings.size !== openingInProgress.size) openingInProgress = nextOpenings;
     }
-    openingInProgress = nextOpenings;
-    const nextProgress = new Map(openingProgress);
-    for (const taskId of nextProgress.keys()) {
-      if (finished.has(taskId)) nextProgress.delete(taskId);
+    if (openingProgress.size > 0) {
+      const nextProgress = new Map(openingProgress);
+      for (const taskId of nextProgress.keys()) {
+        if (finishedTaskIds.has(taskId)) nextProgress.delete(taskId);
+      }
+      if (nextProgress.size !== openingProgress.size) openingProgress = nextProgress;
     }
-    openingProgress = nextProgress;
   });
 
   /**
@@ -1835,12 +1846,17 @@
         taskId = (await getDocument(doc.id, path)).task_id;
       }
       if (taskId) {
-        openingInProgress.set(doc.id, taskId);
-        openingProgress.set(taskId, downloadStore.tasks.get(taskId)?.progress ?? 0);
+        // Reassign instead of mutating: `$state` does not track in-place Map
+        // writes, so a bare `.set()` would never reach the row marker.
+        openingInProgress = new Map(openingInProgress).set(doc.id, taskId);
+        openingProgress = new Map(openingProgress).set(
+          taskId,
+          downloadStore.tasks.get(taskId)?.progress ?? 0,
+        );
       }
 
       const outcome = await waitForDownloadOutcome(taskId, (task) => {
-        openingProgress.set(task.task_id, task.progress);
+        openingProgress = new Map(openingProgress).set(task.task_id, task.progress);
       });
       const task = taskId ? downloadStore.tasks.get(taskId) : undefined;
 
