@@ -59,6 +59,9 @@
     openingInProgressDocumentIds,
     openingInProgressProgress,
     onCancelOpenDocument,
+    downloadingDocumentIds,
+    downloadingDocumentProgress,
+    onCancelDownload,
     loading,
     folders,
     documents,
@@ -97,6 +100,9 @@
     openingInProgressDocumentIds: Set<string>;
     openingInProgressProgress: Map<string, number>;
     onCancelOpenDocument: (documentId: string) => void;
+    downloadingDocumentIds: Set<string>;
+    downloadingDocumentProgress: Map<string, number>;
+    onCancelDownload: (documentId: string) => void;
     loading: boolean;
     folders: ServerDirectoryEntry[];
     documents: ServerDocumentEntry[];
@@ -272,9 +278,48 @@
     return `position:absolute;top:0;left:0;width:100%;height:${virtualItem.size}px;transform:translateY(${virtualItem.start}px);`;
   }
 
-  function rowOpeningStyle(documentId: string): string {
-    const progress = openingInProgressProgress.get(documentId);
-    return progress != null ? `--opening-progress:${Math.round(progress * 100)}%` : '';
+  /**
+   * The row's active transfer, if any, and how far along it is.
+   *
+   * An in-flight open owns the row: it is the newer intent, and its cancel
+   * entry point stops the very same underlying transfer. A plain download
+   * otherwise shows on the row it was started from, so the progress is visible
+   * without opening the transfers page.
+   */
+  function rowTransfer(documentId: string): { kind: 'open' | 'download'; progress: number } | null {
+    if (openingInProgressDocumentIds.has(documentId)) {
+      return { kind: 'open', progress: openingInProgressProgress.get(documentId) ?? 0 };
+    }
+    if (downloadingDocumentIds.has(documentId)) {
+      return { kind: 'download', progress: downloadingDocumentProgress.get(documentId) ?? 0 };
+    }
+    return null;
+  }
+
+  function rowTransferStyle(documentId: string): string {
+    const transfer = rowTransfer(documentId);
+    return transfer ? `--row-transfer-progress:${Math.round(transfer.progress * 100)}%` : '';
+  }
+
+  function rowTransferTooltip(document: ServerDocumentEntry): string | undefined {
+    const transfer = rowTransfer(document.id);
+    if (!transfer) return undefined;
+    const values = { name: document.title, percent: Math.round(transfer.progress * 100) };
+    return transfer.kind === 'open'
+      ? $t('files.openInProgress', { values })
+      : $t('files.downloadInProgress', { values });
+  }
+
+  function rowTransferCancelLabel(documentId: string): string {
+    return rowTransfer(documentId)?.kind === 'open'
+      ? $t('files.cancelOpening')
+      : $t('files.cancelDownload');
+  }
+
+  function cancelRowTransfer(event: MouseEvent, documentId: string) {
+    event.stopPropagation();
+    if (rowTransfer(documentId)?.kind === 'open') onCancelOpenDocument(documentId);
+    else onCancelDownload(documentId);
   }
 
   function isBlankInteraction(event: MouseEvent) {
@@ -947,10 +992,10 @@
                   class:file-table-row--dragged={isDragged(row)}
                   class:file-table-row--recently-updated={recentlyUpdatedDocumentIds.has(row.document.id)}
                   class:file-table-row--not-updated={notUpdatedDocumentIds.has(row.document.id)}
-                  class:file-table-row--opening={openingInProgressDocumentIds.has(row.document.id)}
+                  class:file-table-row--transferring={rowTransfer(row.document.id) !== null}
                   aria-pressed={isSelected(row)}
                   tabindex={activeRowKey === rowKey(row) ? 0 : -1}
-                  style={rowStyle(rendered.virtualItem) + rowOpeningStyle(row.document.id)}
+                  style={rowStyle(rendered.virtualItem) + rowTransferStyle(row.document.id)}
                   onclick={(event) => handleRowClick(event, row)}
                   ondblclick={() => onDocumentActivate(row.document)}
                   onkeydown={(event) => handleKeyboardNavigation(event, row, rendered.index)}
@@ -967,10 +1012,9 @@
                     data-not-updated={notUpdatedDocumentIds.has(row.document.id) ? '' : undefined}
                     data-not-downloaded={undownloadedDocumentIds.has(row.document.id) ? '' : undefined}
                     data-outdated={outdatedDocumentIds.has(row.document.id) ? '' : undefined}
-                    data-opening={openingInProgressDocumentIds.has(row.document.id) ? '' : undefined}
-                    title={openingInProgressDocumentIds.has(row.document.id)
-                      ? $t('files.openInProgress', { values: { percent: Math.round((openingInProgressProgress.get(row.document.id) ?? 0) * 100) } })
-                      : recentlyUpdatedDocumentIds.has(row.document.id)
+                    data-transferring={rowTransfer(row.document.id) ? '' : undefined}
+                    title={rowTransferTooltip(row.document)
+                      ?? (recentlyUpdatedDocumentIds.has(row.document.id)
                         ? recentlyUpdatedTooltip
                         : notUpdatedDocumentIds.has(row.document.id)
                           ? notUpdatedTooltip
@@ -978,17 +1022,14 @@
                             ? '服务器有更新版本'
                             : undownloadedDocumentIds.has(row.document.id)
                               ? '未下载到本地'
-                              : undefined}
+                              : undefined)}
                   >
                     {row.document.title}
-                    {#if openingInProgressDocumentIds.has(row.document.id)}
+                    {#if rowTransfer(row.document.id)}
                       <span
-                        class="file-table-opening-cancel"
-                        title={$t('files.cancelOpening')}
-                        onclick={(event) => {
-                          event.stopPropagation();
-                          onCancelOpenDocument(row.document.id);
-                        }}
+                        class="file-table-row-cancel"
+                        title={rowTransferCancelLabel(row.document.id)}
+                        onclick={(event) => cancelRowTransfer(event, row.document.id)}
                       >✕</span>
                     {/if}
                   </span>
@@ -1076,20 +1117,20 @@
   .file-table-row--recently-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--explorer-accent); content: ''; opacity: 0.7; }
   .file-table-row--not-updated { position: relative; }
   .file-table-row--not-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--color-md3-warning, #f09d00); content: ''; opacity: 0.6; }
-  .file-table-row--opening { position: relative; }
-  .file-table-row--opening::after {
+  .file-table-row--transferring { position: relative; }
+  .file-table-row--transferring::after {
     position: absolute; bottom: 0; left: 0; height: 2px; background: var(--explorer-accent); content: '';
-    width: var(--opening-progress, 0%);
+    width: var(--row-transfer-progress, 0%);
     transition: width 120ms linear;
   }
-  .file-table-name[data-opening] { color: var(--explorer-accent); }
-  .file-table-opening-cancel {
+  .file-table-name[data-transferring] { color: var(--explorer-accent); }
+  .file-table-row-cancel {
     display: inline-flex; align-items: center; justify-content: center;
     flex-shrink: 0; margin-left: 4px; width: 16px; height: 16px; border-radius: 50%;
     font-size: 11px; font-style: normal; line-height: 1; cursor: pointer;
     opacity: 0.8; transition: background-color 90ms ease, opacity 90ms ease;
   }
-  .file-table-opening-cancel:hover { background: color-mix(in srgb, var(--explorer-accent) 14%, transparent); opacity: 1; }
+  .file-table-row-cancel:hover { background: color-mix(in srgb, var(--explorer-accent) 14%, transparent); opacity: 1; }
   .file-table-name[data-recently-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--explorer-accent); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.85; }
   .file-table-name[data-not-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--color-md3-warning, #f09d00); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.7; }
   .file-table-name[data-not-downloaded] { opacity: 0.65; font-style: italic; }

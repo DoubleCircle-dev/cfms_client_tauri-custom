@@ -395,6 +395,8 @@ export const zh_CN = {
     missingAfterDownload: '{name} 下载后仍找不到本地文件，未自动打开。',
     openInProgress: '正在打开 {name}（{percent}%）',
     cancelOpening: '取消打开',
+    downloadInProgress: '正在下载 {name}（{percent}%）',
+    cancelDownload: '取消下载',
     confirmOpenOverwrite: '覆盖本地副本？',
     openOverwriteConfirmMessage: '{name} 的本地副本与服务器版本不一致，下载会覆盖它（可能包含你本地的修改）。是否继续？',
     downloadingBeforeOpenDiffer: '{name} 的本地副本与服务器不一致，正在下载服务器版本…',

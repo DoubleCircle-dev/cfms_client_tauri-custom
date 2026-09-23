@@ -402,6 +402,8 @@ export const en = {
     missingAfterDownload: '{name} is still not on disk after downloading, so it was not opened.',
     openInProgress: 'Opening {name} ({percent}%)',
     cancelOpening: 'Cancel opening',
+    downloadInProgress: 'Downloading {name} ({percent}%)',
+    cancelDownload: 'Cancel download',
     confirmOpenOverwrite: 'Overwrite the local copy?',
     openOverwriteConfirmMessage: 'The local copy of {name} differs from the server revision, so downloading replaces it — it may contain edits you made here. Continue anyway?',
     downloadingBeforeOpenDiffer: 'The local copy of {name} differs from the server revision; downloading the server version…',

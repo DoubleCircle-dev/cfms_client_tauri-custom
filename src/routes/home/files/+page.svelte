@@ -16,7 +16,7 @@
   import {
     cancelDownload,
   } from '$lib/api/downloads';
-  import type { DownloadTaskDto } from '$lib/api/types';
+  import type { DownloadTaskDto, DownloadTaskStatus } from '$lib/api/types';
   import {
     listDirectory,
     listDirectoryPage,
@@ -1255,6 +1255,42 @@
     ),
   );
 
+  /** Statuses where a transfer is still expected to move on its own. */
+  const ACTIVE_DOWNLOAD_STATUSES: ReadonlySet<DownloadTaskStatus> = new Set([
+    'pending',
+    'scheduled',
+    'downloading',
+    'paused',
+    'decrypting',
+    'verifying',
+  ]);
+
+  /**
+   * Documents with a download that has not settled yet, keyed by document id.
+   *
+   * `DownloadTaskDto.file_id` holds the document id for document downloads
+   * (revision downloads store the revision id instead, so they never match a
+   * row). Deriving this from the task map rather than registering tasks at each
+   * call site means every entry point that queues a download for a listed
+   * document — the row action, the selection toolbar, or a folder download —
+   * reports its progress on the row itself instead of only on the transfers
+   * page. The verified open keeps its own indicator, which owns the row.
+   */
+  const downloadingDocTasks = $derived.by(() => {
+    const tasks = new Map<string, DownloadTaskDto>();
+    for (const task of downloadStore.tasks.values()) {
+      if (!ACTIVE_DOWNLOAD_STATUSES.has(task.status)) continue;
+      const existing = tasks.get(task.file_id);
+      // A retry can queue a second task for the same document; keep the newest.
+      if (!existing || task.created_at >= existing.created_at) tasks.set(task.file_id, task);
+    }
+    return tasks;
+  });
+  const downloadingDocIds = $derived(new Set(downloadingDocTasks.keys()));
+  const downloadingDocProgress = $derived(
+    new Map([...downloadingDocTasks].map(([docId, task]) => [docId, task.progress])),
+  );
+
   // Auto-refresh download status when directory content changes (navigation or scan)
   $effect(() => {
     // Track documents array reference to trigger on change
@@ -1921,6 +1957,16 @@
     // The backend stops the transfer and the task moves to 'cancelled'; the
     // row marker is cleared by the effect below, which watches the task map.
     void cancelDownload(taskId);
+  }
+
+  /**
+   * Cancel the download a row is showing. The task moves to 'cancelled', which
+   * drops it out of the active set the row indicator is derived from.
+   */
+  function handleCancelDownload(docId: string) {
+    const task = downloadingDocTasks.get(docId);
+    if (!task) return;
+    void cancelDownload(task.task_id);
   }
 
   function handleDocumentClick(event: MouseEvent, doc: ServerDocumentEntry) {
@@ -4833,6 +4879,9 @@
       openingInProgressDocumentIds={openingDocIds}
       openingInProgressProgress={openingDocProgress}
       onCancelOpenDocument={handleCancelOpenDocument}
+      downloadingDocumentIds={downloadingDocIds}
+      downloadingDocumentProgress={downloadingDocProgress}
+      onCancelDownload={handleCancelDownload}
     />
     <ExplorerDetailsPane
       open={detailsOpen}
