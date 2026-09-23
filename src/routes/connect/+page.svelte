@@ -203,7 +203,7 @@
     await openUtilityFromToolbar('/home/about');
   }
 
-  async function openUtilityFromToolbar(path: '/home/about' | '/home/settings') {
+  async function openUtilityFromToolbar(path: '/home/about' | '/home/settings' | '/home/tools') {
     await goto(path);
   }
 
@@ -272,6 +272,15 @@
         onclick={() => openUtilityFromToolbar('/home/settings')}
       >
         <Icon name="settings" size="18px" />
+      </button>
+      <button
+        type="button"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
+        title={$t('tools.title')}
+        aria-label={$t('tools.title')}
+        onclick={() => openUtilityFromToolbar('/home/tools')}
+      >
+        <Icon name="tools" size="18px" />
       </button>
       <button
         type="button"

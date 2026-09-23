@@ -811,6 +811,14 @@ export interface NotificationEntry {
   groupKey?: string;
   groupTitle?: string;
   items: Array<{ text: string; createdAt: number }>;
+  /** An optional follow-up the user can act on, e.g. "View transfers" after a
+   * download could not be confirmed. Cleared when entries are grouped. */
+  action?: NotificationAction;
+}
+
+export interface NotificationAction {
+  label: string;
+  run: () => void;
 }
 
 export interface NotificationOptions {
@@ -818,6 +826,7 @@ export interface NotificationOptions {
   groupTitle?: string;
   itemText?: string;
   summaryText?: (count: number, latestText: string) => string;
+  action?: NotificationAction;
 }
 
 class NotificationStoreImpl {
@@ -845,6 +854,9 @@ class NotificationStoreImpl {
           items,
           createdAt: now,
           timeoutMs: timeoutMs > 0 ? timeoutMs : null,
+          // A grouped summary covers several unrelated operations, so drop any
+          // follow-up that only made sense for one of them.
+          action: undefined,
         };
         this.entries = [next, ...this.entries.filter((entry) => entry.id !== existing.id)];
         return existing.id;
@@ -860,6 +872,7 @@ class NotificationStoreImpl {
       groupKey: options.groupKey,
       groupTitle: options.groupTitle,
       items: [{ text: options.itemText ?? text, createdAt: Date.now() }],
+      action: options.action,
     };
     this.entries = [entry, ...this.entries].slice(0, 5);
     return entry.id;

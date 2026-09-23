@@ -869,6 +869,33 @@
     >
       <Icon name="keyboard" size="18px" />
     </button>
+    <button
+      type="button"
+      class="inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
+      title={$t('settings.title')}
+      aria-label={$t('settings.title')}
+      onclick={() => goto('/home/settings')}
+    >
+      <Icon name="settings" size="18px" />
+    </button>
+    <button
+      type="button"
+      class="inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
+      title={$t('tools.title')}
+      aria-label={$t('tools.title')}
+      onclick={() => goto('/home/tools')}
+    >
+      <Icon name="tools" size="18px" />
+    </button>
+    <button
+      type="button"
+      class="inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
+      title={$t('more.about')}
+      aria-label={$t('more.about')}
+      onclick={() => goto('/home/about')}
+    >
+      <Icon name="info" size="18px" />
+    </button>
   </div>
   <section class="auth-panel">
   <div

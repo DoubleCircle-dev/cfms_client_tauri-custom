@@ -45,6 +45,16 @@ export async function readServerDocument(
   return invoke('read_server_document', { documentId });
 }
 
+/**
+ * Open an already downloaded file with the system default application.
+ *
+ * Returns `false` when the file is not present in the local download root, so
+ * callers can queue a download instead.
+ */
+export async function openDownloadedDocument(relativePath: string): Promise<boolean> {
+  return invoke('open_downloaded_document', { relativePath });
+}
+
 export interface LocalChatboxFile {
   name: string;
   path: string;

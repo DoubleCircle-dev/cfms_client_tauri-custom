@@ -56,6 +56,12 @@
     hiddenItemIds,
     undownloadedDocumentIds,
     outdatedDocumentIds,
+    openingInProgressDocumentIds,
+    openingInProgressProgress,
+    onCancelOpenDocument,
+    downloadingDocumentIds,
+    downloadingDocumentProgress,
+    onCancelDownload,
     loading,
     folders,
     documents,
@@ -91,6 +97,12 @@
     hiddenItemIds: Set<string>;
     undownloadedDocumentIds: Set<string>;
     outdatedDocumentIds: Set<string>;
+    openingInProgressDocumentIds: Set<string>;
+    openingInProgressProgress: Map<string, number>;
+    onCancelOpenDocument: (documentId: string) => void;
+    downloadingDocumentIds: Set<string>;
+    downloadingDocumentProgress: Map<string, number>;
+    onCancelDownload: (documentId: string) => void;
     loading: boolean;
     folders: ServerDirectoryEntry[];
     documents: ServerDocumentEntry[];
@@ -264,6 +276,50 @@
   function rowStyle(virtualItem: VirtualItem | null) {
     if (!virtualItem) return '';
     return `position:absolute;top:0;left:0;width:100%;height:${virtualItem.size}px;transform:translateY(${virtualItem.start}px);`;
+  }
+
+  /**
+   * The row's active transfer, if any, and how far along it is.
+   *
+   * An in-flight open owns the row: it is the newer intent, and its cancel
+   * entry point stops the very same underlying transfer. A plain download
+   * otherwise shows on the row it was started from, so the progress is visible
+   * without opening the transfers page.
+   */
+  function rowTransfer(documentId: string): { kind: 'open' | 'download'; progress: number } | null {
+    if (openingInProgressDocumentIds.has(documentId)) {
+      return { kind: 'open', progress: openingInProgressProgress.get(documentId) ?? 0 };
+    }
+    if (downloadingDocumentIds.has(documentId)) {
+      return { kind: 'download', progress: downloadingDocumentProgress.get(documentId) ?? 0 };
+    }
+    return null;
+  }
+
+  function rowTransferStyle(documentId: string): string {
+    const transfer = rowTransfer(documentId);
+    return transfer ? `--row-transfer-progress:${Math.round(transfer.progress * 100)}%` : '';
+  }
+
+  function rowTransferTooltip(document: ServerDocumentEntry): string | undefined {
+    const transfer = rowTransfer(document.id);
+    if (!transfer) return undefined;
+    const values = { name: document.title, percent: Math.round(transfer.progress * 100) };
+    return transfer.kind === 'open'
+      ? $t('files.openInProgress', { values })
+      : $t('files.downloadInProgress', { values });
+  }
+
+  function rowTransferCancelLabel(documentId: string): string {
+    return rowTransfer(documentId)?.kind === 'open'
+      ? $t('files.cancelOpening')
+      : $t('files.cancelDownload');
+  }
+
+  function cancelRowTransfer(event: MouseEvent, documentId: string) {
+    event.stopPropagation();
+    if (rowTransfer(documentId)?.kind === 'open') onCancelOpenDocument(documentId);
+    else onCancelDownload(documentId);
   }
 
   function isBlankInteraction(event: MouseEvent) {
@@ -936,9 +992,10 @@
                   class:file-table-row--dragged={isDragged(row)}
                   class:file-table-row--recently-updated={recentlyUpdatedDocumentIds.has(row.document.id)}
                   class:file-table-row--not-updated={notUpdatedDocumentIds.has(row.document.id)}
+                  class:file-table-row--transferring={rowTransfer(row.document.id) !== null}
                   aria-pressed={isSelected(row)}
                   tabindex={activeRowKey === rowKey(row) ? 0 : -1}
-                  style={rowStyle(rendered.virtualItem)}
+                  style={rowStyle(rendered.virtualItem) + rowTransferStyle(row.document.id)}
                   onclick={(event) => handleRowClick(event, row)}
                   ondblclick={() => onDocumentActivate(row.document)}
                   onkeydown={(event) => handleKeyboardNavigation(event, row, rendered.index)}
@@ -955,8 +1012,27 @@
                     data-not-updated={notUpdatedDocumentIds.has(row.document.id) ? '' : undefined}
                     data-not-downloaded={undownloadedDocumentIds.has(row.document.id) ? '' : undefined}
                     data-outdated={outdatedDocumentIds.has(row.document.id) ? '' : undefined}
-                    title={recentlyUpdatedDocumentIds.has(row.document.id) ? recentlyUpdatedTooltip : notUpdatedDocumentIds.has(row.document.id) ? notUpdatedTooltip : outdatedDocumentIds.has(row.document.id) ? '服务器有更新版本' : undownloadedDocumentIds.has(row.document.id) ? '未下载到本地' : undefined}
-                  >{row.document.title}</span>
+                    data-transferring={rowTransfer(row.document.id) ? '' : undefined}
+                    title={rowTransferTooltip(row.document)
+                      ?? (recentlyUpdatedDocumentIds.has(row.document.id)
+                        ? recentlyUpdatedTooltip
+                        : notUpdatedDocumentIds.has(row.document.id)
+                          ? notUpdatedTooltip
+                          : outdatedDocumentIds.has(row.document.id)
+                            ? '服务器有更新版本'
+                            : undownloadedDocumentIds.has(row.document.id)
+                              ? '未下载到本地'
+                              : undefined)}
+                  >
+                    {row.document.title}
+                    {#if rowTransfer(row.document.id)}
+                      <span
+                        class="file-table-row-cancel"
+                        title={rowTransferCancelLabel(row.document.id)}
+                        onclick={(event) => cancelRowTransfer(event, row.document.id)}
+                      >✕</span>
+                    {/if}
+                  </span>
                   <span class="file-table-modified">{formatDate(row.document.last_modified)}</span>
                   <span class="file-table-type">{documentTypeLabel(row.document.title)}</span>
                   <span class="file-table-size">{formatBytes(row.document.size)}</span>
@@ -997,7 +1073,29 @@
     min-width: var(--file-table-content-width);
     min-height: 100%;
   }
-  .file-table-empty-overlay { position: absolute; z-index: 6; inset: 36px 0 0; display: flex; min-height: 0; align-items: stretch; justify-content: stretch; overflow: hidden; background: var(--explorer-background); }
+  /* Scrollable: the empty state can be taller than the viewport once it
+     carries a permission breakdown, and clipping it would hide the very
+     explanation the user came for. */
+  .file-table-empty-overlay { position: absolute; z-index: 6; inset: 36px 0 0; display: flex; min-height: 0; align-items: stretch; justify-content: stretch; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; background: var(--explorer-background); }
+
+  /* Visible scroll affordance: the 4px workspace scrollbar is easy to miss on
+     a full-page message that no longer fits. */
+  .file-table-empty-overlay {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--explorer-text-muted) 60%, transparent) transparent;
+  }
+
+  .file-table-empty-overlay::-webkit-scrollbar { width: 10px; }
+  .file-table-empty-overlay::-webkit-scrollbar-track { background: transparent; }
+  .file-table-empty-overlay::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: color-mix(in srgb, var(--explorer-text-muted) 55%, transparent);
+  }
+  .file-table-empty-overlay::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--explorer-text-muted) 78%, transparent);
+  }
   .file-table-grid { display: grid; grid-template-columns: 28px var(--file-name-width, minmax(240px, 1fr)) var(--file-modified-width, 168px) var(--file-type-width, 112px) var(--file-size-width, 100px); align-items: center; gap: 0.55rem; }
   .file-table-header { position: sticky; top: 0; z-index: 10; min-height: 36px; border-bottom: 1px solid var(--explorer-border-strong); padding: 0 0.7rem; color: var(--explorer-text); background: var(--explorer-surface-raised); font-size: 0.75rem; }
   .file-table-column-header { position: relative; display: flex; min-width: 0; height: 100%; align-items: center; border-right: 1px solid var(--explorer-border); }
@@ -1019,6 +1117,20 @@
   .file-table-row--recently-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--explorer-accent); content: ''; opacity: 0.7; }
   .file-table-row--not-updated { position: relative; }
   .file-table-row--not-updated::before { position: absolute; top: 0; left: 0; bottom: 0; width: 3px; border-radius: 0 2px 2px 0; background: var(--color-md3-warning, #f09d00); content: ''; opacity: 0.6; }
+  .file-table-row--transferring { position: relative; }
+  .file-table-row--transferring::after {
+    position: absolute; bottom: 0; left: 0; height: 2px; background: var(--explorer-accent); content: '';
+    width: var(--row-transfer-progress, 0%);
+    transition: width 120ms linear;
+  }
+  .file-table-name[data-transferring] { color: var(--explorer-accent); }
+  .file-table-row-cancel {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-left: 4px; width: 16px; height: 16px; border-radius: 50%;
+    font-size: 11px; font-style: normal; line-height: 1; cursor: pointer;
+    opacity: 0.8; transition: background-color 90ms ease, opacity 90ms ease;
+  }
+  .file-table-row-cancel:hover { background: color-mix(in srgb, var(--explorer-accent) 14%, transparent); opacity: 1; }
   .file-table-name[data-recently-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--explorer-accent); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.85; }
   .file-table-name[data-not-updated]::after { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--color-md3-warning, #f09d00); margin-left: 4px; vertical-align: middle; content: ''; opacity: 0.7; }
   .file-table-name[data-not-downloaded] { opacity: 0.65; font-style: italic; }

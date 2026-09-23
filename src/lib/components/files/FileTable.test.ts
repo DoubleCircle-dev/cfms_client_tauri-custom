@@ -25,6 +25,12 @@ function renderTable(
     canMoveItems?: boolean;
     selectedFolderIds?: Set<string>;
     selectedDocumentIds?: Set<string>;
+    openingInProgressDocumentIds?: Set<string>;
+    openingInProgressProgress?: Map<string, number>;
+    onCancelOpenDocument?: () => void;
+    downloadingDocumentIds?: Set<string>;
+    downloadingDocumentProgress?: Map<string, number>;
+    onCancelDownload?: () => void;
   } = {},
 ) {
   const onFolderClick = vi.fn();
@@ -32,6 +38,7 @@ function renderTable(
   const onRowKeydown = vi.fn();
   const onDragSelection = vi.fn();
   const onMoveItems = vi.fn();
+  const onDocumentActivate = vi.fn();
   const result = render(FileTable, {
     props: {
       loading: false,
@@ -49,7 +56,7 @@ function renderTable(
       onFolderClick,
       onDocumentClick: vi.fn(),
       onFolderActivate: vi.fn(),
-      onDocumentActivate: vi.fn(),
+      onDocumentActivate,
       onRowKeydown,
       onBlankClick: vi.fn(),
       onBlankContextMenu: vi.fn(),
@@ -67,6 +74,12 @@ function renderTable(
       hiddenItemIds: new Set<string>(),
       undownloadedDocumentIds: new Set<string>(),
       outdatedDocumentIds: new Set<string>(),
+      openingInProgressDocumentIds: options.openingInProgressDocumentIds ?? new Set<string>(),
+      openingInProgressProgress: options.openingInProgressProgress ?? new Map<string, number>(),
+      onCancelOpenDocument: options.onCancelOpenDocument ?? vi.fn(),
+      downloadingDocumentIds: options.downloadingDocumentIds ?? new Set<string>(),
+      downloadingDocumentProgress: options.downloadingDocumentProgress ?? new Map<string, number>(),
+      onCancelDownload: options.onCancelDownload ?? vi.fn(),
     },
   });
 
@@ -96,6 +109,7 @@ function renderTable(
     onRowKeydown,
     onDragSelection,
     onMoveItems,
+    onDocumentActivate,
   };
 }
 
@@ -649,5 +663,67 @@ describe('FileTable programmatic row reveal', () => {
 
     await expect(component.revealRow('document:document-320', true)).resolves.toBe(true);
     expect(viewport.scrollTop).toBeGreaterThan(0);
+  });
+});
+
+describe('FileTable row transfer indicator', () => {
+  const document = { id: 'document-1', title: 'Report', size: 10, last_modified: null };
+  const rowSelector = '[data-selection-key="document:document-1"]';
+
+  it('shows download progress on the row the download was started from', () => {
+    const { container } = renderTable([], [document], {
+      downloadingDocumentIds: new Set(['document-1']),
+      downloadingDocumentProgress: new Map([['document-1', 0.42]]),
+    });
+
+    const row = container.querySelector<HTMLElement>(rowSelector)!;
+    expect(row.classList.contains('file-table-row--transferring')).toBe(true);
+    expect(row.getAttribute('style')).toMatch(/--row-transfer-progress:\s*42%/);
+
+    // The i18n mock returns the key, so the tooltip names the download copy.
+    const name = row.querySelector<HTMLElement>('.file-table-name')!;
+    expect(name.getAttribute('title')).toBe('files.downloadInProgress');
+    expect(name.getAttribute('data-transferring')).toBe('');
+    expect(name.querySelector('.file-table-row-cancel')).not.toBeNull();
+  });
+
+  it('cancels the download from the row without activating it', async () => {
+    const onCancelDownload = vi.fn();
+    const { container, onDocumentActivate } = renderTable([], [document], {
+      downloadingDocumentIds: new Set(['document-1']),
+      downloadingDocumentProgress: new Map([['document-1', 0.1]]),
+      onCancelDownload,
+    });
+
+    const cancel = container.querySelector<HTMLElement>('.file-table-row-cancel')!;
+    expect(cancel.getAttribute('title')).toBe('files.cancelDownload');
+    await fireEvent.click(cancel);
+
+    expect(onCancelDownload).toHaveBeenCalledWith('document-1');
+    expect(onDocumentActivate).not.toHaveBeenCalled();
+  });
+
+  it('leaves a row without a transfer unmarked', () => {
+    const { container } = renderTable([], [document]);
+
+    const row = container.querySelector<HTMLElement>(rowSelector)!;
+    expect(row.classList.contains('file-table-row--transferring')).toBe(false);
+    expect(container.querySelector('.file-table-row-cancel')).toBeNull();
+  });
+
+  it('keeps a single indicator when an open runs over an existing download', () => {
+    const { container } = renderTable([], [document], {
+      openingInProgressDocumentIds: new Set(['document-1']),
+      openingInProgressProgress: new Map([['document-1', 0.8]]),
+      downloadingDocumentIds: new Set(['document-1']),
+      downloadingDocumentProgress: new Map([['document-1', 0.2]]),
+    });
+
+    const row = container.querySelector<HTMLElement>(rowSelector)!;
+    // The open is the newer intent, so it owns the row and its cancel entry.
+    expect(row.getAttribute('style')).toMatch(/--row-transfer-progress:\s*80%/);
+    const name = row.querySelector<HTMLElement>('.file-table-name')!;
+    expect(name.getAttribute('title')).toBe('files.openInProgress');
+    expect(container.querySelectorAll('.file-table-row-cancel')).toHaveLength(1);
   });
 });
