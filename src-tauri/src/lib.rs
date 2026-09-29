@@ -9,6 +9,7 @@
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod background;
 mod commands;
+mod github_credentials;
 mod local_data_reset;
 mod localization;
 
@@ -291,6 +292,11 @@ pub struct AndroidUpdateNotification<R: Runtime> {
     pub handle: tauri::plugin::PluginHandle<R>,
 }
 
+#[cfg(target_os = "android")]
+pub struct AndroidGithubCredentialPlugin<R: Runtime> {
+    pub handle: tauri::plugin::PluginHandle<R>,
+}
+
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
@@ -326,6 +332,7 @@ pub fn run() {
         .plugin(android_app_lifecycle_plugin())
         .plugin(android_secure_screen_plugin())
         .plugin(android_update_notification_plugin())
+        .plugin(android_github_credential_plugin())
         .plugin(background_service_plugin())
         .setup(|app| {
             // The main WebView is deliberately configured with `create: false`.
@@ -341,6 +348,11 @@ pub fn run() {
                 reset_marker_path,
                 reset_status,
             ));
+            let github_credentials = github_credentials::GithubCredentialState::new(app.handle());
+            if reset_recovery_mode {
+                github_credentials.begin_reset();
+            }
+            app.manage(github_credentials);
 
             let mut log_targets = Vec::new();
             if cfg!(debug_assertions) {
@@ -536,6 +548,9 @@ pub fn run() {
             commands::set_android_content_protected,
             commands::show_android_update_notification,
             commands::cancel_android_update_notification,
+            commands::get_github_auth_status,
+            commands::save_github_token,
+            commands::delete_github_token,
             commands::check_app_update,
             commands::install_app_update,
             commands::add_download,
@@ -859,4 +874,23 @@ fn android_update_notification_plugin<R: tauri::Runtime>() -> tauri::plugin::Tau
 #[cfg(not(target_os = "android"))]
 fn android_update_notification_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("android-update-notification-noop").build()
+}
+
+#[cfg(target_os = "android")]
+fn android_github_credential_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    const PLUGIN_IDENTIFIER: &str = "org.crpteam.cfms_client_tauri";
+
+    tauri::plugin::Builder::new("android-github-credential")
+        .setup(|app, api| {
+            let handle =
+                api.register_android_plugin(PLUGIN_IDENTIFIER, "AndroidGithubCredentialPlugin")?;
+            app.manage(AndroidGithubCredentialPlugin { handle });
+            Ok(())
+        })
+        .build()
+}
+
+#[cfg(not(target_os = "android"))]
+fn android_github_credential_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::new("android-github-credential-noop").build()
 }

@@ -95,6 +95,12 @@ pnpm tauri ios build
 
 Server addresses, account permissions, document scope, and administrative features are controlled by the CFMS server. Contact the server administrator if you have lost your account password.
 
+### Optional GitHub API token
+
+Update checks and CA certificate list refreshes read public repositories through the GitHub REST API. Anonymous requests normally share a limit of 60 requests per hour per originating IP address; requests authenticated with a personal access token normally use the account's 5,000-request-per-hour limit. These are GitHub's primary limits, not a guarantee that every request will succeed. See [GitHub's rate-limit documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
+
+To configure a token, open **Settings → GitHub API**. A [fine-grained personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with minimal permissions is recommended. Public repository reading does not require write access. The token is saved in this device's secure credential storage and used only for the GitHub API requests above, including update checks before CFMS sign-in. It is not sent to your CFMS server or to update and certificate download URLs. Remove it on the same page when you no longer want authenticated requests. If it stops working, public requests continue anonymously and the client asks you to update or remove it.
+
 ## Security notes
 
 CFMS is intended for confidential information. Authorized files are decrypted locally on the client device, so endpoint security is essential:
@@ -103,6 +109,7 @@ CFMS is intended for confidential information. Authorized files are decrypted lo
 - Do not disable TLS certificate validation unless you fully understand the risk and are performing controlled troubleshooting.
 - Enable app lock and a system screen lock, install client updates promptly, and follow your organization's rules for handling and distributing confidential data.
 - Never commit private keys, signing certificates, credentials, or build artifacts containing sensitive files.
+- Keep a configured GitHub token private. It belongs to the GitHub account that created it and remains available to this device until you remove it or reset local application data.
 - App lock is a privacy barrier for the UI, not a native authorization boundary: existing transfers and service state remain active while the UI is locked.
 - The native client minimizes and zeroizes application-owned password, token, DEK, and serialized request buffers. WebView/JavaScript, operating-system, networking-library, register, and historical allocation copies cannot be reliably erased.
 - Release builds disable frontend source maps and verbose WebView/stdout logging; Linux release builds also disable ordinary same-user process dumps. None of these controls claims to resist an administrator, root, kernel compromise, jailbroken device, or physical forensics.

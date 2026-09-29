@@ -278,6 +278,20 @@
         </a>
       </div>
     </section>
+
+    <section class="update-section settings-section" aria-labelledby="github-api-heading">
+      <div class="settings-section-heading">
+        <h2 id="github-api-heading">{$t('settings.updates.githubApiLink')}</h2>
+        <p>{$t('settings.updates.githubApiHint')}</p>
+      </div>
+      <div class="section-actions">
+        <a class="text-action" href="/home/settings/github-api">
+          <Icon name="api" size="18px" />
+          {$t('settings.githubApi.title')}
+          <Icon name="navigateNext" size="18px" />
+        </a>
+      </div>
+    </section>
   </div>
 
   <p class="update-footnote">

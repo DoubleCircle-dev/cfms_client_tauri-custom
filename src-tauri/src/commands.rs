@@ -51,6 +51,8 @@ include!("commands/types.rs");
 include!("commands/health.rs");
 include!("commands/passkeys.rs");
 include!("commands/mobile.rs");
+include!("commands/github_api.rs");
+include!("commands/github_credentials.rs");
 include!("commands/updates.rs");
 include!("commands/downloads.rs");
 include!("commands/upload_tasks.rs");

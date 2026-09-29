@@ -1,4 +1,5 @@
 import { getSetting, setSetting } from '$lib/api';
+import { notifyGithubAuthFallback } from '$lib/github-auth-notices';
 import {
   checkAppUpdate,
   installAppUpdate,
@@ -180,6 +181,7 @@ export class AppUpdateState {
       return null;
     } finally {
       this.checking = false;
+      await notifyGithubAuthFallback();
     }
   }
 
