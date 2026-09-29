@@ -131,7 +131,6 @@
           bind:value={token}
           disabled={loading || busy || mode === 'unavailable'}
         />
-        <p class="credential-form__hint">{$t('settings.githubApi.savedTokenHidden')}</p>
         <div class="credential-actions">
           <button type="submit" class="primary-action" disabled={!canSave}>
             <Icon name="check" size="18px" />
@@ -147,24 +146,20 @@
       </form>
     </section>
 
-    <section class="settings-section github-api-section" aria-labelledby="github-api-help-title">
-      <div class="settings-section-heading">
-        <h2 id="github-api-help-title">{$t('settings.githubApi.helpTitle')}</h2>
+    <div class="settings-section github-api-section">
+      <div class="github-api-guidance">
         <p>{$t('settings.githubApi.rateLimitHint')}</p>
-        <p>{$t('settings.githubApi.storageHint')}</p>
         <p>{$t('settings.githubApi.permissionsHint')}</p>
       </div>
       <div class="documentation-links">
         <a href={tokenGuideUrl} target="_blank" rel="noopener noreferrer" onclick={(event) => { event.preventDefault(); void openDocumentation(tokenGuideUrl); }}>
           {$t('settings.githubApi.createTokenLink')}
-          <Icon name="openInNew" size="17px" />
         </a>
         <a href={rateLimitsUrl} target="_blank" rel="noopener noreferrer" onclick={(event) => { event.preventDefault(); void openDocumentation(rateLimitsUrl); }}>
           {$t('settings.githubApi.rateLimitsLink')}
-          <Icon name="openInNew" size="17px" />
         </a>
       </div>
-    </section>
+    </div>
   </div>
 </div>
 
@@ -203,8 +198,7 @@
     font: 650 0.875rem/1.4 var(--font-md3-sans);
   }
 
-  .credential-status__copy span,
-  .credential-form__hint {
+  .credential-status__copy span {
     color: var(--color-md3-on-surface-variant);
     font-size: 0.75rem;
     line-height: 1.5;
@@ -233,8 +227,6 @@
   }
 
   .credential-form input:disabled { opacity: 0.55; }
-  .credential-form__hint { margin: 0; }
-
   .credential-actions,
   .documentation-links {
     display: flex;
@@ -277,20 +269,33 @@
   .remove-action:hover:not(:disabled) { background: color-mix(in srgb, var(--color-md3-error) 9%, transparent); }
   .credential-actions button:disabled { cursor: not-allowed; opacity: 0.55; }
 
+  .github-api-guidance {
+    display: grid;
+    gap: 0.24rem;
+  }
+
+  .github-api-guidance p {
+    max-width: 70ch;
+    margin: 0;
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.74rem;
+    line-height: 1.5;
+  }
+
+  .documentation-links { gap: 1.25rem; }
+
   .documentation-links a {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
     min-height: 2.5rem;
-    border-radius: 6px;
-    padding: 0.3rem 0.45rem;
     color: var(--color-md3-primary-emphasis);
-    font: 650 0.8rem/1.4 var(--font-md3-sans);
+    font: 500 0.8rem/1.4 var(--font-md3-sans);
     text-decoration: underline;
     text-underline-offset: 0.2rem;
   }
 
-  .documentation-links a:hover { background: color-mix(in srgb, var(--color-md3-primary-emphasis) 9%, transparent); }
+  .documentation-links a:hover { text-decoration-thickness: 2px; }
+  .documentation-links a:focus-visible { outline-offset: 2px; }
 
   @media (max-width: 420px) {
     .credential-actions { width: 100%; }

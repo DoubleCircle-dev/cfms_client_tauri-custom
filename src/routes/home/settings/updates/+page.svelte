@@ -278,26 +278,18 @@
         </a>
       </div>
     </section>
-
-    <section class="update-section settings-section" aria-labelledby="github-api-heading">
-      <div class="settings-section-heading">
-        <h2 id="github-api-heading">{$t('settings.updates.githubApiLink')}</h2>
-        <p>{$t('settings.updates.githubApiHint')}</p>
-      </div>
-      <div class="section-actions">
-        <a class="text-action" href="/home/settings/github-api">
-          <Icon name="api" size="18px" />
-          {$t('settings.githubApi.title')}
-          <Icon name="navigateNext" size="18px" />
-        </a>
-      </div>
-    </section>
   </div>
 
-  <p class="update-footnote">
-    <Icon name="verified" size="17px" />
-    {$t('settings.updates.signedUpdateHint')}
-  </p>
+  <div class="update-notes">
+    <p class="related-settings">
+      {$t('settings.updates.githubApiHint')}
+      <a href="/home/settings/github-api">{$t('settings.updates.githubApiLink')}</a>
+    </p>
+    <p class="update-footnote">
+      <Icon name="verified" size="17px" />
+      {$t('settings.updates.signedUpdateHint')}
+    </p>
+  </div>
 </div>
 
 <style>
@@ -451,14 +443,38 @@
     opacity: 0.55;
   }
 
+  .update-notes {
+    display: grid;
+    gap: 0.4rem;
+    padding-top: 0.2rem;
+  }
+
+  .related-settings,
+  .update-footnote {
+    color: var(--color-md3-on-surface-variant);
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+
+  .related-settings {
+    padding-inline: 0.15rem;
+  }
+
+  .related-settings a {
+    color: var(--color-md3-primary-emphasis);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+
+  .related-settings a:hover {
+    color: var(--color-md3-primary);
+  }
+
   .update-footnote {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     padding: 0.2rem 0.15rem;
-    color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
-    line-height: 1.45;
   }
 
   .update-footnote :global(.material-symbols-outlined) {
