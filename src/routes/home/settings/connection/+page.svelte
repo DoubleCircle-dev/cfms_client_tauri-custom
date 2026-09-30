@@ -11,6 +11,7 @@
     type ConnectionSettings,
   } from '$lib/api';
   import { createAutoSave } from '$lib/settings-autosave.svelte';
+  import { notifyGithubAuthFallback } from '$lib/github-auth-notices';
   import { notificationStore } from '$lib/stores.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import MdSwitch from '$lib/components/MdSwitch.svelte';
@@ -138,6 +139,7 @@
       error = err instanceof Error ? err.message : String(err);
     } finally {
       caUpdating = false;
+      void notifyGithubAuthFallback();
     }
   }
 </script>
@@ -294,6 +296,18 @@
       {#if caResult}
         <p class="text-xs text-md3-on-surface-variant">{caResult}</p>
       {/if}
+
+      <div class="settings-section-heading">
+        <p>{$t('settings.connection.githubApiHint')}</p>
+      </div>
+      <a
+        href="/home/settings/github-api"
+        class="inline-flex min-h-10 w-fit items-center gap-2 rounded-md px-2 text-sm font-semibold text-md3-primary-emphasis hover:bg-md3-primary-emphasis/10"
+      >
+        <Icon name="api" size="18px" />
+        {$t('settings.connection.githubApiLink')}
+        <Icon name="navigateNext" size="18px" />
+      </a>
     </section>
 
   </div>

@@ -164,6 +164,7 @@ export const ICONS = {
   warningAmber:   'warning_amber',
   supervisedUserCircleOff: 'supervised_user_circle_off',
   ifl:            'ifl',
+  api:            'api',
 } as const;
 
 export type IconName = keyof typeof ICONS;

@@ -63,6 +63,14 @@ describe('settings entry visibility', () => {
     expect(signedOut.find((entry) => entry.href === '/home/settings/data')?.tone).toBe('danger');
   });
 
+  it('keeps device GitHub credentials available while signed out', () => {
+    const entries = getVisibleSettingsEntries({ isLoggedIn: false, isMobile: false });
+    const github = entries.find((entry) => entry.href === '/home/settings/github-api');
+
+    expect(github?.group).toBe('maintenance');
+    expect(github?.requiresAuth).toBeUndefined();
+  });
+
   it('keeps extension settings outside user-reachable settings', () => {
     const entries = getVisibleSettingsEntries({ isLoggedIn: true, isMobile: false });
 

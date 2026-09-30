@@ -4,6 +4,24 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.52.0
+**Released on:** 2026-09-29
+
+**Title:** Implement Github Token Configuration Page
+
+### Maintenance
+- Update deps
+
+### Fixed
+- Remove redundant hints and improve layout for GitHub token settings
+- Improve update timeout settings and add webpki-roots dependency for Android
+- Fix double-focus issues
+
+### Added
+- Implement Github token configuration page
+
+--- 
+
 ## v0.51.1
 **Released on:** 2026-09-11
 

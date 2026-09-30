@@ -175,7 +175,7 @@ pub async fn update_ca_certificates(
     app_handle: tauri::AppHandle,
 ) -> Result<CaCertificateUpdateResultDto, String> {
     let ca_dir = ensure_writable_ca_dir(&app_handle)?;
-    let mut result = check_and_update_ca_certificates(&ca_dir).await?;
+    let mut result = check_and_update_ca_certificates(&ca_dir, &app_handle).await?;
     let last_checked = unix_now() as f64;
     let mut manifest = load_ca_manifest(&ca_dir);
     manifest.last_check = Some(last_checked);
@@ -375,18 +375,21 @@ fn save_ca_manifest(ca_dir: &std::path::Path, manifest: &CaManifest) -> Result<(
 
 async fn check_and_update_ca_certificates(
     ca_dir: &std::path::Path,
+    app_handle: &tauri::AppHandle,
 ) -> Result<CaCertificateUpdateResultDto, String> {
     let mut result = CaCertificateUpdateResultDto::default();
     let mut manifest = load_ca_manifest(ca_dir);
 
-    let response = reqwest::Client::new()
-        .get(CA_CERT_API_URL)
-        .header(reqwest::header::USER_AGENT, UPDATE_USER_AGENT)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch CA certificate listing: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("CA certificate listing request failed: {e}"))?;
+    let client = update_http_client_builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| "Failed to initialize GitHub API HTTP client.".to_string())?;
+    let response = github_api_get(
+        &client,
+        GithubApiEndpoint::CaCertificates,
+        &app_handle.state::<crate::github_credentials::GithubCredentialState>(),
+    )
+    .await?;
 
     let entries = response
         .json::<Vec<GithubContentsEntry>>()
@@ -398,6 +401,10 @@ async fn check_and_update_ca_certificates(
         .filter(|entry| entry.entry_type == "file" && is_ca_certificate_filename(&entry.name))
         .map(|entry| (entry.name.clone(), entry))
         .collect();
+
+    // Keep downloads on a separate client with normal redirect handling and
+    // no GitHub API authorization header. It also uses the Android TLS roots.
+    let download_client = update_http_client(None)?;
 
     for (name, entry) in &remote_files {
         let destination = ca_dir.join(name);
@@ -411,7 +418,7 @@ async fn check_and_update_ca_certificates(
             continue;
         };
 
-        let content = match reqwest::Client::new()
+        let content = match download_client
             .get(download_url)
             .header(reqwest::header::USER_AGENT, UPDATE_USER_AGENT)
             .send()

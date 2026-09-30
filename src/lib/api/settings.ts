@@ -232,4 +232,24 @@ export async function updateCaCertificates(): Promise<CaCertificateUpdateResult>
   return invoke("update_ca_certificates");
 }
 
+/** Public status only: the saved GitHub token is never returned over IPC. */
+export type GithubAuthMode = 'none' | 'configured' | 'needs_attention' | 'unavailable';
+
+export interface GithubAuthStatus {
+  mode: GithubAuthMode;
+}
+
+export async function getGithubAuthStatus(): Promise<GithubAuthStatus> {
+  return invoke('get_github_auth_status');
+}
+
+/** Store a token in the device credential store; validation happens on first use. */
+export async function saveGithubToken(token: string): Promise<void> {
+  return invoke('save_github_token', { token });
+}
+
+export async function deleteGithubToken(): Promise<void> {
+  return invoke('delete_github_token');
+}
+
 // ---------------------------------------------------------------------------

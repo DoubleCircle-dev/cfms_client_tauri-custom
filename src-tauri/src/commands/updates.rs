@@ -25,9 +25,14 @@ pub async fn check_app_update(
         "Checking for app updates (proxy={})",
         describe_update_proxy(proxy_url.as_ref())
     );
-    let client = update_http_client(proxy_url.as_ref())?;
-    let Some(release) =
-        find_update_release(&client, channel, UpdateAssetKind::DesktopManifest).await?
+    let client = update_api_http_client(proxy_url.as_ref())?;
+    let Some(release) = find_update_release(
+        &client,
+        &app.state::<crate::github_credentials::GithubCredentialState>(),
+        channel,
+        UpdateAssetKind::DesktopManifest,
+    )
+    .await?
     else {
         let mut pending = state
             .pending_update
@@ -233,9 +238,10 @@ async fn check_android_app_update(
         architecture.as_str(),
         describe_update_proxy(proxy_url.as_ref())
     );
-    let client = update_http_client(proxy_url.as_ref())?;
+    let client = update_api_http_client(proxy_url.as_ref())?;
     let release = find_update_release(
         &client,
+        &app.state::<crate::github_credentials::GithubCredentialState>(),
         channel,
         UpdateAssetKind::AndroidApk { architecture },
     )
@@ -611,19 +617,12 @@ const ANDROID_UNIVERSAL_APK_ASSET_NAME: &str = "app-universal-release.apk";
 
 async fn find_update_release(
     client: &reqwest::Client,
+    credentials: &crate::github_credentials::GithubCredentialState,
     channel: UpdateChannel,
     asset_kind: UpdateAssetKind,
 ) -> Result<Option<GithubReleaseDto>, String> {
-    let releases = client
-        .get(UPDATE_RELEASES_API)
-        .header(reqwest::header::USER_AGENT, UPDATE_USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-        .timeout(UPDATE_CHECK_TIMEOUT)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch release list: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("GitHub release request failed: {e}"))?
+    let releases = github_api_get(client, GithubApiEndpoint::UpdateReleases, credentials)
+        .await?
         .json::<Vec<GithubReleaseDto>>()
         .await
         .map_err(|e| format!("Failed to parse release list: {e}"))?;
@@ -653,10 +652,25 @@ fn updater_proxy_url(state: &tauri::State<'_, AppHandleState>) -> Result<Option<
 }
 
 fn update_http_client(proxy_url: Option<&url::Url>) -> Result<reqwest::Client, String> {
+    build_update_http_client(proxy_url, false)
+}
+
+fn update_api_http_client(proxy_url: Option<&url::Url>) -> Result<reqwest::Client, String> {
+    build_update_http_client(proxy_url, true)
+}
+
+fn build_update_http_client(
+    proxy_url: Option<&url::Url>,
+    github_api_only: bool,
+) -> Result<reqwest::Client, String> {
     let mut builder = update_http_client_builder()
         .user_agent(UPDATE_USER_AGENT)
         .connect_timeout(UPDATE_CONNECT_TIMEOUT)
         .read_timeout(UPDATE_READ_TIMEOUT);
+    if github_api_only {
+        // The bearer token must never follow an API redirect to another host.
+        builder = builder.redirect(reqwest::redirect::Policy::none());
+    }
     if let Some(proxy_url) = proxy_url {
         let proxy = reqwest::Proxy::all(proxy_url.as_str())
             .map_err(|e| format!("Failed to configure updater proxy: {e}"))?;
@@ -928,9 +942,7 @@ mod android_apk_selection_tests {
             "cfms-client-arm64.apk",
             "app-universal-release.aab",
         ]);
-        assert!(
-            select_android_apk_asset(&release, AndroidApkArchitecture::Arm64).is_none()
-        );
+        assert!(select_android_apk_asset(&release, AndroidApkArchitecture::Arm64).is_none());
     }
 
     #[test]

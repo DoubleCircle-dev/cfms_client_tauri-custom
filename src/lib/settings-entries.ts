@@ -161,6 +161,14 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     href: '/home/settings/updates',
     group: 'maintenance',
   },
+  {
+    labelKey: 'settings.githubApi.title',
+    descriptionKey: 'settings.githubApi.description',
+    icon: 'api',
+    href: '/home/settings/github-api',
+    group: 'maintenance',
+    scopeKey: 'settings.overview.scope.device',
+  },
 ];
 
 export function getVisibleSettingsEntries(

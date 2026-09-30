@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -36,6 +36,8 @@ pub struct LocalDataResetStatus {
 struct LocalDataResetMarker {
     version: u8,
     delete_downloads: bool,
+    #[serde(default)]
+    credential_cleared: bool,
 }
 
 pub struct LocalDataResetRuntime {
@@ -73,6 +75,7 @@ pub fn schedule_reset(path: &Path, delete_downloads: bool) -> Result<(), String>
     let marker = LocalDataResetMarker {
         version: RESET_MARKER_VERSION,
         delete_downloads,
+        credential_cleared: false,
     };
     let bytes = serde_json::to_vec(&marker)
         .map_err(|e| format!("Failed to encode the local data reset request: {e}"))?;
@@ -90,6 +93,18 @@ pub fn ensure_retryable_marker(path: &Path) -> Result<(), String> {
         schedule_reset(path, false)?;
     }
     Ok(())
+}
+
+pub fn credential_cleared(path: &Path) -> Result<bool, String> {
+    read_marker(path).map(|marker| marker.credential_cleared)
+}
+
+pub fn mark_credential_cleared(path: &Path) -> Result<(), String> {
+    let mut marker = read_marker(path)?;
+    marker.credential_cleared = true;
+    let bytes = serde_json::to_vec(&marker)
+        .map_err(|e| format!("Failed to encode the local data reset request: {e}"))?;
+    atomic_write(path, &bytes)
 }
 
 pub fn complete_pending_reset<R: Runtime>(
@@ -112,6 +127,15 @@ pub fn complete_pending_reset<R: Runtime>(
             };
         }
     };
+    if !marker.credential_cleared {
+        return LocalDataResetStatus {
+            pending: true,
+            failures: vec![LocalDataResetFailure {
+                target: "github-credential".into(),
+                message: "Credential cleanup was interrupted; retry the reset.".into(),
+            }],
+        };
+    }
 
     let mut failures = Vec::new();
     let download_root = match resolve_download_root(app) {
@@ -213,12 +237,22 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .ok_or_else(|| "The reset marker has no parent directory".to_string())?;
     fs::create_dir_all(parent)
         .map_err(|e| format!("Failed to create the reset marker directory: {e}"))?;
+    if path.exists() {
+        // Keep the marker present throughout an update. A crash during this
+        // write may leave a corrupt marker, which recovery mode can repair;
+        // removing the old file before rename could lose the reset request.
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(path)
+            .map_err(|e| format!("Failed to open the reset request: {e}"))?;
+        file.write_all(bytes)
+            .and_then(|()| file.sync_all())
+            .map_err(|e| format!("Failed to update the reset request: {e}"))?;
+        return Ok(());
+    }
     let temporary = parent.join(format!("{RESET_MARKER_NAME}.tmp"));
     fs::write(&temporary, bytes).map_err(|e| format!("Failed to write the reset request: {e}"))?;
-    if path.exists() {
-        fs::remove_file(path)
-            .map_err(|e| format!("Failed to replace the previous reset request: {e}"))?;
-    }
     fs::rename(&temporary, path).map_err(|e| format!("Failed to commit the reset request: {e}"))
 }
 
@@ -456,7 +490,12 @@ mod tests {
         schedule_reset(&marker_path, true).unwrap();
         let raw = fs::read_to_string(&marker_path).unwrap();
         assert!(raw.contains("delete_downloads"));
+        assert!(raw.contains("credential_cleared"));
         assert!(!raw.contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!credential_cleared(&marker_path).unwrap());
+
+        mark_credential_cleared(&marker_path).unwrap();
+        assert!(credential_cleared(&marker_path).unwrap());
         assert_eq!(read_marker(&marker_path).unwrap().delete_downloads, true);
     }
 
@@ -469,6 +508,7 @@ mod tests {
         ensure_retryable_marker(&marker_path).unwrap();
 
         assert!(!read_marker(&marker_path).unwrap().delete_downloads);
+        assert!(!credential_cleared(&marker_path).unwrap());
     }
 
     #[test]
