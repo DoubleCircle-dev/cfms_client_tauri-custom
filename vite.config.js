@@ -89,8 +89,20 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell vite to ignore watching `src-tauri`, and the large generated
+      // trees at the repository root that are never part of the frontend
+      // module graph:
+      //   * `target/`       - Cargo build output (tens of thousands of files)
+      //   * `build/`        - adapter-static output of a previous build
+      //   * `agent-scratch/` - tool/agent scratch files (probe logs, fixtures)
+      // Watching them makes the initial chokidar crawl very expensive and lets
+      // scratch writes trigger bogus HMR reloads.
+      ignored: [
+        "**/src-tauri/**",
+        "**/target/**",
+        "**/build/**",
+        "**/agent-scratch/**",
+      ],
     },
   },
   build: {
