@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ListDirectoryPageResponse } from '$lib/api/types';
-import { BatchAccessRulesController, batchRulesSessionProblem, type BatchRulesProblem, type BatchRulesTarget } from './batch-access-rules';
+import { BatchAccessRulesController, batchRulesSessionProblem, type BatchRulesFailureAction, type BatchRulesProblem, type BatchRulesTarget } from './batch-access-rules';
 
 const doc = (id: string): BatchRulesTarget => ({ objectType: 'document', objectId: id, name: id });
 const folder = (id: string): BatchRulesTarget => ({ objectType: 'directory', objectId: id, name: id });
@@ -18,15 +18,19 @@ function deferred<T>() {
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-function setup(targets = [doc('a'), doc('b')]) {
+function setup(targets = [doc('a'), doc('b')], options: { resolveFailures?: boolean; initialRetryAt?: number } = {}) {
   const fetchPage = vi.fn().mockResolvedValue(page());
   const setRules = vi.fn().mockResolvedValue(true);
   const onChange = vi.fn();
+  const resolveFailure = vi.fn<(target: BatchRulesTarget, problem: BatchRulesProblem, signal: AbortSignal) => Promise<BatchRulesFailureAction>>()
+    .mockResolvedValue('skip');
   let problem: BatchRulesProblem | null = null;
   const controller = new BatchAccessRulesController(targets, {
     fetchPage, setRules, onChange, guard: () => problem, requestTimeoutMs: 0,
+    resolveFailure: options.resolveFailures ? resolveFailure : undefined,
+    initialRetryAt: options.initialRetryAt,
   });
-  return { controller, fetchPage, setRules, onChange, setGuard: (next: BatchRulesProblem | null) => { problem = next; } };
+  return { controller, fetchPage, setRules, resolveFailure, onChange, setGuard: (next: BatchRulesProblem | null) => { problem = next; } };
 }
 async function flush() { for (let i = 0; i < 20; i += 1) await Promise.resolve(); }
 
@@ -272,6 +276,171 @@ describe('batch access rule execution and recovery', () => {
     await controller.apply();
     expect(setRules.mock.calls[1][2].read).toHaveLength(1);
     expect(setRules.mock.calls[1][3]).toBe(false);
+  });
+});
+
+describe('batch access rule failure decisions', () => {
+  it('waits for a choice, retries the same child before its parent and counts each object once', async () => {
+    const choice = deferred<BatchRulesFailureAction>();
+    const { controller, fetchPage, setRules, resolveFailure } = setup([folder('root')], { resolveFailures: true });
+    fetchPage.mockResolvedValue(page([], ['child']));
+    setRules.mockRejectedValueOnce('Server returned 403: denied').mockRejectedValueOnce('Server returned 403: still denied');
+    resolveFailure.mockReturnValueOnce(choice.promise).mockResolvedValueOnce('retry');
+    await controller.discover({}, true, true);
+    const run = controller.apply();
+    await flush();
+    expect(controller.snapshot.phase).toBe('deciding');
+    expect(controller.snapshot.activeKey).toBe('document:child');
+    expect(controller.snapshot.runCompleted).toBe(0);
+    expect(setRules).toHaveBeenCalledTimes(1);
+    await controller.apply();
+    await controller.retryFailed();
+    expect(setRules).toHaveBeenCalledTimes(1);
+    choice.resolve('retry');
+    await run;
+    expect(setRules.mock.calls.map(([, id]) => id)).toEqual(['child', 'child', 'child', 'root']);
+    expect(resolveFailure).toHaveBeenCalledTimes(2);
+    expect(controller.snapshot.runCompleted).toBe(2);
+    expect(controller.snapshot.runTotal).toBe(2);
+    expect(controller.snapshot.results.map((item) => item.status)).toEqual(['success', 'success']);
+    expect(controller.snapshot.results.every((item) => item.skipped === undefined)).toBe(true);
+  });
+
+  it('records skipped failures, continues processing and clears the skip after an explicit successful retry', async () => {
+    const { controller, setRules, resolveFailure } = setup(undefined, { resolveFailures: true });
+    setRules.mockRejectedValueOnce('Server returned 403: denied');
+    await controller.discover({}, true, false);
+    await controller.apply();
+    expect(resolveFailure.mock.calls[0].slice(0, 2)).toEqual([doc('a'), expect.objectContaining({ kind: 'denied', status: 403 })]);
+    expect(controller.snapshot.results[0]).toMatchObject({ status: 'failed', skipped: true });
+    expect(controller.snapshot.results[1].status).toBe('success');
+    await controller.retryFailed();
+    expect(setRules.mock.calls.map(([, id]) => id)).toEqual(['a', 'b', 'a']);
+    expect(controller.snapshot.results[0]).toEqual({ target: doc('a'), status: 'success' });
+  });
+
+  it('limits skip-all to matching kind and status in the current execution', async () => {
+    const { controller, setRules, resolveFailure } = setup(['a', 'b', 'c', 'd', 'e'].map(doc), { resolveFailures: true });
+    for (const status of [403, 403, 404, 400, 500]) setRules.mockRejectedValueOnce(`Server returned ${status}: rejected`);
+    resolveFailure.mockResolvedValue('skip_all');
+    await controller.discover({}, true, false);
+    await controller.apply();
+    expect(resolveFailure.mock.calls.map(([, problem]) => problem.status)).toEqual([403, 404, 400, 500]);
+    expect(controller.snapshot.results.every((item) => item.status === 'failed' && item.skipped)).toBe(true);
+    expect(controller.snapshot.runCompleted).toBe(5);
+    setRules.mockRejectedValue('Server returned 403: denied');
+    await controller.retryFailed();
+    expect(resolveFailure.mock.calls.map(([, problem]) => problem.status)).toEqual([403, 404, 400, 500, 403]);
+    expect(setRules).toHaveBeenCalledTimes(10);
+    expect(controller.snapshot.runCompleted).toBe(5);
+  });
+
+  it('cancels future writes while retaining the confirmed current failure', async () => {
+    const { controller, setRules, resolveFailure } = setup(undefined, { resolveFailures: true });
+    setRules.mockRejectedValueOnce('Server returned 404: missing');
+    resolveFailure.mockResolvedValueOnce('cancel');
+    await controller.discover({}, true, false);
+    await controller.apply();
+    expect(setRules).toHaveBeenCalledTimes(1);
+    expect(controller.snapshot.phase).toBe('stopped');
+    expect(controller.snapshot.stopReason?.kind).toBe('stopped');
+    expect(controller.snapshot.results.map((item) => item.status)).toEqual(['failed', 'pending']);
+    expect(controller.snapshot.results[0].skipped).toBeUndefined();
+    expect(controller.snapshot.runCompleted).toBe(1);
+  });
+
+  it.each(['stop', 'dispose'] as const)('wakes a decision on %s even if its resolver ignores abort', async (action) => {
+    const choice = deferred<BatchRulesFailureAction>();
+    const { controller, setRules, resolveFailure, onChange } = setup(undefined, { resolveFailures: true });
+    setRules.mockRejectedValueOnce('Server returned 403: denied');
+    resolveFailure.mockReturnValueOnce(choice.promise);
+    await controller.discover({}, true, false);
+    const run = controller.apply();
+    await flush();
+    const signal = resolveFailure.mock.calls[0][2];
+    expect(signal.aborted).toBe(false);
+    controller[action]();
+    const callbackCount = onChange.mock.calls.length;
+    await run;
+    expect(signal.aborted).toBe(true);
+    expect(controller.snapshot.phase).toBe('stopped');
+    expect(controller.snapshot.runCompleted).toBe(1);
+    expect(setRules).toHaveBeenCalledTimes(1);
+    if (action === 'dispose') expect(onChange).toHaveBeenCalledTimes(callbackCount);
+    const stoppedCallbackCount = onChange.mock.calls.length;
+    choice.resolve('retry');
+    await flush();
+    expect(setRules).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledTimes(stoppedCallbackCount);
+  });
+
+  it('rechecks the guard after a retry choice and preserves the failure when the next write is unsent', async () => {
+    const { controller, setRules, resolveFailure, setGuard } = setup(undefined, { resolveFailures: true });
+    setRules.mockRejectedValueOnce('Server returned 403: denied');
+    resolveFailure.mockImplementationOnce(async () => { setGuard({ kind: 'identity' }); return 'retry'; });
+    await controller.discover({}, true, false);
+    await controller.apply();
+    expect(setRules).toHaveBeenCalledTimes(1);
+    expect(controller.snapshot.phase).toBe('stopped');
+    expect(controller.snapshot.stopReason?.kind).toBe('identity');
+    expect(controller.snapshot.results.map((item) => item.status)).toEqual(['failed', 'pending']);
+    expect(controller.snapshot.runCompleted).toBe(1);
+  });
+
+  it('stops safely if the failure resolver rejects', async () => {
+    const { controller, setRules, resolveFailure } = setup(undefined, { resolveFailures: true });
+    setRules.mockRejectedValueOnce('Server returned 403: denied');
+    resolveFailure.mockRejectedValueOnce(new Error('Dialog was unavailable'));
+    await controller.discover({}, true, false);
+    await controller.apply();
+    expect(controller.snapshot.phase).toBe('stopped');
+    expect(controller.snapshot.results.map((item) => item.status)).toEqual(['failed', 'pending']);
+    expect(setRules).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([401, 999, null, false])('does not offer ordinary failure decisions for %s', async (problem) => {
+    const { controller, setRules, resolveFailure } = setup(undefined, { resolveFailures: true });
+    if (problem === false) setRules.mockResolvedValueOnce(false);
+    else setRules.mockRejectedValueOnce(problem === null ? new Error('No response') : `Server returned ${problem}: blocked`);
+    await controller.discover({}, true, false);
+    await controller.apply();
+    expect(resolveFailure).not.toHaveBeenCalled();
+    expect(controller.snapshot.phase).toBe('stopped');
+    expect(setRules).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([429, 503])('keeps automatic cooldown and pausing for %s outside the failure dialog', async (status) => {
+    vi.useFakeTimers();
+    const { controller, setRules, resolveFailure } = setup(undefined, { resolveFailures: true });
+    setRules.mockRejectedValue(`Server returned ${status}: busy\nCFMS_ERROR_DATA:{"retry_after_seconds":1}`);
+    await controller.discover({}, true, false);
+    const run = controller.apply();
+    await flush();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await run;
+    expect(setRules).toHaveBeenCalledTimes(3);
+    expect(resolveFailure).not.toHaveBeenCalled();
+    expect(controller.snapshot.phase).toBe('paused');
+  });
+
+  it.each([true, false])('preserves an inherited cooldown before the first request with recursion %s', async (recursive) => {
+    vi.useFakeTimers();
+    const retryAt = Date.now() + 5_000;
+    const { controller, fetchPage, setRules } = setup([folder('root')], { initialRetryAt: retryAt });
+    const scan = controller.discover({}, true, recursive);
+    const run = recursive ? scan : scan.then(() => controller.apply());
+    await flush();
+    expect(controller.snapshot.retryAt).toBe(retryAt);
+    expect(controller.snapshot.phase).toBe('waiting');
+    expect(fetchPage).not.toHaveBeenCalled();
+    expect(setRules).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(fetchPage).not.toHaveBeenCalled();
+    expect(setRules).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await run;
+    if (recursive) expect(fetchPage).toHaveBeenCalledTimes(1);
+    else expect(setRules).toHaveBeenCalledTimes(1);
   });
 });
 

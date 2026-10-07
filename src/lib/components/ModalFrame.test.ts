@@ -113,6 +113,23 @@ function renderModal(overrides: ModalOverrides = {}) {
   return { ...result, onClose, props };
 }
 
+function renderKeyboardModal(markup = '', title = 'Keyboard dialog') {
+  const onDefault = vi.fn();
+  const result = render(ModalFrame, {
+    props: {
+      title,
+      onClose: vi.fn(),
+      children: createRawSnippet(() => ({
+        render: () => `<div>${markup}<button type="button" data-dialog-default>OK</button></div>`,
+      })),
+    },
+  });
+  const dialog = result.container.querySelector<HTMLElement>('[role="dialog"]')!;
+  const defaultButton = dialog.querySelector<HTMLButtonElement>('button[data-dialog-default]')!;
+  defaultButton.addEventListener('click', onDefault);
+  return { ...result, dialog, defaultButton, onDefault };
+}
+
 function makeRect(left: number, top: number, width: number, height: number): DOMRect {
   return {
     x: left,
@@ -311,6 +328,116 @@ describe('ModalFrame', () => {
     await fireEvent.keyDown(dialog, { key: 'Escape' });
     await fireEvent.click(container.querySelector<HTMLElement>('.modal-backdrop')!);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('activates an explicitly marked default button from the panel and a text field', async () => {
+    const { dialog, onDefault } = renderKeyboardModal('<input aria-label="Rule name" />');
+    const input = dialog.querySelector('input')!;
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+
+    await fireEvent(dialog, event);
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(event.defaultPrevented).toBe(true);
+    expect(onDefault).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not give unmarked dialogs an implicit default button', async () => {
+    const { dialog, defaultButton, onDefault } = renderKeyboardModal();
+    defaultButton.removeAttribute('data-dialog-default');
+
+    await fireEvent.keyDown(dialog, { key: 'Enter' });
+    expect(onDefault).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '<button type="button" data-local>Local action</button>',
+    '<a href="#local" data-local>Local link</a>',
+    '<input type="checkbox" data-local />',
+    '<input type="radio" data-local />',
+    '<select data-local><option>One</option></select>',
+    '<textarea data-local></textarea>',
+    '<div contenteditable="true" data-local>Editor</div>',
+    '<div class="cm-editor"><div data-local>Source</div></div>',
+    '<div role="switch" tabindex="0" data-local></div>',
+    '<form><input data-local /><button type="submit">Add rule</button></form>',
+  ])('preserves the focused control or local form Enter behavior for %s', async (markup) => {
+    const { dialog, onDefault } = renderKeyboardModal(markup);
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+
+    await fireEvent(dialog.querySelector('[data-local]')!, event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(onDefault).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { altKey: true },
+    { shiftKey: true },
+    { isComposing: true },
+    { repeat: true },
+  ])('does not activate the default for modified, composing or repeated Enter: %j', async (options) => {
+    const { dialog, onDefault } = renderKeyboardModal();
+
+    await fireEvent.keyDown(dialog, { key: 'Enter', ...options });
+    expect(onDefault).not.toHaveBeenCalled();
+  });
+
+  it('respects an already handled Enter event', async () => {
+    const { dialog, onDefault } = renderKeyboardModal();
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    event.preventDefault();
+
+    await fireEvent(dialog, event);
+    expect(onDefault).not.toHaveBeenCalled();
+  });
+
+  it.each(['disabled', 'hidden', 'inert', 'aria-hidden', 'aria-disabled', 'display', 'visibility', 'unmarked'])
+    ('ignores an unavailable default button: %s', async (kind) => {
+      const { dialog, defaultButton, onDefault } = renderKeyboardModal();
+      if (kind === 'disabled') defaultButton.disabled = true;
+      if (kind === 'hidden') defaultButton.parentElement!.hidden = true;
+      if (kind === 'inert') defaultButton.parentElement!.setAttribute('inert', '');
+      if (kind === 'aria-hidden') defaultButton.parentElement!.setAttribute('aria-hidden', 'true');
+      if (kind === 'aria-disabled') defaultButton.setAttribute('aria-disabled', 'true');
+      if (kind === 'display') defaultButton.parentElement!.style.display = 'none';
+      if (kind === 'visibility') defaultButton.parentElement!.style.visibility = 'hidden';
+      if (kind === 'unmarked') defaultButton.dataset.dialogDefault = 'false';
+
+      await fireEvent.keyDown(dialog, { key: 'Enter' });
+      expect(onDefault).not.toHaveBeenCalled();
+    });
+
+  it('activates only the topmost dialog default button', async () => {
+    const first = renderKeyboardModal('', 'First dialog');
+    const second = renderKeyboardModal('', 'Second dialog');
+
+    await fireEvent.keyDown(first.dialog, { key: 'Enter' });
+    await fireEvent.keyDown(second.dialog, { key: 'Enter' });
+    expect(first.onDefault).not.toHaveBeenCalled();
+    expect(second.onDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Ctrl+Enter submission for textarea forms without activating the dialog default', async () => {
+    const { dialog, onDefault } = renderKeyboardModal('<form><textarea data-local></textarea></form>');
+    const form = dialog.querySelector('form')!;
+    const requestSubmit = vi.spyOn(form, 'requestSubmit').mockImplementation(() => {});
+
+    await fireEvent.keyDown(dialog.querySelector('textarea')!, { key: 'Enter', ctrlKey: true });
+    expect(requestSubmit).toHaveBeenCalledTimes(1);
+    expect(onDefault).not.toHaveBeenCalled();
+  });
+
+  it('keeps keyboard focus inside the modal with its marked default button', async () => {
+    const { dialog, defaultButton } = renderKeyboardModal();
+    const closeButton = dialog.querySelector<HTMLButtonElement>('.modal-close')!;
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+
+    defaultButton.focus();
+    await fireEvent.keyDown(defaultButton, { key: 'Tab' });
+    expect(document.activeElement).toBe(closeButton);
+    await fireEvent.keyDown(closeButton, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(defaultButton);
   });
 
   it('keeps fixed dialogs free of resize and maximize controls', () => {

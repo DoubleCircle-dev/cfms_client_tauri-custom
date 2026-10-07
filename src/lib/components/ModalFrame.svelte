@@ -184,7 +184,7 @@
   });
 
   function handleKeydown(event: KeyboardEvent) {
-    if (!isTopmostDialog()) return;
+    if (!isTopmostDialog() || event.defaultPrevented || event.isComposing) return;
 
     if (
       event.key === 'Enter'
@@ -204,6 +204,26 @@
       event.stopPropagation();
       onClose();
       return;
+    }
+
+    if (
+      event.key === 'Enter'
+      && !event.ctrlKey
+      && !event.metaKey
+      && !event.altKey
+      && !event.shiftKey
+      && !event.repeat
+      && panelElement
+      && !hasOwnEnterBehavior(event.target)
+    ) {
+      const defaultButton = Array.from(panelElement.querySelectorAll<HTMLButtonElement>(
+        'button[data-dialog-default]:not([data-dialog-default="false"])',
+      )).find(isAvailableDefaultButton);
+      if (defaultButton) {
+        event.preventDefault();
+        defaultButton.click();
+        return;
+      }
     }
 
     if (event.key !== 'Tab' || !panelElement) return;
@@ -230,6 +250,32 @@
       event.preventDefault();
       first.focus();
     }
+  }
+
+  function hasOwnEnterBehavior(target: EventTarget | null) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest(
+      'form, button, a[href], textarea, select, summary, '
+      + 'input[type="button"], input[type="submit"], input[type="reset"], '
+      + 'input[type="checkbox"], input[type="radio"], input[type="file"], '
+      + 'input[type="range"], input[type="color"], '
+      + '[contenteditable]:not([contenteditable="false"]), .cm-editor, '
+      + '[role="button"], [role="switch"], [role="checkbox"], [role="radio"], '
+      + '[role="combobox"], [role="listbox"], [role="slider"], [role="spinbutton"], '
+      + '[role="menuitem"], [role="treeitem"]',
+    ));
+  }
+
+  function isAvailableDefaultButton(button: HTMLButtonElement) {
+    if (button.matches(':disabled') || button.closest('[hidden], [inert], [aria-hidden="true"], [aria-disabled="true"]')) {
+      return false;
+    }
+    for (let element: HTMLElement | null = button; element; element = element.parentElement) {
+      const style = window.getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+      if (element === panelElement) break;
+    }
+    return true;
   }
 
   function isTopmostDialog() {

@@ -69,6 +69,7 @@
   import AccessRulesManager from '$lib/components/AccessRulesManager.svelte';
   import BatchAccessRulesDialog from '$lib/components/BatchAccessRulesDialog.svelte';
   import { batchRulesSessionProblem, type BatchRulesIdentity, type BatchRulesTarget } from '$lib/files/batch-access-rules';
+  import { accessRulesTemplateKey } from '$lib/files/access-rules-edit';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import {
     beginDownloadBatch,
@@ -313,6 +314,7 @@
   let batchAccessRulesDialog = $state<{
     targets: BatchRulesTarget[];
     identity: BatchRulesIdentity;
+    initialTemplateKey: string;
   } | null>(null);
   let moveTargetDialog = $state<{
     objectType: ServerObjectType;
@@ -1177,9 +1179,9 @@
     },
     {
       id: 'access-rules-selected',
-      label: $t('files.batchRules.title'),
+      label: selectedFolder ? $t('files.setPermissions') : $t('files.batchRules.title'),
       icon: 'rule',
-      visible: totalSelected > 1,
+      visible: totalSelected > 1 || !!selectedFolder,
       disabled: batchBusy || loading || !hasPermission('set_access_rules'),
       run: handleBatchAccessRules,
     },
@@ -2096,7 +2098,7 @@
   }
 
   function handleBatchAccessRules() {
-    if (totalSelected < 2 || batchBusy || loading || !hasPermission('set_access_rules')) return;
+    if (totalSelected < 2 && !selectedFolder) return;
     const targets: BatchRulesTarget[] = [
       ...[...selectedFolderIds].map((objectId) => ({
         objectType: 'directory' as const,
@@ -2109,9 +2111,15 @@
         name: fileListIndex.documentById.get(objectId)?.title ?? objectId,
       })),
     ];
+    openBatchAccessRules(targets);
+  }
+
+  function openBatchAccessRules(targets: BatchRulesTarget[]) {
+    if (!targets.length || batchBusy || loading || !hasPermission('set_access_rules')) return;
     batchAccessRulesDialog = {
       targets,
       identity: { server: serverStateStore.remoteAddress, username: authStore.username },
+      initialTemplateKey: accessRulesTemplateKey(targets, focusedItemKey),
     };
     batchBusy = true;
   }
@@ -2146,6 +2154,10 @@
     objectId: string,
     objectName: string,
   ) {
+    if (objectType === 'directory') {
+      openBatchAccessRules([{ objectType, objectId, name: objectName }]);
+      return;
+    }
     await runFileAction(async () => {
       const current = await getAccessRules(objectType, objectId);
       accessRulesDialog = {
@@ -4685,6 +4697,7 @@
 {#if batchAccessRulesDialog}
   <BatchAccessRulesDialog
     targets={batchAccessRulesDialog.targets}
+    initialTemplateKey={batchAccessRulesDialog.initialTemplateKey}
     canReadTemplate={hasPermission('view_access_rules')}
     checkGuard={batchAccessRulesGuard}
     onApplied={refreshAfterBatchAccessRules}

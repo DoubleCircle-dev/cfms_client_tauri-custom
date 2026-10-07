@@ -44,10 +44,12 @@ export function batchRulesSessionProblem(expected: BatchRulesIdentity, current: 
 }
 
 export type BatchRulesItemStatus = 'pending' | 'success' | 'failed' | 'unconfirmed';
+export type BatchRulesFailureAction = 'retry' | 'skip' | 'skip_all' | 'cancel';
 export interface BatchRulesItemResult {
   target: BatchRulesTarget;
   status: BatchRulesItemStatus;
   problem?: BatchRulesProblem;
+  skipped?: boolean;
 }
 export interface BatchRulesScanIssue {
   target: BatchRulesTarget;
@@ -55,7 +57,7 @@ export interface BatchRulesScanIssue {
 }
 
 export interface BatchRulesSnapshot {
-  phase: 'idle' | 'scanning' | 'ready' | 'running' | 'waiting' | 'paused' | 'stopped' | 'finished';
+  phase: 'idle' | 'scanning' | 'ready' | 'running' | 'waiting' | 'deciding' | 'paused' | 'stopped' | 'finished';
   operation: 'scan' | 'apply';
   targets: BatchRulesTarget[];
   results: BatchRulesItemResult[];
@@ -76,7 +78,9 @@ interface Dependencies {
   setRules: (type: ServerObjectType, id: string, rules: AccessRulesRecord, inherit: boolean) => Promise<boolean>;
   guard: () => BatchRulesProblem | null;
   onChange: (snapshot: BatchRulesSnapshot) => void;
+  resolveFailure?: (target: BatchRulesTarget, problem: BatchRulesProblem, signal: AbortSignal) => Promise<BatchRulesFailureAction>;
   requestTimeoutMs?: number;
+  initialRetryAt?: number;
 }
 
 type RequestOutcome<T> = { ok: true; value: T } | {
@@ -116,6 +120,7 @@ export class BatchAccessRulesController {
   private waitingUntil: number | null = null;
   private retryAt = 0;
   private wakeWait: (() => void) | null = null;
+  private failureDecision: AbortController | null = null;
   private loader: DirectoryLoadController;
   private generation = 0;
   private roots: BatchRulesTarget[];
@@ -123,6 +128,7 @@ export class BatchAccessRulesController {
   constructor(targets: BatchRulesTarget[], private readonly dependencies: Dependencies) {
     this.roots = [...new Map(targets.map((target) => [batchRulesTargetKey(target), { ...target }])).values()];
     this.loader = new DirectoryLoadController(dependencies.fetchPage, dependencies.requestTimeoutMs);
+    this.retryAt = dependencies.initialRetryAt ?? 0;
   }
 
   get snapshot(): BatchRulesSnapshot {
@@ -243,6 +249,7 @@ export class BatchAccessRulesController {
     this.stopRequested = true;
     this.stopReason = reason;
     this.wakeWait?.();
+    this.failureDecision?.abort();
     if (!this.busy) this.phase = 'stopped';
     this.emit();
   }
@@ -301,31 +308,82 @@ export class BatchAccessRulesController {
     if (!indices.length) return;
     this.runCompleted = 0;
     this.runTotal = indices.length;
+    const skippedProblems = new Set<string>();
     await this.withOperation('apply', async () => {
       for (const index of indices) {
         const item = this.results[index];
         this.activeKey = batchRulesTargetKey(item.target);
-        this.emit();
-        const outcome = await this.request(
-          () => this.dependencies.setRules(item.target.objectType, item.target.objectId, cloneAccessRules(this.rules), this.inherit),
-          (value) => value === true,
-        );
-        if (outcome.ok) this.results[index] = { target: item.target, status: 'success' };
-        else if (outcome.sent) this.results[index] = {
-          target: item.target,
-          status: ['unconfirmed', 'invalid_response'].includes(outcome.problem.kind) ? 'unconfirmed' : 'failed',
-          problem: outcome.problem,
-        };
-        if (outcome.ok || outcome.sent) this.runCompleted += 1;
-        this.emit();
-        const stop = this.currentStop();
-        if ((!outcome.ok && outcome.halt) || stop) {
-          this.halt(stop ?? (!outcome.ok ? outcome.problem : { kind: 'stopped' }));
-          return;
+        let attempted = false;
+        while (true) {
+          this.emit();
+          const outcome = await this.request(
+            () => this.dependencies.setRules(item.target.objectType, item.target.objectId, cloneAccessRules(this.rules), this.inherit),
+            (value) => value === true,
+          );
+          if (outcome.ok) this.results[index] = { target: item.target, status: 'success' };
+          else if (outcome.sent) this.results[index] = {
+            target: item.target,
+            status: ['unconfirmed', 'invalid_response'].includes(outcome.problem.kind) ? 'unconfirmed' : 'failed',
+            problem: outcome.problem,
+          };
+          attempted ||= outcome.ok || outcome.sent;
+          this.emit();
+          const stop = this.currentStop();
+          if ((!outcome.ok && outcome.halt) || stop) {
+            if (attempted) this.runCompleted += 1;
+            this.halt(stop ?? (!outcome.ok ? outcome.problem : { kind: 'stopped' }));
+            return;
+          }
+          if (outcome.ok || !this.dependencies.resolveFailure) break;
+
+          const problemKey = `${outcome.problem.kind}:${outcome.problem.status ?? ''}`;
+          const action = skippedProblems.has(problemKey) ? 'skip'
+            : await this.decideFailure(item.target, outcome.problem);
+          const stoppedAfterDecision = this.currentStop();
+          if (stoppedAfterDecision || action === 'cancel') {
+            if (attempted) this.runCompleted += 1;
+            this.halt(stoppedAfterDecision ?? { kind: 'stopped' });
+            return;
+          }
+          if (action === 'retry') continue;
+          if (action === 'skip_all') skippedProblems.add(problemKey);
+          this.results[index] = { ...this.results[index], skipped: true };
+          break;
         }
+        if (attempted) this.runCompleted += 1;
+        this.emit();
       }
       this.phase = 'finished';
     });
+  }
+
+  private async decideFailure(target: BatchRulesTarget, problem: BatchRulesProblem): Promise<BatchRulesFailureAction> {
+    const decision = new AbortController();
+    this.failureDecision = decision;
+    this.phase = 'deciding';
+    this.emit();
+    let onAbort!: () => void;
+    const aborted = new Promise<BatchRulesFailureAction>((resolve) => {
+      onAbort = () => resolve('cancel');
+      if (decision.signal.aborted) onAbort();
+      else decision.signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      if (this.currentStop()) {
+        decision.abort();
+        return 'cancel';
+      }
+      // A UI resolver may ignore abort or settle much later; stopping still wakes this operation.
+      const answer = Promise.resolve().then((): BatchRulesFailureAction | Promise<BatchRulesFailureAction> =>
+        decision.signal.aborted ? 'cancel'
+          : this.dependencies.resolveFailure!({ ...target }, { ...problem }, decision.signal),
+      ).catch((): BatchRulesFailureAction => 'cancel');
+      return await Promise.race([answer, aborted]);
+    } finally {
+      decision.signal.removeEventListener('abort', onAbort);
+      if (this.failureDecision === decision) this.failureDecision = null;
+      this.phase = 'running';
+    }
   }
 
   private async withOperation(operation: BatchRulesSnapshot['operation'], run: () => Promise<void>): Promise<void> {

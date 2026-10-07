@@ -44,6 +44,7 @@ export interface ChoiceDialogOptions<T extends string = string> {
   detailLabel?: string;
   applyToAllLabel?: string;
   cancelLabel?: string;
+  signal?: AbortSignal;
 }
 
 export interface ChoiceDialogResult<T extends string = string> {
@@ -136,9 +137,15 @@ class DialogStoreImpl {
   }
 
   choose<T extends string>(options: ChoiceDialogOptions<T>): Promise<ChoiceDialogResult<T> | null> {
+    if (options.signal?.aborted) return Promise.resolve(null);
+
     return new Promise((resolve) => {
-      this.enqueue({
-        id: this.nextId++,
+      const id = this.nextId++;
+      const signal = options.signal;
+      let settled = false;
+      const handleAbort = () => this.cancel(id);
+      const request: DialogRequest = {
+        id,
         kind: "choice",
         title: options.title ?? "Choose an action",
         message: options.message,
@@ -155,12 +162,20 @@ class DialogStoreImpl {
         details: options.details ?? [],
         detailLabel: options.detailLabel ?? "",
         applyToAllLabel: options.applyToAllLabel ?? "",
-        resolve: (value) => resolve(
-          value && typeof value === "object"
-            ? value as ChoiceDialogResult<T>
-            : null,
-        ),
-      });
+        resolve: (value) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", handleAbort);
+          resolve(
+            value && typeof value === "object"
+              ? value as ChoiceDialogResult<T>
+              : null,
+          );
+        },
+      };
+      signal?.addEventListener("abort", handleAbort, { once: true });
+      this.enqueue(request);
+      if (signal?.aborted) this.cancel(id);
     });
   }
 
@@ -175,6 +190,18 @@ class DialogStoreImpl {
   private enqueue(request: DialogRequest) {
     this.queue.push(request);
     if (!this.current) this.showNext();
+  }
+
+  private cancel(id: number) {
+    if (this.current?.id === id) {
+      this.resolve(null);
+      return;
+    }
+
+    const index = this.queue.findIndex((request) => request.id === id);
+    if (index < 0) return;
+    const [request] = this.queue.splice(index, 1);
+    request.resolve(null);
   }
 
   private showNext() {
