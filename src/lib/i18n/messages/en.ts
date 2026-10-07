@@ -379,7 +379,6 @@ export const en = {
     moveSelected: 'Move selected',
     batchSelectionName: '{count} selected item(s)',
     batchRules: {
-      title: 'Set access rules for selection',
       selection: 'Apply the same rules to {count} selected objects.',
       recursive: 'Also apply these rules to subfolders and documents',
       recursiveEnabled: 'Includes all discovered descendants',

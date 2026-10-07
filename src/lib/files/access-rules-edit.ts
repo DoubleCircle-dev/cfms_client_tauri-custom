@@ -16,8 +16,15 @@ function canonical(value: unknown): unknown {
 }
 
 /** Explorer uses folder: keys; the rules API uses directory: keys. */
-export function accessRulesTemplateKey(targets: BatchRulesTarget[], focusedItemKey: string | null): string {
-  const focusedKey = focusedItemKey?.replace(/^folder:/, 'directory:');
-  const focused = targets.find((target) => batchRulesTargetKey(target) === focusedKey);
-  return batchRulesTargetKey(focused ?? targets[0]);
+export function accessRulesTemplateKey(
+  targets: BatchRulesTarget[],
+  focusedItemKey: string | null,
+  contextItemKey: string | null = null,
+): string {
+  for (const itemKey of [contextItemKey, focusedItemKey]) {
+    const key = itemKey?.replace(/^folder:/, 'directory:');
+    const target = targets.find((target) => batchRulesTargetKey(target) === key);
+    if (target) return batchRulesTargetKey(target);
+  }
+  return batchRulesTargetKey(targets[0]);
 }

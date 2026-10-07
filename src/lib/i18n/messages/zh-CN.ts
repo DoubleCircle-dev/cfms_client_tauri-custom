@@ -373,7 +373,6 @@ export const zh_CN = {
     moveSelected: '移动所选项',
     batchSelectionName: '已选择 {count} 项',
     batchRules: {
-      title: '批量设置访问规则',
       selection: '将为已选的 {count} 个对象设置同一套规则。',
       recursive: '也将这些规则应用到子文件夹和文档',
       recursiveEnabled: '包含枚举发现的所有后代',

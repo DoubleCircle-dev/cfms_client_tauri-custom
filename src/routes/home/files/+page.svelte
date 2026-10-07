@@ -286,6 +286,7 @@
     y: number;
     kind: 'folder' | 'document' | 'selection' | 'current-directory' | null;
     item: ServerDirectoryEntry | ServerDocumentEntry | null;
+    targetKey?: string;
     sourceElement: HTMLElement | null;
   }>({ open: false, x: 0, y: 0, kind: null, item: null, sourceElement: null });
   let detailTitle = $state<string | null>(null);
@@ -1179,8 +1180,8 @@
     },
     {
       id: 'access-rules-selected',
-      label: selectedFolder ? $t('files.setPermissions') : $t('files.batchRules.title'),
-      icon: 'rule',
+      label: $t('files.setPermissions'),
+      icon: 'settings',
       visible: totalSelected > 1 || !!selectedFolder,
       disabled: batchBusy || loading || !hasPermission('set_access_rules'),
       run: handleBatchAccessRules,
@@ -1472,7 +1473,7 @@
     e.preventDefault();
     const anchor = keyboardMenuAnchor(e);
     if (selectedFolderIds.has(folder.id) && totalSelected > 1) {
-      contextMenu = { open: true, ...anchor, kind: 'selection', item: null };
+      contextMenu = { open: true, ...anchor, kind: 'selection', item: null, targetKey: `folder:${folder.id}` };
       return;
     }
     if (!selectedFolderIds.has(folder.id)) {
@@ -1487,7 +1488,7 @@
     e.preventDefault();
     const anchor = keyboardMenuAnchor(e);
     if (selectedDocumentIds.has(doc.id) && totalSelected > 1) {
-      contextMenu = { open: true, ...anchor, kind: 'selection', item: null };
+      contextMenu = { open: true, ...anchor, kind: 'selection', item: null, targetKey: `document:${doc.id}` };
       return;
     }
     if (!selectedDocumentIds.has(doc.id)) {
@@ -1517,6 +1518,8 @@
 
   function getContextMenuItems(): ContextMenuItem[] {
     if (contextMenu.kind === 'selection') {
+      // ContextMenu closes before invoking the action, so capture its target now.
+      const targetKey = contextMenu.targetKey ?? null;
       return [
         {
           id: 'download-selection',
@@ -1534,11 +1537,11 @@
         },
         {
           id: 'access-rules-selection',
-          label: $t('files.batchRules.title'),
-          icon: 'rule',
+          label: $t('files.setPermissions'),
+          icon: 'settings',
           disabled: batchBusy || loading,
           requiredPermissions: ['set_access_rules'],
-          onSelect: handleBatchAccessRules,
+          onSelect: () => handleBatchAccessRules(targetKey),
         },
         { type: 'divider' },
         {
@@ -2097,7 +2100,7 @@
     }
   }
 
-  function handleBatchAccessRules() {
+  function handleBatchAccessRules(contextItemKey: string | null = null) {
     if (totalSelected < 2 && !selectedFolder) return;
     const targets: BatchRulesTarget[] = [
       ...[...selectedFolderIds].map((objectId) => ({
@@ -2111,15 +2114,15 @@
         name: fileListIndex.documentById.get(objectId)?.title ?? objectId,
       })),
     ];
-    openBatchAccessRules(targets);
+    openBatchAccessRules(targets, contextItemKey);
   }
 
-  function openBatchAccessRules(targets: BatchRulesTarget[]) {
+  function openBatchAccessRules(targets: BatchRulesTarget[], contextItemKey: string | null = null) {
     if (!targets.length || batchBusy || loading || !hasPermission('set_access_rules')) return;
     batchAccessRulesDialog = {
       targets,
       identity: { server: serverStateStore.remoteAddress, username: authStore.username },
-      initialTemplateKey: accessRulesTemplateKey(targets, focusedItemKey),
+      initialTemplateKey: accessRulesTemplateKey(targets, focusedItemKey, contextItemKey),
     };
     batchBusy = true;
   }

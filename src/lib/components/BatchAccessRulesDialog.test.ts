@@ -103,6 +103,16 @@ afterEach(() => {
 });
 
 describe('BatchAccessRulesDialog property-style editing', () => {
+  it.each([
+    ['en', 'Set permissions'],
+    ['zh-CN', '设置权限'],
+  ])('uses the regular permissions label for a selection in %s', async (language, title) => {
+    locale.set(language);
+    setup({ initialTemplateKey: 'document:document' });
+    expect(await screen.findByRole('dialog', { name: title })).toBeTruthy();
+    await waitFor(() => expect(getAccessRules).toHaveBeenCalledExactlyOnceWith('document', 'document'));
+  });
+
   it('automatically reads the selected focus object and places OK, Cancel, Apply in Windows order', async () => {
     setup({ initialTemplateKey: 'document:document' });
     await initialized('Report.txt');

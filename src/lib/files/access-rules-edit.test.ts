@@ -32,4 +32,11 @@ describe('access rules reference selection', () => {
     expect(accessRulesTemplateKey(targets, null)).toBe('directory:folder');
     expect(accessRulesTemplateKey(targets, 'folder:other')).toBe('directory:folder');
   });
+  it('prefers the right-clicked object over a different focused object', () => {
+    expect(accessRulesTemplateKey(targets, 'folder:folder', 'document:doc')).toBe('document:doc');
+    expect(accessRulesTemplateKey(targets, 'document:doc', 'folder:folder')).toBe('directory:folder');
+  });
+  it('uses the selected focus when the context target is outside the selection', () => {
+    expect(accessRulesTemplateKey(targets, 'document:doc', 'folder:other')).toBe('document:doc');
+  });
 });

@@ -105,7 +105,7 @@
   $effect(() => {
     if (busy) {
       const text = statusText;
-      const title = $t('files.batchRules.title');
+      const title = $t('files.setPermissions');
       const current = snapshot.operation === 'scan' ? 0 : snapshot.runCompleted;
       const total = snapshot.operation === 'scan' ? 0 : snapshot.runTotal;
       untrack(() => floatingProgressStore.upsert(progressId, title, text, current, total));
@@ -347,7 +347,7 @@
 </script>
 
 <ModalFrame
-  title={roots.length === 1 ? $t('files.ruleManagerTitle', { values: { name: roots[0].name } }) : $t('files.batchRules.title')}
+  title={roots.length === 1 ? $t('files.ruleManagerTitle', { values: { name: roots[0].name } }) : $t('files.setPermissions')}
   maxWidth="max-w-6xl" resizable maximizable minWidth={680} minHeight={480}
   closeLabel={$t('common.close')} dismissible={!refreshing} closeOnBackdrop={false} onClose={close}
 >
@@ -409,9 +409,9 @@
     </div>
     {#if stage !== 'edit'}
       <div class="batch-rules-summary" aria-live="polite" role="region"
-        aria-label={$t('files.batchRules.title')} tabindex="-1" bind:this={progressElement}>
+        aria-label={$t('files.setPermissions')} tabindex="-1" bind:this={progressElement}>
         {#if busy}
-          <div class="batch-rules-status"><ProgressRing size={20} label={$t('files.batchRules.title')} /><span>{statusText}</span></div>
+          <div class="batch-rules-status"><ProgressRing size={20} label={$t('files.setPermissions')} /><span>{statusText}</span></div>
           {#if activeTarget}<p class="batch-rules-current">{activeTarget.name}</p><p class="batch-rules-muted">{activeTarget.path ?? activeTarget.objectId}</p>{/if}
         {:else}<p class="batch-rules-step">{$t('files.batchRules.phase.' + snapshot.phase)}</p>{/if}
         <p>{$t('files.batchRules.scope', { values: { documents, folders } })}</p>
