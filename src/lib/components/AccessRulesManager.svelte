@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack, type Snippet } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import {
     ACCESS_OPERATIONS,
@@ -10,6 +11,7 @@
     formatAccessRules,
     normalizeAccessRules,
     parseAccessRulesJson,
+    validateAccessRules,
     type AccessConditionBlock,
     type AccessOperation,
     type AccessRuleGroup,
@@ -28,7 +30,13 @@
     rules: unknown;
     inheritParent: boolean;
     saving?: boolean;
-    onSave: (rules: AccessRulesRecord, inheritParent: boolean) => Promise<void> | void;
+    submitLabel?: string;
+    submitDisabled?: boolean;
+    resetRevision?: number;
+    footer?: Snippet<[submit: (intent?: 'ok' | 'apply') => Promise<void>]>;
+    onEdit?: () => void;
+    onDraftChange?: (draft: { rules: AccessRulesRecord; inheritParent: boolean } | null) => void;
+    onSave: (rules: AccessRulesRecord, inheritParent: boolean, intent?: 'ok' | 'apply') => Promise<void> | void;
     onCancel: () => void;
   }
 
@@ -36,6 +44,12 @@
     rules,
     inheritParent,
     saving = false,
+    submitLabel,
+    submitDisabled = false,
+    resetRevision = 0,
+    footer,
+    onEdit,
+    onDraftChange,
     onSave,
     onCancel,
   }: Props = $props();
@@ -46,22 +60,53 @@
   let sourceText = $state('');
   let inherit = $state(false);
   let sourceError = $state<string | null>(null);
+  let incomingDraftKey: string | null = null;
 
   const operationRules = $derived(visualRules[activeOperation] ?? []);
 
   $effect(() => {
     const nextRules = normalizeAccessRules(rules);
+    const nextInherit = Boolean(inheritParent);
+    const nextKey = JSON.stringify([nextRules, nextInherit, resetRevision]);
+    if (incomingDraftKey === nextKey) return;
+    incomingDraftKey = nextKey;
     visualRules = nextRules;
     sourceText = formatAccessRules(nextRules);
-    inherit = Boolean(inheritParent);
+    inherit = nextInherit;
     sourceError = null;
   });
+
+  $effect(() => {
+    const notify = onDraftChange;
+    if (!notify) return;
+    let draft: { rules: AccessRulesRecord; inheritParent: boolean } | null;
+    try {
+      draft = { rules: cloneAccessRules(validatedDraftRules()), inheritParent: inherit };
+      if (activeView === 'source') sourceError = null;
+    } catch (error) {
+      draft = null;
+      if (activeView === 'source') sourceError = (error as Error).message;
+    }
+    // A parent can update its baseline or button state without making those
+    // reactive reads dependencies of the editor's draft notification.
+    untrack(() => notify(draft));
+  });
+
+  function validatedDraftRules(): AccessRulesRecord {
+    const nextRules = activeView === 'source'
+      ? parseAccessRulesJson(sourceText)
+      : normalizeAccessRules(visualRules);
+    validateAccessRules(nextRules);
+    return nextRules;
+  }
 
   function getRulesForActiveOperation() {
     return [...(visualRules[activeOperation] ?? [])];
   }
 
   function commitActiveOperationRules(nextRules: AccessRuleGroup[]) {
+    if (saving) return;
+    onEdit?.();
     visualRules = {
       ...visualRules,
       [activeOperation]: nextRules,
@@ -70,6 +115,7 @@
   }
 
   function selectEditorView(view: 'visual' | 'source') {
+    if (saving) return;
     if (view === activeView) return;
 
     if (view === 'visual') {
@@ -89,11 +135,14 @@
   }
 
   function changeSource(value: string) {
+    if (saving) return;
+    onEdit?.();
     sourceText = value;
     sourceError = null;
   }
 
   function setActiveOperation(operation: AccessOperation) {
+    if (saving) return;
     activeOperation = operation;
   }
 
@@ -209,20 +258,23 @@
     });
   }
 
-  async function submitRules() {
+  async function submitRules(intent?: 'ok' | 'apply') {
+    if (saving || submitDisabled) return;
     let nextRules: AccessRulesRecord;
 
     try {
-      nextRules = activeView === 'source'
-        ? parseAccessRulesJson(sourceText)
-        : normalizeAccessRules(visualRules);
+      nextRules = validatedDraftRules();
       sourceError = null;
     } catch (err) {
       sourceError = (err as Error).message;
       return;
     }
 
-    await onSave(cloneAccessRules(nextRules), inherit);
+    if (intent) {
+      await onSave(cloneAccessRules(nextRules), inherit, intent);
+    } else {
+      await onSave(cloneAccessRules(nextRules), inherit);
+    }
   }
 
   function selectValue(event: Event) {
@@ -235,12 +287,14 @@
 </script>
 
 <div class="flex h-full min-h-0 max-h-[78vh] flex-col overflow-hidden">
+  <div class="flex min-h-0 flex-1 flex-col overflow-hidden" inert={saving} aria-busy={saving}>
   <div class="border-b border-md3-outline px-5 py-3">
     <div class="flex flex-wrap items-center gap-2">
       <button
         type="button"
         class="editor-tab {activeView === 'visual' ? 'editor-tab-active' : ''}"
         onclick={() => selectEditorView('visual')}
+        disabled={saving}
       >
         <Icon name="rule" size="17px" />
         {$t('files.accessRulesVisualization')}
@@ -249,6 +303,7 @@
         type="button"
         class="editor-tab {activeView === 'source' ? 'editor-tab-active' : ''}"
         onclick={() => selectEditorView('source')}
+        disabled={saving}
       >
         <Icon name="code" size="17px" />
         {$t('files.sourceCode')}
@@ -256,6 +311,8 @@
       <div class="ml-auto flex items-center gap-2 text-sm text-md3-on-surface-variant">
         <MdSwitch
           bind:checked={inherit}
+          disabled={saving}
+          onChange={() => onEdit?.()}
           ariaLabel={$t('files.inheritParentRules')}
         />
         {$t('files.inheritParentRules')}
@@ -275,6 +332,7 @@
               type="button"
               class="operation-button {activeOperation === operation ? 'operation-button-active' : ''}"
               onclick={() => setActiveOperation(operation)}
+              disabled={saving}
             >
               {#if operation === 'read'}
                 <Icon name="visibility" size="18px" />
@@ -521,25 +579,30 @@
       </p>
     </div>
   {/if}
+  </div>
 
-  <div class="flex flex-wrap items-center justify-end gap-2 border-t border-md3-outline px-5 py-4">
+  {#if footer}
+    {@render footer(submitRules)}
+  {:else}
+    <div class="flex flex-wrap items-center justify-end gap-2 border-t border-md3-outline px-5 py-4">
     <DialogActionButton onclick={onCancel} disabled={saving}>
       {$t('common.cancel')}
     </DialogActionButton>
     <DialogActionButton
       variant="primary"
-      onclick={submitRules}
-      disabled={saving}
+      onclick={() => submitRules()}
+      disabled={saving || submitDisabled}
     >
       {#if saving}
         <ProgressRing size={17} strokeWidth={2.4} label={$t('common.loadingEllipsis')} />
         {$t('common.saving')}
       {:else}
         <Icon name="done" size="17px" />
-        {$t('common.save')}
+        {submitLabel ?? $t('common.save')}
       {/if}
     </DialogActionButton>
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>

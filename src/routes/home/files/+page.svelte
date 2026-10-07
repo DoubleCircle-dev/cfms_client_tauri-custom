@@ -73,6 +73,9 @@
   import AccessDeniedNotice from '$lib/components/AccessDeniedNotice.svelte';
   import AuthorizeAccessDialog from '$lib/components/AuthorizeAccessDialog.svelte';
   import AccessRulesManager from '$lib/components/AccessRulesManager.svelte';
+  import BatchAccessRulesDialog from '$lib/components/BatchAccessRulesDialog.svelte';
+  import { batchRulesSessionProblem, type BatchRulesIdentity, type BatchRulesTarget } from '$lib/files/batch-access-rules';
+  import { accessRulesTemplateKey } from '$lib/files/access-rules-edit';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import {
     beginDownloadBatch,
@@ -331,6 +334,7 @@
     y: number;
     kind: 'folder' | 'document' | 'selection' | 'current-directory' | null;
     item: ServerDirectoryEntry | ServerDocumentEntry | null;
+    targetKey?: string;
     sourceElement: HTMLElement | null;
   }>({ open: false, x: 0, y: 0, kind: null, item: null, sourceElement: null });
   let detailTitle = $state<string | null>(null);
@@ -355,6 +359,11 @@
     rules: unknown;
     inheritParent: boolean;
     saving: boolean;
+  } | null>(null);
+  let batchAccessRulesDialog = $state<{
+    targets: BatchRulesTarget[];
+    identity: BatchRulesIdentity;
+    initialTemplateKey: string;
   } | null>(null);
   let moveTargetDialog = $state<{
     objectType: ServerObjectType;
@@ -1556,6 +1565,14 @@
       run: handleMoveSelected,
     },
     {
+      id: 'access-rules-selected',
+      label: $t('files.setPermissions'),
+      icon: 'settings',
+      visible: totalSelected > 1 || !!selectedFolder,
+      disabled: batchBusy || loading || !hasPermission('set_access_rules'),
+      run: handleBatchAccessRules,
+    },
+    {
       id: 'delete-selected',
       label: $t('common.delete'),
       icon: 'delete',
@@ -2201,7 +2218,7 @@
     e.preventDefault();
     const anchor = keyboardMenuAnchor(e);
     if (selectedFolderIds.has(folder.id) && totalSelected > 1) {
-      contextMenu = { open: true, ...anchor, kind: 'selection', item: null };
+      contextMenu = { open: true, ...anchor, kind: 'selection', item: null, targetKey: `folder:${folder.id}` };
       return;
     }
     if (!selectedFolderIds.has(folder.id)) {
@@ -2216,7 +2233,7 @@
     e.preventDefault();
     const anchor = keyboardMenuAnchor(e);
     if (selectedDocumentIds.has(doc.id) && totalSelected > 1) {
-      contextMenu = { open: true, ...anchor, kind: 'selection', item: null };
+      contextMenu = { open: true, ...anchor, kind: 'selection', item: null, targetKey: `document:${doc.id}` };
       return;
     }
     if (!selectedDocumentIds.has(doc.id)) {
@@ -2246,6 +2263,8 @@
 
   function getContextMenuItems(): ContextMenuItem[] {
     if (contextMenu.kind === 'selection') {
+      // ContextMenu closes before invoking the action, so capture its target now.
+      const targetKey = contextMenu.targetKey ?? null;
       return [
         {
           id: 'download-selection',
@@ -2260,6 +2279,14 @@
           icon: 'driveFileMove',
           disabled: batchBusy || !hasPermission('move'),
           onSelect: handleMoveSelected,
+        },
+        {
+          id: 'access-rules-selection',
+          label: $t('files.setPermissions'),
+          icon: 'settings',
+          disabled: batchBusy || loading,
+          requiredPermissions: ['set_access_rules'],
+          onSelect: () => handleBatchAccessRules(targetKey),
         },
         { type: 'divider' },
         {
@@ -2828,11 +2855,67 @@
     }
   }
 
+  function handleBatchAccessRules(contextItemKey: string | null = null) {
+    if (totalSelected < 2 && !selectedFolder) return;
+    const targets: BatchRulesTarget[] = [
+      ...[...selectedFolderIds].map((objectId) => ({
+        objectType: 'directory' as const,
+        objectId,
+        name: fileListIndex.folderById.get(objectId)?.name ?? objectId,
+      })),
+      ...[...selectedDocumentIds].map((objectId) => ({
+        objectType: 'document' as const,
+        objectId,
+        name: fileListIndex.documentById.get(objectId)?.title ?? objectId,
+      })),
+    ];
+    openBatchAccessRules(targets, contextItemKey);
+  }
+
+  function openBatchAccessRules(targets: BatchRulesTarget[], contextItemKey: string | null = null) {
+    if (!targets.length || batchBusy || loading || !hasPermission('set_access_rules')) return;
+    batchAccessRulesDialog = {
+      targets,
+      identity: { server: serverStateStore.remoteAddress, username: authStore.username },
+      initialTemplateKey: accessRulesTemplateKey(targets, focusedItemKey, contextItemKey),
+    };
+    batchBusy = true;
+  }
+
+  function batchAccessRulesGuard() {
+    if (!batchAccessRulesDialog) return { kind: 'stopped' as const };
+    return batchRulesSessionProblem(batchAccessRulesDialog.identity, {
+      server: serverStateStore.remoteAddress,
+      username: authStore.username,
+      loggedIn: authStore.isLoggedIn,
+      permitted: hasPermission('set_access_rules'),
+      connected: serverStateStore.connected,
+      lockdown: serverStateStore.lockdown,
+      bypassLockdown: hasPermission('bypass_lockdown'),
+    });
+  }
+
+  function closeBatchAccessRules() {
+    batchAccessRulesDialog = null;
+    batchBusy = false;
+  }
+
+  async function refreshAfterBatchAccessRules() {
+    if (batchAccessRulesGuard()) return;
+    const loaded = await loadDirectory(currentFolderId, true, undefined, false);
+    if (!loaded) throw new Error(directoryLoadError ?? $t('files.batchRules.refreshFailed'));
+    await loadSelectionDetails();
+  }
+
   async function handleSetAccessRules(
     objectType: ServerObjectType,
     objectId: string,
     objectName: string,
   ) {
+    if (objectType === 'directory') {
+      openBatchAccessRules([{ objectType, objectId, name: objectName }]);
+      return;
+    }
     await runFileAction(async () => {
       const current = await getAccessRules(objectType, objectId);
       accessRulesDialog = {
@@ -3820,6 +3903,7 @@
         || accessEntriesDialog
         || authorizeDialog
         || accessRulesDialog
+        || batchAccessRulesDialog
         || moveTargetDialog
         || batchMoveDialog
         || revisionsDialog
@@ -5518,6 +5602,17 @@
         {/if}
       </div>
   </ModalFrame>
+{/if}
+
+{#if batchAccessRulesDialog}
+  <BatchAccessRulesDialog
+    targets={batchAccessRulesDialog.targets}
+    initialTemplateKey={batchAccessRulesDialog.initialTemplateKey}
+    canReadTemplate={hasPermission('view_access_rules')}
+    checkGuard={batchAccessRulesGuard}
+    onApplied={refreshAfterBatchAccessRules}
+    onClose={closeBatchAccessRules}
+  />
 {/if}
 
 {#if accessRulesDialog}
