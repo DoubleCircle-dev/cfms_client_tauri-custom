@@ -1,16 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerDocumentEntry } from '$lib/api';
 import { deniedDocuments } from './denied-documents.svelte';
-import { EMPTY_SHA256, makeDownloadPath, readLocalDocumentStates, syncFiles } from './sync-all.svelte';
+import {
+  DENIED_FOLDER_MARKER_FILENAME,
+  EMPTY_FOLDER_MARKER_FILENAME,
+  EMPTY_SHA256,
+  commitPendingFolderHistoryChanges,
+  ensureDownloadFolderPlaceholder,
+  makeDownloadPath,
+  readLocalDocumentStates,
+  syncFiles,
+} from './sync-all.svelte';
 
 const files = vi.hoisted(() => ({
   checkDownloadsExist: vi.fn(),
   computeLocalSha256: vi.fn(),
   createDownloadPlaceholder: vi.fn(),
+  deleteDownloadDirectoryIfEmpty: vi.fn(),
   deleteDownloadFile: vi.fn(),
   downloadGitCommit: vi.fn(),
   downloadGitInit: vi.fn(),
   getDocument: vi.fn(),
+  ensureDownloadSubdirectory: vi.fn(),
   listDirectory: vi.fn(),
   listDownloadFiles: vi.fn(),
   moveDownloadFile: vi.fn(),
@@ -58,7 +69,10 @@ beforeEach(() => {
   files.checkDownloadsExist.mockResolvedValue([]);
   files.getDocument.mockResolvedValue(null);
   files.moveDownloadFile.mockResolvedValue(true);
+  files.deleteDownloadDirectoryIfEmpty.mockResolvedValue(false);
+  files.deleteDownloadFile.mockResolvedValue(true);
   files.createDownloadPlaceholder.mockResolvedValue(undefined);
+  files.ensureDownloadSubdirectory.mockResolvedValue('');
   files.downloadGitInit.mockResolvedValue(undefined);
   files.downloadGitCommit.mockResolvedValue(null);
 
@@ -350,6 +364,33 @@ describe('syncFiles (cached queue)', () => {
   });
 });
 
+describe('ensureDownloadFolderPlaceholder', () => {
+  it('creates a local folder and a marker inside it', async () => {
+    await expect(
+      ensureDownloadFolderPlaceholder('archive/empty', EMPTY_FOLDER_MARKER_FILENAME),
+    ).resolves.toBe(true);
+
+    expect(files.ensureDownloadSubdirectory).toHaveBeenCalledWith('archive/empty');
+    expect(files.checkDownloadsExist).toHaveBeenCalledWith([
+      `archive/empty/${EMPTY_FOLDER_MARKER_FILENAME}`,
+    ]);
+    expect(files.createDownloadPlaceholder).toHaveBeenCalledWith(
+      `archive/empty/${EMPTY_FOLDER_MARKER_FILENAME}`,
+    );
+
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+    files.downloadGitCommit.mockResolvedValue('folder-marker-commit');
+    const committed = await commitPendingFolderHistoryChanges();
+
+    expect(committed).toBe(true);
+    expect(files.downloadGitInit).toHaveBeenCalledOnce();
+    expect(files.downloadGitCommit).toHaveBeenCalledWith(
+      expect.stringContaining('*1'),
+    );
+    expect(files.downloadGitCommit.mock.calls[0][0]).not.toContain('archive/empty');
+  });
+});
+
 describe('syncFiles (full server walk)', () => {
   /** Serve one directory holding `documents` and a download root holding `local`. */
   function serve(documents: ServerDocumentEntry[], local: Record<string, string>) {
@@ -357,6 +398,121 @@ describe('syncFiles (full server walk)', () => {
     files.computeLocalSha256.mockResolvedValue(local);
     files.listDownloadFiles.mockResolvedValue(Object.keys(local));
   }
+
+  it('leaves a placeholder inside an empty server folder', async () => {
+    files.listDownloadFiles.mockResolvedValue([]);
+    files.listDirectory.mockImplementation(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'empty-folder', name: 'archive', created_time: null }], documents: [] }
+        : { folders: [], documents: [] },
+    );
+
+    await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.ensureDownloadSubdirectory).toHaveBeenCalledWith('archive');
+    expect(files.createDownloadPlaceholder).toHaveBeenCalledWith(
+      `archive/${EMPTY_FOLDER_MARKER_FILENAME}`,
+    );
+  });
+
+  it('commits new folder markers when Git tracking is enabled', async () => {
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+    files.downloadGitCommit.mockResolvedValue('folder-marker-commit');
+    files.listDownloadFiles.mockResolvedValue([]);
+    files.listDirectory.mockImplementation(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'empty-folder', name: 'archive', created_time: null }], documents: [] }
+        : { folders: [], documents: [] },
+    );
+
+    const result = await syncFiles();
+
+    expect(result.changed).toBe(true);
+    expect(files.downloadGitCommit).toHaveBeenCalledWith(
+      expect.stringContaining('*1'),
+    );
+    expect(files.downloadGitCommit.mock.calls[0][0]).not.toContain('archive');
+  });
+
+  it('records folder permission changes with an asterisk in Git history', async () => {
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+    files.downloadGitCommit.mockResolvedValue('permission-commit');
+    files.listDownloadFiles.mockResolvedValue(['locked/.cfms-no-folder-access']);
+    files.listDirectory.mockImplementation(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'locked', name: 'locked', created_time: null }], documents: [] }
+        : { folders: [], documents: [] },
+    );
+
+    await syncFiles();
+
+    expect(files.downloadGitCommit).toHaveBeenCalledWith(
+      expect.stringContaining('*2'),
+    );
+    expect(files.downloadGitCommit.mock.calls[0][0]).not.toContain('locked');
+  });
+
+  it('removes the empty-folder marker when server content appears', async () => {
+    const markerPath = `archive/${EMPTY_FOLDER_MARKER_FILENAME}`;
+    files.listDirectory.mockImplementation(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'folder', name: 'archive', created_time: null }], documents: [] }
+        : { folders: [], documents: [doc('readme.txt')] },
+    );
+    files.listDownloadFiles.mockResolvedValue([markerPath]);
+
+    await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.deleteDownloadFile).toHaveBeenCalledWith(markerPath);
+    expect(files.getDocument).toHaveBeenCalledWith('readme.txt', 'archive/readme.txt');
+  });
+
+  it('deletes the marker through the normal deletion flow when its folder is gone', async () => {
+    const markerPath = `archive/${EMPTY_FOLDER_MARKER_FILENAME}`;
+    files.listDirectory.mockResolvedValue({ folders: [], documents: [] });
+    files.listDownloadFiles.mockResolvedValue([markerPath]);
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.deleteDownloadFile).toHaveBeenCalledWith(markerPath);
+    expect(files.deleteDownloadDirectoryIfEmpty).toHaveBeenCalledWith('archive');
+    expect(result.deleted).toBe(1);
+  });
+
+  it('uses a distinct marker for denied folders', async () => {
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+    files.downloadGitCommit.mockResolvedValue('denied-folder-commit');
+    files.listDownloadFiles.mockResolvedValue([]);
+    files.listDirectory.mockImplementation(async (id: string | null) => {
+      if (id === null) {
+        return { folders: [{ id: 'locked', name: 'locked', created_time: null }], documents: [] };
+      }
+      throw new Error('Server returned 403: access denied');
+    });
+
+    await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.createDownloadPlaceholder).toHaveBeenCalledWith(
+      `locked/${DENIED_FOLDER_MARKER_FILENAME}`,
+    );
+    expect(DENIED_FOLDER_MARKER_FILENAME).not.toBe(EMPTY_FOLDER_MARKER_FILENAME);
+    expect(files.downloadGitCommit).toHaveBeenCalledWith(
+      expect.stringContaining('*1'),
+    );
+    expect(files.downloadGitCommit.mock.calls[0][0]).not.toContain('locked');
+  });
+
+  it('removes a denied-folder marker when that folder is no longer on the server', async () => {
+    const markerPath = `locked/${DENIED_FOLDER_MARKER_FILENAME}`;
+    files.listDirectory.mockResolvedValue({ folders: [], documents: [] });
+    files.listDownloadFiles.mockResolvedValue([markerPath]);
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.deleteDownloadFile).toHaveBeenCalledWith(markerPath);
+    expect(files.deleteDownloadDirectoryIfEmpty).toHaveBeenCalledWith('locked');
+    expect(result.deleted).toBe(1);
+  });
 
   it('fetches a document the server cannot prove is current, even when a local copy exists', async () => {
     // Regression: the cached-queue path re-fetched documents the server sends no

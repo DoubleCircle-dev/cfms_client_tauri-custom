@@ -16,9 +16,11 @@ import {
   checkDownloadsExist,
   computeLocalSha256,
   createDownloadPlaceholder,
+  deleteDownloadDirectoryIfEmpty,
   deleteDownloadFile,
   downloadGitCommit,
   downloadGitInit,
+  ensureDownloadSubdirectory,
   getDocument,
   listDirectory,
   listDownloadFiles,
@@ -80,6 +82,10 @@ export function isSyncBackupPath(path: string): boolean {
 /** SHA-256 of the empty byte string — the digest every zero byte file has. */
 export const EMPTY_SHA256 =
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+/** Git-trackable markers that distinguish empty folders from denied folders. */
+export const EMPTY_FOLDER_MARKER_FILENAME = '.cfms-empty-folder';
+export const DENIED_FOLDER_MARKER_FILENAME = '.cfms-no-folder-access';
 
 /**
  * Whether a local copy is *provably* the server revision.
@@ -216,14 +222,19 @@ export const syncAllCoordinator = new SyncAllCoordinator();
 
 const DOWNLOAD_BATCH_SIZE = 25;
 const DOWNLOAD_BATCH_DELAY_MS = 2500;
+let pendingFolderHistoryMarkers: string[] = [];
+
+export function recordFolderHistoryMarker(marker: string) {
+  if (!pendingFolderHistoryMarkers.includes(marker)) {
+    pendingFolderHistoryMarkers = [...pendingFolderHistoryMarkers, marker];
+  }
+}
 
 interface DownloadRunner {
   /** Rate limit: pause every `DOWNLOAD_BATCH_SIZE` requests. */
   throttle(): Promise<void>;
   /** Fetch one document, retrying once when the server rate limits us. */
   download(docId: string, path: string): Promise<unknown>;
-  /** Record an inaccessible server item as an empty local placeholder. */
-  createPlaceholder(relativePath: string): Promise<void>;
 }
 
 /**
@@ -263,11 +274,7 @@ function createDownloadRunner(): DownloadRunner {
     return null;
   }
 
-  async function createPlaceholder(relativePath: string) {
-    await ensureDownloadPlaceholder(relativePath);
-  }
-
-  return { throttle, download, createPlaceholder };
+  return { throttle, download };
 }
 
 /**
@@ -294,6 +301,31 @@ export async function ensureDownloadPlaceholder(path: string): Promise<boolean> 
     return true;
   } catch (err) {
     console.warn(`%c[cfms:sync] Placeholder failed for ${path}:`, 'color:#ffb74d', err);
+    return false;
+  }
+}
+
+/**
+ * Keep a server folder visible locally without representing it as a file at
+ * the folder's own path, which would prevent later downloads into that folder.
+ */
+export async function ensureDownloadFolderPlaceholder(
+  path: string,
+  markerFilename: string,
+): Promise<boolean> {
+  if (!path || path === 'download') return false;
+  try {
+    await ensureDownloadSubdirectory(path);
+    const created = await ensureDownloadPlaceholder(`${path}/${markerFilename}`);
+    if (created) {
+      const marker = markerFilename === DENIED_FOLDER_MARKER_FILENAME
+        ? `* folder permission denied: ${path}`
+        : `* new empty folder: ${path}`;
+      recordFolderHistoryMarker(marker);
+    }
+    return created;
+  } catch (err) {
+    console.warn(`%c[cfms:sync] Folder placeholder failed for ${path}:`, 'color:#ffb74d', err);
     return false;
   }
 }
@@ -363,7 +395,7 @@ async function resolveGitTracking(override?: boolean): Promise<boolean> {
 }
 
 /** Snapshot the download root once the transfers have landed on disk. */
-async function commitSyncSnapshot(summary: string): Promise<void> {
+async function commitSyncSnapshot(summary: string): Promise<boolean | null> {
   // `getDocument` resolves before the transfer finishes, so committing straight
   // away would snapshot half-written files.
   const activeCount = downloadStore.activeTasks.length;
@@ -376,10 +408,35 @@ async function commitSyncSnapshot(summary: string): Promise<void> {
     const hash = await downloadGitCommit(commitMsg);
     if (hash) {
       console.log(`%c[cfms:sync] Git commit: ${hash.slice(0, 7)} — ${commitMsg}`, 'color:#a5d6a7');
+      return true;
     }
+    return false;
   } catch (gitErr) {
     console.warn('%c[cfms:sync] Git tracking skipped:', 'color:#ffb74d', gitErr);
+    return null;
   }
+}
+
+/**
+ * Commit folder-state events discovered by the update checker even when no
+ * document update was queued.
+ */
+export async function commitPendingFolderHistoryChanges(): Promise<boolean> {
+  if (pendingFolderHistoryMarkers.length === 0) return false;
+  const enabled = await getSyncGitTrackingEnabled().catch(() => false);
+  if (!enabled) return false;
+
+  try {
+    await downloadGitInit();
+  } catch (err) {
+    console.warn('%c[cfms:sync] Could not initialise Git for folder history:', 'color:#ffb74d', err);
+    return false;
+  }
+
+  const committed = await commitSyncSnapshot(`*${pendingFolderHistoryMarkers.length}`);
+  if (committed !== true) return false;
+  pendingFolderHistoryMarkers = [];
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -420,6 +477,10 @@ interface SyncPlan {
   moves: { from: string; to: string; download: PlannedDownload }[];
   /** Documents left alone while planning. */
   skipped: number;
+  /** Folder markers created while mirroring empty or inaccessible folders. */
+  folderMarkersCreated: number;
+  /** Human-readable folder events to annotate in the Git commit message. */
+  folderHistoryMarkers: string[];
 }
 
 /**
@@ -431,7 +492,14 @@ interface SyncPlan {
  * which is exactly what this mode avoids.
  */
 async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPlan> {
-  const plan: SyncPlan = { downloads: [], deletions: [], moves: [], skipped: 0 };
+  const plan: SyncPlan = {
+    downloads: [],
+    deletions: [],
+    moves: [],
+    skipped: 0,
+    folderMarkersCreated: 0,
+    folderHistoryMarkers: [],
+  };
 
   let localHashes: Record<string, string> = {};
   try {
@@ -464,7 +532,14 @@ async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPl
  * server no longer has.
  */
 async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
-  const plan: SyncPlan = { downloads: [], deletions: [], moves: [], skipped: 0 };
+  const plan: SyncPlan = {
+    downloads: [],
+    deletions: [],
+    moves: [],
+    skipped: 0,
+    folderMarkersCreated: 0,
+    folderHistoryMarkers: [],
+  };
   const serverPaths = new Set<string>();  // every path the server has
   const walkedDirs = new Set<string>();   // dirs that were listed successfully
   const failedDirs = new Set<string>();   // dirs that could not be listed
@@ -499,14 +574,14 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
       const dirPath = makeDownloadPath(pathParts);
       failedDirs.add(dirPath);
       // A folder that exists on the server but is inaccessible (permission
-      // denied) is mirrored locally as a same-named empty placeholder file so
-      // the local tree reflects the server instead of silently dropping it.
+      // denied) is mirrored locally with a marker so the local tree reflects
+      // the server instead of silently dropping it.
       // Again, only a refusal aimed at this folder counts: an envelope-level
       // rejection would otherwise litter the tree with stand-ins for the whole
       // library.
       if (isDocumentAccessDenied(err) && dirPath !== 'download') {
-        await runner.createPlaceholder(dirPath);
-        serverPaths.add(dirPath);
+        await ensureDownloadFolderPlaceholder(dirPath, DENIED_FOLDER_MARKER_FILENAME);
+        serverPaths.add(`${dirPath}/${DENIED_FOLDER_MARKER_FILENAME}`);
         console.warn(`%c[cfms:sync] Access denied — placeholder created: ${dirPath}`, 'color:#ef9a9a');
       } else {
         console.warn(`%c[cfms:sync] Skipping unreachable directory (files preserved): ${dirPath || '/'}`, 'color:#ffb74d');
@@ -516,6 +591,15 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
     // Record that this directory was successfully enumerated, so the deletion
     // step only removes files whose parent directory we actually inspected.
     walkedDirs.add(makeDownloadPath(pathParts));
+    if (
+      pathParts.length > 0
+      && resp.folders.length === 0
+      && resp.documents.length === 0
+    ) {
+      const dirPath = makeDownloadPath(pathParts);
+      await ensureDownloadFolderPlaceholder(dirPath, EMPTY_FOLDER_MARKER_FILENAME);
+      serverPaths.add(`${dirPath}/${EMPTY_FOLDER_MARKER_FILENAME}`);
+    }
 
     let states: LocalDocumentState[];
     try {
@@ -597,8 +681,19 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
       ? localPath.slice(0, localPath.lastIndexOf('/'))
       : 'download';
     if (shouldPreserveLocalFile(parentDir)) continue;
+    if (
+      localPath.endsWith(`/${DENIED_FOLDER_MARKER_FILENAME}`)
+      && walkedDirs.has(parentDir)
+    ) {
+      const folderPath = parentDir;
+      const marker = `* folder permission restored: ${folderPath}`;
+      if (!pendingFolderHistoryMarkers.includes(marker)) {
+        pendingFolderHistoryMarkers = [...pendingFolderHistoryMarkers, marker];
+      }
+    }
     deleteCandidates.push(localPath);
   }
+  plan.folderHistoryMarkers = [...pendingFolderHistoryMarkers];
 
   // Compute SHA-256 of deletion candidates so we can detect server-side moves
   // (same content at a different path) and avoid delete + re-download.
@@ -722,7 +817,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
   // server refuses are not retried here: the check that builds the plan asks
   // the server which of them are readable now, so a restored permission turns
   // into an ordinary queued update rather than a blind download attempt.
-  if (queue && queue.length === 0) return emptyResult();
+  if (queue && queue.length === 0 && pendingFolderHistoryMarkers.length === 0) return emptyResult();
   if (!syncAllCoordinator.acquire()) return emptyResult();
 
   const runner = createDownloadRunner();
@@ -746,7 +841,10 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
 
     console.log(`%c[cfms:sync] ${queue ? 'Applying cached update check' : 'Full recursive sync'} starting (throttled: %d per %ds)…`, 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
 
+    const pendingMarkersAtStart = pendingFolderHistoryMarkers.length;
     const plan = queue ? await planQueuedSync(queue) : await planServerSync(runner);
+    plan.folderMarkersCreated = pendingFolderHistoryMarkers.length - pendingMarkersAtStart;
+    plan.folderHistoryMarkers = [...pendingFolderHistoryMarkers];
     skipped += plan.skipped;
 
     // Manual syncs (no preset strategy) ask for the files they would replace.
@@ -809,12 +907,29 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
         });
       }
       if (confirmed) {
+        const directoriesToPrune = new Set<string>();
         for (const localPath of plan.deletions) {
           try {
-            await deleteDownloadFile(localPath);
-            deleted++;
-            console.log(`%c[cfms:sync] Removed: ${localPath}`, 'color:#ef9a9a');
+            if (await deleteDownloadFile(localPath)) {
+              deleted++;
+              const parts = localPath.split('/');
+              parts.pop();
+              while (parts.length > 0) {
+                directoriesToPrune.add(parts.join('/'));
+                parts.pop();
+              }
+              console.log(`%c[cfms:sync] Removed: ${localPath}`, 'color:#ef9a9a');
+            }
           } catch { /* ignore */ }
+        }
+        for (const directory of [...directoriesToPrune].sort(
+          (a, b) => b.split('/').length - a.split('/').length,
+        )) {
+          try {
+            await deleteDownloadDirectoryIfEmpty(directory);
+          } catch (err) {
+            console.warn(`%c[cfms:sync] Could not remove empty directory ${directory}:`, 'color:#ffb74d', err);
+          }
         }
       }
     }
@@ -868,13 +983,24 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     if (updated > 0) counters.push(`${updated} updated`);
     if (deleted > 0) counters.push(`${deleted} deleted`);
     if (moved > 0) counters.push(`${moved} moved`);
+    if (plan.folderMarkersCreated > 0) counters.push(`${plan.folderMarkersCreated} folder markers`);
     if (skipped > 0) counters.push(`${skipped} skipped`);
     if (denied > 0) counters.push(`${denied} denied`);
     console.log(`%c[cfms:sync] Done in ${elapsed}s: ${counters.join(', ') || 'nothing to do'}`, 'color:#4caf50');
 
-    const changed = queued + updated + deleted + moved > 0;
+    const changed = queued + updated + deleted + moved
+      + (hasGit ? plan.folderHistoryMarkers.length : plan.folderMarkersCreated) > 0;
     if (changed) {
-      onStatus?.(get(t)('files.syncCompleted', { values: { downloaded: queued, updated, moved, deleted } }), 'success');
+      if (queued + updated + moved + deleted > 0) {
+        onStatus?.(get(t)('files.syncCompleted', { values: { downloaded: queued, updated, moved, deleted } }), 'success');
+      } else {
+        onStatus?.(
+          get(t)('files.syncFoldersMirrored', {
+            values: { count: plan.folderHistoryMarkers.length },
+          }),
+          'success',
+        );
+      }
     } else if (denied > 0) {
       // Saying "everything is up to date" while a document was refused would be
       // a lie the user cannot act on; name the reason instead.
@@ -895,7 +1021,12 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
       if (updated > 0) msgParts.push(`~${updated}`);
       if (deleted > 0) msgParts.push(`-${deleted}`);
       if (moved > 0) msgParts.push(`→${moved}`);
-      await commitSyncSnapshot(msgParts.join(' '));
+      if (plan.folderHistoryMarkers.length > 0) {
+        msgParts.push(`*${plan.folderHistoryMarkers.length}`);
+      }
+      if ((await commitSyncSnapshot(msgParts.join('\n'))) !== null) {
+        pendingFolderHistoryMarkers = [];
+      }
     }
 
     return { queued, updated, deleted, moved, skipped, denied, changed, cancelled: false };

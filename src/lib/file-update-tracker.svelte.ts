@@ -7,10 +7,17 @@
 // (stale) for visual indicators.
 
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api';
+import { checkDownloadsExist, deleteDownloadFile } from '$lib/api/files';
+import { isDocumentAccessDenied } from '$lib/api/server-errors';
 import { deniedDocuments } from '$lib/denied-documents.svelte';
 import {
+  DENIED_FOLDER_MARKER_FILENAME,
+  EMPTY_FOLDER_MARKER_FILENAME,
+  commitPendingFolderHistoryChanges,
+  ensureDownloadFolderPlaceholder,
   ensureDownloadPlaceholder,
   makeDownloadPath,
+  recordFolderHistoryMarker,
   readLocalDocumentStates,
 } from '$lib/sync-all.svelte';
 
@@ -66,10 +73,10 @@ interface UpdateEntry {
   timestamp: number;
 }
 
-/** Why a check flagged one document. */
+/** Why a check flagged a document or folder. */
 export type CheckHistoryItemKind = 'added' | 'modified' | 'unverifiable' | 'denied';
 
-/** One document a check flagged, kept so the record can name it later. */
+/** One document or folder a check flagged, kept so the record can name it later. */
 export interface CheckHistoryItem {
   id: string;
   title: string;
@@ -83,11 +90,11 @@ export interface CheckHistoryEntry {
   changed: number;
   dirs: number;
   docs: number;
-  /** The flagged documents, capped at `CHECK_HISTORY_ITEM_MAX`. */
+  /** The flagged documents and folders, capped at `CHECK_HISTORY_ITEM_MAX`. */
   items: CheckHistoryItem[];
   /** How many more were flagged than `items` holds. */
   hidden: number;
-  /** Documents the server refuses to hand over. */
+  /** Documents or folders the server refuses to provide access to. */
   denied: number;
 }
 
@@ -267,11 +274,18 @@ class FileUpdateTracker {
     }) => void,
   ): Promise<{ outdated: number; denied: number; dirs: number; docs: number }> {
     let outdatedDocs = 0;
-    let deniedDocs = 0;
+    let deniedItems = 0;
     let checkedDirs = 0;
     let checkedDocs = 0;
     const findings: CheckHistoryItem[] = [];
     let hidden = 0;
+    const record = (id: string, title: string, path: string, kind: CheckHistoryItemKind) => {
+      if (findings.length < CHECK_HISTORY_ITEM_MAX) {
+        findings.push({ id, title, path, kind });
+      } else {
+        hidden += 1;
+      }
+    };
 
     const walk = async (id: string | null, depth: number, pathParts: string[]): Promise<void> => {
       if (depth > maxDepth) return;
@@ -279,26 +293,42 @@ class FileUpdateTracker {
       let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
       try {
         resp = await listFn(id);
-      } catch {
+      } catch (err) {
+        const path = makeDownloadPath(pathParts);
+        if (pathParts.length > 0 && isDocumentAccessDenied(err)) {
+          const title = pathParts[pathParts.length - 1];
+          await ensureDownloadFolderPlaceholder(path, DENIED_FOLDER_MARKER_FILENAME);
+          deniedItems += 1;
+          record(`folder:${id}`, title, path, 'denied');
+        }
         return;
       }
 
       const diff = this.compareSnapshot(id, resp.folders, resp.documents);
+      if (pathParts.length > 0) {
+        const directoryPath = makeDownloadPath(pathParts);
+        const deniedMarker = `${directoryPath}/${DENIED_FOLDER_MARKER_FILENAME}`;
+        const emptyMarker = `${directoryPath}/${EMPTY_FOLDER_MARKER_FILENAME}`;
+        try {
+          const existingMarkers = await checkDownloadsExist([deniedMarker, emptyMarker]);
+          if (existingMarkers.includes(deniedMarker)) {
+            if (await deleteDownloadFile(deniedMarker)) {
+              recordFolderHistoryMarker(`* folder permission restored: ${directoryPath}`);
+            }
+          }
+          if (
+            existingMarkers.includes(emptyMarker)
+            && (resp.folders.length > 0 || resp.documents.length > 0)
+          ) {
+            await deleteDownloadFile(emptyMarker);
+          }
+        } catch (err) {
+          console.warn(`[cfms:check] Could not reconcile folder markers for ${directoryPath}:`, err);
+        }
+      }
 
       const outdated: ServerDocumentEntry[] = [];
       const denied: ServerDocumentEntry[] = [];
-      const record = (doc: ServerDocumentEntry, kind: CheckHistoryItemKind) => {
-        if (findings.length < CHECK_HISTORY_ITEM_MAX) {
-          findings.push({
-            id: doc.id,
-            title: doc.title,
-            path: makeDownloadPath([...pathParts, doc.title]),
-            kind,
-          });
-        } else {
-          hidden += 1;
-        }
-      };
       try {
         for (const state of await readLocalDocumentStates(resp.documents, pathParts)) {
           if (state.isCurrent) continue;
@@ -313,7 +343,12 @@ class FileUpdateTracker {
           if (await deniedDocuments.probeDocumentAccess(state.doc.id)) {
             deniedDocuments.clear(state.doc.id);
             outdated.push(state.doc);
-            record(state.doc, state.mismatched ? 'modified' : state.existsLocally ? 'unverifiable' : 'added');
+            record(
+              state.doc.id,
+              state.doc.title,
+              path,
+              state.mismatched ? 'modified' : state.existsLocally ? 'unverifiable' : 'added',
+            );
             continue;
           }
           deniedDocuments.mark({ docId: state.doc.id, path });
@@ -324,7 +359,7 @@ class FileUpdateTracker {
           // queued for download, so no later step could create it.
           await ensureDownloadPlaceholder(path);
           denied.push(state.doc);
-          record(state.doc, 'denied');
+          record(state.doc.id, state.doc.title, path, 'denied');
         }
       } catch (err) {
         // Never guess: a directory we could not verify contributes nothing, and
@@ -335,7 +370,7 @@ class FileUpdateTracker {
         );
       }
       outdatedDocs += outdated.length;
-      deniedDocs += denied.length;
+      deniedItems += denied.length;
 
       onDirectoryDiff?.({
         directoryId: id,
@@ -345,6 +380,13 @@ class FileUpdateTracker {
         outdated,
         denied,
       });
+
+      if (pathParts.length > 0 && resp.folders.length === 0 && resp.documents.length === 0) {
+        await ensureDownloadFolderPlaceholder(
+          makeDownloadPath(pathParts),
+          EMPTY_FOLDER_MARKER_FILENAME,
+        );
+      }
 
       checkedDirs += resp.folders.length;
       checkedDocs += resp.documents.length;
@@ -356,13 +398,14 @@ class FileUpdateTracker {
     await walk(dirId, 0, []);
     this.addCheckHistory({
       outdated: outdatedDocs,
-      denied: deniedDocs,
+      denied: deniedItems,
       dirs: checkedDirs,
       docs: checkedDocs,
       items: findings,
       hidden,
     });
-    return { outdated: outdatedDocs, denied: deniedDocs, dirs: checkedDirs, docs: checkedDocs };
+    await commitPendingFolderHistoryChanges();
+    return { outdated: outdatedDocs, denied: deniedItems, dirs: checkedDirs, docs: checkedDocs };
   }
 
   /** Queue changed/new documents for user-confirmed update. */
@@ -702,9 +745,9 @@ class FileUpdateTracker {
    * revision — i.e. what a sync would fetch. It is not "what changed since the
    * last poll", which would report nothing on the first check of a session.
    *
-   * `items` names those documents, so a record can answer "which files?" long
-   * after the check that found them. It is capped: the log keeps twenty records,
-   * and a first sync of a large tree can flag thousands of files.
+   * `items` names flagged documents and denied folders, so a record can answer
+   * "which items?" long after the check that found them. It is capped: the log
+   * keeps twenty records, and a first sync of a large tree can flag thousands.
    */
   addCheckHistory(result: {
     outdated: number;
@@ -986,4 +1029,3 @@ class FileUpdateTracker {
 }
 
 export const fileUpdateTracker = new FileUpdateTracker();
-

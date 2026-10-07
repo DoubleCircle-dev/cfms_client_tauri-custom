@@ -128,6 +128,11 @@ export async function deleteDownloadFile(relativePath: string): Promise<boolean>
   return invoke("delete_download_file", { relativePath });
 }
 
+/** Remove a download directory only when it is empty. */
+export async function deleteDownloadDirectoryIfEmpty(relativePath: string): Promise<boolean> {
+  return invoke("delete_download_directory_if_empty", { relativePath });
+}
+
 /** Move (rename) a file within the local download root by relative paths. */
 export async function moveDownloadFile(fromPath: string, toPath: string): Promise<boolean> {
   return invoke("move_download_file", { fromPath, toPath });

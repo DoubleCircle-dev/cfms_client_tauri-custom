@@ -1,14 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const files = vi.hoisted(() => ({ getDocumentInfo: vi.fn() }));
+const files = vi.hoisted(() => ({
+  checkDownloadsExist: vi.fn(),
+  deleteDownloadFile: vi.fn(),
+  getDocumentInfo: vi.fn(),
+}));
 // The tracker reaches out for the local comparison and, once per candidate, for
 // the permission test that decides whether it is worth offering at all.
 vi.mock('$lib/api/files', () => files);
-const placeholders = vi.hoisted(() => ({ ensureDownloadPlaceholder: vi.fn() }));
+const placeholders = vi.hoisted(() => ({
+  commitPendingFolderHistoryChanges: vi.fn(),
+  ensureDownloadFolderPlaceholder: vi.fn(),
+  ensureDownloadPlaceholder: vi.fn(),
+  recordFolderHistoryMarker: vi.fn(),
+}));
 vi.mock('$lib/sync-all.svelte', () => ({
+  DENIED_FOLDER_MARKER_FILENAME: '.cfms-no-folder-access',
+  EMPTY_FOLDER_MARKER_FILENAME: '.cfms-empty-folder',
   makeDownloadPath: (p: string[]) => p.join('/'),
+  commitPendingFolderHistoryChanges: placeholders.commitPendingFolderHistoryChanges,
   readLocalDocumentStates: vi.fn(),
+  ensureDownloadFolderPlaceholder: placeholders.ensureDownloadFolderPlaceholder,
   ensureDownloadPlaceholder: placeholders.ensureDownloadPlaceholder,
+  recordFolderHistoryMarker: placeholders.recordFolderHistoryMarker,
 }));
 
 import { deniedDocuments } from './denied-documents.svelte';
@@ -53,9 +67,18 @@ beforeEach(() => {
   deniedDocuments.clearAll();
   files.getDocumentInfo.mockReset();
   files.getDocumentInfo.mockResolvedValue(null);
+  files.checkDownloadsExist.mockReset();
+  files.checkDownloadsExist.mockResolvedValue([]);
+  files.deleteDownloadFile.mockReset();
+  files.deleteDownloadFile.mockResolvedValue(true);
+  placeholders.commitPendingFolderHistoryChanges.mockReset();
+  placeholders.commitPendingFolderHistoryChanges.mockResolvedValue(false);
+  placeholders.ensureDownloadFolderPlaceholder.mockReset();
+  placeholders.ensureDownloadFolderPlaceholder.mockResolvedValue(false);
   placeholders.ensureDownloadPlaceholder.mockReset();
   placeholders.ensureDownloadPlaceholder.mockResolvedValue(false);
   vi.mocked(readLocalDocumentStates).mockReset();
+  vi.mocked(readLocalDocumentStates).mockResolvedValue([]);
 });
 
 describe('check history scoping', () => {
@@ -137,6 +160,61 @@ describe('what a check reports', () => {
     await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
 
     expect(placeholders.ensureDownloadPlaceholder).not.toHaveBeenCalled();
+  });
+
+  it('creates a marker for an empty server folder', async () => {
+    const listFn = vi.fn(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'empty-folder', name: 'archive', created_time: null }], documents: [] }
+        : { folders: [], documents: [] },
+    );
+
+    await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(placeholders.ensureDownloadFolderPlaceholder).toHaveBeenCalledWith(
+      'archive',
+      '.cfms-empty-folder',
+    );
+  });
+
+  it('records a folder whose listing is denied and creates its marker', async () => {
+    const listFn = vi.fn(async (id: string | null) => {
+      if (id === null) {
+        return { folders: [{ id: 'locked-folder', name: 'locked', created_time: null }], documents: [] };
+      }
+      throw new Error('Server returned 403: access denied');
+    });
+
+    const result = await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(placeholders.ensureDownloadFolderPlaceholder).toHaveBeenCalledWith(
+      'locked',
+      '.cfms-no-folder-access',
+    );
+    expect(result.denied).toBe(1);
+    expect(fileUpdateTracker.checkHistory.at(-1)).toMatchObject({
+      denied: 1,
+      items: [{ id: 'folder:locked-folder', title: 'locked', path: 'locked', kind: 'denied' }],
+    });
+    expect(placeholders.commitPendingFolderHistoryChanges).toHaveBeenCalledOnce();
+  });
+
+  it('records a restored folder permission and commits its history marker', async () => {
+    const deniedMarker = 'locked/.cfms-no-folder-access';
+    files.checkDownloadsExist.mockResolvedValue([deniedMarker]);
+    const listFn = vi.fn(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'locked-folder', name: 'locked', created_time: null }], documents: [] }
+        : { folders: [], documents: [] },
+    );
+
+    await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(files.deleteDownloadFile).toHaveBeenCalledWith(deniedMarker);
+    expect(placeholders.recordFolderHistoryMarker).toHaveBeenCalledWith(
+      '* folder permission restored: locked',
+    );
+    expect(placeholders.commitPendingFolderHistoryChanges).toHaveBeenCalledOnce();
   });
 
   it('offers a document whose access check failed for reasons other than a refusal', async () => {

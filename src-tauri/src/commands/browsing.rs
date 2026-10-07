@@ -389,6 +389,31 @@ pub async fn delete_download_file(
     Ok(true)
 }
 
+/// Remove a download directory only when it is empty.
+#[tauri::command]
+pub async fn delete_download_directory_if_empty(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    relative_path: String,
+) -> Result<bool, String> {
+    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let directory_path = resolve_download_subdirectory(download_root.clone(), &relative_path)?;
+    if directory_path == download_root || !directory_path.is_dir() {
+        return Ok(false);
+    }
+
+    match std::fs::remove_dir(&directory_path) {
+        Ok(()) => Ok(true),
+        Err(error)
+            if error.kind() == std::io::ErrorKind::NotFound
+                || error.kind() == std::io::ErrorKind::DirectoryNotEmpty =>
+        {
+            Ok(false)
+        }
+        Err(error) => Err(format!("Failed to delete download directory: {error}")),
+    }
+}
+
 /// Move (rename) a file within the local download root by relative paths.
 /// Creates the destination directory if needed.
 #[tauri::command]
@@ -560,8 +585,8 @@ pub async fn download_git_commit(
     // repository may predate it.
     ensure_gitignore_line(&download_root, BACKUP_IGNORE_PATTERN)?;
 
-    // Stage all remaining changes (small files, renames, deletions, and the
-    // `.gitignore` rules for large files).
+    // Stage all remaining changes (small files, folder markers, renames,
+    // deletions, and the `.gitignore` rules for large files).
     run_git(&download_root, &["add", "."])?;
 
     // Commit.
@@ -897,7 +922,7 @@ fn stage_large_file_placeholders(root: &std::path::Path) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod large_file_placeholder_tests {
+mod git_placeholder_tests {
     use super::*;
 
     #[test]
@@ -1004,6 +1029,43 @@ mod large_file_placeholder_tests {
         assert_eq!(found[0].1, 100);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[ignore = "requires git on PATH; run explicitly with: cargo test -- --ignored"]
+    fn normal_git_add_records_folder_markers_in_history() {
+        let dir = tempfile::tempdir().unwrap();
+        run_git(dir.path(), &["init", "-q"]).unwrap();
+        run_git(dir.path(), &["config", "user.name", "CFMS Test"]).unwrap();
+        run_git(
+            dir.path(),
+            &["config", "user.email", "cfms-test@example.invalid"],
+        )
+        .unwrap();
+
+        let folder = dir.path().join("archive");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join(".cfms-empty-folder"), "").unwrap();
+        std::fs::write(folder.join(".cfms-no-folder-access"), "").unwrap();
+
+        run_git(dir.path(), &["add", "."]).unwrap();
+        run_git(
+            dir.path(),
+            &["commit", "-q", "-m", "sync: * empty folder archive"],
+        )
+        .unwrap();
+
+        let paths = run_git(dir.path(), &["ls-tree", "-r", "--name-only", "HEAD"]).unwrap();
+        assert!(paths.lines().any(|path| path == "archive/.cfms-empty-folder"));
+        assert!(paths
+            .lines()
+            .any(|path| path == "archive/.cfms-no-folder-access"));
+        assert!(
+            run_git(dir.path(), &["log", "-1", "--format=%s"])
+                .unwrap()
+                .contains("* empty folder")
+        );
+        assert_eq!(run_git(dir.path(), &["status", "--porcelain"]).unwrap(), "");
     }
 
     #[test]

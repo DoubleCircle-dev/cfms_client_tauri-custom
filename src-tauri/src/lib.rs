@@ -658,6 +658,7 @@ pub fn run() {
             commands::check_downloads_exist,
             commands::compute_local_sha256,
             commands::delete_download_file,
+            commands::delete_download_directory_if_empty,
             commands::move_download_file,
             commands::create_download_placeholder,
             commands::list_download_files,
