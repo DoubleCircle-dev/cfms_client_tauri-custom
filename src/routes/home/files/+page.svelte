@@ -354,6 +354,7 @@
   } | null>(null);
   let accessRulesDialog = $state<{
     title: string;
+    name: string;
     objectType: ServerObjectType;
     objectId: string;
     rules: unknown;
@@ -2857,19 +2858,35 @@
 
   function handleBatchAccessRules(contextItemKey: string | null = null) {
     if (totalSelected < 2 && !selectedFolder) return;
+    const parentPath = breadcrumbSegments.map((segment) => segment.label);
     const targets: BatchRulesTarget[] = [
       ...[...selectedFolderIds].map((objectId) => ({
         objectType: 'directory' as const,
         objectId,
         name: fileListIndex.folderById.get(objectId)?.name ?? objectId,
+        path: [...parentPath, fileListIndex.folderById.get(objectId)?.name ?? objectId].join('/'),
       })),
       ...[...selectedDocumentIds].map((objectId) => ({
         objectType: 'document' as const,
         objectId,
         name: fileListIndex.documentById.get(objectId)?.title ?? objectId,
+        path: [...parentPath, fileListIndex.documentById.get(objectId)?.title ?? objectId].join('/'),
       })),
     ];
     openBatchAccessRules(targets, contextItemKey);
+  }
+
+  function accessRulesHistoryPath(name: string) {
+    return [...breadcrumbSegments.map((segment) => segment.label), name].filter(Boolean).join('/');
+  }
+
+  function recordAccessRulesHistory(targets: BatchRulesTarget[]) {
+    fileUpdateTracker.addAccessRulesHistory(targets.map((target) => ({
+      id: `${target.objectType}:${target.objectId}`,
+      title: target.name,
+      path: target.path ?? target.name,
+      kind: 'permission_changed',
+    })));
   }
 
   function openBatchAccessRules(targets: BatchRulesTarget[], contextItemKey: string | null = null) {
@@ -2913,13 +2930,19 @@
     objectName: string,
   ) {
     if (objectType === 'directory') {
-      openBatchAccessRules([{ objectType, objectId, name: objectName }]);
+      openBatchAccessRules([{
+        objectType,
+        objectId,
+        name: objectName,
+        path: accessRulesHistoryPath(objectName),
+      }]);
       return;
     }
     await runFileAction(async () => {
       const current = await getAccessRules(objectType, objectId);
       accessRulesDialog = {
         title: $t('files.ruleManagerTitle', { values: { name: objectName } }),
+        name: objectName,
         objectType,
         objectId,
         rules: current.rules ?? {},
@@ -2939,12 +2962,19 @@
     error = null;
 
     try {
-      await setAccessRules(
+      const saved = await setAccessRules(
         dialog.objectType,
         dialog.objectId,
         accessRules,
         inheritParent,
       );
+      if (!saved) throw new Error($t('files.accessRulesSaveFailed'));
+      fileUpdateTracker.addAccessRulesHistory([{
+        id: `${dialog.objectType}:${dialog.objectId}`,
+        title: dialog.name,
+        path: accessRulesHistoryPath(dialog.name),
+        kind: 'permission_changed',
+      }]);
       accessRulesDialog = null;
       status = $t('files.accessRulesSaved');
     } catch (err) {
@@ -5611,6 +5641,7 @@
     canReadTemplate={hasPermission('view_access_rules')}
     checkGuard={batchAccessRulesGuard}
     onApplied={refreshAfterBatchAccessRules}
+    onRulesApplied={recordAccessRulesHistory}
     onClose={closeBatchAccessRules}
   />
 {/if}

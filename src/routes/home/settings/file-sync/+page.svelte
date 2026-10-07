@@ -23,6 +23,11 @@
   } from '$lib/api';
   import { createAutoSave } from '$lib/settings-autosave.svelte';
   import { authStore, notificationStore } from '$lib/stores.svelte';
+  import {
+    DEFAULT_CHECK_HISTORY_LIMIT,
+    MAX_CHECK_HISTORY_LIMIT,
+    fileUpdateTracker,
+  } from '$lib/file-update-tracker.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import MdSwitch from '$lib/components/MdSwitch.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
@@ -31,6 +36,7 @@
   let autoFileUpdateEnabled = $state(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
   let autoFileUpdateIntervalMinutes = $state(DEFAULT_FILE_AUTO_UPDATE_INTERVAL_MINUTES);
   let autoFileUpdateAutoDownload = $state(DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD);
+  let checkHistoryLimit = $state(DEFAULT_CHECK_HISTORY_LIMIT);
   let syncGitTrackingEnabled = $state(DEFAULT_SYNC_GIT_TRACKING_ENABLED);
   let syncOverwriteStrategy = $state<SyncOverwriteStrategy>(DEFAULT_SYNC_OVERWRITE_STRATEGY);
   let gitInitBusy = $state(false);
@@ -80,6 +86,7 @@
       autoFileUpdateAutoDownload = autoUpdateSettings.autoDownload;
       syncGitTrackingEnabled = await getSyncGitTrackingEnabled();
       syncOverwriteStrategy = await getSyncOverwriteStrategy();
+      checkHistoryLimit = await fileUpdateTracker.getCheckHistoryLimit();
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -143,6 +150,21 @@
     });
   }
 
+  function applyCheckHistoryLimit(rawValue: number) {
+    if (loading) return;
+    if (!Number.isFinite(rawValue)) {
+      checkHistoryLimit = fileUpdateTracker.checkHistoryLimit;
+      return;
+    }
+    const limit = Math.min(MAX_CHECK_HISTORY_LIMIT, Math.max(1, Math.trunc(rawValue)));
+    checkHistoryLimit = limit;
+    error = null;
+    void autoSave.run(async () => {
+      await fileUpdateTracker.setCheckHistoryLimit(limit);
+      checkHistoryLimit = fileUpdateTracker.checkHistoryLimit;
+    });
+  }
+
   /** Enable git tracking: initialize the repo if missing; revert with a warning on failure. */
   function applySyncGitTrackingEnabled(enabled: boolean) {
     if (loading || gitInitBusy) return;
@@ -180,6 +202,7 @@
     applyAutoFileUpdateAutoDownload(DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD);
     applySyncOverwriteStrategy(DEFAULT_SYNC_OVERWRITE_STRATEGY);
     applySyncGitTrackingEnabled(DEFAULT_SYNC_GIT_TRACKING_ENABLED);
+    applyCheckHistoryLimit(DEFAULT_CHECK_HISTORY_LIMIT);
   }
 </script>
 
@@ -194,6 +217,33 @@
   />
 
   <div class="settings-section-list">
+    <section class="settings-section space-y-4">
+      <div class="settings-section-heading">
+        <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+          {$t('settings.fileSync.historySectionTitle')}
+        </h2>
+        <p class="text-xs text-md3-on-surface-variant mt-1">
+          {$t('settings.fileSync.historySectionHint')}
+        </p>
+      </div>
+      <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
+        {$t('settings.fileSync.historyLimitLabel')}
+        <input
+          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high px-3 py-2 text-md3-on-surface disabled:opacity-60 sm:max-w-xs"
+          type="number"
+          min="1"
+          max={MAX_CHECK_HISTORY_LIMIT}
+          step="1"
+          value={checkHistoryLimit}
+          onchange={(event) => applyCheckHistoryLimit(event.currentTarget.valueAsNumber)}
+          disabled={loading}
+        />
+        <p class="text-xs text-md3-on-surface-variant">
+          {$t('settings.fileSync.historyLimitHint')}
+        </p>
+      </label>
+    </section>
+
     <section class="settings-section space-y-4">
       <div class="settings-section-heading">
         <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">

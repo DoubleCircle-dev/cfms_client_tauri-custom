@@ -1,13 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const files = vi.hoisted(() => ({
   checkDownloadsExist: vi.fn(),
   deleteDownloadFile: vi.fn(),
   getDocumentInfo: vi.fn(),
 }));
+const sharedSettings = vi.hoisted(() => ({
+  get: vi.fn(),
+  set: vi.fn(),
+}));
 // The tracker reaches out for the local comparison and, once per candidate, for
 // the permission test that decides whether it is worth offering at all.
 vi.mock('$lib/api/files', () => files);
+vi.mock('$lib/api/settings', () => ({
+  getSetting: sharedSettings.get,
+  setSetting: sharedSettings.set,
+}));
 const placeholders = vi.hoisted(() => ({
   commitPendingFolderHistoryChanges: vi.fn(),
   ensureDownloadFolderPlaceholder: vi.fn(),
@@ -67,6 +75,10 @@ beforeEach(() => {
   deniedDocuments.clearAll();
   files.getDocumentInfo.mockReset();
   files.getDocumentInfo.mockResolvedValue(null);
+  sharedSettings.get.mockReset();
+  sharedSettings.get.mockResolvedValue(null);
+  sharedSettings.set.mockReset();
+  sharedSettings.set.mockResolvedValue(undefined);
   files.checkDownloadsExist.mockReset();
   files.checkDownloadsExist.mockResolvedValue([]);
   files.deleteDownloadFile.mockReset();
@@ -79,6 +91,12 @@ beforeEach(() => {
   placeholders.ensureDownloadPlaceholder.mockResolvedValue(false);
   vi.mocked(readLocalDocumentStates).mockReset();
   vi.mocked(readLocalDocumentStates).mockResolvedValue([]);
+});
+
+afterEach(() => {
+  Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+  Reflect.deleteProperty(window, '__CFMS_BROWSER_PREVIEW__');
+  Reflect.deleteProperty(window, '__CFMS_PREVIEW_MODE__');
 });
 
 describe('check history scoping', () => {
@@ -120,12 +138,164 @@ describe('check history scoping', () => {
     expect(fileUpdateTracker.checkHistory).toHaveLength(1);
   });
 
+  it('records successful access-rule changes as account-scoped history entries', () => {
+    fileUpdateTracker.useAccountScope(scopeFor('wss://a', 'alice'));
+    fileUpdateTracker.addAccessRulesHistory([
+      { id: 'document:d1', title: 'Report.md', path: 'Notes/Report.md', kind: 'permission_changed' },
+    ]);
+
+    expect(fileUpdateTracker.checkHistory.at(-1)).toMatchObject({
+      eventType: 'access_rules',
+      changed: 0,
+      items: [
+        { id: 'document:d1', title: 'Report.md', path: 'Notes/Report.md', kind: 'permission_changed' },
+      ],
+    });
+    expect(JSON.parse(window.localStorage.getItem(
+      `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Fa:alice`,
+    )!)).toMatchObject([{ eventType: 'access_rules' }]);
+
+    fileUpdateTracker.useAccountScope(scopeFor('wss://a', 'bob'));
+    expect(fileUpdateTracker.checkHistory).toEqual([]);
+  });
+
+  it('restores older history records as check entries', () => {
+    const key = `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Fold:alice`;
+    window.localStorage.setItem(key, JSON.stringify([
+      { time: 1, changed: 2, dirs: 1, docs: 3, items: [], hidden: 0, denied: 0 },
+    ]));
+
+    fileUpdateTracker.useAccountScope(scopeFor('wss://old', 'alice'));
+
+    expect(fileUpdateTracker.checkHistory[0]?.eventType).toBe('check');
+  });
+
+  it('uses shared device settings in the native client instead of origin-local storage', async () => {
+    Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: {} });
+    const key = `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Fshared:alice`;
+    sharedSettings.get.mockResolvedValue(JSON.stringify([
+      { time: 1, changed: 2, dirs: 1, docs: 3, items: [], hidden: 0, denied: 0 },
+    ]));
+    fileUpdateTracker.useAccountScope(scopeFor('wss://shared', 'alice'));
+    await vi.waitFor(() => expect(fileUpdateTracker.checkHistory).toHaveLength(1));
+
+    fileUpdateTracker.addAccessRulesHistory([
+      { id: 'directory:d1', title: 'Docs', path: 'Docs', kind: 'permission_changed' },
+    ]);
+    await vi.waitFor(() => {
+      expect(sharedSettings.set).toHaveBeenCalled();
+      expect(JSON.parse(sharedSettings.set.mock.lastCall![1])).toHaveLength(2);
+    });
+
+    expect(sharedSettings.get).toHaveBeenCalledWith(key);
+    expect(window.localStorage.getItem(key)).toBeNull();
+
+    await fileUpdateTracker.setCheckHistoryLimit(42);
+    expect(sharedSettings.set).toHaveBeenCalledWith(`${key}:limit`, '42');
+    await fileUpdateTracker.clearCheckHistory();
+    expect(sharedSettings.set).toHaveBeenCalledWith(key, '[]');
+  });
+
+  it('restores a customized retention limit from shared settings', async () => {
+    Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: {} });
+    const key = `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Fretention:alice`;
+    sharedSettings.get.mockImplementation(async (settingKey: string) =>
+      settingKey === `${key}:limit` ? '42' : '[]');
+
+    fileUpdateTracker.useAccountScope(scopeFor('wss://retention', 'alice'));
+    await vi.waitFor(() => expect(fileUpdateTracker.checkHistoryLimit).toBe(42));
+
+    fileUpdateTracker.addCheckHistory({
+      outdated: 1,
+      denied: 0,
+      dirs: 0,
+      docs: 1,
+      items: [],
+      hidden: 0,
+    });
+    await vi.waitFor(() => {
+      expect(sharedSettings.set.mock.calls.some(([settingKey, value]) =>
+        settingKey === key && JSON.parse(value).length === 1,
+      )).toBe(true);
+    });
+  });
+
+  it('merges browser history into the shared bridge history without duplicates', async () => {
+    Object.defineProperty(window, '__CFMS_BROWSER_PREVIEW__', { configurable: true, value: true });
+    Object.defineProperty(window, '__CFMS_PREVIEW_MODE__', { configurable: true, value: 'live' });
+    const key = `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Fbridge:alice`;
+    const sharedEntry = { time: 1, eventType: 'check', changed: 1, dirs: 1, docs: 2, items: [], hidden: 0, denied: 0 };
+    const legacyEntry = { time: 2, eventType: 'access_rules', changed: 0, dirs: 0, docs: 0, items: [], hidden: 0, denied: 0 };
+    sharedSettings.get.mockResolvedValue(JSON.stringify([sharedEntry]));
+    window.localStorage.setItem(key, JSON.stringify([sharedEntry, legacyEntry]));
+
+    fileUpdateTracker.useAccountScope(scopeFor('wss://bridge', 'alice'));
+    await vi.waitFor(() => expect(fileUpdateTracker.checkHistory).toHaveLength(2));
+    await vi.waitFor(() => expect(sharedSettings.set).toHaveBeenCalled());
+
+    expect(fileUpdateTracker.checkHistory.map((entry) => entry.time)).toEqual([1, 2]);
+    expect(JSON.parse(sharedSettings.set.mock.lastCall![1])).toHaveLength(2);
+    expect(window.localStorage.getItem(key)).toBeNull();
+  });
+
   it('does not write history to a shared key while logged out', () => {
     fileUpdateTracker.useAccountScope(null);
     fileUpdateTracker.addCheckHistory({ outdated: 1, denied: 0, dirs: 1, docs: 1, items: [], hidden: 0 });
 
     expect(fileUpdateTracker.checkHistory).toHaveLength(1);
     expect(Object.keys(window.localStorage)).toEqual([]);
+  });
+
+  it('applies a validated per-account limit and keeps the newest entries', async () => {
+    const scope = scopeFor('wss://limit.example', 'alice');
+    fileUpdateTracker.useAccountScope(scope);
+    for (const changed of [1, 2, 3]) {
+      fileUpdateTracker.addCheckHistory({
+        outdated: changed,
+        denied: 0,
+        dirs: 0,
+        docs: 0,
+        items: [],
+        hidden: 0,
+      });
+    }
+
+    await fileUpdateTracker.setCheckHistoryLimit(2);
+
+    expect(fileUpdateTracker.checkHistoryLimit).toBe(2);
+    expect(fileUpdateTracker.checkHistory.map((entry) => entry.changed)).toEqual([2, 3]);
+    expect(window.localStorage.getItem(
+      `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Flimit.example:alice:limit`,
+    )).toBe('2');
+    await expect(fileUpdateTracker.setCheckHistoryLimit(501)).rejects.toThrow(RangeError);
+    expect(fileUpdateTracker.checkHistoryLimit).toBe(2);
+  });
+
+  it('clears only the current account log and preserves access-state tracking', async () => {
+    const scope = scopeFor('wss://clear.example', 'alice');
+    fileUpdateTracker.useAccountScope(scope);
+    fileUpdateTracker.addCheckHistory({
+      outdated: 1,
+      denied: 0,
+      dirs: 0,
+      docs: 1,
+      items: [],
+      hidden: 0,
+    });
+    const key = `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Fclear.example:alice`;
+    const accessState = JSON.stringify({
+      'document:d1': { status: 'accessible', title: 'report', path: 'report.txt' },
+    });
+    window.localStorage.setItem(`${key}:access-state`, accessState);
+
+    await fileUpdateTracker.clearCheckHistory();
+
+    expect(fileUpdateTracker.checkHistory).toEqual([]);
+    expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual([]);
+    expect(window.localStorage.getItem(`${key}:access-state`)).toBe(accessState);
+
+    fileUpdateTracker.useAccountScope(scopeFor('wss://clear.example', 'bob'));
+    expect(fileUpdateTracker.checkHistory).toEqual([]);
   });
 });
 
@@ -149,6 +319,9 @@ describe('what a check reports', () => {
     expect(result.denied).toBe(1);
     expect(deniedDocuments.isDenied('locked')).toBe(true);
     expect(fileUpdateTracker.checkHistory.at(-1)).toMatchObject({ changed: 1, denied: 1 });
+    expect(fileUpdateTracker.checkHistory.at(-1)?.items).toContainEqual(
+      expect.objectContaining({ id: 'locked', kind: 'denied' }),
+    );
     // The stand-in is what the user sees in place of the file they cannot have,
     // and since the check never queues it, the check has to write it.
     expect(placeholders.ensureDownloadPlaceholder).toHaveBeenCalledWith('locked.txt');
@@ -160,6 +333,104 @@ describe('what a check reports', () => {
     await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
 
     expect(placeholders.ensureDownloadPlaceholder).not.toHaveBeenCalled();
+  });
+
+  it('records access revocation and restoration for a current local document', async () => {
+    const scope = scopeFor('wss://access.example', 'transition');
+    fileUpdateTracker.useAccountScope(scope);
+    deniedDocuments.useAccountScope(scope);
+    const listFn = serve([{
+      id: 'd1',
+      title: 'report.txt',
+      state: { existsLocally: true, isCurrent: true },
+    }]);
+    const accessStateKey = `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Faccess.example:transition:access-state`;
+
+    files.getDocumentInfo.mockResolvedValue(null);
+    await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+    expect(JSON.parse(window.localStorage.getItem(accessStateKey)!)).toMatchObject({
+      'document:d1': { status: 'accessible', path: 'report.txt' },
+    });
+    expect(fileUpdateTracker.checkHistory.at(-1)?.items).toEqual([]);
+
+    files.getDocumentInfo.mockRejectedValue(new Error('Server returned 403: access denied'));
+    const revoked = await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(revoked).toMatchObject({ outdated: 0, denied: 1 });
+    expect(fileUpdateTracker.checkHistory.at(-1)?.items).toContainEqual(
+      expect.objectContaining({
+        id: 'document:d1',
+        path: 'report.txt',
+        kind: 'access_revoked',
+      }),
+    );
+    expect(fileUpdateTracker.checkHistory.at(-1)?.revoked).toBe(1);
+    expect(placeholders.ensureDownloadPlaceholder).not.toHaveBeenCalled();
+
+    files.getDocumentInfo.mockResolvedValue(null);
+    const restored = await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(restored).toMatchObject({ outdated: 0, denied: 0 });
+    expect(fileUpdateTracker.checkHistory.at(-1)?.items).toContainEqual(
+      expect.objectContaining({
+        id: 'document:d1',
+        path: 'report.txt',
+        kind: 'access_restored',
+      }),
+    );
+    expect(fileUpdateTracker.checkHistory.at(-1)?.restored).toBe(1);
+  });
+
+  it('does not report access restoration when the probe only had a transient error', async () => {
+    const scope = scopeFor('wss://unknown.example', 'transition');
+    fileUpdateTracker.useAccountScope(scope);
+    deniedDocuments.useAccountScope(scope);
+    const listFn = serve([{
+      id: 'd1',
+      title: 'report.txt',
+      state: { existsLocally: true, isCurrent: true },
+    }]);
+    files.getDocumentInfo.mockRejectedValue(new Error('Server returned 403: access denied'));
+    await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    files.getDocumentInfo.mockRejectedValue(new Error('WebSocket closed unexpectedly'));
+    await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(fileUpdateTracker.checkHistory.at(-1)?.items).toEqual([]);
+    expect(JSON.parse(window.localStorage.getItem(
+      `${HISTORY_KEY_PREFIX}:wss%3A%2F%2Funknown.example:transition:access-state`,
+    )!)).toMatchObject({
+      'document:d1': { status: 'denied' },
+    });
+  });
+
+  it('records revoked and restored listing access for a folder', async () => {
+    const scope = scopeFor('wss://folder-access.example', 'transition');
+    fileUpdateTracker.useAccountScope(scope);
+    deniedDocuments.useAccountScope(scope);
+    let folderDenied = false;
+    const listFn = vi.fn(async (id: string | null) => {
+      if (id === null) {
+        return { folders: [{ id: 'f1', name: 'Reports', created_time: null }], documents: [] };
+      }
+      if (folderDenied) throw new Error('Server returned 403: access denied');
+      return { folders: [], documents: [] };
+    });
+
+    await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+    folderDenied = true;
+    await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(fileUpdateTracker.checkHistory.at(-1)?.items).toContainEqual(
+      expect.objectContaining({ id: 'folder:f1', kind: 'access_revoked', path: 'Reports' }),
+    );
+
+    folderDenied = false;
+    await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(fileUpdateTracker.checkHistory.at(-1)?.items).toContainEqual(
+      expect.objectContaining({ id: 'folder:f1', kind: 'access_restored', path: 'Reports' }),
+    );
   });
 
   it('creates a marker for an empty server folder', async () => {

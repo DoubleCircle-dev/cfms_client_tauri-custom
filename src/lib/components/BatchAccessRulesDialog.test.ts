@@ -48,13 +48,17 @@ const inheritLabel = 'Inherit rules from parent object';
 const scopeTitle = 'Confirm access rule changes';
 const emptyPage = { folders: [], documents: [], parent_id: null, has_more: false, next_cursor: null, page_size: 128 };
 type Props = { targets: BatchRulesTarget[]; initialTemplateKey?: string; canReadTemplate: boolean;
-  checkGuard: () => BatchRulesProblem | null; onApplied: () => Promise<void>; onClose: () => void };
+  checkGuard: () => BatchRulesProblem | null; onApplied: () => Promise<void>;
+  onRulesApplied: (targets: BatchRulesTarget[]) => void; onClose: () => void };
 function setup(options: Partial<Props> = {}) {
   const onApplied = vi.fn().mockResolvedValue(undefined);
+  const onRulesApplied = vi.fn();
   const onClose = vi.fn();
-  const props: Props = { targets, canReadTemplate: true, checkGuard: () => null, onApplied, onClose, ...options };
+  const props: Props = {
+    targets, canReadTemplate: true, checkGuard: () => null, onApplied, onRulesApplied, onClose, ...options,
+  };
   const view = render(BatchAccessRulesDialog, props);
-  return { ...view, onApplied, onClose, props };
+  return { ...view, onApplied, onRulesApplied, onClose, props };
 }
 function submittedRules(index: number): AccessRulesRecord {
   return vi.mocked(setAccessRules).mock.calls[index][2] as AccessRulesRecord;
@@ -132,7 +136,7 @@ describe('BatchAccessRulesDialog property-style editing', () => {
   });
 
   it('opens an editable new draft without read permission and confirms an empty-rule clear', async () => {
-    setup({ canReadTemplate: false });
+    const { onRulesApplied } = setup({ canReadTemplate: false });
     expect(await screen.findByText('New rule draft; current rules have not been read')).toBeTruthy();
     expect(screen.getByRole('switch', { name: inheritLabel }).getAttribute('aria-checked')).toBe('true');
     expect(screen.queryByRole('button', { name: 'Load as template' })).toBeNull();
@@ -145,6 +149,7 @@ describe('BatchAccessRulesDialog property-style editing', () => {
     await confirmScope();
     await screen.findByText('Applied to 2 objects');
     expect(setAccessRules).toHaveBeenCalledTimes(2);
+    expect(onRulesApplied).toHaveBeenCalledWith(targets);
     expect(vi.mocked(setAccessRules).mock.calls.every((call) => call[3] === true)).toBe(true);
   });
 

@@ -14,6 +14,8 @@
   } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import HomeRecordPanel from '$lib/components/HomeRecordPanel.svelte';
+  import { dialogStore } from '$lib/dialogs.svelte';
+  import { serializeCheckHistoryCsv } from '$lib/file-check-history-export';
   import {
     clearFavoriteRecords,
     clearRecentVisits,
@@ -192,7 +194,7 @@
   }
 
   const checkHistory = $derived([...fileUpdateTracker.checkHistory].reverse());
-  const lastCheckResult = $derived(checkHistory[0] ?? null);
+  const lastCheckResult = $derived(checkHistory.find((entry) => entry.eventType === 'check') ?? null);
   const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
 
   /**
@@ -211,7 +213,14 @@
     const rows: HistoryRow[] = [];
     for (const entry of checkHistory) {
       const last = rows[rows.length - 1];
-      if (entry.changed === 0) {
+      if (
+        entry.eventType === 'check'
+        && entry.changed === 0
+        && entry.denied === 0
+        && entry.revoked === 0
+        && entry.restored === 0
+        && entry.items.length === 0
+      ) {
         if (last?.kind === 'quiet') last.entries.push(entry);
         else rows.push({ kind: 'quiet', entries: [entry] });
         continue;
@@ -240,7 +249,76 @@
       case 'added': return $t('files.checkKindAdded');
       case 'modified': return $t('files.checkKindModified');
       case 'denied': return $t('files.checkKindDenied');
+      case 'permission_changed': return $t('files.checkKindPermissionChanged');
+      case 'access_revoked': return $t('files.checkKindAccessRevoked');
+      case 'access_restored': return $t('files.checkKindAccessRestored');
       default: return $t('files.checkKindUnverifiable');
+    }
+  }
+
+  function historyAccessTransitionSummary(entry: CheckHistoryEntry) {
+    return $t('files.checkHistoryAccessTransitions', {
+      values: { revoked: entry.revoked, restored: entry.restored },
+    });
+  }
+
+  async function clearCheckHistory() {
+    const confirmed = await dialogStore.confirm({
+      title: $t('files.checkHistoryClearTitle'),
+      message: $t('files.checkHistoryClearConfirm'),
+      confirmLabel: $t('files.checkHistoryClearConfirmButton'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await fileUpdateTracker.clearCheckHistory();
+      expandedHistory = new Set();
+      notificationStore.success($t('files.checkHistoryCleared'));
+    } catch (error) {
+      notificationStore.error(formatUserFacingError(error));
+    }
+  }
+
+  function exportCheckHistory() {
+    if (fileUpdateTracker.checkHistory.length === 0) return;
+    try {
+      const csv = serializeCheckHistoryCsv(
+        fileUpdateTracker.checkHistory,
+        serverStateStore.remoteAddress ?? '',
+        authStore.username ?? '',
+        {
+          headers: [
+            $t('files.checkHistoryCsvTime'),
+            $t('files.checkHistoryCsvEvent'),
+            $t('files.checkHistoryCsvServer'),
+            $t('files.checkHistoryCsvAccount'),
+            $t('files.checkHistoryCsvChanged'),
+            $t('files.checkHistoryCsvDenied'),
+            $t('files.checkHistoryCsvRevoked'),
+            $t('files.checkHistoryCsvRestored'),
+            $t('files.checkHistoryCsvDirectories'),
+            $t('files.checkHistoryCsvDocuments'),
+            $t('files.checkHistoryCsvItemKind'),
+            $t('files.checkHistoryCsvItemTitle'),
+            $t('files.checkHistoryCsvPath'),
+            $t('files.checkHistoryCsvHidden'),
+          ],
+          checkEvent: $t('files.checkHistoryCsvCheckEvent'),
+          accessRulesEvent: $t('files.checkHistoryCsvAccessRulesEvent'),
+          itemKind: historyKindLabel,
+        },
+      );
+      const blobUrl = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = `cfms-file-history-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      notificationStore.success($t('files.checkHistoryExported'));
+    } catch (error) {
+      notificationStore.error(formatUserFacingError(error));
     }
   }
 
@@ -496,14 +574,11 @@
     />
   </div>
 
-  {#if checkHistory.length > 0}
-    <section class="check-history-section">
-      <div class="check-history-header">
+  <section class="check-history-section">
+    <div class="check-history-header">
+      <div class="check-history-heading">
         <Icon name="history" size="18px" />
-        <h2 class="text-sm font-medium text-md3-on-surface">文件更新检查记录</h2>
-        {#if pollCountdown}
-          <span class="check-countdown">下次: {pollCountdown}</span>
-        {/if}
+        <h2 class="text-sm font-medium text-md3-on-surface">{$t('files.checkHistoryTitle')}</h2>
         {#if lastCheckResult}
           <span class="check-history-badge" class:has-changes={lastCheckResult.changed > 0}>
             {lastCheckResult.changed > 0
@@ -512,8 +587,35 @@
           </span>
         {/if}
       </div>
+      {#if pollCountdown}
+        <span class="check-countdown">下次: {pollCountdown}</span>
+      {/if}
+      <div class="check-history-actions">
+        <button
+          type="button"
+          class="check-history-action"
+          onclick={exportCheckHistory}
+          disabled={checkHistory.length === 0}
+        >
+          <Icon name="download" size="16px" />
+          {$t('files.checkHistoryExport')}
+        </button>
+        <button
+          type="button"
+          class="check-history-action danger"
+          onclick={clearCheckHistory}
+          disabled={checkHistory.length === 0}
+        >
+          <Icon name="delete" size="16px" />
+          {$t('files.checkHistoryClear')}
+        </button>
+      </div>
+    </div>
+    {#if checkHistory.length === 0}
+      <p class="check-history-empty">{$t('files.checkHistoryEmpty')}</p>
+    {:else}
       <div class="check-history-list">
-        {#each historyRows.slice(0, 20) as row, index (`${row.kind}:${index}`)}
+        {#each historyRows.slice(0, fileUpdateTracker.checkHistoryLimit) as row, index (`${row.kind}:${index}`)}
           {#if row.kind === 'quiet'}
             <div class="check-history-row" class:has-detail={row.entries[0].items.length > 0}>
               <button
@@ -560,24 +662,32 @@
                 disabled={row.entry.items.length === 0}
                 onclick={() => toggleHistoryRow(row.entry.time)}
               >
-                <span class="check-history-icon">🔔</span>
+                <span class="check-history-icon">{row.entry.eventType === 'access_rules' ? '🔐' : '🔔'}</span>
                 <span class="check-history-time">{formatCheckTime(row.entry.time)}</span>
                 <span class="check-history-summary">
-                  {$t('files.checkHistoryUpdates', { values: { count: row.entry.changed } })}
+                  {row.entry.eventType === 'access_rules'
+                    ? $t('files.checkHistoryAccessRules', { values: { count: row.entry.items.length + row.entry.hidden } })
+                    : row.entry.revoked > 0 || row.entry.restored > 0
+                      ? historyAccessTransitionSummary(row.entry)
+                    : $t('files.checkHistoryUpdates', { values: { count: row.entry.changed } })}
                 </span>
-                {#if row.entry.denied > 0}
+                {#if row.entry.eventType === 'check' && row.entry.denied > 0}
                   <span class="check-history-denied">
                     🔒 {$t('files.checkHistoryDenied', { values: { count: row.entry.denied } })}
                   </span>
                 {/if}
-                <span class="check-history-meta">
-                  {$t('files.checkHistoryScope', { values: { dirs: row.entry.dirs, docs: row.entry.docs } })}
-                </span>
+                {#if row.entry.eventType === 'check'}
+                  <span class="check-history-meta">
+                    {$t('files.checkHistoryScope', { values: { dirs: row.entry.dirs, docs: row.entry.docs } })}
+                  </span>
+                {/if}
               </button>
               {#if row.entry.items.length > 0}
                 <div class="check-history-files" class:open={expandedHistory.has(row.entry.time)}>
                   <span class="check-history-files-title">
-                    {$t('files.checkHistoryFilesTitle')}
+                    {$t(row.entry.eventType === 'access_rules'
+                      ? 'files.checkHistoryAccessRulesItemsTitle'
+                      : 'files.checkHistoryFilesTitle')}
                   </span>
                   {#each row.entry.items as item (item.id)}
                     <span class="check-history-file">
@@ -596,8 +706,8 @@
           {/if}
         {/each}
       </div>
-    </section>
-  {/if}
+    {/if}
+  </section>
 </div>
 
 <style>
@@ -679,16 +789,70 @@
   }
 
   .check-history-header {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.6rem 0.75rem;
     margin-bottom: 0.75rem;
-    padding-bottom: 0.5rem;
+    padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--explorer-border);
   }
 
+  .check-history-heading {
+    display: flex;
+    align-items: center;
+    grid-column: 1;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .check-history-actions {
+    display: flex;
+    align-items: center;
+    justify-self: end;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .check-history-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 2rem;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid var(--explorer-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--explorer-text);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+
+  .check-history-action:hover:not(:disabled) {
+    background: var(--explorer-surface-hover);
+  }
+
+  .check-history-action.danger {
+    color: var(--color-md3-error, #d93025);
+  }
+
+  .check-history-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .check-history-empty {
+    margin: 0.25rem 0 0;
+    color: var(--explorer-text-muted);
+    font-size: 0.8rem;
+  }
+
   .check-history-badge {
-    margin-left: auto;
+    margin-left: 0;
     font-size: 0.75rem;
     padding: 0.15rem 0.5rem;
     border-radius: 999px;
@@ -702,12 +866,34 @@
   }
 
   .check-countdown {
-    margin-left: auto;
-    margin-right: 0.5rem;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
     font-size: 0.72rem;
     font-variant-numeric: tabular-nums;
     color: var(--explorer-accent);
     font-weight: 500;
+  }
+
+  @media (max-width: 640px) {
+    .check-history-header {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .check-history-heading {
+      grid-column: 1 / -1;
+    }
+
+    .check-countdown {
+      grid-column: 1;
+      grid-row: 2;
+      justify-self: start;
+    }
+
+    .check-history-actions {
+      grid-column: 2;
+      grid-row: 2;
+    }
   }
 
   .check-history-list {

@@ -20,12 +20,13 @@
   import ProgressRing from './ProgressRing.svelte';
   import VirtualList from './VirtualList.svelte';
 
-  let { targets, initialTemplateKey, canReadTemplate, checkGuard, onApplied, onClose }: {
+  let { targets, initialTemplateKey, canReadTemplate, checkGuard, onApplied, onRulesApplied, onClose }: {
     targets: BatchRulesTarget[];
     initialTemplateKey?: string;
     canReadTemplate: boolean;
     checkGuard: () => BatchRulesProblem | null;
     onApplied: () => Promise<void>;
+    onRulesApplied: (targets: BatchRulesTarget[]) => void;
     onClose: () => void;
   } = $props();
 
@@ -65,6 +66,7 @@
   let generation = 0;
   let cooldownUntil = 0;
   let refreshedSuccesses = 0;
+  const loggedSuccesses = new Set<string>();
   const unconfirmedKeys = new Set<string>();
   let controller = createController();
   snapshot = controller.snapshot;
@@ -242,6 +244,7 @@
     controller = createController();
     snapshot = controller.snapshot;
     refreshedSuccesses = 0;
+    loggedSuccesses.clear();
     const round = generation;
     try {
       await controller.discover(draftRules, draftInherit, draftRecursive);
@@ -297,6 +300,16 @@
     const round = generation;
     await action();
     if (disposed || round !== generation) return;
+    const newlyApplied = snapshot.results
+      .filter((item) => item.status === 'success')
+      .filter((item) => {
+        const key = batchRulesTargetKey(item.target);
+        if (loggedSuccesses.has(key)) return false;
+        loggedSuccesses.add(key);
+        return true;
+      })
+      .map((item) => item.target);
+    if (newlyApplied.length > 0) onRulesApplied(newlyApplied);
     if (counts.success > refreshedSuccesses) await refreshDirectory();
     if (!disposed && round === generation) finishSuccessfulRun();
   }

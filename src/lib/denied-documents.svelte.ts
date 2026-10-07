@@ -105,11 +105,16 @@ class DeniedDocumentStore {
    * a real update behind one would be worse than reporting it.
    */
   async probeDocumentAccess(docId: string): Promise<boolean> {
+    return (await this.probeDocumentAccessState(docId)) !== 'denied';
+  }
+
+  /** Distinguish a confirmed access result from a transient probe failure. */
+  async probeDocumentAccessState(docId: string): Promise<'accessible' | 'denied' | 'unknown'> {
     try {
       await getDocumentInfo(docId);
-      return true;
+      return 'accessible';
     } catch (err) {
-      return !isDocumentAccessDenied(err);
+      return isDocumentAccessDenied(err) ? 'denied' : 'unknown';
     }
   }
 
