@@ -67,6 +67,8 @@
   import AccessDeniedNotice from '$lib/components/AccessDeniedNotice.svelte';
   import AuthorizeAccessDialog from '$lib/components/AuthorizeAccessDialog.svelte';
   import AccessRulesManager from '$lib/components/AccessRulesManager.svelte';
+  import BatchAccessRulesDialog from '$lib/components/BatchAccessRulesDialog.svelte';
+  import { batchRulesSessionProblem, type BatchRulesIdentity, type BatchRulesTarget } from '$lib/files/batch-access-rules';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import {
     beginDownloadBatch,
@@ -307,6 +309,10 @@
     rules: unknown;
     inheritParent: boolean;
     saving: boolean;
+  } | null>(null);
+  let batchAccessRulesDialog = $state<{
+    targets: BatchRulesTarget[];
+    identity: BatchRulesIdentity;
   } | null>(null);
   let moveTargetDialog = $state<{
     objectType: ServerObjectType;
@@ -1170,6 +1176,14 @@
       run: handleMoveSelected,
     },
     {
+      id: 'access-rules-selected',
+      label: $t('files.batchRules.title'),
+      icon: 'rule',
+      visible: totalSelected > 1,
+      disabled: batchBusy || loading || !hasPermission('set_access_rules'),
+      run: handleBatchAccessRules,
+    },
+    {
       id: 'delete-selected',
       label: $t('common.delete'),
       icon: 'delete',
@@ -1515,6 +1529,14 @@
           icon: 'driveFileMove',
           disabled: batchBusy || !hasPermission('move'),
           onSelect: handleMoveSelected,
+        },
+        {
+          id: 'access-rules-selection',
+          label: $t('files.batchRules.title'),
+          icon: 'rule',
+          disabled: batchBusy || loading,
+          requiredPermissions: ['set_access_rules'],
+          onSelect: handleBatchAccessRules,
         },
         { type: 'divider' },
         {
@@ -2071,6 +2093,52 @@
       error = formatError(err);
       authorizeDialog = { ...dialog, saving: false };
     }
+  }
+
+  function handleBatchAccessRules() {
+    if (totalSelected < 2 || batchBusy || loading || !hasPermission('set_access_rules')) return;
+    const targets: BatchRulesTarget[] = [
+      ...[...selectedFolderIds].map((objectId) => ({
+        objectType: 'directory' as const,
+        objectId,
+        name: fileListIndex.folderById.get(objectId)?.name ?? objectId,
+      })),
+      ...[...selectedDocumentIds].map((objectId) => ({
+        objectType: 'document' as const,
+        objectId,
+        name: fileListIndex.documentById.get(objectId)?.title ?? objectId,
+      })),
+    ];
+    batchAccessRulesDialog = {
+      targets,
+      identity: { server: serverStateStore.remoteAddress, username: authStore.username },
+    };
+    batchBusy = true;
+  }
+
+  function batchAccessRulesGuard() {
+    if (!batchAccessRulesDialog) return { kind: 'stopped' as const };
+    return batchRulesSessionProblem(batchAccessRulesDialog.identity, {
+      server: serverStateStore.remoteAddress,
+      username: authStore.username,
+      loggedIn: authStore.isLoggedIn,
+      permitted: hasPermission('set_access_rules'),
+      connected: serverStateStore.connected,
+      lockdown: serverStateStore.lockdown,
+      bypassLockdown: hasPermission('bypass_lockdown'),
+    });
+  }
+
+  function closeBatchAccessRules() {
+    batchAccessRulesDialog = null;
+    batchBusy = false;
+  }
+
+  async function refreshAfterBatchAccessRules() {
+    if (batchAccessRulesGuard()) return;
+    const loaded = await loadDirectory(currentFolderId, true, undefined, false);
+    if (!loaded) throw new Error(directoryLoadError ?? $t('files.batchRules.refreshFailed'));
+    await loadSelectionDetails();
   }
 
   async function handleSetAccessRules(
@@ -3053,6 +3121,7 @@
         || accessEntriesDialog
         || authorizeDialog
         || accessRulesDialog
+        || batchAccessRulesDialog
         || moveTargetDialog
         || batchMoveDialog
         || revisionsDialog
@@ -4611,6 +4680,16 @@
         {/if}
       </div>
   </ModalFrame>
+{/if}
+
+{#if batchAccessRulesDialog}
+  <BatchAccessRulesDialog
+    targets={batchAccessRulesDialog.targets}
+    canReadTemplate={hasPermission('view_access_rules')}
+    checkGuard={batchAccessRulesGuard}
+    onApplied={refreshAfterBatchAccessRules}
+    onClose={closeBatchAccessRules}
+  />
 {/if}
 
 {#if accessRulesDialog}

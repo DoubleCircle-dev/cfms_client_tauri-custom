@@ -1,3 +1,5 @@
+import { Validator, type Schema } from '@cfworker/json-schema';
+
 export const ACCESS_OPERATIONS = ['read', 'write', 'move', 'manage'] as const;
 export const MATCH_MODES = ['all', 'any'] as const;
 export const CONDITION_TYPES = ['rights', 'groups'] as const;
@@ -55,7 +57,55 @@ export function formatAccessRules(rules: AccessRulesRecord): string {
 
 export function parseAccessRulesJson(value: string): AccessRulesRecord {
   const parsed = value.trim() ? JSON.parse(value) : {};
+  validateAccessRules(parsed);
   return normalizeAccessRules(parsed);
+}
+
+// Mirrors reference/src/include/domains/access/authorization/access_rules.py.
+// Validate original JSON before normalization can discard invalid fields.
+const conditionSchema = {
+  type: 'object',
+  properties: {
+    match: { enum: ['any', 'all'] },
+    require: { type: 'array', items: { type: 'string' } },
+  },
+  additionalProperties: false,
+};
+const operationSchema = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      match: { enum: ['any', 'all'] },
+      match_groups: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            match: { enum: ['any', 'all'] },
+            rights: conditionSchema,
+            groups: conditionSchema,
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['match', 'match_groups'],
+    additionalProperties: false,
+  },
+};
+const accessRulesValidator = new Validator({
+  type: 'object',
+  properties: Object.fromEntries(ACCESS_OPERATIONS.map((operation) => [operation, operationSchema])),
+  additionalProperties: false,
+} as Schema, '2020-12', false);
+
+export function validateAccessRules(value: unknown): asserts value is AccessRulesRecord {
+  const result = accessRulesValidator.validate(value);
+  if (result.valid) return;
+  const issue = result.errors.find((error) => !['properties', 'items'].includes(error.keyword))
+    ?? result.errors[0];
+  throw new TypeError(`${issue.instanceLocation || '#'}: ${issue.error}`);
 }
 
 export function normalizeAccessRules(value: unknown): AccessRulesRecord {

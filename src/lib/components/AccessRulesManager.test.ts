@@ -19,6 +19,19 @@ afterEach(() => {
 });
 
 describe('AccessRulesManager', () => {
+  it('keeps the default single-object save action and passes the edited rules and inheritance choice', async () => {
+    const onSave = vi.fn();
+    render(AccessRulesManager, {
+      rules: { manage: [{ match: 'all', match_groups: [] }] },
+      inheritParent: false,
+      onSave,
+      onCancel: vi.fn(),
+    });
+    await fireEvent.click(screen.getByRole('switch', { name: 'files.inheritParentRules' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    expect(onSave).toHaveBeenCalledWith({ read: [], write: [], move: [], manage: [{ match: 'all', match_groups: [] }] }, true);
+  });
+
   it('uses the shared CodeMirror JSON editor for source rules', async () => {
     const { container } = render(AccessRulesManager, {
       props: {

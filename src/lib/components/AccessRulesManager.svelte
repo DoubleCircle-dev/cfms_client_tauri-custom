@@ -10,6 +10,7 @@
     formatAccessRules,
     normalizeAccessRules,
     parseAccessRulesJson,
+    validateAccessRules,
     type AccessConditionBlock,
     type AccessOperation,
     type AccessRuleGroup,
@@ -28,6 +29,9 @@
     rules: unknown;
     inheritParent: boolean;
     saving?: boolean;
+    submitLabel?: string;
+    submitDisabled?: boolean;
+    onEdit?: () => void;
     onSave: (rules: AccessRulesRecord, inheritParent: boolean) => Promise<void> | void;
     onCancel: () => void;
   }
@@ -36,6 +40,9 @@
     rules,
     inheritParent,
     saving = false,
+    submitLabel,
+    submitDisabled = false,
+    onEdit,
     onSave,
     onCancel,
   }: Props = $props();
@@ -62,6 +69,7 @@
   }
 
   function commitActiveOperationRules(nextRules: AccessRuleGroup[]) {
+    onEdit?.();
     visualRules = {
       ...visualRules,
       [activeOperation]: nextRules,
@@ -89,6 +97,7 @@
   }
 
   function changeSource(value: string) {
+    onEdit?.();
     sourceText = value;
     sourceError = null;
   }
@@ -210,12 +219,14 @@
   }
 
   async function submitRules() {
+    if (saving || submitDisabled) return;
     let nextRules: AccessRulesRecord;
 
     try {
       nextRules = activeView === 'source'
         ? parseAccessRulesJson(sourceText)
         : normalizeAccessRules(visualRules);
+      validateAccessRules(nextRules);
       sourceError = null;
     } catch (err) {
       sourceError = (err as Error).message;
@@ -256,6 +267,8 @@
       <div class="ml-auto flex items-center gap-2 text-sm text-md3-on-surface-variant">
         <MdSwitch
           bind:checked={inherit}
+          disabled={saving}
+          onChange={() => onEdit?.()}
           ariaLabel={$t('files.inheritParentRules')}
         />
         {$t('files.inheritParentRules')}
@@ -529,14 +542,14 @@
     <DialogActionButton
       variant="primary"
       onclick={submitRules}
-      disabled={saving}
+      disabled={saving || submitDisabled}
     >
       {#if saving}
         <ProgressRing size={17} strokeWidth={2.4} label={$t('common.loadingEllipsis')} />
         {$t('common.saving')}
       {:else}
         <Icon name="done" size="17px" />
-        {$t('common.save')}
+        {submitLabel ?? $t('common.save')}
       {/if}
     </DialogActionButton>
   </div>
