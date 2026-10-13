@@ -15,6 +15,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import HomeRecordPanel from '$lib/components/HomeRecordPanel.svelte';
   import { dialogStore } from '$lib/dialogs.svelte';
+  import { buildCheckHistoryRows } from '$lib/file-check-history-rows';
   import { serializeCheckHistoryCsv } from '$lib/file-check-history-export';
   import {
     clearFavoriteRecords,
@@ -197,38 +198,7 @@
   const lastCheckResult = $derived(checkHistory.find((entry) => entry.eventType === 'check') ?? null);
   const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
 
-  /**
-   * History rows, with runs of uneventful checks folded together.
-   *
-   * A periodic checker logs every run, so an idle afternoon buries the two
-   * entries that mattered under a column of identical "no changes" lines. Only
-   * *adjacent* entries merge: a gap in the middle means something happened
-   * between them, and folding across it would misreport when it happened.
-   */
-  type HistoryRow =
-    | { kind: 'entry'; entry: CheckHistoryEntry }
-    | { kind: 'quiet'; entries: CheckHistoryEntry[] };
-
-  const historyRows = $derived.by<HistoryRow[]>(() => {
-    const rows: HistoryRow[] = [];
-    for (const entry of checkHistory) {
-      const last = rows[rows.length - 1];
-      if (
-        entry.eventType === 'check'
-        && entry.changed === 0
-        && entry.denied === 0
-        && entry.revoked === 0
-        && entry.restored === 0
-        && entry.items.length === 0
-      ) {
-        if (last?.kind === 'quiet') last.entries.push(entry);
-        else rows.push({ kind: 'quiet', entries: [entry] });
-        continue;
-      }
-      rows.push({ kind: 'entry', entry });
-    }
-    return rows;
-  });
+  const historyRows = $derived(buildCheckHistoryRows(checkHistory));
 
   /** Records whose file list the user opened. */
   let expandedHistory = $state<Set<number>>(new Set());
