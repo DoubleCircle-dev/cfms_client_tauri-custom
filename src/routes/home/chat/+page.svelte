@@ -13,7 +13,9 @@
     readServerDocument,
     resolveNodePath,
     scanLocalChatbox,
+    type LocalChatboxReadError,
   } from '$lib/api/files';
+  import { isAccessDeniedError } from '$lib/api/server-errors';
   import { notificationStore } from '$lib/stores.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
@@ -86,6 +88,12 @@
     lines: string[];
   }
 
+  interface UnreadableRecord {
+    file: string;
+    source: 'local' | 'server';
+    reason: LocalChatboxReadError;
+  }
+
   interface ChatRoom {
     /** Server directory ID used for API calls (online mode only). */
     id: string;
@@ -96,6 +104,7 @@
     messages: ChatMessage[];
     attachments: ChatAttachment[];
     nonformat: NonformatBlock[];
+    unreadableRecords: UnreadableRecord[];
     loaded: boolean;
     failed?: boolean;
   }
@@ -254,6 +263,7 @@
         messages: [],
         attachments: [],
         nonformat: [],
+        unreadableRecords: [],
         loaded: false,
       }));
       // Newest rooms first (folder creation time is the cheap, server-light
@@ -307,15 +317,30 @@
         const messages: ChatMessage[] = [];
         const nonformat: NonformatBlock[] = [];
         const attachments: ChatAttachment[] = [];
+        const unreadableRecords: UnreadableRecord[] = [];
         for (const file of room.files) {
-          if (file.kind === 'text' && file.content !== null) {
-            const userId = file.name.endsWith('.txt')
-              ? file.name.slice(0, -4)
-              : file.name;
-            const result = parseRoomText(userId, file.content);
-            messages.push(...result.messages);
-            if (result.nonformat.length > 0 && result.messages.length > 0) {
-              nonformat.push({ file: file.name, lines: result.nonformat });
+          if (file.kind === 'text') {
+            if (file.read_error) {
+              unreadableRecords.push({
+                file: file.name,
+                source: 'local',
+                reason: file.read_error,
+              });
+            } else if (file.content !== null) {
+              const userId = file.name.endsWith('.txt')
+                ? file.name.slice(0, -4)
+                : file.name;
+              const result = parseRoomText(userId, file.content);
+              messages.push(...result.messages);
+              if (result.nonformat.length > 0 && result.messages.length > 0) {
+                nonformat.push({ file: file.name, lines: result.nonformat });
+              }
+            } else {
+              unreadableRecords.push({
+                file: file.name,
+                source: 'local',
+                reason: 'read_failed',
+              });
             }
           } else {
             attachments.push({
@@ -335,6 +360,7 @@
           messages,
           attachments,
           nonformat,
+          unreadableRecords,
           loaded: true,
         };
       });
@@ -409,6 +435,7 @@
       const messages: ChatMessage[] = [];
       const nonformat: NonformatBlock[] = [];
       const attachments: ChatAttachment[] = [];
+      const unreadableRecords: UnreadableRecord[] = [];
 
       const textFiles = listing.documents.filter((doc) =>
         doc.title.toLowerCase().endsWith('.txt'),
@@ -423,8 +450,12 @@
           if (parsed.nonformat.length > 0 && parsed.messages.length > 0) {
             nonformat.push({ file: doc.title, lines: parsed.nonformat });
           }
-        } catch {
-          // A single unreadable record should not break the whole room.
+        } catch (err) {
+          unreadableRecords.push({
+            file: doc.title,
+            source: 'server',
+            reason: isAccessDeniedError(err) ? 'permission_denied' : 'read_failed',
+          });
         }
       }
 
@@ -446,6 +477,7 @@
           messages,
           attachments,
           nonformat,
+          unreadableRecords,
           loaded: true,
         };
       }
@@ -508,6 +540,36 @@
     showNonformat = false;
     const room = rooms.find((item) => item.roomId === roomId);
     if (room && !room.loaded) void loadRoomDetails(roomId);
+  }
+
+  function unreadableRecordReason(record: UnreadableRecord): string {
+    if (record.source === 'local') {
+      return $t(
+        record.reason === 'permission_denied'
+          ? 'chat.localPermissionDenied'
+          : 'chat.localReadFailed',
+      );
+    }
+    return $t(
+      record.reason === 'permission_denied'
+        ? 'chat.serverPermissionDenied'
+        : 'chat.serverReadFailed',
+    );
+  }
+
+  function unreadableRecordAction(record: UnreadableRecord): string {
+    if (record.source === 'local') {
+      return $t(
+        record.reason === 'permission_denied'
+          ? 'chat.localPermissionAction'
+          : 'chat.localReadAction',
+      );
+    }
+    return $t(
+      record.reason === 'permission_denied'
+        ? 'chat.serverPermissionAction'
+        : 'chat.serverReadAction',
+    );
   }
 
   function renameRoom(roomId: string) {
@@ -766,12 +828,12 @@
             <Icon name="chat" size="28px" />
             <p>{$t('chat.loadingRoom')}</p>
           </div>
-        {:else if selectedRoom.messages.length === 0}
+        {:else if selectedRoom.messages.length === 0 && selectedRoom.unreadableRecords.length === 0}
           <div class="chat-state">
             <Icon name="chat" size="28px" />
             <p>{$t('chat.noMessages')}</p>
           </div>
-        {:else}
+        {:else if selectedRoom.messages.length > 0}
           <div class="chat-messages">
             {#each selectedRoom.messages as message, index (index)}
               {@const colors = selectedColorMap.get(message.user) ?? { bg: BUBBLE_COLORS[0], strip: STRIP_COLORS[0] }}
@@ -827,6 +889,33 @@
               </article>
             {/each}
           </div>
+        {/if}
+
+        {#if selectedRoom.unreadableRecords.length > 0}
+          <section class="chat-unreadable-records" aria-labelledby="chat-unreadable-records-title">
+            <h3 id="chat-unreadable-records-title">
+              <Icon name="lock" size="16px" />
+              {$t('chat.unreadableRecordsTitle')}
+            </h3>
+            {#each selectedRoom.unreadableRecords as record, index (`${record.source}:${record.file}:${index}`)}
+              <article class="chat-unreadable-record">
+                <dl>
+                  <div>
+                    <dt>{$t('chat.unreadableFile')}</dt>
+                    <dd>{record.file}</dd>
+                  </div>
+                  <div>
+                    <dt>{$t('chat.unreadableReason')}</dt>
+                    <dd>{unreadableRecordReason(record)}</dd>
+                  </div>
+                  <div>
+                    <dt>{$t('chat.unreadableAction')}</dt>
+                    <dd>{unreadableRecordAction(record)}</dd>
+                  </div>
+                </dl>
+              </article>
+            {/each}
+          </section>
         {/if}
 
         {#if showNonformat && selectedRoom.nonformat.length > 0}
@@ -1299,6 +1388,69 @@
     color: #5d4037;
     font-size: 0.72rem;
     white-space: pre-wrap;
+  }
+
+  .chat-unreadable-records {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    border-top: 1px solid var(--explorer-border);
+    padding: 0.8rem 1rem;
+    background: color-mix(
+      in srgb,
+      var(--explorer-surface-raised) 72%,
+      var(--explorer-background)
+    );
+  }
+
+  .chat-unreadable-records h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0 0 0.6rem;
+    color: var(--explorer-text);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .chat-unreadable-record {
+    border-inline-start: 3px solid var(--explorer-accent);
+    border-radius: var(--explorer-radius-small);
+    padding: 0.55rem 0.7rem;
+    background: var(--explorer-surface);
+  }
+
+  .chat-unreadable-record + .chat-unreadable-record {
+    margin-top: 0.45rem;
+  }
+
+  .chat-unreadable-record dl,
+  .chat-unreadable-record dl div {
+    display: grid;
+    gap: 0.2rem 0.7rem;
+  }
+
+  .chat-unreadable-record dl div {
+    grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+    align-items: baseline;
+  }
+
+  .chat-unreadable-record dl {
+    margin: 0;
+  }
+
+  .chat-unreadable-record dt {
+    color: var(--explorer-text-muted);
+    font-size: 0.68rem;
+    font-weight: 650;
+  }
+
+  .chat-unreadable-record dd {
+    min-width: 0;
+    margin: 0;
+    color: var(--explorer-text);
+    font-size: 0.72rem;
+    overflow-wrap: anywhere;
   }
 
   .chat-attachments {

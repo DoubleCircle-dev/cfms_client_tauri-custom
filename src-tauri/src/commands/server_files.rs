@@ -20,6 +20,13 @@ pub struct ServerTextFile {
     pub truncated: bool,
 }
 
+#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalChatboxReadError {
+    PermissionDenied,
+    ReadFailed,
+}
+
 #[derive(serde::Serialize)]
 pub struct LocalChatboxFile {
     pub name: String,
@@ -27,6 +34,7 @@ pub struct LocalChatboxFile {
     pub kind: String,
     pub size: u64,
     pub content: Option<String>,
+    pub read_error: Option<LocalChatboxReadError>,
     pub truncated: bool,
 }
 
@@ -76,21 +84,23 @@ pub fn open_local_path(app: tauri::AppHandle, path: String) -> Result<(), String
         .map_err(|e| format!("Failed to open file: {e}"))
 }
 
-fn read_text_capped(path: &Path) -> (String, bool) {
-    let Ok(file) = std::fs::File::open(path) else {
-        return (String::new(), false);
-    };
-    let mut buf = Vec::new();
-    if file
-        .take(MAX_LOCAL_TEXT_BYTES + 1)
-        .read_to_end(&mut buf)
-        .is_err()
-    {
-        return (String::new(), false);
+fn local_read_error(error: &std::io::Error) -> LocalChatboxReadError {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        LocalChatboxReadError::PermissionDenied
+    } else {
+        LocalChatboxReadError::ReadFailed
     }
+}
+
+fn read_text_capped(path: &Path) -> Result<(String, bool), LocalChatboxReadError> {
+    let file = std::fs::File::open(path).map_err(|error| local_read_error(&error))?;
+    let mut buf = Vec::new();
+    file.take(MAX_LOCAL_TEXT_BYTES + 1)
+        .read_to_end(&mut buf)
+        .map_err(|error| local_read_error(&error))?;
     let truncated = buf.len() as u64 > MAX_LOCAL_TEXT_BYTES;
     buf.truncate(MAX_LOCAL_TEXT_BYTES as usize);
-    (String::from_utf8_lossy(&buf).into_owned(), truncated)
+    Ok((String::from_utf8_lossy(&buf).into_owned(), truncated))
 }
 
 fn sorted_dir_entries(dir: &Path) -> Vec<PathBuf> {
@@ -152,13 +162,17 @@ pub fn scan_local_chatbox(dir: String) -> Result<Vec<LocalChatboxRoom>, String> 
                 local_attachment_kind(&name).to_string()
             };
             if is_txt {
-                let (content, truncated) = read_text_capped(&path);
+                let (content, truncated, read_error) = match read_text_capped(&path) {
+                    Ok((content, truncated)) => (Some(content), truncated, None),
+                    Err(error) => (None, false, Some(error)),
+                };
                 files.push(LocalChatboxFile {
                     name,
                     path: path.to_string_lossy().into_owned(),
                     kind,
                     size,
-                    content: Some(content),
+                    content,
+                    read_error,
                     truncated,
                 });
             } else {
@@ -168,6 +182,7 @@ pub fn scan_local_chatbox(dir: String) -> Result<Vec<LocalChatboxRoom>, String> 
                     kind,
                     size,
                     content: None,
+                    read_error: None,
                     truncated: false,
                 });
             }
@@ -288,6 +303,24 @@ async fn download_document_to(
     transfer_conn.close().await;
     result.map_err(|e| format!("Document download failed: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{local_read_error, LocalChatboxReadError};
+    use std::io::{Error, ErrorKind};
+
+    #[test]
+    fn classifies_permission_denied_separately_from_other_read_errors() {
+        assert_eq!(
+            local_read_error(&Error::from(ErrorKind::PermissionDenied)),
+            LocalChatboxReadError::PermissionDenied
+        );
+        assert_eq!(
+            local_read_error(&Error::from(ErrorKind::NotFound)),
+            LocalChatboxReadError::ReadFailed
+        );
+    }
 }
 
 /// Open a file inside the local download root with the system default

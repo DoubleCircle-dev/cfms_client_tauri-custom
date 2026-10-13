@@ -61,8 +61,11 @@ export interface LocalChatboxFile {
   kind: string;
   size: number;
   content: string | null;
+  read_error: LocalChatboxReadError | null;
   truncated: boolean;
 }
+
+export type LocalChatboxReadError = 'permission_denied' | 'read_failed';
 
 export interface LocalChatboxRoom {
   id: string;

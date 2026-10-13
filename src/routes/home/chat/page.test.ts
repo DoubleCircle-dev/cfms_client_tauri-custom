@@ -72,6 +72,7 @@ interface RealRoomFixture {
     kind: string;
     size: number;
     content: string | null;
+    read_error?: 'permission_denied' | 'read_failed' | null;
     truncated: boolean;
   }[];
 }
@@ -103,6 +104,35 @@ function roomCards(): HTMLElement[] {
 }
 
 describe('chat page local mode', () => {
+  it('shows a structured explanation for a local record that cannot be read', async () => {
+    localStorage.setItem('cfms:chatbox:mode', 'local');
+    localStorage.setItem('cfms:chatbox:localPath', 'C:/fake/chatbox');
+    mocks.scanLocalChatbox.mockResolvedValue([
+      {
+        id: 'restricted-room',
+        files: [
+          {
+            name: 'restricted-user.txt',
+            path: 'C:/fake/chatbox/restricted-room/restricted-user.txt',
+            kind: 'text',
+            size: 20,
+            content: null,
+            read_error: 'permission_denied',
+            truncated: false,
+          },
+        ],
+      },
+    ]);
+
+    render(ChatPage);
+
+    expect(await screen.findByText('chat.unreadableRecordsTitle')).toBeTruthy();
+    expect(screen.getByText('restricted-user.txt')).toBeTruthy();
+    expect(screen.getByText('chat.localPermissionDenied')).toBeTruthy();
+    expect(screen.getByText('chat.localPermissionAction')).toBeTruthy();
+    expect(screen.queryByText('chat.noMessages')).toBeNull();
+  });
+
   it.skipIf(REAL_ROOMS === null)('updates the room header when switching rooms and uses folder names as room ids', async () => {
     localStorage.setItem('cfms:chatbox:mode', 'local');
     localStorage.setItem('cfms:chatbox:localPath', 'C:/fake/chatbox');
@@ -130,6 +160,41 @@ describe('chat page local mode', () => {
 });
 
 describe('chat page online mode', () => {
+  it('shows a structured explanation when the server denies access to a chat record', async () => {
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', '.runtime', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockImplementation(async (folderId: string | null) => {
+      if (folderId === 'chatbox-folder-id') {
+        return {
+          folders: [{ id: 'restricted-room-id', name: 'restricted-room', created_time: 100 }],
+          documents: [],
+          parent_id: null,
+        };
+      }
+      return {
+        folders: [],
+        documents: [{ id: 'restricted-record-id', title: 'restricted-user.txt' }],
+        parent_id: folderId,
+      };
+    });
+    mocks.readServerDocument.mockRejectedValue(new Error('Access denied: download permission required'));
+
+    render(ChatPage);
+    await waitFor(() => {
+      expect(roomCards().length).toBe(1);
+    });
+
+    const card = roomCards()[0].closest('.chat-room-card') as HTMLElement;
+    await fireEvent.click(card);
+
+    expect(await screen.findByText('chat.unreadableRecordsTitle')).toBeTruthy();
+    expect(screen.getByText('restricted-user.txt')).toBeTruthy();
+    expect(screen.getByText('chat.serverPermissionDenied')).toBeTruthy();
+    expect(screen.getByText('chat.serverPermissionAction')).toBeTruthy();
+    expect(screen.queryByText('chat.noMessages')).toBeNull();
+  });
+
   it('lists rooms by folder name (room id), includes the public room, and displays the folder name in the header', async () => {
     mocks.resolveNodePath.mockResolvedValue({
       node_ids: ['/', '.runtime', 'chatbox-folder-id'],
