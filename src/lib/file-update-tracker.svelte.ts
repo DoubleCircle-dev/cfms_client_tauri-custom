@@ -501,7 +501,9 @@ class FileUpdateTracker {
       revoked,
       restored,
     });
-    await commitPendingFolderHistoryChanges();
+    // Keep folder-state changes pending when updates need confirmation so the
+    // eventual sync snapshot records both changes in one commit.
+    if (outdatedDocs === 0) await commitPendingFolderHistoryChanges();
     return { outdated: outdatedDocs, denied: deniedItems, dirs: checkedDirs, docs: checkedDocs };
   }
 

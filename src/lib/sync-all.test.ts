@@ -8,6 +8,7 @@ import {
   commitPendingFolderHistoryChanges,
   ensureDownloadFolderPlaceholder,
   makeDownloadPath,
+  recordFolderHistoryMarker,
   readLocalDocumentStates,
   syncFiles,
 } from './sync-all.svelte';
@@ -361,6 +362,18 @@ describe('syncFiles (cached queue)', () => {
     files.computeLocalSha256.mockResolvedValue({ 'b.txt': 'S' });
     await syncFiles({ queue: [{ docId: 'd2', path: 'b.txt', sha256: 'S' }] });
     expect(files.downloadGitCommit).not.toHaveBeenCalled();
+  });
+
+  it('commits pending folder changes with confirmed file updates in one snapshot', async () => {
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+    files.downloadGitCommit.mockResolvedValue('combined-commit');
+    recordFolderHistoryMarker('* folder permission restored: locked');
+
+    await syncFiles({ queue: [{ docId: 'd1', path: 'fresh.txt', sha256: 'S' }] });
+
+    expect(files.downloadGitCommit).toHaveBeenCalledOnce();
+    expect(files.downloadGitCommit.mock.calls[0][0]).toContain('+1');
+    expect(files.downloadGitCommit.mock.calls[0][0]).toContain('*1');
   });
 });
 

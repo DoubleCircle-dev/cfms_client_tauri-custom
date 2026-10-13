@@ -488,6 +488,44 @@ describe('what a check reports', () => {
     expect(placeholders.commitPendingFolderHistoryChanges).toHaveBeenCalledOnce();
   });
 
+  it('defers folder history commits while file updates await confirmation', async () => {
+    const deniedMarker = 'locked/.cfms-no-folder-access';
+    files.checkDownloadsExist.mockResolvedValue([deniedMarker]);
+    vi.mocked(readLocalDocumentStates).mockImplementation(async (documents, pathParts) =>
+      documents.length === 0
+        ? []
+        : [{
+          doc: documents[0],
+          path: [...pathParts, documents[0].title].join('/'),
+          localHash: null,
+          existsLocally: false,
+          isCurrent: false,
+          mismatched: false,
+        }]);
+    const listFn = vi.fn(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'locked-folder', name: 'locked', created_time: null }], documents: [] }
+        : {
+          folders: [],
+          documents: [{
+            id: 'fresh',
+            title: 'fresh.txt',
+            size: 1,
+            last_modified: null,
+            sha256: 'HASH',
+          }],
+        },
+    );
+
+    const result = await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(result.outdated).toBe(1);
+    expect(placeholders.recordFolderHistoryMarker).toHaveBeenCalledWith(
+      '* folder permission restored: locked',
+    );
+    expect(placeholders.commitPendingFolderHistoryChanges).not.toHaveBeenCalled();
+  });
+
   it('offers a document whose access check failed for reasons other than a refusal', async () => {
     // A dropped connection says nothing about permission. Hiding the update
     // would be a silent lie; the next check can ask again.
