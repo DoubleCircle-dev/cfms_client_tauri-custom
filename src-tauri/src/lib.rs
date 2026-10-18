@@ -9,6 +9,7 @@
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod background;
 mod commands;
+mod file_auto_check;
 mod github_credentials;
 mod local_data_reset;
 mod localization;
@@ -253,6 +254,9 @@ pub struct AppHandleState {
     /// Application data directory (for persistence file paths).
     pub app_data_dir: PathBuf,
 
+    /// Automatic file-update check scheduler shared with its service.
+    pub file_auto_check: Arc<file_auto_check::FileAutoCheckRuntime>,
+
     /// Background service manager.  Wrapped in Arc+Mutex so it can be
     /// activated on the async runtime and later shut down.
     pub service_manager: Arc<tokio::sync::Mutex<Option<ServiceManager>>>,
@@ -323,7 +327,11 @@ pub(crate) fn local_ip_addresses() -> Vec<std::net::IpAddr> {
     let mut seen = HashSet::new();
     let mut addresses = Vec::new();
     for probe in PROBES {
-        let bind_addr = if probe.starts_with('[') { "[::]:0" } else { "0.0.0.0:0" };
+        let bind_addr = if probe.starts_with('[') {
+            "[::]:0"
+        } else {
+            "0.0.0.0:0"
+        };
         let Ok(socket) = std::net::UdpSocket::bind(bind_addr) else {
             continue;
         };
@@ -507,6 +515,14 @@ pub fn run() {
                         cfms_service::services::download_queue::run(s, t, a, rx).await;
                     }
                 });
+
+                // Automatic file-update checks. Owned here (rather than by the
+                // Webview) so the interval keeps running while the app is
+                // backgrounded on mobile; see `file_auto_check`.
+                let check_app = app.handle().clone();
+                service_manager.register("file_auto_check", move |rx| async move {
+                    crate::file_auto_check::run(check_app, rx).await;
+                });
             }
 
             // --- Wrap service manager in Arc<Mutex<Option<...>>> ---
@@ -560,6 +576,7 @@ pub fn run() {
                 #[cfg(target_os = "android")]
                 pending_mobile_update,
                 app_data_dir: app_data_dir.clone(),
+                file_auto_check: Arc::new(file_auto_check::FileAutoCheckRuntime::new()),
                 service_manager: sm,
             });
 
@@ -669,6 +686,8 @@ pub fn run() {
             commands::download_git_commit,
             commands::get_setting,
             commands::set_setting,
+            commands::get_file_auto_check_state,
+            commands::rebase_file_auto_check_schedule,
             commands::get_extension_overview,
             commands::import_extension_package,
             commands::refresh_extension_catalog,
