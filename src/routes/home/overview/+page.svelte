@@ -383,7 +383,7 @@
   });
 </script>
 
-<div class="workspace-page blueprint-home mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 sm:p-5">
+<div class="workspace-page blueprint-home mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 pb-[max(1rem,var(--safe-area-bottom))] sm:p-5 sm:pb-[max(1.25rem,var(--safe-area-bottom))]">
   <section class="blueprint-hero overflow-hidden">
     <div class="relative z-10 grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:p-6">
       <div class="blueprint-hero-copy min-w-0">
@@ -526,30 +526,41 @@
       <div class="check-history-list">
         {#each historyRows.slice(0, fileUpdateTracker.checkHistoryLimit) as row, index (`${row.kind}:${index}`)}
           {#if row.kind === 'quiet'}
-            <div class="check-history-row" class:has-detail={row.entries[0].items.length > 0}>
+            {@const entry = row.entries[0]}
+            {@const expandable = entry.items.length > 0}
+            {@const expanded = expandedHistory.has(entry.time)}
+            <div class="check-history-row" class:has-detail={expandable}>
               <button
                 type="button"
                 class="check-history-main"
-                disabled={row.entries[0].items.length === 0}
-                onclick={() => toggleHistoryRow(row.entries[0].time)}
+                disabled={!expandable}
+                aria-expanded={expandable ? expanded : undefined}
+                onclick={() => toggleHistoryRow(entry.time)}
               >
                 <span class="check-history-icon">✅</span>
                 <span class="check-history-time">{quietRange(row.entries)}</span>
-                <span class="check-history-summary">
-                  {row.entries.length > 1
-                    ? $t('files.checkHistoryMerged', { values: { count: row.entries.length } })
-                    : $t('files.checkHistoryNoChanges')}
+                <span class="check-history-info">
+                  <span class="check-history-summary">
+                    {row.entries.length > 1
+                      ? $t('files.checkHistoryMerged', { values: { count: row.entries.length } })
+                      : $t('files.checkHistoryNoChanges')}
+                  </span>
+                  <span class="check-history-meta">
+                    {$t('files.checkHistoryScope', { values: { dirs: entry.dirs, docs: entry.docs } })}
+                  </span>
                 </span>
-                <span class="check-history-meta">
-                  {$t('files.checkHistoryScope', { values: { dirs: row.entries[0].dirs, docs: row.entries[0].docs } })}
-                </span>
+                {#if expandable}
+                  <span class="check-history-chevron" class:open={expanded} aria-hidden="true">
+                    <Icon name="expandMore" size="18px" />
+                  </span>
+                {/if}
               </button>
-              {#if row.entries[0].items.length > 0}
-                <div class="check-history-files" class:open={expandedHistory.has(row.entries[0].time)}>
+              {#if expandable}
+                <div class="check-history-files" class:open={expanded}>
                   <span class="check-history-files-title">
                     {$t('files.checkHistoryFilesTitle')}
                   </span>
-                  {#each row.entries[0].items as item (item.id)}
+                  {#each entry.items as item (item.id)}
                     <span class="check-history-file">
                       <span class="check-history-file-kind" data-kind={item.kind}>
                         {historyKindLabel(item.kind)}
@@ -557,48 +568,59 @@
                       <span class="check-history-file-path" title={item.path}>{item.path}</span>
                     </span>
                   {/each}
-                  {#if row.entries[0].hidden > 0}
-                    <span class="check-history-file-more">+{row.entries[0].hidden}</span>
+                  {#if entry.hidden > 0}
+                    <span class="check-history-file-more">+{entry.hidden}</span>
                   {/if}
                 </div>
               {/if}
             </div>
           {:else}
-            <div class="check-history-row" class:has-detail={row.entry.items.length > 0}>
+            {@const entry = row.entry}
+            {@const expandable = entry.items.length > 0}
+            {@const expanded = expandedHistory.has(entry.time)}
+            <div class="check-history-row" class:has-detail={expandable}>
               <button
                 type="button"
                 class="check-history-main"
-                disabled={row.entry.items.length === 0}
-                onclick={() => toggleHistoryRow(row.entry.time)}
+                disabled={!expandable}
+                aria-expanded={expandable ? expanded : undefined}
+                onclick={() => toggleHistoryRow(entry.time)}
               >
-                <span class="check-history-icon">{row.entry.eventType === 'access_rules' ? '🔐' : '🔔'}</span>
-                <span class="check-history-time">{formatCheckTime(row.entry.time)}</span>
-                <span class="check-history-summary">
-                  {row.entry.eventType === 'access_rules'
-                    ? $t('files.checkHistoryAccessRules', { values: { count: row.entry.items.length + row.entry.hidden } })
-                    : row.entry.revoked > 0 || row.entry.restored > 0
-                      ? historyAccessTransitionSummary(row.entry)
-                    : $t('files.checkHistoryUpdates', { values: { count: row.entry.changed } })}
-                </span>
-                {#if row.entry.eventType === 'check' && row.entry.denied > 0}
-                  <span class="check-history-denied">
-                    🔒 {$t('files.checkHistoryDenied', { values: { count: row.entry.denied } })}
+                <span class="check-history-icon">{entry.eventType === 'access_rules' ? '🔐' : '🔔'}</span>
+                <span class="check-history-time">{formatCheckTime(entry.time)}</span>
+                <span class="check-history-info">
+                  <span class="check-history-summary">
+                    {entry.eventType === 'access_rules'
+                      ? $t('files.checkHistoryAccessRules', { values: { count: entry.items.length + entry.hidden } })
+                      : entry.revoked > 0 || entry.restored > 0
+                        ? historyAccessTransitionSummary(entry)
+                      : $t('files.checkHistoryUpdates', { values: { count: entry.changed } })}
                   </span>
-                {/if}
-                {#if row.entry.eventType === 'check'}
-                  <span class="check-history-meta">
-                    {$t('files.checkHistoryScope', { values: { dirs: row.entry.dirs, docs: row.entry.docs } })}
+                  {#if entry.eventType === 'check' && entry.denied > 0}
+                    <span class="check-history-denied">
+                      🔒 {$t('files.checkHistoryDenied', { values: { count: entry.denied } })}
+                    </span>
+                  {/if}
+                  {#if entry.eventType === 'check'}
+                    <span class="check-history-meta">
+                      {$t('files.checkHistoryScope', { values: { dirs: entry.dirs, docs: entry.docs } })}
+                    </span>
+                  {/if}
+                </span>
+                {#if expandable}
+                  <span class="check-history-chevron" class:open={expanded} aria-hidden="true">
+                    <Icon name="expandMore" size="18px" />
                   </span>
                 {/if}
               </button>
-              {#if row.entry.items.length > 0}
-                <div class="check-history-files" class:open={expandedHistory.has(row.entry.time)}>
+              {#if expandable}
+                <div class="check-history-files" class:open={expanded}>
                   <span class="check-history-files-title">
-                    {$t(row.entry.eventType === 'access_rules'
+                    {$t(entry.eventType === 'access_rules'
                       ? 'files.checkHistoryAccessRulesItemsTitle'
                       : 'files.checkHistoryFilesTitle')}
                   </span>
-                  {#each row.entry.items as item (item.id)}
+                  {#each entry.items as item (item.id)}
                     <span class="check-history-file">
                       <span class="check-history-file-kind" data-kind={item.kind}>
                         {historyKindLabel(item.kind)}
@@ -606,8 +628,8 @@
                       <span class="check-history-file-path" title={item.path}>{item.path}</span>
                     </span>
                   {/each}
-                  {#if row.entry.hidden > 0}
-                    <span class="check-history-file-more">+{row.entry.hidden}</span>
+                  {#if entry.hidden > 0}
+                    <span class="check-history-file-more">+{entry.hidden}</span>
                   {/if}
                 </div>
               {/if}
@@ -739,10 +761,18 @@
     font: inherit;
     font-size: 0.75rem;
     cursor: pointer;
+    touch-action: manipulation;
+    transition: background-color 120ms ease, transform 120ms ease;
   }
 
-  .check-history-action:hover:not(:disabled) {
-    background: var(--explorer-surface-hover);
+  .check-history-action:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  @media (hover: hover) {
+    .check-history-action:hover:not(:disabled) {
+      background: var(--explorer-surface-hover);
+    }
   }
 
   .check-history-action.danger {
@@ -784,33 +814,14 @@
     font-weight: 500;
   }
 
-  @media (max-width: 640px) {
-    .check-history-header {
-      grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    .check-history-heading {
-      grid-column: 1 / -1;
-    }
-
-    .check-countdown {
-      grid-column: 1;
-      grid-row: 2;
-      justify-self: start;
-    }
-
-    .check-history-actions {
-      grid-column: 2;
-      grid-row: 2;
-    }
-  }
-
   .check-history-list {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
     max-height: 320px;
+    max-height: min(320px, 46dvh);
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .check-history-row {
@@ -826,6 +837,7 @@
     align-items: center;
     gap: 0.5rem;
     width: 100%;
+    min-height: 2rem;
     padding: 0.35rem 0.4rem;
     border-radius: 4px;
     background: transparent;
@@ -833,14 +845,28 @@
     font: inherit;
     text-align: start;
     cursor: pointer;
+    touch-action: manipulation;
   }
 
   .check-history-main:disabled {
     cursor: default;
   }
 
-  .check-history-row:hover {
+  .check-history-main:active:not(:disabled) {
     background: var(--explorer-surface-hover);
+  }
+
+  /* Wide rows keep the chips as direct flex children; narrow rows promote this
+     wrapper into the second line of the row grid so a long timestamp can no
+     longer squeeze the summary off the row. */
+  .check-history-info {
+    display: contents;
+  }
+
+  @media (hover: hover) {
+    .check-history-row:hover {
+      background: var(--explorer-surface-hover);
+    }
   }
 
   .check-history-icon {
@@ -872,6 +898,19 @@
     flex: none;
     font-size: 0.7rem;
     opacity: 0.7;
+  }
+
+  .check-history-chevron {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--explorer-text-muted);
+    transition: transform 200ms var(--motion-easing-emphasized-decelerate);
+  }
+
+  .check-history-chevron.open {
+    transform: rotate(180deg);
   }
 
   .check-history-files {
@@ -928,5 +967,158 @@
   .check-history-file-more {
     font-size: 0.7rem;
     opacity: 0.7;
+  }
+
+  /* -------------------------------------------------------------------------
+   * Narrow layout — phones, tablets without the navigation rail, and narrow
+   * desktop windows. The query measures the routed content column rather than
+   * the viewport, so it also reacts when the navigation rail collapses at
+   * 820px instead of only when the device itself is small.
+   *
+   * A record becomes two lines (icon + timestamp + chevron, then the summary
+   * chips) so a full-timestamp locale string can no longer squeeze the summary
+   * or the scope off the row. The inner list stops scrolling so the page owns
+   * the scroll and touch gestures are never trapped inside the panel.
+   * ---------------------------------------------------------------------- */
+  @container (max-width: 36rem) {
+    .check-history-header {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.5rem 0.6rem;
+    }
+
+    .check-history-heading {
+      grid-column: 1 / -1;
+      flex-wrap: wrap;
+      row-gap: 0.3rem;
+    }
+
+    .check-history-badge {
+      flex: none;
+      white-space: nowrap;
+    }
+
+    .check-countdown {
+      grid-column: 1;
+      grid-row: 2;
+      justify-self: start;
+    }
+
+    .check-history-actions {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .check-history-action {
+      min-height: 2.75rem;
+      padding: 0.4rem 0.7rem;
+      font-size: 0.8rem;
+    }
+
+    .check-history-list {
+      max-height: none;
+      overflow: visible;
+      overscroll-behavior: auto;
+    }
+
+    .check-history-row {
+      font-size: 0.82rem;
+    }
+
+    .check-history-main {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        'icon time chevron'
+        'info info info';
+      gap: 0.25rem 0.45rem;
+      padding: 0.55rem 0.45rem;
+    }
+
+    .check-history-icon {
+      grid-area: icon;
+      width: auto;
+      font-size: 1rem;
+    }
+
+    .check-history-time {
+      grid-area: time;
+      min-width: 0;
+      font-variant-numeric: tabular-nums;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .check-history-info {
+      display: flex;
+      grid-area: info;
+      min-width: 0;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.3rem 0.45rem;
+    }
+
+    .check-history-summary {
+      flex: 1 1 auto;
+      min-width: 8rem;
+    }
+
+    .check-history-denied {
+      white-space: nowrap;
+    }
+
+    .check-history-meta {
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .check-history-chevron {
+      grid-area: chevron;
+    }
+
+    .check-history-files {
+      margin: 0 0 0.45rem;
+      padding-left: 0.6rem;
+    }
+
+    .check-history-file {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.1rem;
+      padding-block: 0.15rem;
+    }
+
+    .check-history-file-kind {
+      min-width: 0;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    /* Touch devices cannot hover, so an ellipsised path would be unreadable:
+       let long paths wrap onto as many lines as they need instead. */
+    .check-history-file-path {
+      overflow: visible;
+      white-space: normal;
+      text-overflow: clip;
+      overflow-wrap: anywhere;
+      line-height: 1.45;
+    }
+  }
+
+  @container (max-width: 22rem) {
+    .check-countdown {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+
+    .check-history-actions {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      justify-self: stretch;
+      width: 100%;
+    }
+
+    .check-history-action {
+      flex: 1 1 0;
+    }
   }
 </style>
