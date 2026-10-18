@@ -5,9 +5,6 @@
   import {
     getDirectoryInfo,
     getDocument,
-    getFileAutoDetectOnStartup,
-    getFileAutoUpdateSettings,
-    getSyncOverwriteStrategy,
     loadUserPreference,
     listDirectory,
     type SyncOverwriteStrategy,
@@ -44,6 +41,7 @@
     type PendingUpdateItem,
   } from '$lib/file-update-tracker.svelte';
   import { makeDownloadPath, syncAllCoordinator, syncFiles } from '$lib/sync-all.svelte';
+  import { refreshFileAutoCheckState } from '$lib/file-auto-check-events';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   let recent = $state<RecentFileRecord[]>([]);
@@ -52,11 +50,6 @@
   let loadingFavorites = $state(true);
   let openingId = $state<string | null>(null);
   let recordRecentVisits = $state(true);
-  let autoFileDetectOnStartup = $state(false);
-  let autoFileUpdateEnabled = $state(true);
-  let autoFileUpdateIntervalMinutes = $state(60);
-  let autoFileUpdateAutoDownload = $state(false);
-  let syncOverwriteStrategy = $state<SyncOverwriteStrategy>('backup_rename');
   let queueBusy = $state(false);
 
   onMount(async () => {
@@ -66,63 +59,20 @@
       recordRecentVisits = shouldRecordRecentVisits(preferences);
       recent = await loadRecentVisits(scope);
       favorites = await loadFavoriteRecords(scope);
-      autoFileDetectOnStartup = await getFileAutoDetectOnStartup();
-      const autoSettings = await getFileAutoUpdateSettings();
-      autoFileUpdateEnabled = autoSettings.enabled;
-      autoFileUpdateIntervalMinutes = autoSettings.intervalMinutes;
-      autoFileUpdateAutoDownload = autoSettings.autoDownload;
-      syncOverwriteStrategy = await getSyncOverwriteStrategy();
     } catch {
       recent = [];
       favorites = [];
       recordRecentVisits = true;
-      autoFileDetectOnStartup = false;
-      autoFileUpdateEnabled = true;
-      autoFileUpdateIntervalMinutes = 60;
-      autoFileUpdateAutoDownload = false;
     } finally {
       loadingRecent = false;
       loadingFavorites = false;
     }
 
-    // Run one automatic full detection at startup only when the user enabled
-    // it (default off) — a sub-option of the "enable automatic checks" master
-    // switch. It runs exactly once per login and behaves exactly like a
-    // periodic automatic check: diffs are enqueued, and they auto-download
-    // immediately when the "download updates immediately" option is on.
-    //
-    // The flag lives on the tracker and is per account, so signing in as
-    // somebody else within the same run gets its own check instead of being
-    // suppressed by the previous user's.
-    if (autoFileUpdateEnabled && autoFileDetectOnStartup && !fileUpdateTracker.initialScanDone) {
-      fileUpdateTracker.initialScanDone = true;
-      console.log('%c[cfms:check] Startup detection after login…', 'color:#4fc3f7');
-      try {
-        await runAutomaticDetection();
-      } catch (err) {
-        console.warn('[cfms:check] Startup detection failed:', err);
-      }
-    }
-
-    // Start persistent polling (survives page navigation) using user settings.
-    // Remounting with an unchanged interval adopts the running schedule so the
-    // countdown is not reset by navigation — only manual checks and interval
-    // changes rebase it.
-    if (autoFileUpdateEnabled) {
-      const intervalMs = autoFileUpdateIntervalMinutes * 60 * 1000;
-      const poll = async () => {
-        try {
-          await runAutomaticDetection();
-        } catch (err) {
-          console.warn('[cfms:check] Poll failed:', err);
-        }
-      };
-      if (!fileUpdateTracker.adoptPolling(poll, intervalMs)) {
-        fileUpdateTracker.startPolling(poll, intervalMs);
-      }
-    } else {
-      fileUpdateTracker.stopPolling();
-    }
+    // The interval, the startup check and the automatic downloads are owned by
+    // the Rust background service (see `$lib/file-auto-check`), which is also
+    // what keeps checking after the app is backgrounded. This page only mirrors
+    // the state it publishes.
+    await refreshFileAutoCheckState();
   });
 
   async function openRecord(record: FileRecord) {
@@ -372,17 +322,6 @@
       notificationStore.success($t('files.noChangesDetected'), 2500);
     }
     return result.outdated;
-  }
-
-  /** Shared automatic-detection step used by the startup check and the
-   *  periodic poll: detect changes (enqueueing diffs), then auto-download
-   *  immediately when the "download updates immediately" option is on. */
-  async function runAutomaticDetection() {
-    const changes = await detectAndQueueServerChanges();
-    if (changes > 0 && autoFileUpdateAutoDownload) {
-      // Automatic download: apply the configured strategy silently.
-      await confirmQueuedUpdates(syncOverwriteStrategy);
-    }
   }
 
   /** Confirm queued updates.

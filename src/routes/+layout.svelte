@@ -20,6 +20,7 @@
   import { _ as t } from "svelte-i18n";
   import { onBackButtonPress } from "@tauri-apps/api/app";
   import { initEventListeners } from "$lib/events";
+  import { initFileAutoCheck, disposeFileAutoCheck } from "$lib/file-auto-check-events";
   import { initI18n } from "$lib/i18n";
   import { initNavigationHistory, navigateUp, parentRouteFor } from "$lib/navigation";
   import { appUpdateState } from "$lib/app-update-state.svelte";
@@ -305,6 +306,11 @@
     // Start listening for backend events.
     await initEventListeners();
 
+    // Follow the Rust background file-update checker (schedule + reports). Its
+    // interval keeps running while the app is backgrounded, so the UI only has
+    // to mirror what it publishes.
+    await initFileAutoCheck();
+
     // Diagnostic: log the local host IP addresses to the DevTools console.
     try {
       const localIps = await getLocalIpAddresses();
@@ -353,7 +359,10 @@
     if (!resetRecoveryMode) appearanceStore.init();
   });
 
-  onMount(() => () => appUpdateState.disposeAutomaticChecks());
+  onMount(() => () => {
+    appUpdateState.disposeAutomaticChecks();
+    disposeFileAutoCheck();
+  });
 
   $effect(() => {
     if (resetRecoveryMode) return;
