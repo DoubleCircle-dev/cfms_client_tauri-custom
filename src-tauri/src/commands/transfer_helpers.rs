@@ -47,7 +47,7 @@ fn default_download_root(app_handle: &tauri::AppHandle) -> Result<std::path::Pat
 
 /// Resolve the download root directory, respecting the user's external storage
 /// preference when configured.
-async fn resolve_download_root(
+pub(crate) async fn resolve_download_root(
     app_handle: &tauri::AppHandle,
     state: &AppHandleState,
 ) -> Result<std::path::PathBuf, String> {
@@ -851,7 +851,7 @@ fn collect_directory_entries(root: &std::path::Path) -> Result<Vec<std::path::Pa
     Ok(entries)
 }
 
-async fn server_action_json(
+pub(crate) async fn server_action_json(
     state: &AppHandleState,
     action: &str,
     data: serde_json::Value,
