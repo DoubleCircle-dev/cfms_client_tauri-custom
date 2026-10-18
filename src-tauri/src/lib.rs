@@ -12,6 +12,7 @@ mod commands;
 mod github_credentials;
 mod local_data_reset;
 mod localization;
+mod mobile_keepalive;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
