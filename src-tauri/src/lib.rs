@@ -599,7 +599,7 @@ pub fn run() {
             tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?.build()?;
 
             // Dev mode: auto-open the vulnerability testing tool in a separate window.
-            #[cfg(debug_assertions)]
+            #[cfg(all(debug_assertions, not(any(target_os = "android", target_os = "ios"))))]
             {
                 let _ = tauri::WebviewWindowBuilder::new(
                     app.handle(),

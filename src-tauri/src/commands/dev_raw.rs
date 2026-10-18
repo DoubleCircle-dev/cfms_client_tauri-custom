@@ -209,20 +209,23 @@ pub async fn fetch_server_page(
 /// Only available in debug builds.
 #[tauri::command]
 #[allow(unused)]
-pub async fn open_dev_tools_window(
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    use tauri::WebviewWindowBuilder;
+pub async fn open_dev_tools_window(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        use tauri::WebviewWindowBuilder;
 
-    // Check if the window is already open
-    if let Some(existing) = app.get_webview_window("dev-tools") {
-        existing
-            .set_focus()
-            .map_err(|e| format!("Failed to focus dev-tools window: {e}"))?;
-        return Ok(());
-    }
+        if let Some(existing) = app.get_webview_window("dev-tools") {
+            existing
+                .set_focus()
+                .map_err(|e| format!("Failed to focus dev-tools window: {e}"))?;
+            return Ok(());
+        }
 
-    WebviewWindowBuilder::new(&app, "dev-tools", tauri::WebviewUrl::App("/dev/server-vuln-test".into()))
+        WebviewWindowBuilder::new(
+            &app,
+            "dev-tools",
+            tauri::WebviewUrl::App("/dev/server-vuln-test".into()),
+        )
         .title("CFMS 漏洞测试工具")
         .inner_size(960.0, 720.0)
         .min_inner_size(640.0, 480.0)
@@ -231,5 +234,12 @@ pub async fn open_dev_tools_window(
         .build()
         .map_err(|e| format!("Failed to create dev-tools window: {e}"))?;
 
-    Ok(())
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = app;
+        Err("Developer tools window is only available on desktop".into())
+    }
 }
