@@ -4,6 +4,23 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.53.0
+**Released on:** 2026-10-22
+
+**Title:** [Security] Batch Operations for Access Rules 
+
+**WARNING:** Due to a recently disclosed CA certificate incident, all client versions prior to this release should now be considered insecure. This version addresses the issue by updating the `webpki-roots` dependency; therefore, please upgrade to this version as soon as possible, if you are able to do so.
+
+### Maintenance
+- Update cargo.lock
+
+### Added
+- Update batch access rules dialog title
+- Enhance modal keyboard handling and dialog management
+- Add batch access rules dialog and controller tests
+
+--- 
+
 ## v0.52.0
 **Released on:** 2026-09-29
 
