@@ -47,8 +47,8 @@ hmac = "0.13"
 rand = "0.10"
 zeroize = { version = "1", features = ["derive"] }
 base64ct = { version = "1", features = ["alloc"] }
-ed25519-dalek = "2"
-zip = { version = "4", default-features = false, features = ["deflate"] }
+ed25519-dalek = "3"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 # ---------------------------------------------------------------------------
 # Database
@@ -82,7 +82,7 @@ unic-langid = "0.9"
 # Tauri
 # ---------------------------------------------------------------------------
 tauri = { version = "2", features = ["protocol-asset"] }
-tauri-plugin-background-service = "0.7"
+tauri-plugin-background-service = "1.0"
 tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
