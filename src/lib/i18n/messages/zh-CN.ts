@@ -3,7 +3,6 @@ export const zh_CN = {
     signInOptions: "登录选项",
     passwordOption: "密码",
     keyOption: "公钥",
-    passwordTitle: "使用密码登录",
     keyTitle: "使用公钥登录",
     help: "选择与此账户已登记公钥对应的私钥。",
     chooseFile: "选择私钥文件",
@@ -1437,8 +1436,6 @@ export const zh_CN = {
     forgotPassword: {
       title: '忘记密码',
       contactAdmin: '若要在忘记密码的情况下恢复对您账户的访问权限，请联系您的系统管理员。',
-      encryptionWarning:
-        '请注意，重置密码无法同步更新已利用旧密码加密的数据加密密钥，因此若您确实忘记了旧密码，您将无法解密客户端本地的用户偏好文件。',
       confirm: '知道了',
     },
     twoFactor: {

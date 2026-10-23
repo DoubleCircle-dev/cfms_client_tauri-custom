@@ -3,7 +3,6 @@ export const en = {
     signInOptions: "Sign-in options",
     passwordOption: "Password",
     keyOption: "Public key",
-    passwordTitle: "Sign in with your password",
     keyTitle: "Sign in with your public key",
     help: "Select the private key matching a public key registered for this account.",
     chooseFile: "Choose private key",
@@ -1448,8 +1447,6 @@ export const en = {
       title: 'Forgot Password',
       contactAdmin:
         'To restore access to your account after forgetting your password, contact your system administrator.',
-      encryptionWarning:
-        'Please note that resetting your password cannot also update the data encryption key that was encrypted with your old password. If you truly forgot the old password, you will not be able to decrypt the local user preference file on this client.',
       confirm: 'OK',
     },
     twoFactor: {

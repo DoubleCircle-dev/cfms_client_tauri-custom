@@ -941,7 +941,6 @@
 
         <div class="login-credential-region" style:height={credentialHeight ? `${credentialHeight}px` : undefined}>
         <div class="login-credential-content" use:measureCredential>
-        <h1 class="login-method-title">{$t(loginMethod === 'password' ? 'publicKey.passwordTitle' : 'publicKey.keyTitle')}</h1>
         {#if loginMethod === 'password'}
         <div>
           <MdOutlinedField
@@ -982,6 +981,11 @@
               {fieldErrors.password}
             </p>
           {/if}
+          <div class="password-field-actions">
+            <button type="button" class="forgot-password-button" onclick={() => (showForgotPasswordDialog = true)} disabled={busy}>
+              {$t('login.forgotPassword')}
+            </button>
+          </div>
         </div>
 
         {:else}
@@ -1054,11 +1058,6 @@
           <button type="button" class="login-disconnect" onclick={handleDisconnect} disabled={busy}>
             <Icon name="chevronLeft" size="16px" />{$t('login.disconnect')}
           </button>
-          {#if loginMethod === 'password'}
-            <button type="button" class="forgot-password-button" onclick={() => (showForgotPasswordDialog = true)} disabled={busy}>
-              {$t('login.forgotPassword')}
-            </button>
-          {/if}
         </div>
       </form>
         </div>
@@ -1120,7 +1119,6 @@
     <div class="space-y-5 p-5">
       <div class="space-y-4 text-sm leading-6 text-md3-on-surface-variant">
         <p>{$t('dialog.forgotPassword.contactAdmin')}</p>
-        <p>{$t('dialog.forgotPassword.encryptionWarning')}</p>
       </div>
 
       <div class="flex justify-end">
@@ -1136,9 +1134,15 @@
 {/if}
 
 <style>
+  .password-field-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.25rem;
+  }
+
   .forgot-password-button {
     border: 0;
-    padding: 0.375rem 0.75rem;
+    padding: 0.375rem 0;
     color: var(--explorer-accent);
     background: transparent;
     font-family: var(--font-md3-sans);
@@ -1174,12 +1178,11 @@
     border: 0;
     padding: 0;
   }
-  .login-credential-region { min-height: 116px; transition: height 180ms var(--motion-easing-standard, ease-out); }
-  .login-credential-content { padding: 2px; }
+  .login-credential-region { transition: height 180ms var(--motion-easing-standard, ease-out); }
+  .login-credential-content { padding: 2px 0; }
   .auth-panel { max-height: calc(100dvh - var(--app-titlebar-height, 0px)); overflow-y: auto; overscroll-behavior-y: contain; }
   @media (max-height: 800px) { .auth-shell .auth-panel { align-items: flex-start; padding-top: 1.5rem; padding-bottom: 1.5rem; } }
   @media (prefers-reduced-motion: reduce) { .login-credential-region { transition: none; } }
-  .login-method-title { margin: 0 0 1rem; color: var(--explorer-text); font-size: 1.125rem; font-weight: 600; text-align: center; }
   .login-primary-action { display: flex; align-items: center; justify-content: center; gap: 0.625rem; width: 100%; min-height: 44px; margin-top: 1.5rem; border: 0; border-radius: 8px; background: var(--explorer-accent); color: var(--color-md3-on-primary); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: filter 140ms ease; }
   .login-primary-action:hover:not(:disabled) { filter: brightness(1.08); }
   .login-primary-action:disabled { opacity: 0.5; cursor: default; }

@@ -36,21 +36,58 @@ beforeEach(() => {
 afterEach(() => { cleanup(); authStore.clear(); serverStateStore.clear(); vi.clearAllMocks(); });
 async function publicKeyForm() {
   await fireEvent.input(screen.getByLabelText('Username'), { target: { value: 'alice' } });
-  await fireEvent.click(screen.getByRole('radio', { name: 'Public key' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Sign-in options' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Public key' }));
   await fireEvent.click(screen.getByRole('button', { name: /Choose private key/ }));
   await screen.findByText('id_ed25519');
   return screen.getByRole('button', { name: 'Login' }).closest('form')!;
 }
 describe('dual-method sign-in', () => {
+  it('starts with collapsed options and toggles the icon buttons without changing the selected method', async () => {
+    render(LoginPage);
+    const toggle = screen.getByRole('button', { name: 'Sign-in options' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Public key' })).toBeNull();
+    await fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Password' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(screen.getByRole('button', { name: 'Public key' }));
+    expect(screen.getByRole('button', { name: 'Public key' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Public key' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Choose private key/ })).toBeTruthy();
+    await fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Public key' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows recovery help beside the password field without an obsolete encryption warning', async () => {
+    render(LoginPage);
+    expect(screen.queryByRole('heading', { name: 'Sign in with your password' })).toBeNull();
+    const recovery = screen.getByRole('button', { name: 'Forgot password?' });
+    const field = screen.getByLabelText('Password', { selector: 'input' });
+    expect(field.closest('.login-credential-content')?.contains(recovery)).toBe(true);
+    await fireEvent.click(recovery);
+    const dialog = await screen.findByRole('dialog', { name: 'Forgot Password' });
+    expect(dialog.textContent).toContain('contact your system administrator');
+    expect(dialog.textContent).not.toContain('data encryption key');
+    await fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Sign-in options' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Public key' }));
+    expect(screen.queryByRole('button', { name: 'Forgot password?' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Sign in with your public key' })).toBeNull();
+  });
+
   it('preserves username and clears the password when changing methods', async () => {
     render(LoginPage);
     await fireEvent.input(screen.getByLabelText('Username'), { target: { value: 'alice' } });
-    await fireEvent.input(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-    await fireEvent.click(screen.getByRole('radio', { name: 'Public key' }));
+    await fireEvent.input(screen.getByLabelText('Password', { selector: 'input' }), { target: { value: 'secret' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Sign-in options' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Public key' }));
     expect((screen.getByLabelText('Username') as HTMLInputElement).value).toBe('alice');
-    expect(screen.queryByLabelText('Password')).toBeNull();
-    await fireEvent.click(screen.getByRole('radio', { name: 'Password' }));
-    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe('');
+    expect(screen.queryByLabelText('Password', { selector: 'input' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Password' }));
+    expect((screen.getByLabelText('Password', { selector: 'input' }) as HTMLInputElement).value).toBe('');
   });
   it('does not repeat a public-key request and unlocks a provisioned device without any account password', async () => {
     render(LoginPage);
