@@ -51,6 +51,7 @@
   import ResetUserPasswordDialog from '$lib/components/ResetUserPasswordDialog.svelte';
   import SecurityManagement from '$lib/components/SecurityManagement.svelte';
   import UserAvatarPicker from '$lib/components/UserAvatarPicker.svelte';
+  import AuthenticationManagement from '$lib/components/AuthenticationManagement.svelte';
   import type { ContextMenuItem } from '$lib/components/context-menu';
   import type { IconName } from '$lib/icons';
   import type { PermissionEntriesEditorData } from '$lib/permission-entries';
@@ -74,6 +75,7 @@
     | { kind: 'user-groups'; user: ManagedUser }
     | { kind: 'user-permissions'; user: ManagedUser }
     | { kind: 'user-avatar'; user: ManagedUser }
+    | { kind: 'user-authentication'; user: ManagedUser }
     | { kind: 'reset-password'; user: ManagedUser }
     | {
         kind: 'account-management';
@@ -127,7 +129,7 @@
   let status = $state<string | null>(null);
   let detailTitle = $state<string | null>(null);
   let detailRows = $state<Array<{ label: string; value: string }>>([]);
-  let blocksDialog = $state<{ username: string; blocks: UserBlock[] } | null>(null);
+  let blocksDialog = $state<{ userId: string; username: string; blocks: UserBlock[] } | null>(null);
   let activeDialog = $state<ManageDialogState>(null);
   let accountDisableReason = $state('');
   let expandedActionRow = $state<string | null>(null);
@@ -433,6 +435,14 @@
         disabled,
         hidden: !canManageUserStatus && !canManage2fa,
       },
+      {
+        id: 'user-authentication',
+        label: $t('authManagement.title'),
+        icon: 'passkey',
+        onSelect: () => { activeDialog = { kind: 'user-authentication', user }; },
+        disabled,
+        hidden: user.user_id !== authStore.userId && !hasAnyPermission('manage_user_authentication'),
+      },
       { type: 'divider', hidden: !canBlock && !canListBlocks },
       {
         id: 'block-user',
@@ -596,8 +606,8 @@
     const nickname = await dialogStore.prompt($t('manage.newNicknamePrompt'), user.nickname ?? user.username);
     if (nickname === null) return;
 
-    await runBusy(`rename-user:${user.username}`, async () => {
-      await renameUser(user.username, nickname.trim());
+    await runBusy(`rename-user:${user.user_id}`, async () => {
+      await renameUser(user.user_id, nickname.trim());
       status = $t('manage.userUpdated', { values: { username: user.username } });
       await loadUserList();
     });
@@ -623,8 +633,8 @@
   async function handleManageAccount(user: ManagedUser) {
     await runBusy(`account-management:${user.username}`, async () => {
       const [info, twoFactor] = await Promise.all([
-        canManageUserStatus ? getUserInfo(user.username) : Promise.resolve(null),
-        canManage2fa ? getManagedTwoFactorStatus(user.username) : Promise.resolve(null),
+        canManageUserStatus ? getUserInfo({ userId: user.user_id }) : Promise.resolve(null),
+        canManage2fa ? getManagedTwoFactorStatus(user.user_id) : Promise.resolve(null),
       ]);
       accountDisableReason = '';
       activeDialog = { kind: 'account-management', user, info, twoFactor };
@@ -644,8 +654,8 @@
     if (!confirmed) return;
 
     await runBusy(`twofa:${user.username}`, async () => {
-      await disableManagedTwoFactor(user.username);
-      if (activeDialog?.kind === 'account-management' && activeDialog.user.username === user.username) {
+      await disableManagedTwoFactor(user.user_id);
+      if (activeDialog?.kind === 'account-management' && activeDialog.user.user_id === user.user_id) {
         activeDialog = {
           ...activeDialog,
           twoFactor: { enabled: false, method: null, backup_codes_count: 0 },
@@ -656,10 +666,11 @@
   }
 
   async function handleViewUser(user: ManagedUser) {
-    await runBusy(`view-user:${user.username}`, async () => {
-      const info = await getUserInfo(user.username);
+    await runBusy(`view-user:${user.user_id}`, async () => {
+      const info = await getUserInfo({ userId: user.user_id });
       detailTitle = $t('manage.userDetailsFor', { values: { username: info.username } });
       detailRows = [
+        { label: $t('manage.userId'), value: info.user_id },
         { label: $t('manage.username'), value: info.username },
         { label: $t('manage.nickname'), value: info.nickname || '-' },
         {
@@ -685,8 +696,8 @@
       cancelLabel: $t('common.cancel'),
       danger: true,
     }))) return;
-    await runBusy(`delete-user:${user.username}`, async () => {
-      await deleteUser(user.username);
+    await runBusy(`delete-user:${user.user_id}`, async () => {
+      await deleteUser(user.user_id);
       status = $t('manage.userDeleted', { values: { username: user.username } });
       await loadUserList();
     });
@@ -697,9 +708,9 @@
   }
 
   async function handleListBlocks(user: ManagedUser) {
-    await runBusy(`blocks-user:${user.username}`, async () => {
-      const blocks = await listUserBlocks(user.username);
-      blocksDialog = { username: user.username, blocks };
+    await runBusy(`blocks-user:${user.user_id}`, async () => {
+      const blocks = await listUserBlocks(user.user_id);
+      blocksDialog = { userId: user.user_id, username: user.username, blocks };
     });
   }
 
@@ -708,8 +719,9 @@
     await runBusy(`unblock:${blockId}`, async () => {
       await unblockUser(blockId);
       blocksDialog = {
+        userId: blocksDialog!.userId,
         username: blocksDialog!.username,
-        blocks: await listUserBlocks(blocksDialog!.username),
+        blocks: await listUserBlocks(blocksDialog!.userId),
       };
       status = $t('manage.blockRevoked');
     });
@@ -732,6 +744,7 @@
     await runBusy(`block-reason:${block.block_id}`, async () => {
       const updated = await updateUserBlock(block.block_id, reasonValue || null);
       blocksDialog = {
+        userId: blocksDialog!.userId,
         username: blocksDialog!.username,
         blocks: blocksDialog!.blocks.map((entry) =>
           entry.block_id === block.block_id ? updated : entry,
@@ -772,7 +785,7 @@
   async function loadUserGroupEditorData(user: ManagedUser): Promise<ListEditorData> {
     const [allGroups, userInfo] = await Promise.all([
       listGroups(),
-      getUserInfo(user.username),
+      getUserInfo({ userId: user.user_id }),
     ]);
     groups = allGroups;
 
@@ -787,7 +800,7 @@
   }
 
   async function loadUserPermissionEditorData(user: ManagedUser): Promise<PermissionEntriesEditorData> {
-    const userInfo = await getUserInfo(user.username);
+    const userInfo = await getUserInfo({ userId: user.user_id });
     return {
       entries: userInfo.permissions,
       effectivePermissions: userInfo.effective_permissions,
@@ -796,14 +809,14 @@
   }
 
   async function saveUserGroups(user: ManagedUser, selected: string[]) {
-    await changeUserGroups(user.username, selected);
+    await changeUserGroups(user.user_id, selected);
     status = $t('manage.userGroupsUpdated', { values: { username: user.username } });
     activeDialog = null;
     await loadUserList();
   }
 
   async function saveUserPermissions(user: ManagedUser, entries: PermissionEntry[]) {
-    await changeUserPermissions(user.username, entries);
+    await changeUserPermissions(user.user_id, entries);
     status = $t('manage.userPermissionsUpdated', { values: { username: user.username } });
     activeDialog = null;
     await loadUserList();
@@ -816,14 +829,14 @@
     forceUpdateAfterLogin: boolean,
     disableTwoFactorAfterReset: boolean,
   ) {
-    await resetUserPassword(user.username, password, bypassRequirements, forceUpdateAfterLogin);
+    await resetUserPassword(user.user_id, password, bypassRequirements, forceUpdateAfterLogin);
     let successMessage = $t('manage.passwordChanged', { values: { username: user.username } });
 
     if (disableTwoFactorAfterReset && canManage2fa) {
       try {
-        const twoFactor = await getManagedTwoFactorStatus(user.username);
+        const twoFactor = await getManagedTwoFactorStatus(user.user_id);
         if (twoFactor.enabled) {
-          await disableManagedTwoFactor(user.username);
+          await disableManagedTwoFactor(user.user_id);
           successMessage = $t('manage.passwordChangedAndTwoFactorDisabled', {
             values: { username: user.username },
           });
@@ -848,7 +861,7 @@
     notAfter: number | null,
     reason: string | null,
   ) {
-    await blockUser(user.username, blockTypes, target, notAfter, reason);
+    await blockUser(user.user_id, blockTypes, target, notAfter, reason);
     status = $t('manage.userBlocked', { values: { username: user.username } });
     activeDialog = null;
   }
@@ -909,13 +922,13 @@
   async function saveActiveUserStatus(statusValue: ManagedUserStatus) {
     if (activeDialog?.kind !== 'account-management' || !activeDialog.info) return;
     const user = activeDialog.user;
-    await runBusy(`status-user:${user.username}`, async () => {
+    await runBusy(`status-user:${user.user_id}`, async () => {
       const reason = statusValue === 'disabled' ? accountDisableReason || null : undefined;
-      const result = await manageUserStatus(user.username, statusValue, reason);
+      const result = await manageUserStatus(user.user_id, statusValue, reason);
       status = $t('manage.userStatusUpdated', {
         values: { username: user.username },
       });
-      if (activeDialog?.kind === 'account-management' && activeDialog.user.username === user.username) {
+      if (activeDialog?.kind === 'account-management' && activeDialog.user.user_id === user.user_id) {
         activeDialog = {
           ...activeDialog,
           info: activeDialog.info ? { ...activeDialog.info, status: statusValue } : null,
@@ -1171,8 +1184,8 @@
             style={`--manage-identity-width: ${accountIdentityColumnWidth}px;`}
             role="list"
           >
-            {#each users as user (user.username)}
-              {@const actionKey = `user:${user.username}`}
+            {#each users as user (user.user_id)}
+              {@const actionKey = `user:${user.user_id}`}
               <div
                 class="manage-list-row"
                 role="listitem"
@@ -1213,6 +1226,7 @@
                   {@render ActionButton('accountCircle', canManageUserAvatars ? $t('manage.changeUserAvatar') : $t('manage.avatarPermissionRequired'), () => handleChangeUserAvatar(user), !canManageUserAvatars || busyKey !== null)}
                   {@render ActionButton('adminPanelSettings', $t('manage.editPermissions'), () => handleEditUserPermissions(user), !canSetUserPermissions || busyKey !== null)}
                   {@render ActionButton('password', $t('manage.resetPassword'), () => handleResetPassword(user), busyKey !== null)}
+                  {#if user.user_id === authStore.userId || hasAnyPermission('manage_user_authentication')}{@render ActionButton('passkey', $t('authManagement.title'), () => { activeDialog = { kind: 'user-authentication', user }; }, busyKey !== null)}{/if}
                   {@render ActionButton('manageAccounts', $t('manage.accountManagement'), () => handleManageAccount(user), (!canManageUserStatus && !canManage2fa) || busyKey !== null)}
                   {@render ActionButton('block', $t('manage.blockUser'), () => handleBlockUser(user), !canBlock || busyKey !== null)}
                   {@render ActionButton('manageAccounts', $t('manage.viewBlocks'), () => handleListBlocks(user), !canListBlocks || busyKey !== null)}
@@ -1227,6 +1241,7 @@
                       {@render ActionButton('accountCircle', canManageUserAvatars ? $t('manage.changeUserAvatar') : $t('manage.avatarPermissionRequired'), () => handleChangeUserAvatar(user), !canManageUserAvatars || busyKey !== null)}
                       {@render ActionButton('adminPanelSettings', $t('manage.editPermissions'), () => handleEditUserPermissions(user), !canSetUserPermissions || busyKey !== null)}
                       {@render ActionButton('password', $t('manage.resetPassword'), () => handleResetPassword(user), busyKey !== null)}
+                      {#if user.user_id === authStore.userId || hasAnyPermission('manage_user_authentication')}{@render ActionButton('passkey', $t('authManagement.title'), () => { activeDialog = { kind: 'user-authentication', user }; }, busyKey !== null)}{/if}
                       {@render ActionButton('manageAccounts', $t('manage.accountManagement'), () => handleManageAccount(user), (!canManageUserStatus && !canManage2fa) || busyKey !== null)}
                       {@render ActionButton('block', $t('manage.blockUser'), () => handleBlockUser(user), !canBlock || busyKey !== null)}
                       {@render ActionButton('manageAccounts', $t('manage.viewBlocks'), () => handleListBlocks(user), !canListBlocks || busyKey !== null)}
@@ -1493,7 +1508,11 @@
   onClose={hideContextMenu}
 />
 
-{#if activeDialog?.kind === 'create-user'}
+{#if activeDialog?.kind === 'user-authentication'}
+  <ModalFrame title={`${$t('authManagement.title')} · ${activeDialog.user.username}`} maxWidth="max-w-3xl" onClose={() => (activeDialog = null)} closeLabel={$t('common.close')}>
+    <div class="p-5"><AuthenticationManagement userId={activeDialog.user.user_id} /></div>
+  </ModalFrame>
+{:else if activeDialog?.kind === 'create-user'}
   <CreateUserAccountDialog
     onSave={saveCreatedUser}
     onClose={() => (activeDialog = null)}
@@ -1505,6 +1524,7 @@
   />
 {:else if activeDialog?.kind === 'user-avatar'}
   <UserAvatarPicker
+    userId={activeDialog.user.user_id}
     username={activeDialog.user.username}
     requireSuperPermission={true}
     onClose={() => (activeDialog = null)}

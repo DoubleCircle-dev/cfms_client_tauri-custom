@@ -1,6 +1,6 @@
 // CFMS Client - typed Tauri IPC wrappers.
-import { invoke } from '@tauri-apps/api/core';
-import type { AuthStatus, JsonValue, ServerInfo, ServerState, TwoFactorSetup, TwoFactorStatus, UserAuthentication } from './types';
+import { Channel, invoke } from '@tauri-apps/api/core';
+import type { AuthPolicy, AuthPolicyReplacement, AuthPurpose, AuthStatus, JsonValue, ServerInfo, ServerState, TwoFactorSetup, TwoFactorStatus, UserAuthentication } from './types';
 
 /** Log in with username + password. Derives KEK via PBKDF2 on the Rust side.
  *
@@ -19,8 +19,49 @@ export async function completeLoginMfa(method: string, data: Record<string, Json
   return invoke('complete_login_mfa', { method, data });
 }
 
-export async function getUserAuthentication(): Promise<UserAuthentication> {
-  return invoke('get_user_authentication');
+export interface AuthPrivateKeyInfo {
+  keyRef: string;
+  filename: string;
+  algorithm: string;
+  fingerprint: string;
+  encrypted: boolean;
+}
+export type PublicKeyInteraction = { kind: 'signing' } | { kind: 'select_key'; interaction_id: string };
+export const pickAuthPrivateKey = (): Promise<AuthPrivateKeyInfo | null> => invoke('pick_auth_private_key');
+export const releaseAuthPrivateKey = (keyRef: string): Promise<void> => invoke('release_auth_private_key', { keyRef });
+export const cancelPublicKeyAuthentication = (): Promise<void> => invoke('cancel_public_key_authentication');
+export const respondPublicKeyInteraction = (interactionId: string, keyRef: string, passphrase: string): Promise<void> =>
+  invoke('respond_public_key_interaction', { interactionId, keyRef, passphrase });
+export function loginWithPublicKey(username: string, keyRef: string, passphrase: string, onInteraction: (event: PublicKeyInteraction) => void, mfa = false): Promise<AuthStatus> {
+  const channel = new Channel<PublicKeyInteraction>();
+  channel.onmessage = onInteraction;
+  return invoke('login_with_public_key', { username, keyRef, passphrase, onInteraction: channel, mfa });
+}
+export const preparePreferenceUnlock = (): Promise<'ready' | 'password_required'> => invoke('prepare_preference_unlock');
+export const unlockPreferenceDek = (password: string): Promise<void> => invoke('unlock_preference_dek', { password });
+
+export async function getUserAuthentication(userId?: string): Promise<UserAuthentication> {
+  return invoke('get_user_authentication', { userId: userId ?? null });
+}
+
+export async function setUserAuthPolicies(policies: AuthPolicyReplacement[], userId?: string): Promise<{ policies: Partial<Record<AuthPurpose, AuthPolicy>> }> {
+  return invoke('set_user_auth_policies', { policies, userId: userId ?? null });
+}
+
+export async function registerUserAuthPublicKey(publicKey: string, label: string | null, userId?: string): Promise<{ credential_id: string; fingerprint: string; label: string | null }> {
+  return invoke('register_user_auth_public_key', { publicKey, label, userId: userId ?? null });
+}
+
+export async function updateUserAuthPublicKey(credentialId: string, label: string | null, userId?: string): Promise<{ credential_id: string; label: string | null }> {
+  return invoke('update_user_auth_public_key', { credentialId, label, userId: userId ?? null });
+}
+
+export async function deleteUserAuthPublicKey(credentialId: string, userId?: string): Promise<{ credential_id: string }> {
+  return invoke('delete_user_auth_public_key', { credentialId, userId: userId ?? null });
+}
+
+export async function dropEscalation(): Promise<AuthStatus> {
+  return invoke('drop_escalation');
 }
 
 export async function requestEscalation(method?: string, data?: Record<string, JsonValue>): Promise<AuthStatus> {

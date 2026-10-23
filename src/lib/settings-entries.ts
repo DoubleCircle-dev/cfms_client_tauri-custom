@@ -86,6 +86,15 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     requiresAuth: true,
   },
   {
+    labelKey: 'authManagement.title',
+    descriptionKey: 'authManagement.description',
+    icon: 'passkey',
+    href: '/home/settings/authentication',
+    group: 'accessSecurity',
+    scopeKey: 'settings.overview.scope.account',
+    requiresAuth: true,
+  },
+  {
     labelKey: 'settings.privacy.title',
     descriptionKey: 'settings.privacy.description',
     icon: 'privacy',

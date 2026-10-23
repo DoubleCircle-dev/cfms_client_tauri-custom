@@ -153,7 +153,7 @@
 
     nicknameBusy = true;
     try {
-      const success = await renameUser(username, cleanNickname);
+      const success = await renameUser(authStore.userId!, cleanNickname);
       if (!success) throw new Error($t('settings.account.nicknameUpdateFailed'));
 
       if (authStore.isLoggedIn && authStore.username === username) {

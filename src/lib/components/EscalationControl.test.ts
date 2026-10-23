@@ -6,14 +6,14 @@ import { authStore, serverStateStore } from '$lib/stores.svelte';
 import EscalationControl from './EscalationControl.svelte';
 import EscalationCountdown from './EscalationCountdown.svelte';
 
-const mocks = vi.hoisted(() => ({ inventory: vi.fn(), escalate: vi.fn() }));
-vi.mock('$lib/api', () => ({ getUserAuthentication: mocks.inventory, requestEscalation: mocks.escalate }));
+const mocks = vi.hoisted(() => ({ inventory: vi.fn(), escalate: vi.fn(), drop: vi.fn() }));
+vi.mock('$lib/api', () => ({ getUserAuthentication: mocks.inventory, requestEscalation: mocks.escalate, dropEscalation: mocks.drop }));
 vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'windows' }));
 vi.mock('$lib/motion/transitions', () => ({ flyScale: () => ({ duration: 0 }) }));
 vi.mock('$lib/appearance', () => ({ isReducedMotionEnabled: () => true }));
 vi.mock('svelte-i18n', () => ({ _: { subscribe(run: (t: (key: string) => string) => void) { run((key) => key); return () => {}; } } }));
 
-const status = { username: 'alice', nickname: 'Alice', has_token: true, token_exp: 2e9, permissions: [], groups: [] };
+const status = { username: 'alice', user_id: 'aabbccdd-0000-4000-8000-000000000001', nickname: 'Alice', has_token: true, token_exp: 2e9, permissions: [], groups: [] };
 const emptyPolicy = { escalation: { revision: 0, chains: [] } };
 
 Object.defineProperty(Element.prototype, 'animate', {
@@ -26,10 +26,30 @@ beforeEach(() => {
   serverStateStore.connected = true;
   mocks.inventory.mockResolvedValue({ policies: emptyPolicy });
   mocks.escalate.mockResolvedValue({ ...status, escalation_exp: Date.now() / 1000 + 300 });
+  mocks.drop.mockResolvedValue({ ...status, escalation_exp: null });
 });
 afterEach(() => { cleanup(); authStore.clear(); serverStateStore.clear(); vi.useRealTimers(); vi.clearAllMocks(); });
 
 describe('elevation controls', () => {
+  it('drops elevation on a second click, preserving login and removing the countdown', async () => {
+    authStore.escalationExp = Date.now() / 1000 + 300;
+    serverStateStore.connected = false;
+    render(EscalationControl);
+    render(EscalationCountdown);
+    const exit = screen.getByRole('button', { name: 'authentication.exitEscalation' });
+    expect(exit.getAttribute('data-active')).toBe('true');
+    expect(exit.hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('timer')).toBeTruthy();
+    await fireEvent.click(exit);
+    await waitFor(() => expect(authStore.escalationExp).toBeNull());
+    expect(mocks.drop).toHaveBeenCalledOnce();
+    expect(mocks.inventory).not.toHaveBeenCalled();
+    expect(mocks.escalate).not.toHaveBeenCalled();
+    expect(authStore.isLoggedIn).toBe(true);
+    expect(screen.queryByRole('timer')).toBeNull();
+    expect(screen.getByRole('button', { name: 'authentication.escalate' }).getAttribute('data-active')).toBe('false');
+  });
+
   it('directly exchanges a token when no additional proof is required', async () => {
     render(EscalationControl);
     await fireEvent.click(screen.getByRole('button', { name: 'authentication.escalate' }));

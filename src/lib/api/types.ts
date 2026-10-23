@@ -264,6 +264,7 @@ export interface DeletedItemsResponse {
 }
 
 export interface ManagedUser {
+  user_id: string;
   username: string;
   nickname?: string | null;
   /** Structured permission entries assigned directly to this user. */
@@ -283,6 +284,7 @@ export interface ManagedUser {
 export type ManagedUserStatus = "active" | "disabled";
 
 export interface ManagedUserStatusUpdate {
+  user_id: string;
   username: string;
   status: ManagedUserStatus;
   reason: string | null;
@@ -314,6 +316,7 @@ export interface UserBlockTarget {
 }
 
 export interface UserBlock {
+  user_id: string;
   block_id: string;
   block_types: string[];
   target_type?: string;
@@ -388,8 +391,8 @@ export interface UserKeyMetadata {
 }
 
 export interface UserKeyDetails extends UserKeyMetadata {
-  key_id?: string;
-  username: string;
+  key_id: string;
+  user_id: string;
   key_content: string;
 }
 
@@ -524,6 +527,7 @@ export type ServiceEvent =
 // ---------------------------------------------------------------------------
 
 export interface AuthStatus {
+  user_id: string | null;
   username: string | null;
   nickname: string | null;
   has_token: boolean;
@@ -551,11 +555,19 @@ export interface AuthPolicyStep {
   credential_ids: string[];
 }
 
+export type AuthPurpose = 'login' | 'mfa' | 'escalation';
+export interface AuthPolicy { revision: number; chains: AuthPolicyStep[][] }
+export interface AuthPolicyReplacement {
+  purpose: AuthPurpose;
+  expected_revision: number;
+  chains: AuthPolicyStep[][];
+}
+
 export interface UserAuthentication {
   user_id: string;
-  methods: Record<string, { purposes: string[]; schema: JsonValue; category: string }>;
+  methods: Record<string, { purposes: AuthPurpose[]; schema: JsonValue; category: string; throttle_factor: string }>;
   credentials: { method: string; credential_id: string; active: boolean; label: string | null; key_identity: string | null }[];
-  policies: Record<'login' | 'mfa' | 'escalation', { revision: number; chains: AuthPolicyStep[][] }>;
+  policies: Record<AuthPurpose, AuthPolicy>;
 }
 
 export interface ServerState {

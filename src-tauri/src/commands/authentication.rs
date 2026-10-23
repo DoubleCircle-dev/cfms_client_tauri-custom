@@ -10,6 +10,7 @@ pub async fn login(
     password: String,
 ) -> Result<serde_json::Value, String> {
     let password = zeroize::Zeroizing::new(password);
+    state.public_keys.cancel();
     state.inner.clear_auth().await;
     let generation = state
         .inner
@@ -158,12 +159,13 @@ pub async fn complete_login_mfa(
 #[tauri::command]
 pub async fn get_user_authentication(
     state: tauri::State<'_, AppHandleState>,
+    user_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let (conn, username, token) = get_connection_auth(&state).await?;
     let response = send_action_request(
         &conn,
         "get_user_authentication",
-        serde_json::json!({}),
+        authentication_target(serde_json::json!({}), user_id),
         &username,
         &token,
     )
@@ -172,6 +174,80 @@ pub async fn get_user_authentication(
         return Err(format_server_response_error(&response));
     }
     Ok(response.data)
+}
+
+fn authentication_target(mut data: serde_json::Value, user_id: Option<String>) -> serde_json::Value {
+    if let Some(user_id) = user_id {
+        data["user_id"] = user_id.into();
+    }
+    data
+}
+
+#[cfg(test)]
+mod authentication_management_tests {
+    use super::authentication_target;
+
+    #[test]
+    fn self_requests_omit_the_optional_uuid_and_delegated_requests_include_it() {
+        let data = serde_json::json!({"credential_id": "key", "label": null});
+        assert_eq!(authentication_target(data.clone(), None), data);
+        let user_id = "aabbccdd-0000-4000-8000-000000000001";
+        assert_eq!(authentication_target(data, Some(user_id.into())), serde_json::json!({
+            "credential_id": "key", "label": null, "user_id": user_id,
+        }));
+    }
+}
+
+#[tauri::command]
+pub async fn set_user_auth_policies(
+    state: tauri::State<'_, AppHandleState>,
+    user_id: Option<String>,
+    policies: Vec<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    server_action_json(&state, "set_user_auth_policies", authentication_target(
+        serde_json::json!({"policies": policies}), user_id,
+    )).await
+}
+
+#[tauri::command]
+pub async fn register_user_auth_public_key(
+    state: tauri::State<'_, AppHandleState>,
+    user_id: Option<String>,
+    public_key: String,
+    label: Option<String>,
+) -> Result<serde_json::Value, String> {
+    server_action_json(&state, "register_user_auth_public_key", authentication_target(
+        serde_json::json!({"public_key": public_key, "label": label}), user_id,
+    )).await
+}
+
+#[tauri::command]
+pub async fn update_user_auth_public_key(
+    state: tauri::State<'_, AppHandleState>,
+    user_id: Option<String>,
+    credential_id: String,
+    label: Option<String>,
+) -> Result<serde_json::Value, String> {
+    server_action_json(&state, "update_user_auth_public_key", authentication_target(
+        serde_json::json!({"credential_id": credential_id, "label": label}), user_id,
+    )).await
+}
+
+#[tauri::command]
+pub async fn delete_user_auth_public_key(
+    state: tauri::State<'_, AppHandleState>,
+    user_id: Option<String>,
+    credential_id: String,
+) -> Result<serde_json::Value, String> {
+    server_action_json(&state, "delete_user_auth_public_key", authentication_target(
+        serde_json::json!({"credential_id": credential_id}), user_id,
+    )).await
+}
+
+#[tauri::command]
+pub async fn drop_escalation(state: tauri::State<'_, AppHandleState>) -> Result<serde_json::Value, String> {
+    state.inner.drop_escalation().await;
+    Ok(build_auth_status(&state.inner).await)
 }
 
 #[tauri::command]

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack, tick } from 'svelte';
+  import { untrack, tick, onDestroy } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import type { JsonValue } from '$lib/api';
   import { supportedVerificationMethods } from '$lib/authentication';
@@ -9,22 +9,27 @@
   import DialogActionButton from './DialogActionButton.svelte';
   import MdOutlinedField from './MdOutlinedField.svelte';
   import ProgressRing from './ProgressRing.svelte';
+  import PublicKeyVerification from './PublicKeyVerification.svelte';
+  import type { PublicKeyInteraction } from '$lib/api';
 
-  let { methods, onVerify, onCancel, title }: {
+  let { methods, onVerify, onCancel, title, allowPublicKey = false }: {
     methods: string[];
     title: string;
-    onVerify: (method: string, data: Record<string, JsonValue>) => Promise<boolean>;
+    onVerify: (method: string, data: Record<string, JsonValue>, onInteraction?: (event: PublicKeyInteraction) => void) => Promise<boolean>;
     onCancel: () => void;
+    allowPublicKey?: boolean;
   } = $props();
-  const available = $derived(methods.filter((method) => supportedVerificationMethods.includes(method)));
+  const available = $derived(methods.filter((method) => supportedVerificationMethods.includes(method) || (allowPublicKey && method === 'publickey')));
   let selected = $state<string | null>(untrack(() => available.length === 1 ? available[0] : null));
   let password = $state('');
   let busy = $state(false);
   let error = $state('');
   let passwordInput = $state<HTMLInputElement>();
+  onDestroy(() => { password = ''; });
 
   $effect(() => {
     if (selected === 'password') void tick().then(() => passwordInput?.focus());
+    else password = '';
   });
 
   async function verifyPassword(event: SubmitEvent) {
@@ -52,7 +57,13 @@
   />
 {:else}
   <ModalFrame {title} maxWidth="max-w-md" dismissible={!busy} onClose={onCancel} closeLabel={$t('common.close')}>
-    {#if selected === 'password'}
+    {#if selected === 'publickey'}
+      <PublicKeyVerification
+        onVerify={(keyRef, passphrase, receive) => onVerify('publickey', { keyRef, passphrase }, receive)}
+        {onCancel}
+        onBack={available.length > 1 ? () => { selected = null; } : undefined}
+      />
+    {:else if selected === 'password'}
       <form class="flex flex-col gap-5 p-5" onsubmit={verifyPassword}>
         <p class="text-sm text-md3-on-surface-variant">{$t('authentication.passwordPrompt')}</p>
         <MdOutlinedField inputId="authentication-password" label={$t('login.password')}>

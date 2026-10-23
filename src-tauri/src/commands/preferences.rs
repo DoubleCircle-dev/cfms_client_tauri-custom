@@ -106,11 +106,16 @@ pub async fn save_user_preference(
 /// recoverable local encrypted state, or reporting that user recovery/deletion
 /// is required.
 #[tauri::command]
-pub async fn setup_preference_dek(
+pub async fn setup_preference_dek<R: Runtime>(
+    app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppHandleState>,
     current_password: String,
 ) -> Result<serde_json::Value, String> {
     let current_password = zeroize::Zeroizing::new(current_password);
+    let _update = state.inner.auth_update.lock().await;
+    if restore_cached_preference_key(&app, &state).await.unwrap_or(false) {
+        return Ok(serde_json::json!({"status":"ready"}));
+    }
     let (conn, username, token) = get_connection_auth(&state).await?;
     let server_addr = {
         let a = state.inner.server_address.read().await;
@@ -143,6 +148,7 @@ pub async fn setup_preference_dek(
         DekSetupStatus::ResetRequired => "reset_required",
     };
 
+    if status == "ready" { let _ = cache_current_preference_key(&app, &state).await; }
     Ok(serde_json::json!({ "status": status }))
 }
 
@@ -180,7 +186,8 @@ pub async fn discard_user_preference(
 /// Reset the current session's preference DEK after the user discards local
 /// encrypted state that could not be decrypted.
 #[tauri::command]
-pub async fn reset_preference_dek(
+pub async fn reset_preference_dek<R: Runtime>(
+    app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppHandleState>,
     current_password: String,
 ) -> Result<(), String> {
@@ -231,6 +238,8 @@ pub async fn reset_preference_dek(
 
     state.tasks.clear();
     state.upload_tasks.clear();
+    state.inner.preference_dek_local_only.store(false, std::sync::atomic::Ordering::SeqCst);
+    let _ = cache_current_preference_key(&app, &state).await;
     Ok(())
 }
 

@@ -38,6 +38,21 @@ pub async fn reset_local_data<R: Runtime>(
     // A locked vault leaves the current UI usable; no WebView or app files have
     // been cleared yet. Once the credential is gone, preserve the reset marker
     // through any later failure so cleanup can finish after restart.
+    let preference_cleanup = {
+        let app = app.clone();
+        tokio::task::spawn_blocking(move || {
+            let vault = app.state::<crate::preference_keys::PreferenceKeys>();
+            let _guard = vault.operation.lock().unwrap();
+            crate::preference_keys::clear(&app)
+        }).await.map_err(|_| crate::secure_store::UNAVAILABLE.to_string())
+            .and_then(|result| result)
+    };
+    if let Err(error) = preference_cleanup {
+        crate::local_data_reset::cancel_scheduled_reset(reset.marker_path());
+        credentials.cancel_reset();
+        reset.in_progress.store(false, Ordering::SeqCst);
+        return Err(error);
+    }
     if let Err(error) = credentials.delete_for_reset().await {
         crate::local_data_reset::cancel_scheduled_reset(reset.marker_path());
         credentials.cancel_reset();
@@ -102,6 +117,11 @@ pub async fn retry_local_data_reset<R: Runtime>(
     let result: Result<crate::local_data_reset::LocalDataResetStatus, String> = async {
         crate::local_data_reset::ensure_retryable_marker(reset.marker_path())?;
         if !crate::local_data_reset::credential_cleared(reset.marker_path())? {
+            {
+                let vault = app.state::<crate::preference_keys::PreferenceKeys>();
+                let _guard = vault.operation.lock().unwrap();
+                crate::preference_keys::clear(&app)?;
+            }
             credentials.delete_for_reset().await?;
             if let Err(error) =
                 crate::local_data_reset::mark_credential_cleared(reset.marker_path())

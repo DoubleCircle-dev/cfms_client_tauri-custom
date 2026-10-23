@@ -7,6 +7,7 @@ async fn apply_successful_login_response(
 ) -> Result<(), String> {
     let issued = IssuedToken::from_response(data, GENERAL)?;
     let exp = issued.claims.exp.floor() as i64;
+    *state.inner.user_id.write().await = Some(issued.claims.sub.clone());
     let token = issued.secret;
 
     {
@@ -118,7 +119,13 @@ pub async fn change_password(
         return Ok(());
     }
 
-    let mut prepared_dek_rewrap = if let Some(existing_dek) = state.inner.dek.read().await.clone() {
+    let local_only = state.inner.preference_dek_local_only.load(std::sync::atomic::Ordering::SeqCst);
+    let server_key = if local_only {
+        if let Some(envelope) = state.inner.server_preference_dek.read().await.clone() {
+            decrypt_preference_dek(&envelope, &old_password).await.ok()
+        } else { None }
+    } else { state.inner.dek.read().await.clone() };
+    let mut prepared_dek_rewrap = if let Some(existing_dek) = server_key {
         match get_connection_auth(&state).await {
             Ok((auth_conn, auth_username, auth_token)) if auth_username == username => {
                 let encrypted = rewrap_and_upload_preference_dek(
@@ -198,8 +205,10 @@ pub async fn change_password(
 
     if let Some((dek, encrypted, _, _, _)) = prepared_dek_rewrap.take() {
         {
-            let mut stored_dek = state.inner.dek.write().await;
-            *stored_dek = Some(dek);
+            if !local_only {
+                let mut stored_dek = state.inner.dek.write().await;
+                *stored_dek = Some(dek);
+            }
         }
         remember_server_preference_dek(&state.inner, Some(encrypted)).await;
     }
@@ -210,7 +219,8 @@ pub async fn change_password(
 /// Recover a server-returned preference DEK with a previous password, then
 /// rewrap it with the current login password and upload it back to the server.
 #[tauri::command]
-pub async fn recover_preference_dek(
+pub async fn recover_preference_dek<R: Runtime>(
+    app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppHandleState>,
     recovery_password: String,
     current_password: String,
@@ -252,6 +262,8 @@ pub async fn recover_preference_dek(
         *dek = Some(recovered_dek);
     }
     remember_server_preference_dek(&state.inner, Some(encrypted_for_current_password)).await;
+    state.inner.preference_dek_local_only.store(false, std::sync::atomic::Ordering::SeqCst);
+    let _ = cache_current_preference_key(&app, &state).await;
 
     Ok(())
 }

@@ -1156,6 +1156,7 @@ mod protocol_v15_tests {
 }
 
 async fn clear_auth_state(state: &AppHandleState) {
+    state.public_keys.cancel();
     state.inner.clear_auth().await;
     state.tasks.clear();
     state.upload_tasks.clear();
@@ -1256,6 +1257,7 @@ async fn build_auth_status(inner: &cfms_service::state::AppState) -> serde_json:
 
     let mut status = serde_json::json!({
         "username": username,
+        "user_id": inner.user_id.read().await.clone(),
         "nickname": nickname,
         "has_token": has_token,
         "token_exp": token_exp,

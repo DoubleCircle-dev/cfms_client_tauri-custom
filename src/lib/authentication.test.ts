@@ -7,8 +7,8 @@ describe('authentication policy selection', () => {
     const inventory: UserAuthentication = {
       user_id: 'alice-id',
       methods: {
-        password: { purposes: ['escalation'], schema: {}, category: 'primary' },
-        totp: { purposes: ['mfa', 'escalation'], schema: {}, category: 'secondary' },
+        password: { purposes: ['escalation'], schema: {}, throttle_factor: 'password', category: 'primary' },
+        totp: { purposes: ['mfa', 'escalation'], schema: {}, throttle_factor: 'password', category: 'secondary' },
       },
       credentials: [
         { method: 'password', credential_id: 'p', active: true, label: null, key_identity: null },

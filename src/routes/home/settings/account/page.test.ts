@@ -43,7 +43,7 @@ vi.mock('svelte-i18n', () => ({
 }));
 
 const authStatus = {
-  username: 'alice',
+  username: 'alice', user_id: 'aabbccdd-0000-4000-8000-000000000001',
   nickname: 'Alice',
   has_token: true,
   token_exp: 1_900_000_000,
@@ -87,7 +87,7 @@ describe('account nickname settings', () => {
     await fireEvent.submit(input.closest('form')!);
 
     await waitFor(() => {
-      expect(mocks.renameUser).toHaveBeenCalledWith('alice', 'New Name');
+      expect(mocks.renameUser).toHaveBeenCalledWith(authStatus.user_id, 'New Name');
       expect(authStore.displayName).toBe('New Name');
     });
     expect(screen.getByText('New Name')).toBeTruthy();
@@ -104,7 +104,7 @@ describe('account nickname settings', () => {
     await fireEvent.input(input, { target: { value: '   ' } });
     await fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
 
-    await waitFor(() => expect(mocks.renameUser).toHaveBeenCalledWith('alice', null));
+    await waitFor(() => expect(mocks.renameUser).toHaveBeenCalledWith(authStatus.user_id, null));
     expect(authStore.displayName).toBe('alice');
   });
 

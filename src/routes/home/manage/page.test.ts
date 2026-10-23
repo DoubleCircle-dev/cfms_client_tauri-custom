@@ -28,7 +28,7 @@ function auditEntry(id: string, action: string) {
   return {
     id,
     action,
-    username: 'admin',
+    username: 'admin', user_id: 'aabbccdd-0000-4000-8000-000000000002',
     target: null,
     data: null,
     result: 0,
@@ -56,7 +56,7 @@ beforeEach(() => {
   locale.set('en');
   authStore.clear();
   authStore.apply({
-    username: 'admin',
+    username: 'admin', user_id: 'aabbccdd-0000-4000-8000-000000000002',
     nickname: 'Administrator',
     has_token: true,
     token_exp: 1_900_000_000,

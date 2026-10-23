@@ -80,6 +80,7 @@ export const serverStateStore = new ServerStateStoreImpl();
 // ---------------------------------------------------------------------------
 
 class AuthStoreImpl {
+  userId = $state<string | null>(null);
   username = $state<string | null>(null);
   nickname = $state<string | null>(null);
   hasToken = $state(false);
@@ -119,6 +120,7 @@ class AuthStoreImpl {
    *  server address, lockdown) must be applied to `serverStateStore` separately
    *  by the caller — the two stores are fully independent. */
   apply(s: AuthStatus) {
+    this.userId = s.user_id;
     this.username = s.username;
     this.nickname = normalizeNickname(s.nickname, s.username);
     this.hasToken = s.has_token;
@@ -145,6 +147,7 @@ class AuthStoreImpl {
    *  Server state must be cleared separately via `serverStateStore.clear()` if
    *  needed — the two stores are fully independent. */
   clear() {
+    this.userId = null;
     this.username = null;
     this.nickname = null;
     this.hasToken = false;
