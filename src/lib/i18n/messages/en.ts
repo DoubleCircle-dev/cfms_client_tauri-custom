@@ -1,4 +1,18 @@
 export const en = {
+  authentication: {
+    escalate: 'Elevate privileges',
+    elevated: 'Elevated · {time}',
+    elevatedShort: 'Elevated',
+    escalationTitle: 'Verify to elevate privileges',
+    mfaTitle: 'Complete authentication',
+    chooseMethod: 'Choose a verification method authorized for this account.',
+    passwordPrompt: 'Enter your current account password to continue.',
+    password: 'Password',
+    totp: 'Authenticator or recovery code',
+    failed: 'Verification failed. Try again.',
+    unsupported: 'This client cannot use the available authentication methods: {methods}. Contact your administrator to configure a supported method.',
+    unavailable: 'No active credential can satisfy the escalation policy. Contact your administrator.',
+  },
   common: {
     back: 'Back',
     loading: 'Loading...',

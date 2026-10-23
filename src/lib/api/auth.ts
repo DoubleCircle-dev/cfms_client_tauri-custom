@@ -1,26 +1,37 @@
 // CFMS Client - typed Tauri IPC wrappers.
 import { invoke } from '@tauri-apps/api/core';
-import type { AuthStatus, ServerInfo, ServerState, TwoFactorSetup, TwoFactorStatus } from './types';
+import type { AuthStatus, JsonValue, ServerInfo, ServerState, TwoFactorSetup, TwoFactorStatus, UserAuthentication } from './types';
 
 /** Log in with username + password. Derives KEK via PBKDF2 on the Rust side.
  *
  * If the server requires 2FA (code 202), the returned `AuthStatus` will have
  * `requires_2fa: true`.  The caller should then prompt the user for a
- * verification code and re-invoke this function with `twofaToken`.
+ * verification code and call `completeLoginMfa` with the offered method.
  */
 export async function login(
   username: string,
   password: string,
-  twofaToken?: string,
 ): Promise<AuthStatus> {
-  return invoke("login", { username, password, twofaToken: twofaToken ?? null });
+  return invoke("login", { username, password });
+}
+
+export async function completeLoginMfa(method: string, data: Record<string, JsonValue>): Promise<AuthStatus> {
+  return invoke('complete_login_mfa', { method, data });
+}
+
+export async function getUserAuthentication(): Promise<UserAuthentication> {
+  return invoke('get_user_authentication');
+}
+
+export async function requestEscalation(method?: string, data?: Record<string, JsonValue>): Promise<AuthStatus> {
+  return invoke('request_escalation', { method: method ?? null, data: data ?? null });
 }
 
 /** Change the current user's password via the server `set_passwd` action.
  *
  * Used for the self-change flow when the server rejects login with code
- * 4001/4002 (password must be changed before login).  No authentication token
- * is required — the server verifies `oldPassword` directly.  Throws with the
+ * 4001/4002 (password must be changed before login), using the native POST_AUTH
+ * token. Authenticated self-service uses GENERAL and `oldPassword`. Throws with the
  * server's `(code) message` on failure (e.g. password-rule violations).
  */
 export async function changePassword(

@@ -84,6 +84,7 @@ class AuthStoreImpl {
   nickname = $state<string | null>(null);
   hasToken = $state(false);
   tokenExp = $state<number | null>(null);
+  escalationExp = $state<number | null>(null);
   permissions = $state<string[]>([]);
   permissionSnapshotRevision = $state(0);
   groups = $state<string[]>([]);
@@ -91,7 +92,7 @@ class AuthStoreImpl {
 
   // 2FA state
   requires2fa = $state(false);
-  twofaMethod = $state<string>('totp');
+  authenticationMethods = $state<string[]>([]);
 
   // True while the login page is still running post-login initialization
   // such as preference recovery prompts and task/avatar loading.
@@ -122,12 +123,13 @@ class AuthStoreImpl {
     this.nickname = normalizeNickname(s.nickname, s.username);
     this.hasToken = s.has_token;
     this.tokenExp = s.token_exp;
+    this.escalationExp = s.escalation_exp ?? null;
     this.permissions = s.permissions;
     this.permissionSnapshotRevision += 1;
     this.groups = s.groups;
     this.avatarPath = s.avatar_path ?? this.avatarPath;
     this.requires2fa = s.requires_2fa ?? false;
-    this.twofaMethod = s['2fa_method'] ?? 'totp';
+    this.authenticationMethods = s.authentication_methods ?? [];
   }
 
   beginPostLogin() {
@@ -147,12 +149,13 @@ class AuthStoreImpl {
     this.nickname = null;
     this.hasToken = false;
     this.tokenExp = null;
+    this.escalationExp = null;
     this.permissions = [];
     this.permissionSnapshotRevision += 1;
     this.groups = [];
     this.avatarPath = null;
     this.requires2fa = false;
-    this.twofaMethod = 'totp';
+    this.authenticationMethods = [];
     this.postLoginPending = false;
   }
 }

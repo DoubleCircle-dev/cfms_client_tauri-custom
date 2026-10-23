@@ -64,6 +64,7 @@ include!("commands/settings.rs");
 include!("commands/extensions.rs");
 include!("commands/developer.rs");
 include!("commands/auth_connection.rs");
+include!("commands/authentication.rs");
 include!("commands/avatars.rs");
 include!("commands/preferences.rs");
 include!("commands/task_reload.rs");

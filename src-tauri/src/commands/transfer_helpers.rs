@@ -23,13 +23,7 @@ async fn get_connection_auth(
         .await
         .clone()
         .ok_or_else(|| "Not logged in".to_string())?;
-    let token = state
-        .inner
-        .token
-        .read()
-        .await
-        .clone()
-        .ok_or_else(|| "Not logged in".to_string())?;
+    let token = state.inner.request_token().await.ok_or("Not logged in")?;
     Ok((conn, username, token))
 }
 
@@ -1232,17 +1226,29 @@ fn non_empty_optional(value: Option<String>) -> Option<String> {
 
 /// Build a JSON auth-status payload (auth fields only — no server state).
 async fn build_auth_status(inner: &cfms_service::state::AppState) -> serde_json::Value {
-    let username = inner.username.read().await.clone();
+    let pending = inner.pending_auth.read().await.as_ref().map(|p| {
+        (
+            p.username.clone(),
+            p.issued.claims.purpose,
+            p.methods.clone(),
+        )
+    });
+    let username = inner
+        .username
+        .read()
+        .await
+        .clone()
+        .or_else(|| pending.as_ref().map(|p| p.0.clone()));
     let nickname = inner.nickname.read().await.clone();
-    let pending_2fa = inner.pending_2fa.load(std::sync::atomic::Ordering::SeqCst);
-    // When 2FA is pending, the token is a placeholder — don't report as
-    // authenticated.
-    let has_token = !pending_2fa && inner.token.read().await.is_some();
-    let token_exp = if pending_2fa {
-        None
-    } else {
-        *inner.token_exp.read().await
-    };
+    let has_token = inner.token.read().await.is_some();
+    let token_exp = *inner.token_exp.read().await;
+    let escalation_exp = inner
+        .escalation
+        .read()
+        .await
+        .as_ref()
+        .filter(|issued| issued.claims.exp > cfms_service::authentication::unix_now())
+        .map(|issued| issued.claims.exp);
     let permissions = inner.permissions.read().await.clone();
     let groups = inner.groups.read().await.clone();
     let has_server_preference_dek = inner.server_preference_dek.read().await.is_some();
@@ -1253,6 +1259,7 @@ async fn build_auth_status(inner: &cfms_service::state::AppState) -> serde_json:
         "nickname": nickname,
         "has_token": has_token,
         "token_exp": token_exp,
+        "escalation_exp": escalation_exp,
         "permissions": permissions,
         "groups": groups,
         "avatar_path": inner.avatar_path.read().await.clone(),
@@ -1260,9 +1267,9 @@ async fn build_auth_status(inner: &cfms_service::state::AppState) -> serde_json:
         "has_preference_dek": has_preference_dek,
     });
 
-    if pending_2fa {
+    if let Some(pending) = pending.as_ref().filter(|p| p.1 == AUTH) {
         status["requires_2fa"] = serde_json::Value::Bool(true);
-        status["2fa_method"] = serde_json::Value::String("totp".to_string());
+        status["authentication_methods"] = serde_json::json!(pending.2);
     }
 
     status

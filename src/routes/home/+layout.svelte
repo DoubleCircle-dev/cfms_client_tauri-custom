@@ -19,6 +19,8 @@
   import AvatarPreview from '$lib/components/AvatarPreview.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
   import LockdownControl from '$lib/components/LockdownControl.svelte';
+  import EscalationControl from '$lib/components/EscalationControl.svelte';
+  import EscalationCountdown from '$lib/components/EscalationCountdown.svelte';
   import ShortcutKeys from '$lib/components/ShortcutKeys.svelte';
   import UserAvatarPicker from '$lib/components/UserAvatarPicker.svelte';
   import type { WorkspaceNavItem } from '$lib/explorer/types';
@@ -392,25 +394,30 @@
 
 <div class="explorer-shell">
   <header class="explorer-topbar" data-keyboard-region="toolbar">
-    <button
-      type="button"
-      class="explorer-command-button explorer-mobile-menu"
-      title={$t('workspace.toggleNavigation')}
-      aria-label={$t('workspace.toggleNavigation')}
-      aria-expanded={drawerOpen}
-      onclick={(event) => { event.stopPropagation(); drawerOpen = !drawerOpen; }}
-    >
-      <Icon name="sidebarToggle" size="20px" />
-    </button>
+    <div class="explorer-topbar-leading">
+      <button
+        type="button"
+        class="explorer-command-button explorer-mobile-menu"
+        title={$t('workspace.toggleNavigation')}
+        aria-label={$t('workspace.toggleNavigation')}
+        aria-expanded={drawerOpen}
+        onclick={(event) => { event.stopPropagation(); drawerOpen = !drawerOpen; }}
+      >
+        <Icon name="sidebarToggle" size="20px" />
+      </button>
 
-    {#if isSettingsRoute}
-      <span class="explorer-route-title">{currentTitle}</span>
-    {:else}
-      <h1 class="explorer-route-title">{currentTitle}</h1>
-    {/if}
+      {#if isSettingsRoute}
+        <span class="explorer-route-title">{currentTitle}</span>
+      {:else}
+        <h1 class="explorer-route-title">{currentTitle}</h1>
+      {/if}
+    </div>
+
+    <EscalationCountdown />
 
     {#if authStore.isLoggedIn}
     <div class="explorer-topbar-actions">
+      <EscalationControl />
       {#if canApplyLockdown}
         <LockdownControl
           active={serverStateStore.lockdown}
@@ -617,7 +624,8 @@
   .explorer-topbar {
     position: relative;
     z-index: 45;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     min-height: 48px;
     align-items: center;
     gap: 0.65rem;
@@ -627,10 +635,16 @@
     backdrop-filter: blur(24px) saturate(1.25);
   }
 
+  .explorer-topbar-leading { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+  .explorer-topbar:has(:global(.lockdown-reason-entry)) { grid-template-columns: minmax(0, 1fr) auto; }
+  .explorer-topbar:has(:global(.lockdown-reason-entry)) .explorer-topbar-actions { grid-column: 2; grid-row: 1; }
+  .explorer-topbar:has(:global(.lockdown-reason-entry)) :global(.escalation-countdown) { grid-column: 1 / -1; grid-row: 2; }
   .explorer-mobile-menu { display: none; width: 34px; padding: 0; }
   .explorer-route-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text); font-family: var(--font-md3-sans); font-size: 0.9rem; font-weight: 600; }
-  .explorer-topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.4rem; }
+  .explorer-topbar-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 0.4rem; }
   .explorer-public-utility-close {
+    grid-column: 3;
+    justify-self: end;
     width: auto;
     margin-left: auto;
     gap: 0.4rem;
@@ -733,6 +747,11 @@
   }
 
   @keyframes drawer-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+
+  @media (max-width: 800px) {
+    .explorer-topbar { grid-template-columns: minmax(0, 1fr) auto; }
+    .explorer-topbar-actions, .explorer-public-utility-close { grid-column: 2; grid-row: 1; }
+  }
 
   @media (max-width: 540px) {
     .explorer-topbar { min-height: 44px; padding-inline: 0.45rem; }

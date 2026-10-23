@@ -13,7 +13,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 
 use cfms_core::ServiceEvent;
 use tokio::sync::{Mutex, RwLock, broadcast};
@@ -29,6 +29,11 @@ pub struct AppState {
     pub token: RwLock<Option<SecretString>>,
     /// Unix timestamp (seconds) when the token expires.
     pub token_exp: RwLock<Option<i64>>,
+    pub pending_auth: RwLock<Option<crate::authentication::PendingAuthentication>>,
+    pub escalation: RwLock<Option<crate::authentication::IssuedToken>>,
+    /// Invalidates in-flight authentication responses when the session is cleared.
+    pub auth_generation: AtomicU64,
+    pub auth_update: Mutex<()>,
     /// Display name.
     pub nickname: RwLock<Option<String>>,
     /// Server-assigned permission strings.
@@ -87,12 +92,6 @@ pub struct AppState {
     /// Maximum download chunk size advertised to protocol v20 servers.
     pub download_max_chunk_size: AtomicUsize,
 
-    /// Whether a 2FA verification is pending during login.
-    /// When true, the user has submitted credentials but hasn't completed
-    /// 2FA yet — `token` holds a placeholder and `is_logged_in` helpers
-    /// should return false.
-    pub pending_2fa: AtomicBool,
-
     // --- Events ---
     /// Broadcast channel for service-to-frontend events.
     pub event_tx: broadcast::Sender<ServiceEvent>,
@@ -109,6 +108,24 @@ pub struct AppStateSnapshot {
 }
 
 impl AppState {
+    /// Elevated authority is temporary; ordinary session renewal is independent.
+    pub async fn request_token(&self) -> Option<SecretString> {
+        let elevated = {
+            let mut escalation = self.escalation.write().await;
+            if escalation
+                .as_ref()
+                .is_some_and(|issued| issued.claims.exp <= crate::authentication::unix_now())
+            {
+                escalation.take();
+            }
+            escalation.as_ref().map(|issued| issued.secret.clone())
+        };
+        match elevated {
+            Some(token) => Some(token),
+            None => self.token.read().await.clone(),
+        }
+    }
+
     /// Create a new `AppState` with all fields in their default (empty) state.
     pub fn new() -> Arc<Self> {
         let (event_tx, _) = broadcast::channel(256);
@@ -116,6 +133,10 @@ impl AppState {
             username: RwLock::new(None),
             token: RwLock::new(None),
             token_exp: RwLock::new(None),
+            pending_auth: RwLock::new(None),
+            escalation: RwLock::new(None),
+            auth_generation: AtomicU64::new(0),
+            auth_update: Mutex::new(()),
             nickname: RwLock::new(None),
             permissions: RwLock::new(Vec::new()),
             groups: RwLock::new(Vec::new()),
@@ -140,7 +161,6 @@ impl AppState {
             download_max_chunk_size: AtomicUsize::new(
                 cfms_core::constants::DEFAULT_DOWNLOAD_CHUNK_SIZE as usize,
             ),
-            pending_2fa: AtomicBool::new(false),
             event_tx,
         })
     }
@@ -177,6 +197,9 @@ impl AppState {
     /// Queue-specific persistence contexts are cleared by the Tauri shell,
     /// which owns those queues.
     pub async fn clear_auth(&self) {
+        let _update = self.auth_update.lock().await;
+        self.auth_generation
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut username = self.username.write().await;
         let mut token = self.token.write().await;
         let mut token_exp = self.token_exp.write().await;
@@ -196,15 +219,47 @@ impl AppState {
         dek.take();
         server_preference_dek.take();
         avatar_path.take();
-        self.pending_2fa
-            .store(false, std::sync::atomic::Ordering::SeqCst);
+        self.pending_auth.write().await.take();
+        self.escalation.write().await.take();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::authentication::{AUTH, ESCALATED, IssuedToken, PendingAuthentication, TokenClaims};
     use zeroize::Zeroizing;
+
+    fn issued(secret: &str, purpose: u8, exp: f64) -> IssuedToken {
+        IssuedToken {
+            secret: SecretString::new(secret.into()),
+            claims: TokenClaims {
+                sub: "alice-id".into(),
+                purpose,
+                exp,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn elevation_expiry_and_session_refresh_are_independent() {
+        let state = AppState::new();
+        *state.token.write().await = Some(SecretString::new("general".into()));
+        *state.escalation.write().await = Some(issued(
+            "elevated",
+            ESCALATED,
+            crate::authentication::unix_now() + 300.0,
+        ));
+        assert_eq!(state.request_token().await.unwrap().as_str(), "elevated");
+        *state.token.write().await = Some(SecretString::new("refreshed-general".into()));
+        assert_eq!(state.request_token().await.unwrap().as_str(), "elevated");
+        state.escalation.write().await.as_mut().unwrap().claims.exp = 1.0;
+        assert_eq!(
+            state.request_token().await.unwrap().as_str(),
+            "refreshed-general"
+        );
+        assert!(state.escalation.read().await.is_none());
+    }
 
     #[tokio::test]
     async fn clear_auth_removes_every_session_value() {
@@ -218,9 +273,12 @@ mod tests {
         *state.dek.write().await = Some(Zeroizing::new([7; 32]));
         *state.server_preference_dek.write().await = Some("encrypted-envelope".into());
         *state.avatar_path.write().await = Some("avatar.png".into());
-        state
-            .pending_2fa
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+        *state.pending_auth.write().await = Some(PendingAuthentication {
+            username: "alice".into(),
+            issued: issued("auth-only", AUTH, 42.0),
+            methods: vec!["totp".into()],
+        });
+        *state.escalation.write().await = Some(issued("elevated", ESCALATED, 42.0));
 
         state.clear_auth().await;
 
@@ -233,6 +291,13 @@ mod tests {
         assert!(state.dek.read().await.is_none());
         assert!(state.server_preference_dek.read().await.is_none());
         assert!(state.avatar_path.read().await.is_none());
-        assert!(!state.pending_2fa.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(state.pending_auth.read().await.is_none());
+        assert!(state.escalation.read().await.is_none());
+        assert_eq!(
+            state
+                .auth_generation
+                .load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
     }
 }

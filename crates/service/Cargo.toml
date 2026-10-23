@@ -21,6 +21,7 @@ ed25519-dalek.workspace = true
 zip.workspace = true
 semver.workspace = true
 zeroize.workspace = true
+base64ct.workspace = true
 ignore = "0.4"
 tracing.workspace = true
 hex = "0.4.3"

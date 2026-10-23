@@ -528,6 +528,8 @@ export interface AuthStatus {
   nickname: string | null;
   has_token: boolean;
   token_exp: number | null;
+  /** Expiration read from the elevated JWT payload; tokens remain native-only. */
+  escalation_exp?: number | null;
   permissions: string[];
   groups: string[];
   /** Local filesystem path to the cached user avatar. */
@@ -540,8 +542,20 @@ export interface AuthStatus {
   needs_preference_dek_setup?: boolean;
   /** When true, the server requires 2FA verification before completing login. */
   requires_2fa?: boolean;
-  /** The 2FA method requested by the server (e.g. "totp"). */
-  "2fa_method"?: string;
+  /** Methods offered by the AUTH continuation response. */
+  authentication_methods?: string[];
+}
+
+export interface AuthPolicyStep {
+  method: string;
+  credential_ids: string[];
+}
+
+export interface UserAuthentication {
+  user_id: string;
+  methods: Record<string, { purposes: string[]; schema: JsonValue; category: string }>;
+  credentials: { method: string; credential_id: string; active: boolean; label: string | null; key_identity: string | null }[];
+  policies: Record<'login' | 'mfa' | 'escalation', { revision: number; chains: AuthPolicyStep[][] }>;
 }
 
 export interface ServerState {

@@ -681,6 +681,7 @@ dependencies = [
 name = "cfms-service"
 version = "0.53.0"
 dependencies = [
+ "base64ct",
  "cfms-core",
  "cfms-crypto",
  "cfms-transfer",

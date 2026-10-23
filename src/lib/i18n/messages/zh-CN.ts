@@ -1,4 +1,18 @@
 export const zh_CN = {
+  authentication: {
+    escalate: '申请提权',
+    elevated: '提权剩余 {time}',
+    elevatedShort: '已提权',
+    escalationTitle: '验证身份以提权',
+    mfaTitle: '完成身份验证',
+    chooseMethod: '请选择此账户授权的验证方式。',
+    passwordPrompt: '请输入当前账户密码以继续。',
+    password: '账户密码',
+    totp: '验证器或恢复代码',
+    failed: '验证失败，请重试。',
+    unsupported: '此客户端尚不支持可用的认证方式：{methods}。请联系管理员配置支持的方式。',
+    unavailable: '没有可满足提权策略的有效凭据，请联系管理员。',
+  },
   common: {
     back: '返回',
     loading: '加载中...',

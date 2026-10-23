@@ -1,222 +1,3 @@
-// Authentication & Connection
-// ---------------------------------------------------------------------------
-
-/// Log in with username and password (and optional 2FA token).
-///
-/// Sends a login request over the established WSS connection to the
-/// CFMS server.  The server may:
-///
-/// - Accept the login (code 200) — auth state is stored.
-/// - Request 2FA verification (code 202) — caller must re-invoke with
-///   `twofa_token`.
-/// - Reject the login (any other code) — an error is returned.
-///
-/// The Data Encryption Key (DEK) metadata is captured after successful
-/// authentication, but password-dependent DEK work is deferred to the
-/// post-login encryption setup phase so the login form can transition quickly.
-#[tauri::command]
-pub async fn login(
-    state: tauri::State<'_, AppHandleState>,
-    username: String,
-    password: String,
-    twofa_token: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let password = zeroize::Zeroizing::new(password);
-    let twofa_token = twofa_token.map(zeroize::Zeroizing::new);
-
-    // --- Obtain the active connection ---
-    let conn = {
-        let c = state.inner.conn.read().await;
-        c.clone()
-    }
-    .ok_or_else(|| "Not connected to a server".to_string())?;
-
-    let mut response = send_login_request(
-        &conn,
-        &username,
-        &password,
-        twofa_token.as_ref().map(|token| token.as_str()),
-    )
-    .await?;
-
-    tracing::info!("Login response received with code={}", response.code);
-
-    match response.code {
-        // --- Success (no 2FA) ---
-        200 => {
-            apply_successful_login_response(
-                &state,
-                &username,
-                &mut response.data,
-                true,
-                true,
-            )
-            .await?;
-
-            let mut status = build_auth_status(&state.inner).await;
-            status["needs_preference_dek_setup"] = serde_json::Value::Bool(true);
-            Ok(status)
-        }
-
-        // --- 2FA required ---
-        202 => {
-            // Mark 2FA as pending so auth status polls don't report as
-            // authenticated until 2FA is completed.
-            state
-                .inner
-                .pending_2fa
-                .store(true, std::sync::atomic::Ordering::SeqCst);
-
-            // Store partial auth state so the frontend can re-submit with 2FA.
-            // No DEK setup here — the real token isn't available yet.
-            // DEK setup happens when the frontend re-invokes login with
-            // twofa_token and the server returns 200.
-            {
-                let mut u = state.inner.username.write().await;
-                *u = Some(username.clone());
-            }
-            {
-                // Store a placeholder token to indicate partial auth.
-                let mut t = state.inner.token.write().await;
-                *t = Some(cfms_service::sensitive::SecretString::new(
-                    "pending_2fa".to_string(),
-                ));
-            }
-            {
-                let mut e = state.inner.token_exp.write().await;
-                *e = Some(unix_now() + 300); // 5-minute 2FA window
-            }
-            {
-                let mut n = state.inner.nickname.write().await;
-                *n = Some(username.clone());
-            }
-            {
-                let mut p = state.inner.permissions.write().await;
-                p.clear();
-            }
-            {
-                let mut g = state.inner.groups.write().await;
-                g.clear();
-            }
-
-            let method = response
-                .data
-                .get("method")
-                .and_then(|v| v.as_str())
-                .unwrap_or("totp")
-                .to_string();
-
-            Ok(serde_json::json!({
-                "username": &username,
-                "nickname": &username,
-                "has_token": false,
-                "token_exp": null,
-                "permissions": [],
-                "groups": [],
-                "requires_2fa": true,
-                "2fa_method": method,
-            }))
-        }
-
-        // --- Password must be changed before login ---
-        //
-        // Mirrors the Python reference which shows a PasswdUserDialog for
-        // codes 4001 / 4002.
-        //
-        // The frontend should surface a password-change prompt — we include
-        // the server's message so the user knows why.
-        4001 | 4002 => {
-            let server_preference_dek = response
-                .data
-                .get("preference_dek")
-                .and_then(|preference_dek| preference_dek.get("key_content"))
-                .and_then(|key_content| key_content.as_str())
-                .map(ToOwned::to_owned);
-            remember_server_preference_dek(&state.inner, server_preference_dek).await;
-
-            Err(format_server_error_parts(
-                response.code,
-                &format!(
-                    "Password must be changed before login: {}",
-                    response.message
-                ),
-                &response.data,
-            ))
-        }
-
-        // --- Disabled account ---
-        4003 => Err(format_server_response_error(&response)),
-
-        // --- Server-side error ---
-        _ => Err(format_server_response_error(&response)),
-    }
-}
-
-async fn send_login_request(
-    conn: &cfms_transport::Connection,
-    username: &str,
-    password: &str,
-    twofa_token: Option<&str>,
-) -> Result<cfms_core::Response, String> {
-    #[derive(serde::Serialize)]
-    struct LoginData<'a> {
-        username: &'a str,
-        password: &'a str,
-        #[serde(rename = "2fa_token", skip_serializing_if = "Option::is_none")]
-        twofa_token: Option<&'a str>,
-    }
-
-    #[derive(serde::Serialize)]
-    struct LoginRequest<'a> {
-        action: &'static str,
-        data: LoginData<'a>,
-    }
-
-    let request = LoginRequest {
-        action: "login",
-        data: LoginData {
-            username,
-            password,
-            twofa_token,
-        },
-    };
-
-    let mut stream = conn
-        .create_stream()
-        .await
-        .map_err(|e| format!("Failed to create stream: {e}"))?;
-
-    let request_bytes = zeroize::Zeroizing::new(
-        serde_json::to_vec(&request)
-            .map_err(|e| format!("Failed to encode login request: {e}"))?,
-    );
-
-    stream
-        .send_sensitive(conn, request_bytes)
-        .await
-        .map_err(|e| format!("Failed to send login request: {e}"))?;
-
-    let response_bytes = match stream.recv().await {
-        Some(response) => response,
-        None => {
-            if let Some(close) = conn.close_info()
-                && close.code == 1013
-            {
-                return Err(format_server_error_parts(
-                    503,
-                    &close.reason,
-                    &serde_json::json!({ "close_code": close.code }),
-                ));
-            }
-            return Err("Connection closed before login response".to_string());
-        }
-    };
-
-    let response_bytes = zeroize::Zeroizing::new(response_bytes);
-    serde_json::from_slice(&response_bytes)
-        .map_err(|e| format!("Invalid login response from server: {e}"))
-}
-
 async fn apply_successful_login_response(
     state: &AppHandleState,
     username: &str,
@@ -224,12 +5,9 @@ async fn apply_successful_login_response(
     clear_dek: bool,
     clear_tasks: bool,
 ) -> Result<(), String> {
-    let token = match data.get_mut("token").map(std::mem::take) {
-        Some(serde_json::Value::String(token)) => {
-            cfms_service::sensitive::SecretString::new(token)
-        }
-        _ => return Err("Server did not return a token".to_string()),
-    };
+    let issued = IssuedToken::from_response(data, GENERAL)?;
+    let exp = issued.claims.exp.floor() as i64;
+    let token = issued.secret;
 
     {
         let mut u = state.inner.username.write().await;
@@ -240,7 +18,6 @@ async fn apply_successful_login_response(
         *t = Some(token);
     }
     {
-        let exp = data["exp"].as_i64().unwrap_or(unix_now() + 3600);
         let mut e = state.inner.token_exp.write().await;
         *e = Some(exp);
     }
@@ -273,10 +50,8 @@ async fn apply_successful_login_response(
         let mut g = state.inner.groups.write().await;
         *g = grps;
     }
-    state
-        .inner
-        .pending_2fa
-        .store(false, std::sync::atomic::Ordering::SeqCst);
+    state.inner.pending_auth.write().await.take();
+    state.inner.escalation.write().await.take();
 
     if clear_dek {
         let mut d = state.inner.dek.write().await;
@@ -299,19 +74,8 @@ async fn apply_successful_login_response(
     Ok(())
 }
 
-/// Change a user's password via the server's `set_passwd` action.
-///
-/// This supports the *self-change* flow used when the server rejects a login
-/// with code 4001/4002 ("password must be changed before login").  In that
-/// case the user is **not** authenticated yet, so no top-level token is sent —
-/// the server takes the self-change path, verifying `old_passwd` directly
-/// (see `RequestSetPasswdHandler` in the server reference).
-///
-/// Mirrors `PasswdDialogController.action_passwd_user` in the Python reference
-/// (`controllers/dialogs/passwd.py`) for the `passwd_other = False` case:
-/// `username`/`token` are omitted at the top level and the elevated flags
-/// (`bypass_passwd_requirements`, `force_update_after_login`) are kept `false`
-/// — the server rejects them for a self-change anyway.
+/// Change a password with GENERAL + old password, or POST_AUTH + new password only.
+/// POST_AUTH success invalidates the continuation and requires a fresh login.
 #[tauri::command]
 pub async fn change_password(
     state: tauri::State<'_, AppHandleState>,
@@ -329,11 +93,34 @@ pub async fn change_password(
     }
     .ok_or_else(|| "Not connected to a server".to_string())?;
 
+    let post_auth = {
+        let pending = state.inner.pending_auth.read().await;
+        pending
+            .as_ref()
+            .filter(|p| p.username == username && p.issued.claims.purpose == POST_AUTH)
+            .map(|p| p.issued.secret.clone())
+    };
+    if let Some(token) = post_auth {
+        let response = send_action_request(
+            &conn,
+            "set_passwd",
+            serde_json::json!({
+                "new_passwd":new_password.as_str(),
+            }),
+            &username,
+            &token,
+        )
+        .await?;
+        if response.code != 200 {
+            return Err(format_server_response_error(&response));
+        }
+        clear_auth_state(&state).await;
+        return Ok(());
+    }
+
     let mut prepared_dek_rewrap = if let Some(existing_dek) = state.inner.dek.read().await.clone() {
         match get_connection_auth(&state).await {
-            Ok((auth_conn, auth_username, auth_token))
-                if auth_username == username && auth_token.as_str() != "pending_2fa" =>
-            {
+            Ok((auth_conn, auth_username, auth_token)) if auth_username == username => {
                 let encrypted = rewrap_and_upload_preference_dek(
                     &auth_conn,
                     existing_dek.clone(),
@@ -345,7 +132,13 @@ pub async fn change_password(
                 .map_err(|e| {
                     format!("Failed to prepare preference DEK rewrap before password change: {e}")
                 })?;
-                Some((existing_dek, encrypted, auth_conn, auth_username, auth_token))
+                Some((
+                    existing_dek,
+                    encrypted,
+                    auth_conn,
+                    auth_username,
+                    auth_token,
+                ))
             }
             Ok(_) | Err(_) => None,
         }
@@ -353,54 +146,21 @@ pub async fn change_password(
         None
     };
 
-    let request = cfms_service::sensitive::SensitiveJson::new(serde_json::json!({
-        "action": "set_passwd",
-        "data": {
+    let (_, auth_username, token) = get_connection_auth(&state).await?;
+    let response = send_action_request(
+        &conn,
+        "set_passwd",
+        serde_json::json!({
             "username": &username,
             "old_passwd": old_password.as_str(),
             "new_passwd": new_password.as_str(),
             "bypass_passwd_requirements": false,
             "force_update_after_login": false,
-        },
-    }));
-
-    let mut stream = conn
-        .create_stream()
-        .await
-        .map_err(|e| format!("Failed to create stream: {e}"))?;
-
-    let request_bytes = zeroize::Zeroizing::new(
-        serde_json::to_vec(request.as_value())
-            .map_err(|e| format!("Failed to encode change-password request: {e}"))?,
-    );
-
-    stream
-        .send_sensitive(&conn, request_bytes)
-        .await
-        .map_err(|e| format!("Failed to send change-password request: {e}"))?;
-
-    let response_bytes = match stream.recv().await {
-        Some(response) => response,
-        None => {
-            if let Some(close) = conn.close_info()
-                && close.code == 1013
-            {
-                return Err(format_server_error_parts(
-                    503,
-                    &close.reason,
-                    &serde_json::json!({ "close_code": close.code }),
-                ));
-            }
-            return Err("Connection closed before change-password response".to_string());
-        }
-    };
-
-    // Politely close the stream.
-    let _ = stream.send_final(&conn, vec![]).await;
-
-    let response_bytes = zeroize::Zeroizing::new(response_bytes);
-    let response: cfms_core::Response = serde_json::from_slice(&response_bytes)
-        .map_err(|e| format!("Invalid change-password response from server: {e}"))?;
+        }),
+        &auth_username,
+        &token,
+    )
+    .await?;
 
     tracing::info!("set_passwd response received with code={}", response.code);
 
@@ -415,7 +175,9 @@ pub async fn change_password(
             )
             .await
             {
-                Ok(encrypted) => remember_server_preference_dek(&state.inner, Some(encrypted)).await,
+                Ok(encrypted) => {
+                    remember_server_preference_dek(&state.inner, Some(encrypted)).await
+                }
                 Err(error) => {
                     tracing::warn!(
                         "Failed to roll back prepared preference DEK after password change rejection: {error}"

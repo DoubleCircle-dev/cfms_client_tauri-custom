@@ -315,14 +315,6 @@ pub async fn save_appearance_preference(
 async fn appearance_user_scope(
     state: &AppHandleState,
 ) -> Result<Option<(String, String, zeroize::Zeroizing<[u8; 32]>)>, String> {
-    if state
-        .inner
-        .pending_2fa
-        .load(std::sync::atomic::Ordering::Relaxed)
-    {
-        return Ok(None);
-    }
-
     let username = state.inner.username.read().await.clone();
     let Some(username) = username else {
         return Ok(None);

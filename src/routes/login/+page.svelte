@@ -24,6 +24,7 @@
   } from "$lib/stores.svelte";
   import {
     login,
+    completeLoginMfa,
     changePassword,
     recoverPreferenceDek,
     disconnect,
@@ -61,7 +62,7 @@
   import MdOutlinedField from "$lib/components/MdOutlinedField.svelte";
   import ModalFrame from "$lib/components/ModalFrame.svelte";
   import CorruptedPreferenceDialog from "$lib/components/CorruptedPreferenceDialog.svelte";
-  import TwoFactorVerifyDialog from "$lib/components/TwoFactorVerifyDialog.svelte";
+  import AuthenticationDialog from "$lib/components/AuthenticationDialog.svelte";
   import ChangePasswordDialog from "$lib/components/ChangePasswordDialog.svelte";
   import { consumeConnectToLoginTransition, markLoginToConnectTransition } from "$lib/auth-transition";
   import { shouldDeferPostLoginForLockdown } from '$lib/auth-lockdown';
@@ -570,7 +571,7 @@
       if (authResult.requires_2fa) {
         authStore.apply(authResult);
         serverStateStore.apply(await getServerState());
-        // Keep password in memory for the 2FA re-submit.
+        // Keep the password only for post-login preference key decryption.
         pendingPassword = password;
         show2faDialog = true;
         return;
@@ -625,6 +626,8 @@
     newPassword: string,
   ): Promise<void> {
     await changePassword(username, oldPassword, newPassword);
+    authStore.clear();
+    pendingPassword = '';
     // Success: close the dialog and let the user sign in with the new password.
     showChangePassword = false;
     passwordChangeRequired = false;
@@ -635,18 +638,20 @@
 
   function handleChangePasswordCancel() {
     showChangePassword = false;
+    void clearAuthSession();
+    authStore.clear();
   }
 
-  /** Callback from TwoFactorVerifyDialog — re-sends login with 2FA code. */
+  /** Exchange the server-issued AUTH token for a completed login. */
   async function handle2faVerify(
-    code: string,
-    isRecoveryCode: boolean,
+    method: string,
+    data: Record<string, import('$lib/api').JsonValue>,
   ): Promise<boolean> {
     let authResult;
     const loginRequestedAt = Date.now();
 
     try {
-      authResult = await login(username, pendingPassword, code);
+      authResult = await completeLoginMfa(method, data);
 
       if (authResult.requires_2fa) {
         // Still requires 2FA — shouldn't happen, but handle gracefully.
@@ -655,6 +660,12 @@
     } catch (e) {
       if (isAccountDisabledError(e)) {
         await enterAccountDisabledState(loginRequestedAt, getAccountDisabledReason(e));
+        return true;
+      }
+      if (isPasswordChangeRequired(e)) {
+        show2faDialog = false;
+        passwordChangeRequired = true;
+        showChangePassword = true;
         return true;
       }
       const throttleError = throttledMessage(e);
@@ -996,10 +1007,11 @@
 
 <!-- 2FA Verification Dialog -->
 {#if show2faDialog}
-  <TwoFactorVerifyDialog
+  <AuthenticationDialog
+    title={$t('authentication.mfaTitle')}
     onVerify={handle2faVerify}
     onCancel={handle2faCancel}
-    method={authStore.twofaMethod}
+    methods={authStore.authenticationMethods}
   />
 {/if}
 
@@ -1291,6 +1303,7 @@
   <ChangePasswordDialog
     {username}
     initialOldPassword={password}
+    requireOldPassword={false}
     onSubmit={handleChangePassword}
     onCancel={handleChangePasswordCancel}
   />

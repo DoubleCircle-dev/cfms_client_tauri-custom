@@ -95,6 +95,12 @@ pnpm tauri ios build
 
 Server addresses, account permissions, document scope, and administrative features are controlled by the CFMS server. Contact the server administrator if you have lost your account password.
 
+### Authentication protocol
+
+This client requires protocol **28**, matching the server's advertised wire version; older protocol versions are rejected. Password sign-in uses method-based credentials. Login MFA exchanges an AUTH token through `exchange_token` with target purpose `2`; required password changes use a restricted POST_AUTH token and require signing in again afterward.
+
+Use **Elevate privileges** beside the top-bar lockdown control to request a token with purpose `6`. The account's escalation policy determines whether a password, authenticator/recovery code, or no additional proof is required. The centered timer reads expiration from the issued JWT payload. Elevated tokens stay in native memory, are used for authenticated commands while valid, and expire independently of the ordinary session. Token refresh never extends elevation. This client currently provides password and TOTP verification interfaces; policies requiring public keys or extension authentication methods display an explicit unsupported-method message.
+
 ### Optional GitHub API token
 
 Update checks and CA certificate list refreshes read public repositories through the GitHub REST API. Anonymous requests normally share a limit of 60 requests per hour per originating IP address; requests authenticated with a personal access token normally use the account's 5,000-request-per-hour limit. These are GitHub's primary limits, not a guarantee that every request will succeed. See [GitHub's rate-limit documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
