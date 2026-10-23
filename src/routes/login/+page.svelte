@@ -29,6 +29,7 @@
     releaseAuthPrivateKey,
     preparePreferenceUnlock,
     unlockPreferenceDek,
+    discardLockedPreferenceData,
     type AuthPrivateKeyInfo,
     type PublicKeyInteraction,
     completeLoginMfa,
@@ -1084,6 +1085,7 @@
 {#if migrationVisible}
   <PreferenceUnlockDialog
     onUnlock={async (oldPassword) => { await unlockPreferenceDek(oldPassword); migrationResolver?.(true); }}
+    onDiscard={async () => { await discardLockedPreferenceData(); migrationResolver?.(true); }}
     onCancel={() => migrationResolver?.(false)}
   />
 {/if}
@@ -1181,7 +1183,7 @@
   .login-credential-region { transition: height 180ms var(--motion-easing-standard, ease-out); }
   .login-credential-content { padding: 2px 0; }
   .auth-panel { max-height: calc(100dvh - var(--app-titlebar-height, 0px)); overflow-y: auto; overscroll-behavior-y: contain; }
-  @media (max-height: 800px) { .auth-shell .auth-panel { align-items: flex-start; padding-top: 1.5rem; padding-bottom: 1.5rem; } }
+  @media (max-height: 800px) { .auth-shell .auth-panel { padding-top: 1.5rem; padding-bottom: 1.5rem; } }
   @media (prefers-reduced-motion: reduce) { .login-credential-region { transition: none; } }
   .login-primary-action { display: flex; align-items: center; justify-content: center; gap: 0.625rem; width: 100%; min-height: 44px; margin-top: 1.5rem; border: 0; border-radius: 8px; background: var(--explorer-accent); color: var(--color-md3-on-primary); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: filter 140ms ease; }
   .login-primary-action:hover:not(:disabled) { filter: brightness(1.08); }
@@ -1264,7 +1266,8 @@
     display: flex;
     min-height: 100%;
     flex: 0 0 100%;
-    align-items: center;
+    /* Keep short forms centered while leaving overflowing forms reachable. */
+    align-items: safe center;
     justify-content: center;
     padding: 3rem 1.25rem;
     background:
@@ -1279,7 +1282,7 @@
   .auth-form-stage {
     display: grid;
     width: 100%;
-    max-width: 384px;
+    max-width: 336px;
     align-items: center;
   }
 

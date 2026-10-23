@@ -615,6 +615,7 @@ pub fn run() {
             commands::cancel_public_key_authentication,
             commands::prepare_preference_unlock,
             commands::unlock_preference_dek,
+            commands::discard_locked_preference_data,
             commands::update_user_auth_public_key,
             commands::delete_user_auth_public_key,
             commands::change_password,

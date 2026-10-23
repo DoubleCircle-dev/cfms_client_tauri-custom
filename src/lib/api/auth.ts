@@ -39,6 +39,8 @@ export function loginWithPublicKey(username: string, keyRef: string, passphrase:
 }
 export const preparePreferenceUnlock = (): Promise<'ready' | 'password_required'> => invoke('prepare_preference_unlock');
 export const unlockPreferenceDek = (password: string): Promise<void> => invoke('unlock_preference_dek', { password });
+/** Discard this account's local encrypted data and create a device-only key. */
+export const discardLockedPreferenceData = (): Promise<void> => invoke('discard_locked_preference_data');
 
 export async function getUserAuthentication(userId?: string): Promise<UserAuthentication> {
   return invoke('get_user_authentication', { userId: userId ?? null });

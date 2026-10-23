@@ -13,6 +13,9 @@ afterEach(() => {
 
 describe('VirtualList large collection rendering', () => {
   it.each([634, 2_000])('keeps mounted rows bounded for a %i-item viewport', async (count) => {
+    // TanStack measures the viewport's client box, which jsdom leaves at zero.
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(960);
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
       return this.classList.contains('virtual-list-viewport') ? 480 : 64;
     });

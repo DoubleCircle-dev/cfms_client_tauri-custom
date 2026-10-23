@@ -6,12 +6,13 @@ import '$lib/i18n';
 import { authStore, serverStateStore } from '$lib/stores.svelte';
 import LoginPage from './+page.svelte';
 
-const mocks = vi.hoisted(() => ({ login: vi.fn(), keyLogin: vi.fn(), pick: vi.fn(), release: vi.fn(), clear: vi.fn(), cancel: vi.fn(), prepare: vi.fn(), unlock: vi.fn(), setup: vi.fn(), goto: vi.fn(), server: vi.fn(), preferences: vi.fn(), tasks: vi.fn(), loadAppearance: vi.fn() }));
+const mocks = vi.hoisted(() => ({ login: vi.fn(), keyLogin: vi.fn(), pick: vi.fn(), release: vi.fn(), clear: vi.fn(), cancel: vi.fn(), prepare: vi.fn(), unlock: vi.fn(), discard: vi.fn(), setup: vi.fn(), goto: vi.fn(), server: vi.fn(), preferences: vi.fn(), tasks: vi.fn(), loadAppearance: vi.fn() }));
 vi.hoisted(() => { Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })) }); });
 vi.mock('$lib/api', async (original) => ({
   ...await original<typeof import('$lib/api')>(), login: mocks.login, loginWithPublicKey: mocks.keyLogin,
   pickAuthPrivateKey: mocks.pick, releaseAuthPrivateKey: mocks.release, clearAuthSession: mocks.clear,
   cancelPublicKeyAuthentication: mocks.cancel, preparePreferenceUnlock: mocks.prepare, unlockPreferenceDek: mocks.unlock,
+  discardLockedPreferenceData: mocks.discard,
   setupPreferenceDek: mocks.setup, getServerState: mocks.server, loadUserPreference: mocks.preferences,
   getAuthStatus: vi.fn().mockImplementation(async () => status), checkCachedAvatar: vi.fn().mockResolvedValue(null), getUserAvatar: vi.fn().mockResolvedValue(null),
   reloadTasksForUser: mocks.tasks, getDownloadTasks: vi.fn().mockResolvedValue([]), validateFileShortcuts: vi.fn().mockResolvedValue(undefined),
@@ -31,6 +32,7 @@ beforeEach(() => {
   serverStateStore.apply(server); mocks.server.mockResolvedValue(server);
   mocks.release.mockResolvedValue(undefined); mocks.clear.mockResolvedValue(undefined); mocks.cancel.mockResolvedValue(undefined);
   mocks.pick.mockResolvedValue(key); mocks.prepare.mockResolvedValue('ready'); mocks.unlock.mockResolvedValue(undefined);
+  mocks.discard.mockResolvedValue(undefined);
   mocks.keyLogin.mockResolvedValue(status); mocks.preferences.mockResolvedValue({}); mocks.tasks.mockResolvedValue(0); mocks.loadAppearance.mockResolvedValue(undefined);
 });
 afterEach(() => { cleanup(); authStore.clear(); serverStateStore.clear(); vi.clearAllMocks(); });
@@ -46,6 +48,7 @@ describe('dual-method sign-in', () => {
   it('starts with collapsed options and toggles the icon buttons without changing the selected method', async () => {
     render(LoginPage);
     const toggle = screen.getByRole('button', { name: 'Sign-in options' });
+    expect(toggle.querySelector('.material-symbols-outlined')).toBeNull();
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByRole('button', { name: 'Public key' })).toBeNull();
     await fireEvent.click(toggle);
@@ -107,5 +110,20 @@ describe('dual-method sign-in', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(mocks.clear).toHaveBeenCalled());
     expect(mocks.unlock).not.toHaveBeenCalled(); expect(mocks.tasks).not.toHaveBeenCalled(); expect(mocks.goto).not.toHaveBeenCalled();
+    expect(mocks.discard).not.toHaveBeenCalled();
+  });
+  it('continues public-key sign-in with defaults after confirmed local data deletion without the old password', async () => {
+    mocks.prepare.mockResolvedValue('password_required');
+    render(LoginPage);
+    await fireEvent.submit(await publicKeyForm());
+    await screen.findByRole('dialog', { name: 'Unlock existing data once' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Forgot the old password? Clear local data' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear and continue signing in' }));
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith('/home/overview'), { timeout: 3000 });
+    expect(mocks.discard).toHaveBeenCalledExactlyOnceWith();
+    expect(mocks.preferences).toHaveBeenCalled();
+    expect(mocks.tasks).toHaveBeenCalled();
+    expect(mocks.unlock).not.toHaveBeenCalled();
+    expect(mocks.setup).not.toHaveBeenCalled();
   });
 });

@@ -67,7 +67,7 @@ describe('one-time preference migration', () => {
   it('keeps the dialog open and drops the password when migration fails', async () => {
     const unlock = vi.fn().mockRejectedValue('publicKey.migrationFailed');
     const cancel = vi.fn();
-    render(PreferenceUnlockDialog, { onUnlock: unlock, onCancel: cancel });
+    render(PreferenceUnlockDialog, { onUnlock: unlock, onDiscard: vi.fn(), onCancel: cancel });
     const input = screen.getByLabelText('Password protecting existing data') as HTMLInputElement;
     await fireEvent.input(input, { target: { value: 'old-password' } });
     await fireEvent.submit(input.closest('form')!);
@@ -77,5 +77,34 @@ describe('one-time preference migration', () => {
     expect(cancel).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(cancel).toHaveBeenCalledOnce();
+  });
+  it('requires confirmation and allows backing out without clearing data', async () => {
+    const discard = vi.fn();
+    render(PreferenceUnlockDialog, { onUnlock: vi.fn(), onDiscard: discard, onCancel: vi.fn() });
+    await fireEvent.click(screen.getByRole('button', { name: 'Forgot the old password? Clear local data' }));
+    expect(screen.getByText(/Downloaded files and server data are unaffected/)).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+    expect(discard).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByLabelText('Password protecting existing data')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText('Password protecting existing data'));
+    expect(discard).not.toHaveBeenCalled();
+  });
+  it('blocks duplicate clears and allows retrying a failed clear without a password', async () => {
+    let reject!: (error: string) => void;
+    const discard = vi.fn().mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail; })).mockResolvedValue(undefined);
+    const unlock = vi.fn();
+    render(PreferenceUnlockDialog, { onUnlock: unlock, onDiscard: discard, onCancel: vi.fn() });
+    await fireEvent.click(screen.getByRole('button', { name: 'Forgot the old password? Clear local data' }));
+    const confirm = screen.getByRole('button', { name: 'Clear and continue signing in' });
+    await fireEvent.click(confirm);
+    await fireEvent.click(confirm);
+    expect(discard).toHaveBeenCalledOnce();
+    expect((screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(true);
+    reject('publicKey.discardFailed');
+    expect((await screen.findByRole('alert')).textContent).toContain('Please retry');
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear and continue signing in' }));
+    expect(discard).toHaveBeenCalledTimes(2);
+    expect(unlock).not.toHaveBeenCalled();
   });
 });
