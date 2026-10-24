@@ -10,6 +10,7 @@ import ManagePage from './+page.svelte';
 const mocks = vi.hoisted(() => ({
   viewAuditLogs: vi.fn(),
 }));
+const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
 
 vi.mock('$lib/api', async (importOriginal) => ({
   ...await importOriginal<typeof import('$lib/api')>(),
@@ -28,7 +29,7 @@ function auditEntry(id: string, action: string) {
   return {
     id,
     action,
-    username: 'admin', user_id: 'aabbccdd-0000-4000-8000-000000000002',
+    user_id: 'aabbccdd-0000-4000-8000-000000000002' as string | null,
     target: null,
     data: null,
     result: 0,
@@ -69,10 +70,58 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   authStore.clear();
+  vi.useRealTimers();
+  if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+  else Reflect.deleteProperty(navigator, 'clipboard');
   vi.clearAllMocks();
 });
 
-describe('management audit log filters', () => {
+describe('management audit logs', () => {
+  it('replaces the username column with compact user IDs that expand independently', async () => {
+    const first = auditEntry('audit-record-1', 'login');
+    const second = auditEntry('audit-record-2', 'login');
+    const anonymous = { ...auditEntry('audit-record-3', 'login'), user_id: null };
+    mocks.viewAuditLogs.mockResolvedValue(auditPage([first, second, anonymous]));
+
+    await openAuditLogs();
+    expect(await screen.findByRole('columnheader', { name: 'User ID' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Username' })).toBeNull();
+    const users = screen.getAllByRole('button', { name: 'Expand full user ID' });
+    expect(users).toHaveLength(2);
+    expect(users[0].textContent?.trim()).toBe('aabbccd…');
+    expect(users[0].title).toBe(first.user_id);
+    await fireEvent.click(users[0]);
+    expect(users[0].textContent?.trim()).toBe(first.user_id);
+    expect(users[0].getAttribute('aria-expanded')).toBe('true');
+    expect(users[1].getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getAllByRole('button', { name: 'Expand full audit log ID' })).toHaveLength(3);
+    await fireEvent.click(users[0]);
+    expect(users[0].textContent?.trim()).toBe('aabbccd…');
+    const rows = screen.getAllByRole('row');
+    expect(rows[3].querySelectorAll('td')[2].textContent?.trim()).toBe('—');
+  });
+
+  it.each(['contextmenu', 'longpress'])('copies the complete user ID using %s', async (interaction) => {
+    const entry = auditEntry('audit-record-1', 'login');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    mocks.viewAuditLogs.mockResolvedValue(auditPage([entry]));
+
+    await openAuditLogs();
+    const user = await screen.findByRole('button', { name: 'Expand full user ID' });
+    if (interaction === 'contextmenu') {
+      await fireEvent.contextMenu(user);
+    } else {
+      vi.useFakeTimers();
+      await fireEvent.pointerDown(user, { pointerType: 'touch' });
+      await vi.advanceTimersByTimeAsync(550);
+      await fireEvent.pointerUp(user, { pointerType: 'touch' });
+      await fireEvent.click(user);
+    }
+    expect(writeText).toHaveBeenCalledWith(entry.user_id);
+    expect(user.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('resets pagination on filter changes and carries filters through next and previous pages', async () => {
     mocks.viewAuditLogs
       .mockResolvedValueOnce(auditPage([

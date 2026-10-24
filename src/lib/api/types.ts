@@ -371,7 +371,7 @@ export interface UnlockAuthLockoutsResult {
 export interface AuditLogEntry {
   id: string;
   action: string;
-  username: string;
+  user_id: string | null;
   target: string;
   data: unknown;
   result: string;

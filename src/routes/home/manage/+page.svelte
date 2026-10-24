@@ -40,6 +40,7 @@
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import AuditLogFilter from '$lib/components/AuditLogFilter.svelte';
+  import AuditIdentifier from '$lib/components/AuditIdentifier.svelte';
   import CreateUserAccountDialog from '$lib/components/CreateUserAccountDialog.svelte';
   import CreateUserGroupDialog from '$lib/components/CreateUserGroupDialog.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -141,9 +142,6 @@
   let groupIdentityColumnWidth = $state(IDENTITY_COLUMN_MIN_WIDTH);
   let hideAccountMetadata = $state(false);
   let hideGroupMetadata = $state(false);
-  let expandedAuditIds = $state<Set<string>>(new Set());
-  let auditIdLongPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let suppressAuditIdClick: string | null = null;
   let contextMenu = $state<{
     open: boolean;
     x: number;
@@ -346,7 +344,6 @@
   function loadActiveTab() {
     hideContextMenu();
     expandedActionRow = null;
-    expandedAuditIds = new Set();
     if (activeTab === 'accounts') loadUserList();
     else if (activeTab === 'groups') loadGroupList();
     else if (activeTab === 'security') securityRefreshKey += 1;
@@ -560,7 +557,6 @@
       auditCursorStack = [cursor];
       auditPageIndex = 0;
       auditNextCursor = null;
-      expandedAuditIds = new Set();
     }
     loadingLogs = true;
     error = null;
@@ -579,12 +575,10 @@
       } else {
         if (direction === 'previous') auditPageIndex = Math.max(0, auditPageIndex - 1);
       }
-      expandedAuditIds = new Set();
     } catch (err) {
       error = formatError(err);
       auditEntries = [];
       auditNextCursor = null;
-      expandedAuditIds = new Set();
     } finally {
       loadingLogs = false;
     }
@@ -1012,78 +1006,6 @@
     return JSON.stringify(value);
   }
 
-  function isAuditIdExpanded(id: string) {
-    return expandedAuditIds.has(id);
-  }
-
-  function displayAuditId(id: string) {
-    return isAuditIdExpanded(id) || id.length <= 7 ? id : id.slice(0, 7);
-  }
-
-  function toggleAuditId(id: string) {
-    const next = new Set(expandedAuditIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    expandedAuditIds = next;
-  }
-
-  async function copyAuditId(id: string) {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(id);
-      } else {
-        copyTextWithFallback(id);
-      }
-      notificationStore.success($t('manage.auditIdCopied'), 1600);
-    } catch (err) {
-      notificationStore.error($t('manage.auditIdCopyFailed'));
-    }
-  }
-
-  function copyTextWithFallback(text: string) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand('copy');
-    document.body.removeChild(textarea);
-  }
-
-  function handleAuditIdClick(event: MouseEvent, id: string) {
-    if (suppressAuditIdClick === id) {
-      event.preventDefault();
-      suppressAuditIdClick = null;
-      return;
-    }
-
-    toggleAuditId(id);
-  }
-
-  function handleAuditIdContextMenu(event: MouseEvent, id: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    clearAuditIdLongPress();
-    void copyAuditId(id);
-  }
-
-  function startAuditIdLongPress(id: string) {
-    clearAuditIdLongPress();
-    auditIdLongPressTimer = setTimeout(() => {
-      suppressAuditIdClick = id;
-      auditIdLongPressTimer = null;
-      void copyAuditId(id);
-    }, 550);
-  }
-
-  function clearAuditIdLongPress() {
-    if (!auditIdLongPressTimer) return;
-    clearTimeout(auditIdLongPressTimer);
-    auditIdLongPressTimer = null;
-  }
-
   function formatBlockTarget(block: UserBlock) {
     const targetType = block.target_type ?? 'all';
     if (targetType === 'all') return $t('tasks.all');
@@ -1445,11 +1367,21 @@
           {/if}
         {:else}
           <div class="overflow-x-auto">
-            <table class="min-w-[920px] w-full text-left text-sm">
+            <table class="audit-table w-full text-left text-sm">
+              <colgroup>
+                <col style="width: 10%" />
+                <col style="width: 18%" />
+                <col style="width: 12%" />
+                <col style="width: 20%" />
+                <col style="width: 9%" />
+                <col style="width: 15%" />
+                <col style="width: 16%" />
+              </colgroup>
               <thead class="bg-md3-surface-container-high/50 text-xs uppercase text-md3-on-surface-variant">
                 <tr>
                   <th class="px-3 py-2">{$t('manage.id')}</th>
                   <th class="px-3 py-2">{$t('manage.action')}</th>
+                  <th class="px-3 py-2">{$t('manage.userId')}</th>
                   <th class="px-3 py-2">{$t('manage.target')}</th>
                   <th class="px-3 py-2">{$t('manage.result')}</th>
                   <th class="px-3 py-2">{$t('manage.remote')}</th>
@@ -1460,38 +1392,20 @@
                 {#each auditEntries as entry (entry.id)}
                   <tr class="border-t border-md3-outline/50 text-md3-on-surface">
                     <td class="px-3 py-2 align-top text-md3-on-surface-variant">
-                      <button
-                        class="max-w-36 rounded-md px-1 py-0.5 text-left leading-relaxed transition-colors
-                               hover:bg-md3-primary-container/30 hover:text-md3-primary-emphasis
-                               sm:max-w-64 {isAuditIdExpanded(entry.id) ? 'break-all text-md3-on-surface' : 'truncate'}"
-                        title={entry.id}
-                        aria-label={isAuditIdExpanded(entry.id)
-                          ? $t('manage.collapseAuditId')
-                          : $t('manage.expandAuditId')}
-                        aria-expanded={isAuditIdExpanded(entry.id)}
-                        onclick={(event) => handleAuditIdClick(event, entry.id)}
-                        oncontextmenu={(event) => handleAuditIdContextMenu(event, entry.id)}
-                        onpointerdown={(event) => {
-                          if (event.pointerType === 'mouse' && event.button !== 0) return;
-                          startAuditIdLongPress(entry.id);
-                        }}
-                        onpointerup={clearAuditIdLongPress}
-                        onpointercancel={clearAuditIdLongPress}
-                        onpointerleave={clearAuditIdLongPress}
-                      >
-                        {displayAuditId(entry.id)}
-                      </button>
+                      <AuditIdentifier value={entry.id} />
                     </td>
                     <td class="px-3 py-2 align-top">{entry.action}</td>
-                    <td class="px-3 py-2 align-top max-w-52 truncate" title={entry.target}>{entry.target}</td>
+                    <td class="px-3 py-2 align-top"><AuditIdentifier value={entry.user_id} kind="user" /></td>
+                    <td class="px-3 py-2 align-top">{entry.target}</td>
                     <td class="px-3 py-2 align-top">{entry.result}</td>
                     <td class="px-3 py-2 align-top">{entry.remote_address}</td>
-                    <td class="px-3 py-2 align-top text-right whitespace-nowrap">{formatDate(entry.logged_time)}</td>
+                    <td class="px-3 py-2 align-top text-right">{formatDate(entry.logged_time)}</td>
                   </tr>
                 {/each}
               </tbody>
             </table>
           </div>
+          <p class="px-3 py-2 text-xs text-md3-on-surface-variant">{$t('manage.auditIdentifierHelp')}</p>
         {/if}
       {/if}
     </div>
@@ -1846,6 +1760,17 @@
 
   .management-content--audit {
     overflow: visible;
+  }
+
+  .audit-table {
+    table-layout: fixed;
+    min-width: 40rem;
+  }
+
+  .audit-table th,
+  .audit-table td {
+    padding-inline: 0.5rem;
+    overflow-wrap: anywhere;
   }
 
   .audit-active-filters {
