@@ -42,7 +42,10 @@ describe('protocol 28 account selectors', () => {
 
 describe('authentication management IPC', () => {
   it('supports self service and an explicit delegated target for every endpoint', async () => {
-    const policies = [{ purpose: 'mfa' as const, expected_revision: 4, chains: [] }];
+    const policies = [
+      { purpose: 'mfa' as const, expected_revision: 4, chains: [] },
+      { purpose: 'escalation' as const, expected_revision: 7, chains: [] },
+    ];
     for (const target of [undefined, userId]) {
       const userId = target ?? null;
       await getUserAuthentication(target);

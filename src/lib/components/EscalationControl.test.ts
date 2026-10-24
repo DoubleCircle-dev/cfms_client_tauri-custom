@@ -50,7 +50,8 @@ describe('elevation controls', () => {
     expect(screen.getByRole('button', { name: 'authentication.escalate' }).getAttribute('data-active')).toBe('false');
   });
 
-  it('directly exchanges a token when no additional proof is required', async () => {
+  it.each([0, 2])('directly exchanges a token for an empty elevation policy at revision %s', async (revision) => {
+    mocks.inventory.mockResolvedValue({ policies: { escalation: { revision, chains: [] } } });
     render(EscalationControl);
     await fireEvent.click(screen.getByRole('button', { name: 'authentication.escalate' }));
     await waitFor(() => expect(mocks.escalate).toHaveBeenCalledWith());

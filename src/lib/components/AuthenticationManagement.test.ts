@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authStore } from '$lib/stores.svelte';
+import type { AuthPolicy } from '$lib/api';
 import AuthenticationManagement from './AuthenticationManagement.svelte';
 import { dialogStore } from '$lib/dialogs.svelte';
 
@@ -22,11 +23,11 @@ vi.mock('svelte-i18n', () => ({ _: { subscribe(run: (t: (key: string) => string)
 Object.defineProperty(Element.prototype, 'animate', { configurable: true, value: () => ({ cancel: vi.fn(), currentTime: 0, effect: {}, onfinish: null, playState: 'finished' }) });
 
 const userId = 'aabbccdd-0000-4000-8000-000000000001';
-const inventory = () => ({
+const inventory = (escalation: AuthPolicy = { revision: 0, chains: [] }) => ({
   user_id: userId,
   methods: { password: { purposes: ['login', 'mfa', 'escalation'] }, publickey: { purposes: ['login', 'mfa', 'escalation'] } },
   credentials: [{ method: 'password', credential_id: 'password-id', active: true, label: 'Password', key_identity: null }],
-  policies: { login: { revision: 3, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] }, mfa: { revision: 0, chains: [] }, escalation: { revision: 0, chains: [] } },
+  policies: { login: { revision: 3, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] }, mfa: { revision: 0, chains: [] }, escalation },
 });
 
 beforeEach(() => {
@@ -79,6 +80,71 @@ describe('authentication management', () => {
     expect(await screen.findByText('Work key')).toBeTruthy();
     expect(mocks.policies).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'authManagement.savePolicies' })).toBeNull();
+  });
+
+  it.each([undefined, 'other-account-uuid'])('clears all elevation alternatives for %s using the current revision only after saving', async (target) => {
+    const original = inventory();
+    original.policies.escalation = { revision: 7, chains: [original.policies.login.chains[0], original.policies.login.chains[0]] };
+    mocks.inventory.mockResolvedValue({ ...original, user_id: target ?? userId });
+    mocks.policies.mockResolvedValue({ policies: { escalation: { revision: 8, chains: [] } } });
+    render(AuthenticationManagement, { userId: target });
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    expect(screen.queryByRole('button', { name: 'authManagement.clearEscalation' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.purposes.escalation' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.clearEscalation' }));
+    expect(screen.getByText('authManagement.empty.escalation')).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'authManagement.selectedStep' })).toBeNull();
+    expect(mocks.policies).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole('tab', { name: 'authManagement.methodsTab' }));
+    await fireEvent.click(screen.getByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.savePolicies' }));
+    await waitFor(() => expect(mocks.policies).toHaveBeenCalledWith([
+      { purpose: 'escalation', expected_revision: 7, chains: [] },
+    ], target));
+    await waitFor(() => expect(screen.queryByText('authManagement.unsaved')).toBeNull());
+    expect(screen.getByText('authManagement.empty.escalation')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'authManagement.clearEscalation' })).toBeNull();
+  });
+
+  it('can clear elevation by deleting its last alternative and preserves the empty draft on conflict', async () => {
+    const original = inventory();
+    original.policies.escalation = { revision: 1, chains: original.policies.login.chains };
+    mocks.inventory.mockResolvedValue(original);
+    mocks.policies.mockRejectedValue(new Error('Server returned 409: Conflict\nCFMS_ERROR_DATA:{"reason":"revision_conflict"}'));
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.purposes.escalation' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.removeAlternative' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.savePolicies' }));
+    await waitFor(() => expect(mocks.policies).toHaveBeenCalledWith([
+      { purpose: 'escalation', expected_revision: 1, chains: [] },
+    ], undefined));
+    expect((await screen.findByRole('alert')).textContent).toBe('authManagement.errors.revision_conflict');
+    expect(screen.getByText('authManagement.empty.escalation')).toBeTruthy();
+    expect(screen.getByText('authManagement.unsaved')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'authManagement.savePolicies' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('prevents clearing or saving an elevation policy after elevation expires', async () => {
+    const original = inventory();
+    original.policies.escalation = { revision: 1, chains: original.policies.login.chains };
+    mocks.inventory.mockResolvedValue(original);
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.purposes.escalation' }));
+    const clear = screen.getByRole('button', { name: 'authManagement.clearEscalation' }) as HTMLButtonElement;
+    authStore.escalationExp = null;
+    await waitFor(() => expect(clear.disabled).toBe(true));
+    await fireEvent.click(clear);
+    expect(screen.queryByText('authManagement.empty.escalation')).toBeNull();
+    authStore.escalationExp = Date.now() / 1000 + 300;
+    await waitFor(() => expect(clear.disabled).toBe(false));
+    await fireEvent.click(clear);
+    authStore.escalationExp = null;
+    const save = screen.getByRole('button', { name: 'authManagement.savePolicies' }) as HTMLButtonElement;
+    await waitFor(() => expect(save.disabled).toBe(true));
+    await fireEvent.click(save);
+    expect(mocks.policies).not.toHaveBeenCalled();
   });
 
   it('preserves drafts across purposes and tabs, and saves all changes atomically', async () => {

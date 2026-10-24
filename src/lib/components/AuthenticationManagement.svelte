@@ -114,7 +114,7 @@
     catch (e) {
       const reason = serverErrorData(e)?.reason;
       if (reason === 'revision_conflict') conflict = true;
-      const reasons = ['revision_conflict', 'duplicate_public_key', 'login_unavailable', 'escalation_unavailable', 'escalation_required', 'invalid_public_key', 'unsupported_public_key', 'invalid_policy'];
+      const reasons = ['revision_conflict', 'duplicate_public_key', 'login_unavailable', 'escalation_unavailable', 'invalid_public_key', 'unsupported_public_key', 'invalid_policy'];
       error = typeof reason === 'string' && reasons.includes(reason) ? $t(`authManagement.errors.${reason}`) : formatUserFacingError(e);
       return false;
     } finally { busy = false; }
@@ -131,6 +131,11 @@
       }
       conflict = false;
     });
+  }
+  function clearEscalationPolicy() {
+    if (!writable) return;
+    draft.escalation = [];
+    selectedChain = 0; selectedStep = 0;
   }
   function addAlternative() {
     if (!writable || !inventory) return;
@@ -221,7 +226,15 @@
       {#if purpose === 'mfa'}<p>{$t('authManagement.mfaMethodHint')}</p>{/if}
       {#if !loginAvailable}<p class="auth-notice">{$t('authManagement.noCompleteLogin')}</p>{/if}
       <div class="auth-flow-layout">
-        <div class="auth-grow"><AuthenticationFlowGraph chains={draft[purpose]} {purpose} credentials={inventory.credentials} {selectedChain} {selectedStep} onSelect={(chain, step) => { selectedChain = chain; selectedStep = step; }} /><div class="auth-actions"><DialogActionButton disabled={!writable || !Object.values(inventory.methods).some((metadata) => metadata.purposes.includes(purpose))} onclick={addAlternative}>{$t('authManagement.addAlternative')}</DialogActionButton></div></div>
+        <div class="auth-grow">
+          <AuthenticationFlowGraph chains={draft[purpose]} {purpose} credentials={inventory.credentials} {selectedChain} {selectedStep} onSelect={(chain, step) => { selectedChain = chain; selectedStep = step; }} />
+          <div class="auth-actions">
+            {#if purpose === 'escalation' && draft.escalation.length}
+              <DialogActionButton variant="danger" disabled={!writable} onclick={clearEscalationPolicy}>{$t('authManagement.clearEscalation')}</DialogActionButton>
+            {/if}
+            <DialogActionButton disabled={!writable || !Object.values(inventory.methods).some((metadata) => metadata.purposes.includes(purpose))} onclick={addAlternative}>{$t('authManagement.addAlternative')}</DialogActionButton>
+          </div>
+        </div>
         {#if selected?.[selectedStep]}
           <AuthenticationStepEditor {inventory} {purpose} chain={selected} chainIndex={selectedChain} stepIndex={selectedStep} {writable} onMethod={setMethod} onToggle={toggle}
             onAddStep={() => { if (writable) { selected.push({ method: selected[0].method, credential_ids: [] }); selectedStep = selected.length - 1; } }}

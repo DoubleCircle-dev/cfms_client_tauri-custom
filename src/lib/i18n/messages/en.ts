@@ -68,6 +68,7 @@ export const en = {
     selectedStep: "Alternative {alternative} · Step {step}",
     allowedCredentials: "Allowed credentials",
     removeAlternative: "Delete this alternative",
+    clearEscalation: "Clear elevation policy",
     removeStep: "Delete this step",
     distinctKeys: "Consecutive public-key steps require different keys. Each step can offer several eligible keys.",
     unavailablePath: "This alternative cannot currently be completed. Check its credentials.",
@@ -95,7 +96,7 @@ export const en = {
     purposeHelp: {
       login: "Choose one alternative when signing in to this account.",
       mfa: "After signing in, confirm your identity with a different method.",
-      escalation: "Confirm your identity before actions that require elevated access."
+      escalation: "Confirm your identity before actions that require elevated access. After clearing and saving this policy, a valid session can elevate privileges without additional verification."
     },
     signInRequired: "Sign in to manage authentication settings.",
     title: "Authentication",
@@ -137,7 +138,6 @@ export const en = {
       duplicate_public_key: "This account already has this public key.",
       login_unavailable: "This change would leave no complete login and MFA path.",
       escalation_unavailable: "This change would make the elevation policy unavailable.",
-      escalation_required: "An existing elevation policy cannot be cleared.",
       invalid_public_key: "Enter a valid OpenSSH public key.",
       unsupported_public_key: "Use an Ed25519, RSA or ECDSA public key.",
       invalid_policy: "The policy contains invalid methods, credential selections, or steps."

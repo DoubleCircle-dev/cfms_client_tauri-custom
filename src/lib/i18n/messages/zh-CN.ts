@@ -68,6 +68,7 @@ export const zh_CN = {
     selectedStep: "方案 {alternative} · 步骤 {step}",
     allowedCredentials: "允许使用",
     removeAlternative: "删除此方案",
+    clearEscalation: "清除提权策略",
     removeStep: "删除此步骤",
     distinctKeys: "连续公钥步骤必须使用不同密钥。每一步可以设置多把候选密钥。",
     unavailablePath: "此方案目前无法完成，请检查凭据是否有效。",
@@ -95,7 +96,7 @@ export const zh_CN = {
     purposeHelp: {
       login: "进入账户时，可选择其中一种登录方案。",
       mfa: "登录后，再使用另一种方式确认身份。",
-      escalation: "执行需要更高权限的操作前，确认身份。"
+      escalation: "执行需要更高权限的操作前，确认身份。清除策略并保存后，有效会话可直接提权，无需额外验证。"
     },
     signInRequired: "请先登录，以管理认证设置。",
     title: "身份验证",
@@ -137,7 +138,6 @@ export const zh_CN = {
       duplicate_public_key: "此账户已注册该公钥。",
       login_unavailable: "此修改会导致账户没有完整可用的登录及多因素验证路径。",
       escalation_unavailable: "此修改会导致提权策略不可用。",
-      escalation_required: "已有的非空提权策略不能清空。",
       invalid_public_key: "请输入有效的 OpenSSH 公钥。",
       unsupported_public_key: "请使用 Ed25519、RSA 或 ECDSA 公钥。",
       invalid_policy: "策略中的认证方式、凭据选择或步骤无效。"
