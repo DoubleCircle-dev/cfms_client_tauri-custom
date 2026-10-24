@@ -79,6 +79,13 @@ async function openNicknameEditor() {
 }
 
 describe('account nickname settings', () => {
+  it('routes security management to the unified authentication page', async () => {
+    render(AccountSettingsPage);
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.title' }));
+    expect(mocks.goto).toHaveBeenCalledWith('/home/settings/authentication');
+    expect(screen.queryByRole('button', { name: 'settings.password.action' })).toBeNull();
+    expect(mocks.getTwoFactorStatus).not.toHaveBeenCalled();
+  });
   it('lets an ordinary user save a trimmed nickname and updates global auth state', async () => {
     render(AccountSettingsPage);
     const input = await openNicknameEditor();

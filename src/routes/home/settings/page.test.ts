@@ -85,6 +85,7 @@ describe('settings overview', () => {
     });
     expect(screen.getByText('settings.overview.status.connected')).toBeTruthy();
     expect(screen.getByText('settings.overview.status.twoFactorEnabled')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /authManagement\.title/ }).textContent).toContain('settings.overview.status.twoFactorEnabled');
     expect(screen.getByText('settings.overview.status.screenProtectionEnabled')).toBeTruthy();
     expect(screen.getByText('settings.overview.status.appLockEnabled')).toBeTruthy();
   });

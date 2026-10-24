@@ -3,15 +3,23 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authStore } from '$lib/stores.svelte';
 import AuthenticationManagement from './AuthenticationManagement.svelte';
+import { dialogStore } from '$lib/dialogs.svelte';
 
-const mocks = vi.hoisted(() => ({ inventory: vi.fn(), policies: vi.fn(), register: vi.fn(), update: vi.fn(), remove: vi.fn() }));
+const mocks = vi.hoisted(() => ({ inventory: vi.fn(), policies: vi.fn(), register: vi.fn(), update: vi.fn(), remove: vi.fn(), totp: vi.fn(), setup: vi.fn(), verify: vi.fn(), cancel: vi.fn(), changePassword: vi.fn(), reset: vi.fn(), clear: vi.fn(), goto: vi.fn() }));
 vi.mock('$lib/api', async (importOriginal) => ({
   ...await importOriginal<typeof import('$lib/api')>(),
+  getTwoFactorStatus: mocks.totp, changePassword: mocks.changePassword, clearAuthSession: mocks.clear,
+  setupTwoFactor: mocks.setup, validateTwoFactor: mocks.verify, cancelTwoFactorSetup: mocks.cancel,
+  resetUserPassword: mocks.reset,
   getUserAuthentication: mocks.inventory, setUserAuthPolicies: mocks.policies,
   registerUserAuthPublicKey: mocks.register, updateUserAuthPublicKey: mocks.update, deleteUserAuthPublicKey: mocks.remove,
 }));
+vi.mock('$app/navigation', () => ({ beforeNavigate: vi.fn(), goto: mocks.goto }));
+vi.mock('$lib/motion/transitions', () => ({ flyScale: () => ({ duration: 0 }) }));
 vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'windows' }));
+vi.mock('qrcode', () => ({ toDataURL: async () => 'data:image/png;base64,AA==' }));
 vi.mock('svelte-i18n', () => ({ _: { subscribe(run: (t: (key: string) => string) => void) { run((key) => key); return () => {}; } } }));
+Object.defineProperty(Element.prototype, 'animate', { configurable: true, value: () => ({ cancel: vi.fn(), currentTime: 0, effect: {}, onfinish: null, playState: 'finished' }) });
 
 const userId = 'aabbccdd-0000-4000-8000-000000000001';
 const inventory = () => ({
@@ -24,26 +32,34 @@ const inventory = () => ({
 beforeEach(() => {
   authStore.apply({ user_id: userId, username: 'alice', nickname: 'Alice', has_token: true, token_exp: 2e9, escalation_exp: Date.now() / 1000 + 300, permissions: [], groups: [] });
   mocks.inventory.mockResolvedValue(inventory());
+  mocks.totp.mockResolvedValue({ enabled: false, method: null, backup_codes_count: 0 });
+  mocks.setup.mockResolvedValue({ secret: 'SECRET', provisioning_uri: 'otpauth://totp/account', backup_codes: ['recovery-code'] });
+  mocks.verify.mockResolvedValue(undefined);
   mocks.policies.mockResolvedValue({ policies: { mfa: { revision: 1, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] } } });
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); authStore.clear(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); authStore.clear(); });
 
 describe('authentication management', () => {
   it('reads another account by UUID and keeps writes disabled without elevation', async () => {
     authStore.escalationExp = null;
-    render(AuthenticationManagement, { userId });
-    await screen.findByText('Password', { selector: 'strong' });
-    expect(mocks.inventory).toHaveBeenCalledWith(userId);
-    expect((screen.getByRole('button', { name: 'authManagement.registerKey' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole('status').textContent).toContain('authManagement.elevationRequired');
+    const otherId = 'other-account-uuid';
+    mocks.inventory.mockResolvedValue({ ...inventory(), user_id: otherId });
+    render(AuthenticationManagement, { userId: otherId, username: 'bob' });
+    await screen.findByRole('heading', { name: 'authentication.password' });
+    expect(mocks.inventory).toHaveBeenCalledWith(otherId);
+    expect(mocks.totp).not.toHaveBeenCalled();
+    expect((screen.getByRole('button', { name: 'authManagement.addKey' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('authManagement.elevationRequired').getAttribute('role')).toBe('status');
   });
 
   it('submits only modified policies with their original revisions and preserves edits on conflict', async () => {
     mocks.policies.mockRejectedValue(new Error('Server returned 409: Conflict\nCFMS_ERROR_DATA:{"reason":"revision_conflict"}'));
     render(AuthenticationManagement, { userId });
-    const group = await screen.findByRole('group', { name: /authManagement.purposes.mfa/ });
-    await fireEvent.click(within(group).getByRole('button', { name: 'authManagement.addAlternative' }));
-    await fireEvent.click(within(group).getByRole('checkbox'));
+    await screen.findByRole('tab', { name: 'authManagement.flowsTab' });
+    await fireEvent.click(screen.getByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.purposes.mfa' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.addAlternative' }));
+    const group = screen.getByRole('group');
     await fireEvent.click(screen.getByRole('button', { name: 'authManagement.savePolicies' }));
     await waitFor(() => expect(mocks.policies).toHaveBeenCalledWith([{ purpose: 'mfa', expected_revision: 0, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] }], userId));
     expect((await screen.findByRole('alert')).textContent).toBe('authManagement.errors.revision_conflict');
@@ -54,13 +70,125 @@ describe('authentication management', () => {
   it('registers a public key without granting it a policy', async () => {
     mocks.register.mockResolvedValue({ credential_id: 'key-id', fingerprint: 'abc123', label: 'Work key' });
     render(AuthenticationManagement);
-    await screen.findByText('Password', { selector: 'strong' });
+    await screen.findByRole('heading', { name: 'authentication.password' });
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.addKey' }));
     await fireEvent.input(screen.getByLabelText('authManagement.publicKey'), { target: { value: 'ssh-ed25519 AAAA' } });
     await fireEvent.input(screen.getByLabelText('authManagement.keyLabel'), { target: { value: 'Work key' } });
     await fireEvent.click(screen.getByRole('button', { name: 'authManagement.registerKey' }));
     await waitFor(() => expect(mocks.register).toHaveBeenCalledWith('ssh-ed25519 AAAA', 'Work key', undefined));
     expect(await screen.findByText('Work key')).toBeTruthy();
     expect(mocks.policies).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'authManagement.savePolicies' })).toBeNull();
+  });
+
+  it('preserves drafts across purposes and tabs, and saves all changes atomically', async () => {
+    mocks.policies.mockResolvedValue({ policies: {
+      mfa: { revision: 1, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] },
+      escalation: { revision: 1, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] },
+    } });
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    for (const purpose of ['mfa', 'escalation']) {
+      await fireEvent.click(screen.getByRole('button', { name: `authManagement.purposes.${purpose}` }));
+      await fireEvent.click(screen.getByRole('button', { name: 'authManagement.addAlternative' }));
+    }
+    await fireEvent.click(screen.getByRole('tab', { name: 'authManagement.methodsTab' }));
+    await fireEvent.click(screen.getByRole('tab', { name: 'authManagement.flowsTab' }));
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.savePolicies' }));
+    await waitFor(() => expect(mocks.policies).toHaveBeenCalledWith([
+      { purpose: 'mfa', expected_revision: 0, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] },
+      { purpose: 'escalation', expected_revision: 0, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] },
+    ], undefined));
+    expect(screen.queryByText('authManagement.unsaved')).toBeNull();
+  });
+
+  it('adds ordered public-key steps and edits the selected graph node', async () => {
+    const keyInventory = {
+      ...inventory(),
+      credentials: ['a', 'b'].map((id) => ({ method: 'publickey', credential_id: id, active: true, label: `Key ${id}`, key_identity: id })),
+      policies: { ...inventory().policies, login: { revision: 3, chains: [[{ method: 'publickey', credential_ids: ['a'] }]] } },
+    };
+    mocks.inventory.mockResolvedValue(keyInventory);
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.addStep' }));
     expect((screen.getByRole('button', { name: 'authManagement.savePolicies' }) as HTMLButtonElement).disabled).toBe(true);
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Key b' }));
+    expect(screen.queryByText('authManagement.distinctKeysUnavailable')).toBeNull();
+    await fireEvent.click(screen.getAllByRole('button', { name: /authManagement.selectedStep: authentication.publickey/ })[0]);
+    expect((screen.getByRole('checkbox', { name: 'Key a' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox', { name: 'Key b' }) as HTMLInputElement).checked).toBe(false);
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.savePolicies' }));
+    await waitFor(() => expect(mocks.policies).toHaveBeenCalledWith([
+      { purpose: 'login', expected_revision: 3, chains: [[{ method: 'publickey', credential_ids: ['a'] }, { method: 'publickey', credential_ids: ['b'] }]] },
+    ], undefined));
+  });
+
+  it('does not offer extra password steps and stops policy editing when elevation expires', async () => {
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    expect(screen.queryByRole('button', { name: 'authManagement.addStep' })).toBeNull();
+    authStore.escalationExp = null;
+    await waitFor(() => expect((screen.getByRole('button', { name: 'authManagement.addAlternative' }) as HTMLButtonElement).disabled).toBe(true));
+  });
+
+  it('asks before discarding an unsaved flow when the administrator closes it', async () => {
+    const confirm = vi.spyOn(dialogStore, 'confirm').mockResolvedValue(false);
+    const { component } = render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.purposes.mfa' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.addAlternative' }));
+    expect(await component.canLeave()).toBe(false);
+    expect(screen.getByText('authManagement.unsaved')).toBeTruthy();
+    confirm.mockResolvedValue(true);
+    expect(await component.canLeave()).toBe(true);
+  });
+
+  it('uses the existing password dialog and returns to login after a self-service change', async () => {
+    authStore.permissions = ['set_passwd'];
+    mocks.changePassword.mockResolvedValue(undefined); mocks.clear.mockResolvedValue(undefined); mocks.goto.mockResolvedValue(undefined);
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('button', { name: 'settings.password.action' }));
+    await fireEvent.input(await screen.findByLabelText('dialog.changePassword.currentPassword'), { target: { value: 'old-password' } });
+    await fireEvent.input(screen.getByLabelText('dialog.changePassword.newPassword'), { target: { value: 'new-password' } });
+    await fireEvent.click(screen.getByRole('button', { name: /dialog.changePassword.title/ }));
+    await waitFor(() => expect(mocks.changePassword).toHaveBeenCalledWith('alice', 'old-password', 'new-password'));
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith('/login', { replaceState: true }));
+    expect(mocks.clear).toHaveBeenCalled();
+    expect(authStore.isLoggedIn).toBe(false);
+  });
+
+  it.each(['setup', 'recovery'])('preserves the policy draft when the second leave confirmation is cancelled (%s)', async (phase) => {
+    const { component } = render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('button', { name: 'settings.twofa.enable' }));
+    await screen.findByText('authManagement.scanCode');
+    if (phase === 'recovery') {
+      await fireEvent.input(screen.getByLabelText('settings.twofa.verificationCode'), { target: { value: '123456' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'settings.twofa.verifyEnable' }));
+      await screen.findByText('recovery-code');
+    }
+    await fireEvent.click(screen.getByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.purposes.mfa' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.addAlternative' }));
+    vi.spyOn(dialogStore, 'confirm').mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    expect(await component.canLeave()).toBe(false);
+    expect(screen.getByText('authManagement.unsaved')).toBeTruthy();
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    expect(mocks.cancel).not.toHaveBeenCalled();
+  });
+
+  it('resets the selected account password without signing out the administrator', async () => {
+    authStore.permissions = ['super_set_passwd'];
+    mocks.reset.mockResolvedValue(true);
+    mocks.inventory.mockResolvedValue({ ...inventory(), user_id: 'other-account' });
+    render(AuthenticationManagement, { userId: 'other-account', username: 'bob' });
+    await fireEvent.click(await screen.findByRole('button', { name: 'manage.resetPassword' }));
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.input(within(dialog).getByLabelText('dialog.changePassword.newPassword'), { target: { value: 'new-password' } });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'manage.resetPassword' }));
+    await waitFor(() => expect(mocks.reset).toHaveBeenCalledWith('other-account', 'new-password', false, false));
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(authStore.isLoggedIn).toBe(true);
   });
 });

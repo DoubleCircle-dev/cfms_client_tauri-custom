@@ -631,6 +631,16 @@
     gap: 0.65rem;
     border-bottom: 1px solid var(--explorer-border);
     padding: 0.35rem 0.7rem;
+  }
+
+  /* Keep the blur off the header itself: backdrop-filter makes fixed dialogs
+     inside toolbar controls position against the header instead of the viewport. */
+  .explorer-topbar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
     background: color-mix(in srgb, var(--explorer-surface-raised) 88%, transparent);
     backdrop-filter: blur(24px) saturate(1.25);
   }

@@ -65,12 +65,12 @@
   .private-key-field { display: grid; gap: 0.75rem; min-width: 0; }
   .key-help, .key-caption { margin: 0; color: var(--color-md3-on-surface-variant); font-size: 0.8125rem; line-height: 1.55; }
   .key-caption { font-size: 0.75rem; }
-  .key-picker { display: flex; align-items: center; gap: 0.75rem; width: 100%; min-height: 76px; padding: 0.875rem; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-surface-container); color: var(--color-md3-on-surface); text-align: left; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
+  .key-picker { display: flex; align-items: center; gap: 0.75rem; width: 100%; min-height: 60px; padding: 0.625rem 0.75rem; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-surface-container); color: var(--color-md3-on-surface); text-align: left; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
   .key-picker:hover:not(:disabled) { border-color: var(--color-md3-primary); background: var(--color-md3-surface-container-highest); }
   .key-picker:disabled { opacity: 0.55; cursor: default; }
   .key-picker.invalid { border-color: var(--color-md3-error); }
   .key-picker-icon { display: grid; place-items: center; flex: none; color: var(--color-md3-primary); }
-  .key-picker-copy { display: grid; gap: 0.3rem; min-width: 0; flex: 1; }
+  .key-picker-copy { display: grid; gap: 0.125rem; min-width: 0; flex: 1; }
   .key-picker-copy strong { font-size: 0.875rem; font-weight: 600; overflow-wrap: anywhere; }
   .key-picker-copy span { font-size: 0.75rem; color: var(--color-md3-on-surface-variant); overflow-wrap: anywhere; }
   .key-fingerprint { color: var(--color-md3-on-surface-variant); font-size: 0.75rem; }
@@ -78,6 +78,6 @@
   .key-fingerprint code { display: block; padding-top: 0.5rem; overflow-wrap: anywhere; font-family: var(--font-md3-mono); }
   .key-passphrase { width: 100%; height: 42px; padding: 0 0.875rem; border: 0; outline: none; color: var(--color-md3-on-surface); background: transparent; }
   .key-error { margin: 0; font-size: 0.8125rem; color: var(--color-md3-error); }
-  @media (pointer: coarse) { .key-fingerprint summary { min-height: 44px; display: flex; align-items: center; } .key-passphrase { height: 48px; } }
+  @media (pointer: coarse) { .key-picker { min-height: 64px; } .key-fingerprint summary { min-height: 44px; display: flex; align-items: center; } .key-passphrase { height: 48px; } }
   @media (prefers-reduced-motion: reduce) { .key-picker { transition: none; } }
 </style>

@@ -6,9 +6,10 @@ use serde::Deserialize;
 use crate::sensitive::SecretString;
 
 pub const AUTH: u8 = 1;
-pub const GENERAL: u8 = 2;
-pub const ESCALATED: u8 = 6;
-pub const POST_AUTH: u8 = 8;
+pub const POST_AUTH: u8 = 2;
+pub const GENERAL: u8 = 4;
+pub const ESCALATION: u8 = 8;
+pub const ESCALATED: u8 = GENERAL | ESCALATION;
 
 #[derive(Clone, Deserialize)]
 pub struct TokenClaims {
@@ -83,7 +84,7 @@ mod tests {
 
     #[test]
     fn expiry_comes_from_fractional_jwt_claim_not_response_field() {
-        let exp = unix_now() + 300.125;
+        let exp = unix_now().floor() + 300.125;
         let issued = IssuedToken::from_response(&mut response(ESCALATED, exp), ESCALATED).unwrap();
         assert_eq!(issued.claims.exp, exp);
     }
@@ -95,5 +96,25 @@ mod tests {
         );
         assert!(IssuedToken::from_response(&mut response(ESCALATED, 1.0), ESCALATED).is_err());
         assert!(decode_claims("not-a-jwt").is_err());
+    }
+
+    #[test]
+    fn purposes_match_the_server_flags_and_reject_legacy_escalation() {
+        assert_eq!(
+            (AUTH, POST_AUTH, GENERAL, ESCALATION, ESCALATED),
+            (1, 2, 4, 8, 12)
+        );
+        for purpose in [AUTH, POST_AUTH, GENERAL, ESCALATED] {
+            assert!(
+                IssuedToken::from_response(&mut response(purpose, unix_now() + 60.0), purpose)
+                    .is_ok()
+            );
+        }
+        assert!(
+            IssuedToken::from_response(&mut response(6, unix_now() + 60.0), ESCALATED).is_err()
+        );
+        let mut mismatched = response(GENERAL, unix_now() + 60.0);
+        mismatched["purpose"] = serde_json::json!(POST_AUTH);
+        assert!(IssuedToken::from_response(&mut mismatched, GENERAL).is_err());
     }
 }

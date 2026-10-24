@@ -1,49 +1,21 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { onMount, tick } from 'svelte';
+  import { tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
-  import {
-    cancelTwoFactorSetup,
-    changePassword,
-    clearAuthSession,
-    disableTwoFactor,
-    getAuthStatus,
-    getTwoFactorStatus,
-    renameUser,
-    setupTwoFactor,
-    validateTwoFactor,
-    type TwoFactorSetup,
-    type TwoFactorStatus,
-  } from '$lib/api';
+  import { renameUser } from '$lib/api';
   import { authStore, notificationStore } from '$lib/stores.svelte';
-  import ChangePasswordDialog from '$lib/components/ChangePasswordDialog.svelte';
   import AvatarPreview from '$lib/components/AvatarPreview.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
-
   const NICKNAME_MAX_LENGTH = 255;
-
-  let showPasswordDialog = $state(false);
   let editingNickname = $state(false);
   let nicknameInput = $state('');
   let nicknameInputElement = $state<HTMLInputElement | null>(null);
   let nicknameBusy = $state(false);
-  let authReady = $state(false);
-  let twofa = $state<TwoFactorStatus | null>(null);
-  let setup = $state<TwoFactorSetup | null>(null);
-  let qrCodeDataUrl = $state<string | null>(null);
-  let verifiedBackupCodes = $state<string[]>([]);
-  let verificationCode = $state('');
-  let disablePassword = $state('');
-  let loading = $state(true);
-  let busy = $state(false);
   let status = $state<string | null>(null);
   let error = $state<string | null>(null);
-
-  const enabled = $derived(Boolean(twofa?.enabled));
-  const statusLabel = $derived(enabled ? $t('common.enabled') : $t('common.disabled'));
   const cleanNickname = $derived(nicknameInput.trim() || null);
   const nicknameCharacterCount = $derived(Array.from(nicknameInput.trim()).length);
   const nicknameTooLong = $derived(nicknameCharacterCount > NICKNAME_MAX_LENGTH);
@@ -59,14 +31,6 @@
       && !nicknameTooLong
       && !nicknameBusy,
   );
-  const canChangePassword = $derived(
-    authStore.isLoggedIn
-      && Boolean(authStore.username)
-      && authStore.permissions.includes('set_passwd'),
-  );
-  const canVerify = $derived(Boolean(setup && verificationCode.trim().length > 0));
-  const canDisable = $derived(enabled && disablePassword.trim().length > 0);
-
   $effect(() => {
     if (!status) return;
     notificationStore.success(status, 5000);
@@ -78,53 +42,6 @@
     notificationStore.error(error);
     error = null;
   });
-
-  $effect(() => {
-    const provisioningUri = setup?.provisioning_uri;
-    qrCodeDataUrl = null;
-    if (!provisioningUri) return;
-
-    let canceled = false;
-    void (async () => {
-      try {
-        const { toDataURL } = await import('qrcode');
-        const dataUrl = await toDataURL(provisioningUri, {
-          errorCorrectionLevel: 'M',
-          margin: 2,
-          width: 192,
-          color: {
-            dark: '#111827',
-            light: '#ffffff',
-          },
-        });
-        if (!canceled) qrCodeDataUrl = dataUrl;
-      } catch (err) {
-        if (!canceled) error = formatError(err);
-      }
-    })();
-
-    return () => {
-      canceled = true;
-    };
-  });
-
-  onMount(async () => {
-    await refreshTwoFactorStatus();
-  });
-
-  async function handleChangePassword(oldPassword: string, newPassword: string): Promise<void> {
-    const username = authStore.username;
-    if (!authStore.isLoggedIn || !username) {
-      throw new Error($t('settings.password.signInRequired'));
-    }
-
-    await changePassword(username, oldPassword, newPassword);
-    showPasswordDialog = false;
-    await clearAuthSession();
-    authStore.clear();
-    notificationStore.success($t('more.passwordChanged'));
-    await goto('/login', { replaceState: true });
-  }
 
   async function beginNicknameEdit() {
     if (!authStore.isLoggedIn || !authStore.username || nicknameBusy) return;
@@ -163,101 +80,12 @@
       editingNickname = false;
       status = $t('settings.account.nicknameUpdated');
     } catch (err) {
-      error = formatError(err);
+      error = formatUserFacingError(err);
     } finally {
       nicknameBusy = false;
     }
   }
 
-  async function refreshTwoFactorStatus(options?: { preserveVerifiedBackupCodes?: boolean }) {
-    loading = true;
-    error = null;
-    if (!options?.preserveVerifiedBackupCodes) verifiedBackupCodes = [];
-    try {
-      const auth = await getAuthStatus();
-      authReady = auth.has_token;
-      if (auth.has_token) {
-        twofa = await getTwoFactorStatus();
-      } else {
-        twofa = { enabled: false, method: null, backup_codes_count: 0 };
-      }
-    } catch (err) {
-      error = formatError(err);
-    } finally {
-      loading = false;
-    }
-  }
-
-  async function startSetup() {
-    busy = true;
-    error = null;
-    try {
-      setup = await setupTwoFactor();
-      verifiedBackupCodes = [];
-      verificationCode = '';
-      status = $t('settings.twofa.setupStarted');
-    } catch (err) {
-      error = formatError(err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function verifySetup() {
-    if (!canVerify) return;
-    busy = true;
-    error = null;
-    try {
-      const backupCodes = setup?.backup_codes ?? [];
-      await validateTwoFactor(verificationCode.trim());
-      verifiedBackupCodes = backupCodes;
-      setup = null;
-      verificationCode = '';
-      status = $t('settings.twofa.enabledStatus');
-      await refreshTwoFactorStatus({ preserveVerifiedBackupCodes: true });
-    } catch (err) {
-      error = formatError(err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function cancelSetup() {
-    busy = true;
-    error = null;
-    try {
-      await cancelTwoFactorSetup();
-      setup = null;
-      verifiedBackupCodes = [];
-      verificationCode = '';
-      status = $t('settings.twofa.setupCanceled');
-    } catch (err) {
-      error = formatError(err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function disableCurrentTwoFactor() {
-    if (!canDisable) return;
-    busy = true;
-    error = null;
-    try {
-      await disableTwoFactor(disablePassword);
-      verifiedBackupCodes = [];
-      disablePassword = '';
-      status = $t('settings.twofa.disabledStatus');
-      await refreshTwoFactorStatus();
-    } catch (err) {
-      error = formatError(err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  function formatError(err: unknown): string {
-    return formatUserFacingError(err);
-  }
 </script>
 
 <div class="workspace-page settings-page-shell account-settings-page">
@@ -393,179 +221,9 @@
     {/if}
   </section>
 
-  <section
-    class="security-panel account-section"
-    aria-label={$t('settings.account.description')}
-  >
-    <div class="security-row password-row">
-      <span class="security-icon settings-row__icon" aria-hidden="true">
-        <Icon name="password" size="21px" />
-      </span>
-      <div class="security-copy settings-row__copy">
-        <h2>{$t('settings.password.accountTitle')}</h2>
-        <p>{$t('settings.password.accountHint')}</p>
-        <p class="security-note">{$t('settings.password.sessionHint')}</p>
-      </div>
-      <button
-        type="button"
-        class="action-button action-button--tonal security-action"
-        disabled={!canChangePassword}
-        onclick={() => (showPasswordDialog = true)}
-      >
-        <Icon name="password" size="18px" />
-        {$t('settings.password.action')}
-      </button>
-    </div>
-
-    <div class="security-divider"></div>
-
-    <div class="twofa-section">
-      <div class="security-row twofa-heading">
-        <span class="security-icon settings-row__icon" aria-hidden="true">
-          <Icon name="verifiedUser" size="21px" />
-        </span>
-        <div class="security-copy settings-row__copy">
-          <h2 id="account-twofa-title">
-          {$t('settings.twofa.title')}
-          </h2>
-          <p>{$t('settings.twofa.description')}</p>
-        </div>
-        <span
-          class="status-chip"
-          class:status-chip--active={enabled && !loading}
-          class:status-chip--pending={loading}
-          aria-live="polite"
-        >
-          <span class="status-chip__dot" aria-hidden="true"></span>
-          {loading ? $t('common.checking') : statusLabel}
-        </span>
-      </div>
-
-      <div class="twofa-content">
-        {#if twofa?.method}
-          <dl class="twofa-metadata">
-            <div>
-              <dt>{$t('settings.twofa.method')}</dt>
-              <dd class="uppercase">{twofa.method}</dd>
-            </div>
-            <div>
-              <dt>{$t('settings.twofa.backupCodesCount')}</dt>
-              <dd>{twofa.backup_codes_count}</dd>
-            </div>
-          </dl>
-        {/if}
-
-        {#if setup}
-          <div class="setup-panel">
-            <div class="qr-frame">
-              {#if qrCodeDataUrl}
-                <img
-                  src={qrCodeDataUrl}
-                  alt={$t('settings.twofa.provisioningUri')}
-                />
-              {:else}
-                <Icon name="qrCode" size="48px" />
-              {/if}
-            </div>
-            <dl class="setup-details">
-              <div>
-                <dt>{$t('settings.twofa.secret')}</dt>
-                <dd><code>{setup.secret}</code></dd>
-              </div>
-              <div>
-                <dt>{$t('settings.twofa.provisioningUri')}</dt>
-                <dd><code>{setup.provisioning_uri}</code></dd>
-              </div>
-            </dl>
-          </div>
-
-          <label class="twofa-field">
-            <span>{$t('settings.twofa.verificationCode')}</span>
-            <input
-              class="text-field"
-              type="text"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              bind:value={verificationCode}
-              disabled={busy}
-            />
-          </label>
-        {:else if enabled}
-          <label class="twofa-field">
-            <span>{$t('settings.twofa.currentPassword')}</span>
-            <input
-              class="text-field"
-              type="password"
-              autocomplete="current-password"
-              bind:value={disablePassword}
-              disabled={busy}
-            />
-          </label>
-        {/if}
-
-        {#if verifiedBackupCodes.length > 0}
-          <div class="backup-codes">
-            <p>{$t('settings.twofa.backupCodes')}</p>
-            <div>
-              {#each verifiedBackupCodes as code}
-                <code>{code}</code>
-              {/each}
-            </div>
-          </div>
-        {/if}
-
-        <div class="twofa-actions">
-          {#if setup}
-            <button
-              class="action-button action-button--primary"
-              type="button"
-              onclick={verifySetup}
-              disabled={busy || !canVerify}
-            >
-              <Icon name="verified" size="18px" />
-              {$t('settings.twofa.verifyEnable')}
-            </button>
-            <button
-              class="action-button action-button--secondary"
-              type="button"
-              onclick={cancelSetup}
-              disabled={busy}
-            >
-              {$t('settings.twofa.cancelSetup')}
-            </button>
-          {:else if enabled}
-            <button
-              class="action-button action-button--danger"
-              type="button"
-              onclick={disableCurrentTwoFactor}
-              disabled={busy || !canDisable}
-            >
-              <Icon name="lockOpen" size="18px" />
-              {$t('settings.twofa.disable')}
-            </button>
-          {:else}
-            <button
-              class="action-button action-button--tonal"
-              type="button"
-              onclick={startSetup}
-              disabled={loading || busy || !authReady}
-            >
-              <Icon name="security" size="18px" />
-              {$t('settings.twofa.enable')}
-            </button>
-          {/if}
-          <button
-            class="action-button action-button--secondary"
-            type="button"
-            onclick={() => refreshTwoFactorStatus()}
-            disabled={loading || busy}
-          >
-            <Icon name="refresh" size="18px" />
-            {$t('common.refresh')}
-          </button>
-        </div>
-      </div>
-    </div>
+  <section class="account-section authentication-link">
+    <div><h2>{$t('authManagement.title')}</h2><p>{$t('authManagement.description')}</p></div>
+    <button type="button" class="action-button action-button--secondary" onclick={() => goto('/home/settings/authentication')}><Icon name="passkey" size="18px" />{$t('authManagement.title')}</button>
   </section>
   </div>
 </div>
@@ -583,8 +241,7 @@
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
   }
 
-  .identity-panel,
-  .security-panel {
+  .identity-panel {
     min-width: 0;
   }
 
@@ -607,10 +264,7 @@
   }
 
   .identity-copy h2,
-  .identity-copy p,
-  .security-copy h2,
-  .security-copy p,
-  .backup-codes p {
+  .identity-copy p {
     margin: 0;
   }
 
@@ -725,8 +379,7 @@
     line-height: 1.45;
   }
 
-  .nickname-editor__actions,
-  .twofa-actions {
+  .nickname-editor__actions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
@@ -777,15 +430,6 @@
     background: var(--color-md3-primary-emphasis);
   }
 
-  .action-button--tonal {
-    color: var(--color-md3-on-primary-container);
-    background: var(--color-md3-primary-container);
-  }
-
-  .action-button--tonal:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--color-md3-primary) 38%, var(--color-md3-outline));
-  }
-
   .action-button--secondary {
     border-color: var(--color-md3-outline);
     color: var(--color-md3-on-surface);
@@ -796,332 +440,10 @@
     background: var(--color-md3-surface-container-high);
   }
 
-  .action-button--danger {
-    border-color: color-mix(in srgb, var(--color-md3-error) 34%, var(--color-md3-outline));
-    color: var(--color-md3-error);
-    background: color-mix(in srgb, var(--color-md3-error-container) 70%, transparent);
-  }
-
-  .action-button--danger:hover:not(:disabled) {
-    border-color: var(--color-md3-error);
-    background: var(--color-md3-error-container);
-  }
-
-  .security-row {
-    display: grid;
-    min-width: 0;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 0.85rem;
-  }
-
-  .password-row {
-    align-items: center;
-    padding: 1rem 0;
-  }
-
-  .security-icon {
-    display: grid;
-    width: 24px;
-    height: 24px;
-    place-items: center;
-    color: var(--color-md3-primary-emphasis);
-  }
-
-  .security-copy {
-    min-width: 0;
-  }
-
-  .security-copy h2 {
-    color: var(--color-md3-on-surface);
-    font: 650 0.86rem/1.3 var(--font-md3-sans);
-    letter-spacing: -0.006em;
-  }
-
-  .security-copy p {
-    max-width: 68ch;
-    margin-top: 0.24rem;
-    color: var(--color-md3-on-surface-variant);
-    font-size: 0.72rem;
-    line-height: 1.5;
-  }
-
-  .security-copy .security-note {
-    margin-top: 0.48rem;
-    color: color-mix(in srgb, var(--color-md3-on-surface-variant) 88%, transparent);
-    font-size: 0.68rem;
-  }
-
-  .security-action {
-    align-self: center;
-  }
-
-  .security-divider {
-    height: 1px;
-    background: color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
-  }
-
-  .twofa-section {
-    padding: 1rem 0 1.1rem;
-  }
-
-  .twofa-heading {
-    grid-template-columns: 24px minmax(0, 1fr) auto;
-  }
-
-  .status-chip {
-    display: inline-flex;
-    min-height: 26px;
-    align-items: center;
-    gap: 0.42rem;
-    border-radius: 9999px;
-    padding: 0.28rem 0.62rem;
-    color: var(--color-md3-on-surface-variant);
-    background: var(--color-md3-surface-container-high);
-    font: 650 0.68rem/1 var(--font-md3-sans);
-    white-space: nowrap;
-  }
-
-  .status-chip__dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 9999px;
-    background: currentColor;
-  }
-
-  .status-chip--active {
-    color: var(--color-md3-success);
-    background: color-mix(in srgb, var(--color-md3-success) 12%, transparent);
-  }
-
-  .status-chip--pending .status-chip__dot {
-    animation: status-pulse 1.4s var(--motion-easing-standard) infinite;
-  }
-
-  .twofa-content {
-    margin-left: 2.85rem;
-  }
-
-  .twofa-metadata {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem;
-    margin: 0.9rem 0 0;
-  }
-
-  .twofa-metadata > div {
-    display: flex;
-    align-items: baseline;
-    gap: 0.4rem;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-small, 5px);
-    padding: 0.38rem 0.55rem;
-    background: var(--color-md3-surface-container-high);
-  }
-
-  .twofa-metadata dt {
-    color: var(--color-md3-on-surface-variant);
-    font-size: 0.66rem;
-  }
-
-  .twofa-metadata dd {
-    margin: 0;
-    color: var(--color-md3-on-surface);
-    font: 600 0.7rem/1.2 var(--font-md3-mono);
-  }
-
-  .setup-panel {
-    display: grid;
-    grid-template-columns: 184px minmax(0, 1fr);
-    gap: 1rem;
-    margin-top: 1rem;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-medium, 8px);
-    padding: 0.85rem;
-    background: var(--color-md3-surface-container-high);
-  }
-
-  .qr-frame {
-    display: grid;
-    width: 184px;
-    height: 184px;
-    place-items: center;
-    overflow: hidden;
-    border: 1px solid rgb(0 0 0 / 0.14);
-    border-radius: var(--explorer-radius-small, 5px);
-    padding: 0.45rem;
-    color: #5d5d5d;
-    background: #fff;
-  }
-
-  .qr-frame img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-
-  .setup-details {
-    min-width: 0;
-    margin: 0;
-  }
-
-  .setup-details > div + div {
-    margin-top: 0.85rem;
-  }
-
-  .setup-details dt {
-    color: var(--color-md3-on-surface-variant);
-    font-size: 0.68rem;
-  }
-
-  .setup-details dd {
-    margin: 0.3rem 0 0;
-  }
-
-  .setup-details code {
-    display: block;
-    overflow-wrap: anywhere;
-    color: var(--color-md3-on-surface);
-    font: 0.7rem/1.55 var(--font-md3-mono);
-  }
-
-  .twofa-field {
-    display: grid;
-    max-width: 28rem;
-    gap: 0.38rem;
-    margin-top: 1rem;
-    color: var(--color-md3-on-surface);
-    font: 650 0.76rem/1.3 var(--font-md3-sans);
-  }
-
-  .backup-codes {
-    margin-top: 1rem;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-medium, 8px);
-    padding: 0.85rem;
-    background: var(--color-md3-surface-container-high);
-  }
-
-  .backup-codes p {
-    color: var(--color-md3-on-surface-variant);
-    font-size: 0.7rem;
-  }
-
-  .backup-codes > div {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.4rem 1rem;
-    margin-top: 0.55rem;
-  }
-
-  .backup-codes code {
-    color: var(--color-md3-on-surface);
-    font: 0.74rem/1.4 var(--font-md3-mono);
-  }
-
-  .twofa-actions {
-    margin-top: 1rem;
-  }
-
-  @keyframes status-pulse {
-    0%, 100% { opacity: 0.4; transform: scale(0.8); }
-    50% { opacity: 1; transform: scale(1); }
-  }
-
-  @media (max-width: 640px) {
-    .identity-summary {
-      grid-template-columns: auto minmax(0, 1fr);
-      padding-block: 0.9rem;
-    }
-
-    .identity-edit-button {
-      grid-column: 1 / -1;
-      width: 100%;
-    }
-
-    .nickname-editor {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0.5rem;
-      padding: 0.9rem 0 1rem;
-    }
-
-    .nickname-editor__label {
-      min-height: auto;
-    }
-
-    .nickname-editor__actions {
-      justify-content: flex-end;
-    }
-
-    .password-row,
-    .twofa-section {
-      padding-block: 1rem;
-    }
-
-    .password-row {
-      grid-template-columns: 24px minmax(0, 1fr);
-    }
-
-    .security-action {
-      grid-column: 1 / -1;
-      width: 100%;
-    }
-
-    .twofa-content {
-      margin-left: 0;
-    }
-
-    .setup-panel {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .qr-frame {
-      width: min(100%, 184px);
-      height: auto;
-      aspect-ratio: 1;
-    }
-  }
-
-  @media (max-width: 420px) {
-    .identity-summary {
-      gap: 0.75rem;
-    }
-
-    .twofa-heading {
-      grid-template-columns: 24px minmax(0, 1fr);
-    }
-
-    .twofa-heading .security-icon {
-      width: 24px;
-      height: 24px;
-    }
-
-    .status-chip {
-      grid-column: 2;
-      width: fit-content;
-    }
-
-    .backup-codes > div {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .twofa-actions .action-button {
-      width: 100%;
-    }
-  }
-
-  @media (pointer: coarse) {
-    .action-button {
-      min-height: 44px;
-    }
-  }
+  .authentication-link { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.25rem 0; }
+  .authentication-link h2 { margin: 0; font-size: .9375rem; font-weight: 600; }
+  .authentication-link p { font-size: .8125rem; color: var(--color-md3-on-surface-variant); margin: .35rem 0 0; }
+  @media (max-width: 640px) { .nickname-editor { grid-template-columns: 1fr; } .identity-summary { grid-template-columns: auto minmax(0, 1fr); } .identity-edit-button { grid-column: 2; justify-self: start; } .authentication-link { flex-wrap: wrap; } }
+  @media (pointer: coarse) { .action-button { min-height: 44px; } }
+  @media (prefers-reduced-motion: reduce) { .action-button, .text-field { transition: none; } }
 </style>
-
-{#if showPasswordDialog && canChangePassword && authStore.username}
-  <ChangePasswordDialog
-    username={authStore.username}
-    tip={$t('more.passwordTip')}
-    onSubmit={handleChangePassword}
-    onCancel={() => (showPasswordDialog = false)}
-  />
-{/if}

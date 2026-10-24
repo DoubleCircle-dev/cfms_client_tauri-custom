@@ -1,233 +1,241 @@
 <script lang="ts">
+  // Methods explain what the account owns; flows explain when and how to use it.
+  // The diagram and editor share one draft in the established Material workspace.
   import { onMount } from 'svelte';
+  import { beforeNavigate, goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
-  import { getUserAuthentication, setUserAuthPolicies, registerUserAuthPublicKey, updateUserAuthPublicKey, deleteUserAuthPublicKey, serverErrorData, type AuthPolicyStep, type AuthPurpose, type UserAuthentication } from '$lib/api';
-  import { AUTH_PURPOSES, changedAuthPolicies } from '$lib/auth-policy-editor';
+  import { getUserAuthentication, setUserAuthPolicies, registerUserAuthPublicKey, updateUserAuthPublicKey, deleteUserAuthPublicKey, changePassword, clearAuthSession, resetUserPassword, getManagedTwoFactorStatus, disableManagedTwoFactor, serverErrorData, type AuthPolicyStep, type AuthPurpose, type UserAuthentication } from '$lib/api';
+  import { AUTH_PURPOSES, changedAuthPolicies, canCompleteChain, invalidPolicyDraft, type AuthCredential } from '$lib/auth-policy-editor';
   import { authStore, notificationStore } from '$lib/stores.svelte';
   import { dialogStore } from '$lib/dialogs.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import DialogActionButton from './DialogActionButton.svelte';
   import ProgressRing from './ProgressRing.svelte';
+  import ChangePasswordDialog from './ChangePasswordDialog.svelte';
+  import ResetUserPasswordDialog from './ResetUserPasswordDialog.svelte';
+  import AuthenticationMethods from './authentication/AuthenticationMethods.svelte';
+  import AuthenticationFlowGraph from './authentication/AuthenticationFlowGraph.svelte';
+  import AuthenticationStepEditor from './authentication/AuthenticationStepEditor.svelte';
+  import AuthenticatorSettings from './authentication/AuthenticatorSettings.svelte';
+  import './authentication/authentication.css';
 
-  let { userId }: { userId?: string } = $props();
+  let { userId, username }: { userId?: string; username?: string } = $props();
   let inventory = $state<UserAuthentication | null>(null);
   let draft = $state<Record<AuthPurpose, AuthPolicyStep[][]>>({ login: [], mfa: [], escalation: [] });
   let loading = $state(true);
   let busy = $state(false);
+  let methodBusy = $state(false);
   let error = $state('');
   let conflict = $state(false);
-  let publicKey = $state('');
-  let label = $state('');
+  let tab = $state<'methods' | 'flows'>('methods');
+  let purpose = $state<AuthPurpose>('login');
+  let selectedChain = $state(0);
+  let selectedStep = $state(0);
+  let showPassword = $state(false);
   let now = $state(Date.now());
+  let authenticatorSettings = $state<AuthenticatorSettings>();
+  let allowNavigation = false;
+  const managed = $derived(Boolean(userId && userId !== authStore.userId));
   const elevated = $derived((authStore.escalationExp ?? 0) * 1000 > now);
   const changed = $derived(inventory ? changedAuthPolicies(inventory.policies, draft) : []);
-  const writable = $derived(elevated && !busy && !loading);
+  const writable = $derived(elevated && !busy && !methodBusy && !loading);
+  const invalid = $derived(inventory ? changed.some((policy) => invalidPolicyDraft(policy.chains, inventory!.credentials)) : true);
+  const canSave = $derived(writable && changed.length > 0 && !conflict && !invalid);
+  const canPassword = $derived(authStore.permissions.includes(managed ? 'super_set_passwd' : 'set_passwd'));
+  const selected = $derived(draft[purpose][selectedChain]);
+  const loginAvailable = $derived.by(() => {
+    if (!inventory) return true;
+    const login = draft.login.filter((chain) => canCompleteChain(chain, inventory!.credentials));
+    const mfa = draft.mfa.filter((chain) => canCompleteChain(chain, inventory!.credentials));
+    return login.some((chain) => !draft.mfa.length || mfa.some((alternative) => alternative[0].method !== chain[0].method));
+  });
 
   onMount(() => {
     void load();
     const timer = window.setInterval(() => { now = Date.now(); }, 1000);
     return () => window.clearInterval(timer);
   });
+  beforeNavigate((navigation) => {
+    if (allowNavigation || (!changed.length && !authenticatorSettings?.hasPending())) return;
+    navigation.cancel();
+    if (navigation.willUnload) return;
+    void canLeave().then((leave) => {
+      if (leave && navigation.to) { allowNavigation = true; void goto(navigation.to.url.href).finally(() => { allowNavigation = false; }); }
+    });
+  });
 
   async function load() {
-    loading = true;
     error = '';
     try {
       const result = await getUserAuthentication(userId);
       inventory = result;
-      draft = Object.fromEntries(AUTH_PURPOSES.map((purpose) => [purpose, structuredClone(result.policies[purpose].chains)])) as typeof draft;
+      draft = Object.fromEntries(AUTH_PURPOSES.map((key) => [key, structuredClone(result.policies[key].chains)])) as typeof draft;
       conflict = false;
+      selectedChain = 0; selectedStep = 0;
     } catch (e) { error = formatUserFacingError(e); }
     finally { loading = false; }
   }
-
   async function reload() {
-    if (changed.length && !(await dialogStore.confirm($t('authManagement.discardChanges')))) return;
-    await load();
-  }
-
-  async function write(action: () => Promise<unknown>) {
-    if (!writable) return;
+    if (!(await canLeave())) return;
     busy = true;
-    error = '';
-    try {
-      await action();
-      notificationStore.success($t('authManagement.saved'));
-    } catch (e) {
+    try { await load(); await authenticatorSettings?.refreshStatus(); } finally { busy = false; }
+  }
+  export async function canLeave(): Promise<boolean> {
+    if (busy || methodBusy || showPassword) return false;
+    if (changed.length) {
+      if (!(await dialogStore.confirm({ message: $t('authManagement.leaveChanges'), confirmLabel: $t('authManagement.discard'), danger: true }))) return false;
+    }
+    if (!(await authenticatorSettings?.canLeave() ?? true)) return false;
+    discardDraft();
+    return true;
+  }
+  async function beforeMethodChange(): Promise<boolean> {
+    if (!changed.length) return true;
+    const choice = await dialogStore.choose({ message: $t('authManagement.pendingAction'), choices: [
+      { value: 'save', label: $t('authManagement.saveFirst'), intent: 'primary' },
+      { value: 'discard', label: $t('authManagement.discard'), intent: 'danger' },
+    ], cancelLabel: $t('common.cancel') });
+    if (choice?.value === 'save') return await savePolicies();
+    if (choice?.value === 'discard' && inventory) {
+      discardDraft();
+      return true;
+    }
+    return false;
+  }
+  function discardDraft() {
+    if (!inventory) return;
+    draft = Object.fromEntries(AUTH_PURPOSES.map((key) => [key, structuredClone($state.snapshot(inventory!.policies[key].chains))])) as typeof draft;
+    selectedChain = 0; selectedStep = 0;
+  }
+  async function write(action: () => Promise<void>): Promise<boolean> {
+    if (!writable) return false;
+    busy = true; error = '';
+    try { await action(); notificationStore.success($t('authManagement.saved')); return true; }
+    catch (e) {
       const reason = serverErrorData(e)?.reason;
-      conflict = reason === 'revision_conflict';
+      if (reason === 'revision_conflict') conflict = true;
       const reasons = ['revision_conflict', 'duplicate_public_key', 'login_unavailable', 'escalation_unavailable', 'escalation_required', 'invalid_public_key', 'unsupported_public_key', 'invalid_policy'];
       error = typeof reason === 'string' && reasons.includes(reason) ? $t(`authManagement.errors.${reason}`) : formatUserFacingError(e);
+      return false;
     } finally { busy = false; }
   }
-
-  async function savePolicies() {
-    if (!inventory || !changed.length) return;
+  async function savePolicies(): Promise<boolean> {
+    if (!inventory || !canSave) return false;
     const replacements = structuredClone($state.snapshot(changed));
-    await write(async () => {
+    return await write(async () => {
       const result = await setUserAuthPolicies(replacements, userId);
       if (!inventory) return;
-      for (const purpose of AUTH_PURPOSES) {
-        const policy = result.policies[purpose];
-        if (policy) inventory.policies[purpose] = policy;
+      for (const key of AUTH_PURPOSES) {
+        const policy = result.policies[key];
+        if (policy) { inventory.policies[key] = policy; draft[key] = structuredClone(policy.chains); }
       }
       conflict = false;
     });
   }
-
-  function addAlternative(purpose: AuthPurpose) {
-    const method = Object.keys(inventory?.methods ?? {}).find((name) => inventory?.methods[name].purposes.includes(purpose));
-    if (method) draft[purpose].push([{ method, credential_ids: [] }]);
+  function addAlternative() {
+    if (!writable || !inventory) return;
+    const eligible = Object.keys(inventory.methods).filter((method) => inventory!.methods[method].purposes.includes(purpose));
+    const method = eligible.find((name) => inventory!.credentials.some((c) => c.method === name && c.active)) ?? eligible[0];
+    if (!method) return;
+    const active = inventory.credentials.filter((c) => c.method === method && c.active);
+    draft[purpose].push([{ method, credential_ids: active.length === 1 ? [active[0].credential_id] : [] }]);
+    selectedChain = draft[purpose].length - 1; selectedStep = 0;
   }
-
-  function setMethod(purpose: AuthPurpose, chainIndex: number, method: string) {
-    draft[purpose][chainIndex] = [{ method, credential_ids: [] }];
+  async function setMethod(method: string) {
+    if (!selected || selected[0]?.method === method || !writable) return;
+    if (selected.some((step) => step.credential_ids.length) && !(await dialogStore.confirm({ message: $t('authManagement.replaceMethod') }))) return;
+    if (!writable) return;
+    const active = inventory!.credentials.filter((c) => c.method === method && c.active);
+    draft[purpose][selectedChain] = [{ method, credential_ids: active.length === 1 ? [active[0].credential_id] : [] }];
+    selectedStep = 0;
   }
-
-  function toggleCredential(step: AuthPolicyStep, id: string) {
+  function toggle(id: string) {
+    if (!writable || !selected?.[selectedStep]) return;
+    const step = selected[selectedStep];
     step.credential_ids = step.credential_ids.includes(id) ? step.credential_ids.filter((value) => value !== id) : [...step.credential_ids, id];
   }
-
-  async function registerKey(event: SubmitEvent) {
-    event.preventDefault();
-    if (!publicKey.trim()) return;
-    await write(async () => {
-      const result = await registerUserAuthPublicKey(publicKey.trim(), label.trim() || null, userId);
+  async function registerKey(key: string, label: string) {
+    if (!key) return false;
+    return await write(async () => {
+      const result = await registerUserAuthPublicKey(key, label || null, userId);
       inventory?.credentials.push({ method: 'publickey', credential_id: result.credential_id, active: true, label: result.label, key_identity: result.fingerprint });
-      publicKey = '';
-      label = '';
     });
   }
-
-  async function editKey(credential: UserAuthentication['credentials'][number]) {
+  async function editKey(credential: AuthCredential) {
     const next = await dialogStore.prompt({ message: $t('authManagement.keyLabel'), defaultValue: credential.label ?? '', maxLength: 255 });
     if (next === null) return;
-    await write(async () => {
-      const result = await updateUserAuthPublicKey(credential.credential_id, next.trim() || null, userId);
-      credential.label = result.label;
-    });
+    await write(async () => { const result = await updateUserAuthPublicKey(credential.credential_id, next.trim() || null, userId); credential.label = result.label; });
   }
-
-  async function deleteKey(credential: UserAuthentication['credentials'][number]) {
+  async function deleteKey(credential: AuthCredential) {
     if (!(await dialogStore.confirm({ title: $t('authManagement.deleteKey'), message: $t('authManagement.deleteKeyConfirm'), danger: true }))) return;
-    await write(async () => {
-      await deleteUserAuthPublicKey(credential.credential_id, userId);
-      if (inventory) inventory.credentials = inventory.credentials.filter((item) => item.credential_id !== credential.credential_id);
-    });
+    await write(async () => { await deleteUserAuthPublicKey(credential.credential_id, userId); if (inventory) inventory.credentials = inventory.credentials.filter((c) => c.credential_id !== credential.credential_id); });
+  }
+  async function beginPassword() {
+    if (!canPassword || busy || methodBusy || !(await beforeMethodChange())) return;
+    if (!(await authenticatorSettings?.canLeave() ?? true)) return;
+    showPassword = true;
+  }
+  async function updatePassword(oldPassword: string, newPassword: string) {
+    await changePassword(authStore.username!, oldPassword, newPassword);
+    showPassword = false;
+    await clearAuthSession(); authStore.clear();
+    notificationStore.success($t('more.passwordChanged'));
+    allowNavigation = true; await goto('/login', { replaceState: true });
+  }
+  async function resetPassword(password: string, bypass: boolean, force: boolean, disableTotp: boolean) {
+    await resetUserPassword(userId!, password, bypass, force);
+    showPassword = false;
+    if (disableTotp && authStore.permissions.includes('manage_2fa')) {
+      try { if ((await getManagedTwoFactorStatus(userId!)).enabled) await disableManagedTwoFactor(userId!); }
+      catch (e) { notificationStore.error($t('manage.passwordChangedTwoFactorFailed', { values: { username: username ?? userId!, error: formatUserFacingError(e) } })); await load(); return; }
+    }
+    notificationStore.success($t('authManagement.saved')); await load(); await authenticatorSettings?.refreshStatus();
   }
 </script>
 
 <div class="authentication-management">
-  <div class="management-toolbar">
-    <p>{$t('authManagement.description')}</p>
-    <DialogActionButton disabled={busy || loading} onclick={reload}>{$t('common.refresh')}</DialogActionButton>
-  </div>
-  {#if error}<p role="alert" class="management-error">{error}</p>{/if}
-  {#if loading}
-    <ProgressRing label={$t('common.loading')} />
+  <div class="auth-toolbar"><p>{$t('authManagement.description')}</p><DialogActionButton disabled={busy || methodBusy || loading} onclick={reload}>{$t('common.refresh')}</DialogActionButton></div>
+  {#if managed}<p>{$t('authManagement.adminAccount', { values: { username: username ?? userId! } })}</p>{/if}
+  {#if error}<p role="alert" class="auth-error auth-feedback">{error}</p>{/if}
+  {#if loading}<ProgressRing label={$t('common.loading')} />
   {:else if inventory}
-    <p class="account-id">{$t('manage.userId')}: <span>{inventory.user_id}</span></p>
-    {#if !elevated}<p role="status" class="management-notice">{$t('authManagement.elevationRequired')}</p>{/if}
-    <section aria-labelledby="authentication-credentials-title">
-      <h2 id="authentication-credentials-title">{$t('authManagement.credentials')}</h2>
-      {#if !inventory.credentials.length}<p>{$t('authManagement.noCredentials')}</p>{/if}
-      <ul class="credential-list">
-        {#each inventory.credentials as credential (credential.credential_id)}
-          <li>
-            <div class="credential-copy">
-              <strong>{credential.label || credential.method}</strong>
-              <span>{credential.method} · {$t(credential.active ? 'common.enabled' : 'common.disabled')}</span>
-              <code>{credential.credential_id}</code>
-              {#if credential.key_identity}<code>{credential.key_identity}</code>{/if}
-            </div>
-            {#if credential.method === 'publickey'}
-              <div class="management-actions">
-                <DialogActionButton disabled={!writable} onclick={() => editKey(credential)}>{$t('authManagement.editLabel')}</DialogActionButton>
-                <DialogActionButton disabled={!writable} onclick={() => deleteKey(credential)}>{$t('common.delete')}</DialogActionButton>
-              </div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-      <form onsubmit={registerKey} class="key-form">
-        <h3>{$t('authManagement.registerKey')}</h3>
-        <p>{$t('authManagement.keyHelp')}</p>
-        <label>{$t('authManagement.publicKey')}<textarea bind:value={publicKey} disabled={!writable} rows="3" spellcheck="false" placeholder="ssh-ed25519 AAAA…"></textarea></label>
-        <label>{$t('authManagement.keyLabel')}<input bind:value={label} disabled={!writable} maxlength="255" /></label>
-        <div class="management-actions"><DialogActionButton type="submit" variant="primary" disabled={!writable || !publicKey.trim()}>{$t('authManagement.registerKey')}</DialogActionButton></div>
-      </form>
-    </section>
-    <section aria-labelledby="authentication-policies-title">
-      <h2 id="authentication-policies-title">{$t('authManagement.policies')}</h2>
-      <p>{$t('authManagement.policyHelp')}</p>
-      <p class="mt-2">{$t('authManagement.clientMethods')}</p>
-      {#each AUTH_PURPOSES as purpose}
-        <fieldset class="purpose-editor" disabled={!writable}>
-          <legend>{$t(`authManagement.purposes.${purpose}`)} <span>r{inventory.policies[purpose].revision}</span></legend>
-          {#if !draft[purpose].length}<p>{$t(`authManagement.empty.${purpose}`)}</p>{/if}
-          {#each draft[purpose] as chain, chainIndex}
-            <div class="policy-chain">
-              <div class="chain-toolbar">
-                <label>{$t('authManagement.alternative', { values: { count: chainIndex + 1 } })}
-                  <select value={chain[0]?.method ?? ''} onchange={(event) => setMethod(purpose, chainIndex, event.currentTarget.value)}>
-                    {#if !inventory.methods[chain[0]?.method]}<option value={chain[0]?.method}>{chain[0]?.method}</option>{/if}
-                    {#each Object.entries(inventory.methods) as [method, metadata]}
-                      {#if metadata.purposes.includes(purpose)}<option value={method}>{method}</option>{/if}
-                    {/each}
-                  </select>
-                </label>
-                <DialogActionButton disabled={!writable} onclick={() => { draft[purpose].splice(chainIndex, 1); }}>{$t('common.delete')}</DialogActionButton>
-              </div>
-              {#each chain as step, stepIndex}
-                <div class="policy-step">
-                  <div class="step-toolbar"><strong>{$t('authManagement.step', { values: { count: stepIndex + 1 } })}</strong><DialogActionButton disabled={!writable || chain.length <= 1} onclick={() => { chain.splice(stepIndex, 1); }}>{$t('common.delete')}</DialogActionButton></div>
-                  {#each inventory.credentials.filter((credential) => credential.method === step.method) as credential (credential.credential_id)}
-                    <label class="credential-choice"><input type="checkbox" checked={step.credential_ids.includes(credential.credential_id)} onchange={() => toggleCredential(step, credential.credential_id)} /><span>{credential.label || credential.credential_id}{credential.active ? '' : ` · ${$t('common.disabled')}`}</span></label>
-                  {/each}
-                  {#each step.credential_ids.filter((id) => !inventory?.credentials.some((credential) => credential.credential_id === id)) as id}
-                    <label class="credential-choice"><input type="checkbox" checked onchange={() => toggleCredential(step, id)} /><span>{$t('authManagement.missingCredential')}: {id}</span></label>
-                  {/each}
-                  {#if !step.credential_ids.length}<p class="management-notice">{$t('authManagement.selectCredential')}</p>{/if}
-                </div>
-              {/each}
-              <DialogActionButton disabled={!writable || chain[0]?.method !== 'publickey'} onclick={() => { chain.push({ method: chain[0].method, credential_ids: [] }); }}>{$t('authManagement.addStep')}</DialogActionButton>
-            </div>
-          {/each}
-          <DialogActionButton disabled={!writable} onclick={() => addAlternative(purpose)}>{$t('authManagement.addAlternative')}</DialogActionButton>
-        </fieldset>
+    {#if !elevated}<p role="status" class="auth-notice auth-feedback">{$t('authManagement.elevationRequired')}</p>{/if}
+    <div class="auth-tabs" role="tablist" aria-label={$t('authManagement.title')}>
+      {#each ['methods', 'flows'] as value}
+        <button id={`auth-tab-${value}`} type="button" role="tab" aria-selected={tab === value} aria-controls={`auth-panel-${value}`} tabindex={tab === value ? 0 : -1} onclick={() => { tab = value as typeof tab; }} onkeydown={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); tab = event.key === 'Home' ? 'methods' : event.key === 'End' ? 'flows' : tab === 'methods' ? 'flows' : 'methods'; document.getElementById(`auth-tab-${tab}`)?.focus(); } }}>{$t(`authManagement.${value}Tab`)}</button>
       {/each}
-      <div class="management-actions"><DialogActionButton variant="primary" disabled={!writable || !changed.length || conflict || changed.some((policy) => policy.chains.some((chain) => chain.some((step) => !step.credential_ids.length)))} onclick={savePolicies}>{$t('authManagement.savePolicies')}</DialogActionButton></div>
-    </section>
+    </div>
+    <div id="auth-panel-methods" role="tabpanel" aria-labelledby="auth-tab-methods" hidden={tab !== 'methods'}>
+      <p>{$t('authManagement.methodsHelp')}</p>
+      <AuthenticationMethods {inventory} {writable} {managed} busy={busy || methodBusy} canChangePassword={canPassword} onPassword={beginPassword} onRegister={registerKey} onEdit={editKey} onDelete={deleteKey}>
+        {#snippet authenticator()}
+          <AuthenticatorSettings bind:this={authenticatorSettings} {userId} bind:busy={methodBusy} disabled={busy || loading || !authStore.isLoggedIn} beforeChange={beforeMethodChange} onChanged={load} />
+        {/snippet}
+      </AuthenticationMethods>
+    </div>
+    <div id="auth-panel-flows" role="tabpanel" aria-labelledby="auth-tab-flows" hidden={tab !== 'flows'}>
+      <div class="auth-purposes" aria-label={$t('authManagement.flowsTab')}>
+        {#each AUTH_PURPOSES as key}<DialogActionButton variant={purpose === key ? 'tonal' : 'secondary'} aria-pressed={purpose === key} onclick={() => { purpose = key; selectedChain = 0; selectedStep = 0; }}>{$t(`authManagement.purposes.${key}`)}</DialogActionButton>{/each}
+      </div>
+      <p>{$t(`authManagement.purposeHelp.${purpose}`)}</p>
+      {#if purpose === 'mfa'}<p>{$t('authManagement.mfaMethodHint')}</p>{/if}
+      {#if !loginAvailable}<p class="auth-notice">{$t('authManagement.noCompleteLogin')}</p>{/if}
+      <div class="auth-flow-layout">
+        <div class="auth-grow"><AuthenticationFlowGraph chains={draft[purpose]} {purpose} credentials={inventory.credentials} {selectedChain} {selectedStep} onSelect={(chain, step) => { selectedChain = chain; selectedStep = step; }} /><div class="auth-actions"><DialogActionButton disabled={!writable || !Object.values(inventory.methods).some((metadata) => metadata.purposes.includes(purpose))} onclick={addAlternative}>{$t('authManagement.addAlternative')}</DialogActionButton></div></div>
+        {#if selected?.[selectedStep]}
+          <AuthenticationStepEditor {inventory} {purpose} chain={selected} chainIndex={selectedChain} stepIndex={selectedStep} {writable} onMethod={setMethod} onToggle={toggle}
+            onAddStep={() => { if (writable) { selected.push({ method: selected[0].method, credential_ids: [] }); selectedStep = selected.length - 1; } }}
+            onRemoveStep={() => { if (writable) { selected.splice(selectedStep, 1); selectedStep = Math.max(0, selectedStep - 1); } }}
+            onRemoveChain={() => { if (writable) { draft[purpose].splice(selectedChain, 1); selectedChain = Math.max(0, selectedChain - 1); selectedStep = 0; } }} />
+        {:else}<p>{$t('authManagement.selectNode')}</p>{/if}
+      </div>
+    </div>
+    {#if changed.length}<div class="auth-savebar"><p role="status">{$t('authManagement.unsaved')}</p><div class="auth-actions"><DialogActionButton disabled={busy || methodBusy} onclick={reload}>{$t('authManagement.discard')}</DialogActionButton><DialogActionButton variant="primary" disabled={!canSave} onclick={savePolicies}>{$t('authManagement.savePolicies')}</DialogActionButton></div></div>{/if}
+    {#if managed}<details><summary>{$t('authManagement.details')}</summary><dl><dt>{$t('manage.userId')}</dt><dd><code>{inventory.user_id}</code></dd></dl></details>{/if}
   {/if}
 </div>
 
-<style>
-  .authentication-management { display: flex; min-width: 0; flex-direction: column; gap: 1rem; color: var(--explorer-text); }
-  .management-toolbar, .management-actions, .chain-toolbar, .step-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
-  .management-toolbar p { flex: 1; min-width: 12rem; }
-  .management-actions { justify-content: flex-end; }
-  section { min-width: 0; border-top: 1px solid var(--explorer-border); padding-top: 1.25rem; }
-  h2 { font-size: 1.1rem; font-weight: 650; margin-bottom: .75rem; }
-  h3, legend { font-weight: 600; }
-  p, .credential-copy span, legend span { color: var(--explorer-text-muted); font-size: .8125rem; line-height: 1.6; }
-  .account-id span, code { overflow-wrap: anywhere; font-family: var(--font-md3-mono, monospace); }
-  .credential-list { margin-top: .75rem; }
-  .credential-list li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .75rem; padding-block: .875rem; border-bottom: 1px solid var(--explorer-border); }
-  .credential-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: .2rem; font-size: .875rem; }
-  code { font-size: .75rem; color: var(--explorer-text-muted); }
-  .key-form { display: flex; flex-direction: column; gap: .75rem; margin-block: 1.25rem .25rem; }
-  label { display: flex; flex-direction: column; gap: .4rem; font-size: .8125rem; }
-  input:not([type='checkbox']), textarea, select { min-width: 0; width: 100%; border: 1px solid var(--explorer-border-strong); border-radius: var(--explorer-radius-small); background: var(--explorer-surface-raised); color: var(--explorer-text); padding: .65rem; }
-  textarea { resize: vertical; }
-  .purpose-editor { min-width: 0; margin-block: 1.25rem; }
-  legend { margin-bottom: .6rem; }
-  .policy-chain { border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-medium); padding: 1rem; margin-block: .75rem; }
-  .chain-toolbar label { flex: 1; min-width: 8rem; }
-  .policy-step { border-top: 1px solid var(--explorer-border); padding-block: .75rem; margin-top: .75rem; }
-  .step-toolbar { margin-bottom: .5rem; font-size: .8125rem; }
-  .credential-choice { flex-direction: row; align-items: center; padding-block: .4rem; overflow-wrap: anywhere; }
-  .credential-choice input { flex: none; accent-color: var(--explorer-accent); }
-  .management-error { position: sticky; top: 0; z-index: 2; padding: .75rem; border: 1px solid var(--explorer-danger); border-radius: var(--explorer-radius-small); color: var(--explorer-danger); background: var(--explorer-surface); }
-  .management-notice { color: var(--explorer-danger); }
-  :disabled { opacity: .55; }
-</style>
+{#if showPassword}
+  {#if managed}<ResetUserPasswordDialog username={username ?? userId!} canDisableTwoFactor={authStore.permissions.includes('manage_2fa')} onSave={resetPassword} onClose={() => { showPassword = false; }} />
+  {:else}<ChangePasswordDialog username={authStore.username!} tip={$t('more.passwordTip')} onSubmit={updatePassword} onCancel={() => { showPassword = false; }} />{/if}
+{/if}

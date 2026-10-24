@@ -131,6 +131,7 @@
   let detailRows = $state<Array<{ label: string; value: string }>>([]);
   let blocksDialog = $state<{ userId: string; username: string; blocks: UserBlock[] } | null>(null);
   let activeDialog = $state<ManageDialogState>(null);
+  let authenticationManagement = $state<{ canLeave: () => Promise<boolean> }>();
   let accountDisableReason = $state('');
   let expandedActionRow = $state<string | null>(null);
   let identityMeasureHost = $state<HTMLDivElement | null>(null);
@@ -1449,7 +1450,6 @@
                 <tr>
                   <th class="px-3 py-2">{$t('manage.id')}</th>
                   <th class="px-3 py-2">{$t('manage.action')}</th>
-                  <th class="px-3 py-2">{$t('manage.username')}</th>
                   <th class="px-3 py-2">{$t('manage.target')}</th>
                   <th class="px-3 py-2">{$t('manage.result')}</th>
                   <th class="px-3 py-2">{$t('manage.remote')}</th>
@@ -1483,7 +1483,6 @@
                       </button>
                     </td>
                     <td class="px-3 py-2 align-top">{entry.action}</td>
-                    <td class="px-3 py-2 align-top">{entry.username}</td>
                     <td class="px-3 py-2 align-top max-w-52 truncate" title={entry.target}>{entry.target}</td>
                     <td class="px-3 py-2 align-top">{entry.result}</td>
                     <td class="px-3 py-2 align-top">{entry.remote_address}</td>
@@ -1509,8 +1508,8 @@
 />
 
 {#if activeDialog?.kind === 'user-authentication'}
-  <ModalFrame title={`${$t('authManagement.title')} · ${activeDialog.user.username}`} maxWidth="max-w-3xl" onClose={() => (activeDialog = null)} closeLabel={$t('common.close')}>
-    <div class="p-5"><AuthenticationManagement userId={activeDialog.user.user_id} /></div>
+  <ModalFrame title={`${$t('authManagement.title')} · ${activeDialog.user.username}`} maxWidth="max-w-6xl" onClose={async () => { if (await authenticationManagement?.canLeave() ?? true) activeDialog = null; }} closeLabel={$t('common.close')}>
+    <div class="p-5"><AuthenticationManagement bind:this={authenticationManagement} userId={activeDialog.user.user_id} username={activeDialog.user.username} /></div>
   </ModalFrame>
 {:else if activeDialog?.kind === 'create-user'}
   <CreateUserAccountDialog
