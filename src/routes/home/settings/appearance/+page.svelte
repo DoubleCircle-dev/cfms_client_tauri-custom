@@ -212,6 +212,7 @@
           </span>
           <Icon
             name={colorScheme === option.value ? 'radioChecked' : 'radioUnchecked'}
+            filled={colorScheme === option.value}
             size="21px"
           />
         </button>
@@ -253,6 +254,7 @@
           </span>
           <Icon
             name={reduceMotion === option.value ? 'radioChecked' : 'radioUnchecked'}
+            filled={reduceMotion === option.value}
             size="21px"
           />
         </button>

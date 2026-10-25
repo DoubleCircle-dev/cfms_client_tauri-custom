@@ -135,17 +135,17 @@
   .settings-heading-copy h1 {
     margin: 0;
     color: var(--color-md3-on-surface);
-    font: 700 28px/36px var(--font-md3-sans);
+    font: 600 28px/36px var(--font-md3-sans);
     letter-spacing: -0.018em;
     text-wrap: balance;
   }
 
   .settings-heading-copy p {
     max-width: 68ch;
-    margin: 0.28rem 0 0;
+    margin: 8px 0 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 12px;
-    line-height: 1.5;
+    font-size: 14px;
+    line-height: 20px;
   }
 
   :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]) {

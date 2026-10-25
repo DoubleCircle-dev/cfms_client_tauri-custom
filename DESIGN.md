@@ -94,6 +94,8 @@ Use the 12/16, 14/20, 16/22, 20/26 and 28/36 pixel ramp. Default text is regular
 
 Preserve the existing top bar, 244px navigation region, flexible content and responsive breakpoints. Desktop navigation rows are about 36px and ordinary buttons 32px; coarse-pointer targets are at least 44px. Use the four-pixel grid, with 24px between major groups.
 
+The workspace content container paints one opaque content background across the full viewport and scroll area; route wrappers stay transparent, including centered or short pages. Settings overview entries form two equal columns within each group when the workspace container is at least 800px wide, and one column below that. Keep row-major reading order and wrap status text inside its entry. Transfer page headings use 24px top spacing (16px on narrow windows), 28/36px titles, and an 8px gap before 14/20px descriptions; shared settings headings use the same title/description gap.
+
 At 1024px and above, sign-in retains its 38.196601125% form / remaining image composition. Smaller screens hide the image. Preserve pictures, avatars, credential switching, action order and utilities. Above-field labels may improve clarity without rearranging the route.
 
 ## Elevation & Depth
@@ -115,11 +117,13 @@ Use 4px corners for controls, 8px for content and 12px for large modal/flyout su
 - Prefer official Web Components for buttons, icon buttons, switch, checkbox, radio, spinner and ordinary non-sensitive text input. Register only used components and bundle locally. Thin Svelte adapters own values, events and accessible names; pages never inspect third-party shadow roots.
 - Passwords and private-key passphrases stay native. The pinned Text Input reflects its current value into attributes and must not receive secrets. Server history remains the established native combobox. Shared native fields have above-field labels, Fluent borders, validation and one delegated focus indicator.
 - Keep the semantic IconName interface. Use local Fluent System Icons SVGs, Regular by default and Filled for selected states. Style .cfms-icon or data-icon rather than font implementation classes.
+- Selected radio illustrations explicitly use Filled artwork with a center dot. Language uses Local Language Globe; directory-ID navigation uses Notebook Eye Regular. Icon generation tries the requested size, 24px, then 20px before falling back to Regular artwork.
 - Preserve ModalFrame, complex menus and file tables where they encode focus, resizing or business behavior. Restyle shared surfaces rather than replacing behavior for appearance alone.
 - One owner paints each focus indicator. Native composites use data-focus-ring="delegated"; Fluent owns its internal focus. Shortcuts respect shadow-boundary editable targets and modal loops include enabled custom controls.
 - Ordinary controls use fill/stroke/pressed feedback rather than Material ripples or pronounced spring bounce. State changes generally take 100–200ms; floating layers 200–300ms. Preserve authentication image push/retreat and panel choreography at 600ms, triggered only for route transitions. Honor app/OS reduced motion, including shadow-root animations.
 - Shared settings groups use consistent 8px content surfaces, headings, rows and 4px fields. Business content stays opaque. Existing tab strips scroll horizontally in narrow windows. File rows use one density value for rendering, virtualization, selection and keyboard anchoring: 40px desktop and 48px coarse pointer.
 - Keep styles for adapted button hosts local to their owner through data-fluent-owner. Shared button geometry, icon/text spacing, tone and focus behavior belong in the adapter; generic names such as primary-action must not style buttons in other dialogs. Boolean icon-only is absent for labelled actions.
+- Elevation is an icon-only action: 32px square on desktop, at least 44px for coarse pointers. Explorer command labels and their measurement copies use regular weight. Server search uses a single rectangular field with a 4px radius, inline clear/search actions and delegated input focus; its placeholder describes the server-wide scope. Preview filters wrap, sorting uses rectangular selection states, and footer actions retain readable spacing.
 
 ## Do's and Don'ts
 

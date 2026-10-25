@@ -102,7 +102,7 @@
             class="{language === option.value ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}"
             aria-hidden="true"
           >
-            <Icon name={language === option.value ? 'radioChecked' : 'radioUnchecked'} size="22px" />
+            <Icon name={language === option.value ? 'radioChecked' : 'radioUnchecked'} filled={language === option.value} size="22px" />
           </span>
           {$t(option.labelKey)}
         </button>

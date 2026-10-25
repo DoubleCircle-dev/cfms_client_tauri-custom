@@ -353,7 +353,7 @@ html[data-reduce-motion="true"] .context-menu-surface {
 
 .explorer-shell .workspace-page {
   color: var(--explorer-text);
-  background: var(--colorNeutralBackground1);
+  background: transparent;
 }
 
 .explorer-shell .workspace-page h1,

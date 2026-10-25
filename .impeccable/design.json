@@ -148,7 +148,7 @@
   ],
   "narrative": {
     "northStar": "Fluent Operations Workspace",
-    "overview": "Windows 11 hierarchy with Fluent 2 controls and bundled Noto typography across desktop and Android. Business pages, dialogs and recovery surfaces use the shared foundations; complex lists and editors preserve their workflows.",
+    "overview": "Windows 11 hierarchy with Fluent 2 controls and bundled Noto typography across desktop and Android. One opaque workspace content background, settings entries in two columns at workspace widths of 800px and above, explicit selected radio dots, regular explorer commands, and an integrated server search field share the foundations; complex lists and editors preserve their workflows.",
     "keyCharacteristics": [
       "Native UI typography and compact working density.",
       "Semantic Fluent themes and local system icons.",

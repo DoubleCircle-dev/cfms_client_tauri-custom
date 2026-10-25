@@ -5,10 +5,11 @@ import { ICON_MAP } from '../src/lib/fluent/icon-map.ts';
 const packageRoot = new URL('../node_modules/@fluentui/svg-icons/icons/', import.meta.url);
 const imports = new Map();
 function asset(slug, size, style) {
-  let file = slug + '_' + size + '_' + style + '.svg';
-  if (!existsSync(new URL(file, packageRoot))) file = slug + '_24_' + style + '.svg';
-  if (!existsSync(new URL(file, packageRoot))) file = slug + '_24_regular.svg';
-  if (!existsSync(new URL(file, packageRoot))) throw new Error('Missing Fluent icon: ' + slug);
+  const sizes = [...new Set([size, 24, 20])];
+  const styles = [...new Set([style, 'regular'])];
+  const file = styles.flatMap((variant) => sizes.map((dimension) => `${slug}_${dimension}_${variant}.svg`))
+    .find((candidate) => existsSync(new URL(candidate, packageRoot)));
+  if (!file) throw new Error('Missing Fluent icon: ' + slug);
   if (!imports.has(file)) imports.set(file, 'svg' + imports.size);
   return imports.get(file);
 }

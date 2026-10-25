@@ -703,7 +703,7 @@
   .explorer-nav-favorite :global(.cfms-icon) { color: var(--explorer-folder); }
   .explorer-nav-empty { padding: 0.3rem 0.55rem; color: var(--explorer-text-muted); font-size: 0.7rem; line-height: 1.4; }
   .explorer-nav-loading { padding: 0.5rem; }
-  .explorer-content { position: relative; min-width: 0; flex: 1; overflow: hidden; background: var(--explorer-background); }
+  .explorer-content { position: relative; min-width: 0; flex: 1; overflow: hidden; background: var(--colorNeutralBackground1); }
   .explorer-route-view { height: 100%; min-height: 0; overflow-y: auto; container-type: inline-size; animation: route-enter 160ms ease-out; }
   .explorer-drawer-scrim { display: none; }
 

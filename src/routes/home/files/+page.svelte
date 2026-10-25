@@ -3854,19 +3854,15 @@
     {#if canUseServerSearch}
       <div bind:this={searchPreviewRoot} class="files-search relative">
       <form
-        class="flex gap-2"
+        class="files-search-field"
+        data-search-box
         onsubmit={(e) => { e.preventDefault(); openSearchDialog(true); }}
       >
-        <div class="relative">
-          <span class="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center justify-center leading-none text-md3-on-surface-variant">
-            <Icon name="search" size="17px" class="shrink-0" />
-          </span>
           <input
             type="text"
-            class="cfms-native-field h-9 w-48 rounded-full border border-md3-outline bg-md3-field py-1.5 pl-9 pr-9 text-sm leading-5 text-md3-on-surface
-                   placeholder:text-md3-on-surface-variant
-                   transition-all"
-            placeholder={$t('files.search')}
+            class="files-search-input cfms-native-field"
+            data-focus-ring="delegated"
+            placeholder={$t('files.searchPlaceholder')}
             bind:value={searchQuery}
             bind:this={searchInput}
             onfocus={openSearchPreview}
@@ -3889,22 +3885,22 @@
               onclick={() => {
                 searchQuery = '';
                 handleSearchInput();
+                searchInput?.focus({ preventScroll: true });
               }}
               appearance="subtle"
-              class="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface"
+              class="files-search-clear"
               iconOnly
             >
               <Icon name="close" size="16px" />
             </FluentButton>
           {/if}
-        </div>
         <FluentButton data-fluent-owner="routes-home-files-page"
           type="submit"
           title={$t('files.serverSearch')}
           aria-label={$t('files.serverSearch')}
           disabled={!searchPreviewHasQuery}
           appearance="subtle"
-          class="inline-flex h-9 w-9 items-center justify-center rounded\r\n                 bg-md3-primary-container text-md3-on-primary-container\r\n                 transition-all   disabled:opacity-50"
+          class="files-search-submit"
           iconOnly
         >
           <Icon name="search" size="16px" />
@@ -3918,7 +3914,7 @@
           style={searchPreviewPanelStyle}
         >
           <div class="border-b border-md3-outline bg-md3-surface-container-high px-4 py-3">
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="search-preview-controls">
               <label class="inline-flex items-center gap-1.5 text-sm text-md3-on-surface-variant">
                 <MdCheckbox
                   bind:checked={searchPreview.searchDocuments}
@@ -3936,20 +3932,13 @@
                 {$t('files.searchDirectories')}
               </label>
 
-              <span class="mx-1 hidden h-6 w-px bg-md3-outline sm:block"></span>
-
-              <div class="relative grid grid-cols-3 overflow-hidden rounded-full border border-md3-outline bg-md3-field p-0.5" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
-                <span
-                  class="search-sort-indicator absolute bottom-0.5 left-0.5 top-0.5 rounded-full bg-md3-primary"
-                  style={searchSortIndicatorStyle(searchPreview.sortBy)}
-                  aria-hidden="true"
-                ></span>
+              <div class="search-preview-sort" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
                 {#each ['name', 'size', 'modified'] as field}
                   <button data-fluent-owner="routes-home-files-page"
                     data-search-sort
                     tabindex={searchPreview.sortBy === field ? 0 : -1}
                     type="button"
-                    class="relative z-10 min-w-16 rounded-full px-3 py-1 text-xs font-medium transition-colors {searchPreview.sortBy === field ? 'text-md3-on-primary' : 'text-md3-on-surface-variant hover:text-md3-on-surface'}"
+                    class="search-preview-sort-option"
                     aria-pressed={searchPreview.sortBy === field}
                     onclick={() => setSearchPreviewSort(field as SortField)}
                   >
@@ -3962,7 +3951,7 @@
                 title={searchPreview.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
                 onclick={toggleSearchPreviewSortOrder}
                 appearance="outline"
-                class="inline-flex h-8 items-center gap-1 rounded border border-md3-outline px-2.5 text-xs font-medium text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface"
+                class="search-preview-action"
               >
                 <Icon name={searchPreview.sortOrder === 'asc' ? 'arrowUpward' : 'arrowDownward'} size="16px" />
                 {searchPreview.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
@@ -3970,7 +3959,7 @@
             </div>
           </div>
 
-          <div class="flex items-center justify-between gap-3 px-4 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
+          <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-xs text-md3-on-surface-variant">
             <span>{$t('files.searchPreviewResults')}</span>
             {#if searchPreview.loading || searchPreview.loadingMore}
               <span class="inline-flex items-center gap-2 normal-case">
@@ -4044,13 +4033,13 @@
             {/if}
           </div>
 
-          <div class="flex items-center justify-between gap-3 px-4 py-3">
+          <div class="search-preview-footer">
             <FluentButton data-fluent-owner="routes-home-files-page"
               type="button"
               disabled={!searchPreviewCanSearch}
               onclick={() => openSearchDialog(true)}
               appearance="subtle"
-              class="text-sm font-semibold text-md3-primary-emphasis transition  disabled:opacity-50"
+              class="search-preview-action"
             >
               {$t('files.advancedSearch')}
             </FluentButton>
@@ -4058,8 +4047,8 @@
               type="button"
               disabled={!searchPreviewCanSearch}
               onclick={() => openSearchDialog(true)}
-              appearance="subtle"
-              class="inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm font-semibold text-md3-primary-emphasis transition hover:bg-md3-primary-container/20 disabled:opacity-50"
+              appearance="outline"
+              class="search-preview-action"
             >
               <Icon name="search" size="16px" />
               {$t('files.allResults')}
@@ -4220,20 +4209,54 @@
   }
 
   .files-search {
+    min-width: 0;
+    width: clamp(220px, 22vw, 360px);
     flex: none;
   }
+
+  .files-search-field {
+    display: flex;
+    min-width: 0;
+    min-height: 36px;
+    align-items: center;
+    gap: 2px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-bottom-color: var(--colorNeutralStrokeAccessible);
+    border-radius: var(--borderRadiusMedium);
+    padding: 1px;
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground2);
+  }
+  .files-search-field:hover { border-color: var(--colorNeutralStroke1Hover); }
+  [data-search-box]:has([data-focus-ring="delegated"]:focus) {
+    border-color: var(--colorStrokeFocus2);
+    box-shadow: inset 0 -1px var(--colorStrokeFocus2);
+  }
+  .files-search-input {
+    width: 0;
+    min-width: 0;
+    flex: 1;
+    align-self: stretch;
+    border: 0;
+    padding: 5px 10px;
+    color: inherit;
+    background: transparent;
+    font: 400 14px/20px var(--fontFamilyBase);
+  }
+  .files-search-input::placeholder { color: var(--colorNeutralForeground3); opacity: 1; }
+  :global(.files-search-clear[data-fluent-owner="routes-home-files-page"]),
+  :global(.files-search-submit[data-fluent-owner="routes-home-files-page"]) {
+    flex: none;
+    inline-size: 32px;
+    block-size: 32px;
+    padding: 0;
+    color: var(--colorNeutralForeground2);
+  }
+  :global(.files-search-submit[data-fluent-owner="routes-home-files-page"][disabled]) { color: var(--colorNeutralForegroundDisabled); }
 
   .files-navigation-row :global(.md-icon-button) {
     border-radius: var(--borderRadiusMedium);
     color: var(--explorer-text-muted);
-  }
-
-  .files-navigation-row :global(input:not(.file-address__input)) {
-    width: min(260px, 22vw);
-    border-color: var(--explorer-border) !important;
-    border-radius: var(--borderRadiusMedium);
-    color: var(--explorer-text) !important;
-    background: var(--explorer-surface) !important;
   }
 
   .files-command-row {
@@ -4337,11 +4360,30 @@
 
   .search-preview-panel {
     border-color: var(--explorer-border-strong);
-    background: color-mix(in srgb, var(--explorer-surface-raised) 96%, transparent);
+    background: var(--colorNeutralBackground1);
     box-shadow: var(--explorer-shadow);
     animation: search-preview-in 180ms var(--motion-easing-emphasized-decelerate) both;
-    -webkit-backdrop-filter: blur(24px) saturate(1.12);
-    backdrop-filter: none;
+  }
+
+  .search-preview-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .search-preview-sort { display: flex; max-width: 100%; flex-wrap: wrap; gap: 2px; border: 1px solid var(--colorNeutralStroke1); border-radius: var(--borderRadiusMedium); padding: 2px; }
+  .search-preview-sort-option { min-height: 32px; border-radius: var(--borderRadiusMedium); padding: 4px 12px; color: var(--colorNeutralForeground2); font: 400 14px/20px var(--fontFamilyBase); }
+  .search-preview-sort-option:hover { background: var(--colorNeutralBackground1Hover); }
+  .search-preview-sort-option[aria-pressed="true"] { color: var(--colorBrandForeground1); background: var(--colorBrandBackground2); box-shadow: inset 0 -2px var(--colorBrandStroke1); }
+  :global(.search-preview-action[data-fluent-owner="routes-home-files-page"]) { font-weight: 400; }
+  .search-preview-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+
+  @media (pointer: coarse) {
+    .files-search-field { min-height: 48px; }
+    .files-search-input { font-size: 16px; }
+    :global(.files-search-clear[data-fluent-owner="routes-home-files-page"]),
+    :global(.files-search-submit[data-fluent-owner="routes-home-files-page"]) { inline-size: 44px; block-size: 44px; }
+    .search-preview-sort-option { min-height: 44px; }
+  }
+  @media (forced-colors: active) {
+    .files-search-field { color: FieldText; background: Field; border-color: ButtonText; }
+    [data-search-box]:has([data-focus-ring="delegated"]:focus) { outline: 2px solid Highlight; outline-offset: -2px; box-shadow: none; }
+    .search-preview-sort-option[aria-pressed="true"] { color: HighlightText; background: Highlight; box-shadow: none; outline: 1px solid Highlight; }
   }
 
   .search-sort-indicator {
@@ -4393,6 +4435,7 @@
   }
 
   @media (max-width: 720px) {
+    .files-search { width: clamp(140px, 34vw, 240px); }
     .files-navigation-row {
       min-height: 52px;
       flex-wrap: nowrap;

@@ -206,7 +206,9 @@
     flex: none;
     min-inline-size: 96px;
     white-space: nowrap;
+    font-weight: 400;
   }
+  :global(.explorer-command-button[data-fluent-owner="lib-components-explorer-explorer-command-bar"]) { font-weight: 400; }
   .explorer-command-measure-button.explorer-command-button--compact { min-inline-size: 32px; }
 
   @media (pointer: coarse) {

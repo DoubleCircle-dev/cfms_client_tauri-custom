@@ -41,7 +41,10 @@
 }
 
 /* EscalationControl.svelte */
-.escalation-button[data-fluent-owner="lib-components-escalation-control"] { display: inline-flex; width: 34px; height: 34px; padding: 0; align-items: center; justify-content: center; }
+.escalation-button[data-fluent-owner="lib-components-escalation-control"] { display: inline-flex; inline-size: 32px; block-size: 32px; padding: 0; align-items: center; justify-content: center; }
+@media (pointer: coarse) {
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"] { inline-size: 44px; block-size: 44px; }
+}
   .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='true'],
   .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='true']:hover:not(:is(:disabled, [disabled])) {
     color: var(--explorer-danger);

@@ -180,7 +180,7 @@
             onkeydown={(event) => handleOptionKeydown(event, option.value)}
           >
             <span class="mt-0.5 shrink-0 {behavior === option.value ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}" aria-hidden="true">
-              <Icon name={behavior === option.value ? 'radioChecked' : 'radioUnchecked'} size="22px" />
+              <Icon name={behavior === option.value ? 'radioChecked' : 'radioUnchecked'} filled={behavior === option.value} size="22px" />
             </span>
             <span class="min-w-0">
               <span class="block font-medium">{$t(option.labelKey)}</span>

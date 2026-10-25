@@ -265,7 +265,7 @@
             onclick={() => applyChannel(item)}
           >
             <span class="channel-icon" aria-hidden="true">
-              <Icon name={channel === item ? 'radioChecked' : 'radioUnchecked'} size="20px" />
+              <Icon name={channel === item ? 'radioChecked' : 'radioUnchecked'} filled={channel === item} size="20px" />
             </span>
             <span class="channel-copy">
               <span class="channel-name">{$t(`settings.updates.${item}`)}</span>

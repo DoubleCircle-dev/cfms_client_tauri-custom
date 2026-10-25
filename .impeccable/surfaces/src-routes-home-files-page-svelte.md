@@ -12,4 +12,5 @@ related_targets: ["src/routes/home/trash/+page.svelte", "src/lib/components/file
 - Preserve address/history navigation, sorting, multi-selection, virtualization, viewport anchoring, marquee, drag/drop, revisions, recycle-bin and access-rule workflows.
 - Desktop rows are 40px; coarse-pointer rows 48px. Rendering and all coordinate calculations share this density. Commands remeasure after fonts load; narrow command bars collapse labels and scroll.
 - Tables and complex menus remain custom behavior components. Ordinary commands use the Fluent adapter; secret and special inputs remain native. Both themes, keyboard, forced colors, reduced motion and touch follow the shared contract.
+- Command labels and hidden measurement copies use regular weight. Directory-ID navigation uses Notebook Eye Regular. Server search is a single 4px-radius rectangular field with inline clear/submit actions and delegated input focus; retain server-wide scope, preview, sorting, permissions and keyboard navigation. Preview filters and footer actions wrap without overlap.
 - Implementation/validation inventory: FLUENT-MIGRATION.md. Native/device results are separate from browser fixtures.

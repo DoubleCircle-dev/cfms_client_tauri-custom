@@ -558,12 +558,12 @@
     flex-direction: column;
     gap: 16px;
     overflow: hidden;
-    padding: 1rem clamp(1rem, 2vw, 1.5rem) 1.5rem;
+    padding: 24px clamp(1rem, 2vw, 1.5rem);
   }
 
   .task-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-  .task-header h1 { color: var(--explorer-text); font-size: 28px; font-weight: 700; }
-  .task-header p { max-width: 68ch; margin-top: 0.2rem; color: var(--explorer-text-muted); font-size: 12px; }
+  .task-header h1 { margin: 0; color: var(--explorer-text); font: 600 28px/36px var(--fontFamilyBase); }
+  .task-header p { max-width: 68ch; margin: 8px 0 0; color: var(--explorer-text-muted); font: 400 14px/20px var(--fontFamilyBase); }
   .task-header-actions { display: flex; flex: none; align-items: center; gap: 4px; }
 
   :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]) { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: var(--borderRadiusMedium); color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
@@ -616,9 +616,8 @@
   }
 
   @media (max-width: 520px) {
-    .task-page { padding: 0.85rem; }
+    .task-page { padding: 16px; }
     .task-header { align-items: center; }
-    .task-header p { display: none; }
     .task-toolbar { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
     .section-filter,
     .task-summary { grid-column: 1; justify-self: stretch; }

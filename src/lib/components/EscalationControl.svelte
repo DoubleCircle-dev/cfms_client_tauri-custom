@@ -64,6 +64,7 @@
   disabled={busy || (!active && !serverStateStore.connected)}
   onclick={begin}
   appearance="subtle"
+  iconOnly
   class="explorer-command-button escalation-button"
 >
   {#if busy}
