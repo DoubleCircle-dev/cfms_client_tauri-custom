@@ -11,4 +11,5 @@ related_targets: ["src/lib/components/SecurityManagement.svelte", "src/lib/compo
 - Authority: DESIGN.md. Fluent command/field/state vocabulary, Noto typography and restrained neutral content surfaces.
 - Preserve all permission gates, identity-column sizing, responsive metadata/action disclosure, audit filtering, permission editing and authentication policy semantics. Tabs scroll in narrow layouts.
 - Reuse the shared action and dialog infrastructure. Complex list/editor behavior remains custom; secrets remain in native inputs. Host styles are isolated from other editors and prompts.
+- Context-menu copy, permission settings, password reset and avatar icons use the shared locally composed duotone outlines: neutral body with a theme-accent front sheet, gear, reset arrow or person. Simple icons stay monochrome; disabled/danger actions and forced colors use monochrome. Ordinary buttons do not opt into duotone.
 - Implementation/validation inventory: FLUENT-MIGRATION.md; browser fixtures do not prove server integration.

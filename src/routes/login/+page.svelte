@@ -1314,6 +1314,39 @@
       display: block;
     }
 
+    @supports ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+      .auth-shell::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: url('/astronomy.jpg') center / cover;
+      }
+
+      .auth-panel {
+        background: transparent;
+      }
+
+      /* Keep the material outside the scrolling panel so it covers the whole
+       * viewport even when a short window scrolls the form to its last action.
+       * Filtering this paint layer also leaves fixed descendants unaffected. */
+      .auth-shell::after {
+        content: '';
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: var(--auth-panel-basis);
+        pointer-events: none;
+        background: var(--cfms-account-acrylic);
+        -webkit-backdrop-filter: var(--cfms-material-filter);
+        backdrop-filter: var(--cfms-material-filter);
+      }
+
+      .auth-shell--connect-intro::after {
+        animation: auth-material-shrink var(--auth-transition-duration)
+          var(--auth-transition-easing) both;
+      }
+    }
+
     .auth-shell--connect-intro .auth-panel {
       animation: auth-panel-shrink var(--auth-transition-duration)
         var(--auth-transition-easing) both;
@@ -1330,6 +1363,35 @@
       animation: auth-visual-image-push var(--auth-transition-duration)
         var(--auth-transition-easing) both;
       will-change: transform;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+    .auth-shell::before {
+      content: none;
+    }
+
+    .auth-panel {
+      background: var(--colorNeutralBackground2);
+    }
+
+    .auth-shell::after {
+      content: none;
+    }
+  }
+
+  @keyframes auth-material-shrink {
+    from {
+      width: 100%;
+    }
+    to {
+      width: var(--auth-panel-basis);
+    }
+  }
+
+  @media (forced-colors: active) {
+    .auth-panel {
+      background: Canvas;
     }
   }
 

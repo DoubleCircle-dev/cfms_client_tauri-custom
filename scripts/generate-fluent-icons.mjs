@@ -4,7 +4,10 @@ import { ICON_MAP } from '../src/lib/fluent/icon-map.ts';
 
 const packageRoot = new URL('../node_modules/@fluentui/svg-icons/icons/', import.meta.url);
 const imports = new Map();
-const duotoneSlugs = new Set(['folder_add', 'folder_arrow_up', 'folder_arrow_right']);
+const duotoneSlugs = new Set([
+  'folder_add', 'folder_arrow_up', 'folder_arrow_right',
+  'copy', 'shield_settings', 'password_reset', 'person_circle',
+]);
 const duotoneImports = new Map();
 function duotoneAsset(slug, size) {
   const file = `${slug}_${size}.svg`;

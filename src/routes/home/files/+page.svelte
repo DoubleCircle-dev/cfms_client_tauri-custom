@@ -1599,16 +1599,16 @@
           onSelect: handleCreateFolder,
         },
         {
-          id: 'upload-files-here',
-          label: $t('files.uploadFiles'),
-          icon: 'uploadFile',
-          onSelect: handleUploadFiles,
-        },
-        {
           id: 'upload-folder-here',
           label: $t('files.uploadFolder'),
           icon: 'folderUpload',
           onSelect: handleUploadFolder,
+        },
+        {
+          id: 'upload-files-here',
+          label: $t('files.uploadFiles'),
+          icon: 'uploadFile',
+          onSelect: handleUploadFiles,
         },
         { type: 'divider' },
         {

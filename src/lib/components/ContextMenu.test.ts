@@ -16,6 +16,23 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
 afterEach(cleanup);
 
 describe('ContextMenu keyboard interaction', () => {
+  it.each(['contentCopy', 'adminPanelSettings', 'passwordReset', 'accountCircle'] as const)(
+    'uses the %s accent only for enabled, non-dangerous actions', (icon) => {
+      render(ContextMenu, {
+        open: true, x: 10, y: 10, onClose: vi.fn(),
+        items: [
+          { id: 'enabled', label: 'Enabled', icon, onSelect: vi.fn() },
+          { id: 'disabled', label: 'Disabled', icon, disabled: true, onSelect: vi.fn() },
+          { id: 'danger', label: 'Danger', icon, danger: true, onSelect: vi.fn() },
+        ],
+      });
+      const accentPath = 'path[fill="var(--cfms-icon-accent, currentColor)"]';
+      expect(screen.getByRole('menuitem', { name: 'Enabled' }).querySelector(accentPath)).not.toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Disabled' }).querySelector(accentPath)).toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Danger' }).querySelector(accentPath)).toBeNull();
+    },
+  );
+
   it('filters permissions and separators, ignores disabled actions, and closes before selection', async () => {
     const order: string[] = [];
     const disabledAction = vi.fn();
