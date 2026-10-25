@@ -32,12 +32,6 @@ async function readUiText() {
   return uniqueChars(`${asciiPrintable}${commonUiSymbols}${contents.join("\n")}`);
 }
 
-async function readIconNames() {
-  const iconsSource = await readFile(path.join(rootDir, "src/lib/icons.ts"), "utf8");
-  const names = [...iconsSource.matchAll(/:\s*'([^']+)'/g)].map((match) => match[1]);
-  return [...new Set(names)].sort();
-}
-
 async function fetchText(url) {
   const { stdout } = await execFileAsync(
     curlCommand,
@@ -58,7 +52,7 @@ async function fetchBinary(url) {
   return stdout;
 }
 
-function googleFontsUrl({ family, display, text, iconNames }) {
+function googleFontsUrl({ family, display, text }) {
   const url = new URL("https://fonts.googleapis.com/css2");
   url.searchParams.append("family", family);
   url.searchParams.set("display", display);
@@ -67,9 +61,6 @@ function googleFontsUrl({ family, display, text, iconNames }) {
     url.searchParams.set("text", text);
   }
 
-  if (iconNames) {
-    url.searchParams.set("icon_names", iconNames.join(","));
-  }
 
   return url;
 }
@@ -110,18 +101,10 @@ async function localizeCss({ name, url, localFamily }) {
     );
   }
 
-  if (name === "material-symbols-outlined" && localFamily) {
-    localizedCss = localizedCss.replace(
-      `.material-symbols-outlined {\n  font-family: '${localFamily}';`,
-      `.material-symbols-outlined {\n  font-family: '${localFamily}', 'Material Symbols Outlined';`,
-    );
-  }
-
   return localizedCss.trim();
 }
 
 const uiText = await readUiText();
-const iconNames = await readIconNames();
 
 const specs = [
   {
@@ -160,15 +143,6 @@ const specs = [
       text: asciiPrintable,
     }),
   },
-  {
-    name: "material-symbols-outlined",
-    localFamily: "CFMS Material Symbols Outlined",
-    url: googleFontsUrl({
-      family: "Material Symbols Outlined:opsz,wght,FILL,GRAD@24,400,0,0",
-      display: "block",
-      iconNames,
-    }),
-  },
 ];
 
 await rm(fontsDir, { recursive: true, force: true });
@@ -190,5 +164,5 @@ await writeFile(
 );
 
 console.log(
-  `Embedded ${specs.length} font families with ${uiText.length} UI characters and ${iconNames.length} Material Symbols.`,
+  `Embedded ${specs.length} font families with ${uiText.length} UI characters; system icons are bundled as Fluent SVGs.`,
 );

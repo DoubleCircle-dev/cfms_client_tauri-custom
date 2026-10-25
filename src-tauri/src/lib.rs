@@ -15,6 +15,7 @@ mod localization;
 mod preference_keys;
 mod public_key_auth;
 mod secure_store;
+mod window_backdrop;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -534,12 +535,17 @@ pub fn run() {
                 .find(|config| config.label == "main")
                 .cloned()
                 .ok_or_else(|| std::io::Error::other("Main window configuration is missing"))?;
-            tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?.build()?;
+            let main_window =
+                tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?;
+            #[cfg(target_os = "windows")]
+            let main_window = main_window.transparent(true);
+            main_window.build()?;
 
             tracing::info!("CFMS Client initialized successfully");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            window_backdrop::set_window_backdrop,
             commands::greet,
             commands::ping,
             commands::protocol_version,

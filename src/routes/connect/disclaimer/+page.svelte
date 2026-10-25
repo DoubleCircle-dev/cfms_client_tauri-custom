@@ -285,7 +285,7 @@
     }
   }
 
-  .warning-symbol :global(.material-symbols-outlined) {
+  .warning-symbol :global(.cfms-icon) {
     width: var(--flet-icon) !important;
     height: var(--flet-icon) !important;
     font-size: var(--flet-icon) !important;

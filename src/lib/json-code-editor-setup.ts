@@ -31,7 +31,7 @@ import {
 import { ICONS } from '$lib/icons';
 
 /**
- * CodeMirror's basic setup with a Material fold marker in place of its
+ * CodeMirror's basic setup with a Fluent SVG fold marker in place of its
  * font-dependent `⌄` / `›` text characters.
  */
 export const jsonCodeEditorSetup: Extension = [
@@ -40,8 +40,14 @@ export const jsonCodeEditorSetup: Extension = [
   highlightSpecialChars(),
   history(),
   foldGutter({
-    openText: ICONS.expandMore,
-    closedText: ICONS.breadcrumbSep,
+    markerDOM: (open) => {
+      const marker = document.createElement('span');
+      marker.className = 'cfms-icon';
+      marker.setAttribute('aria-hidden', 'true');
+      marker.title = open ? 'Fold line' : 'Unfold line';
+      marker.innerHTML = open ? ICONS.expandMore : ICONS.breadcrumbSep;
+      return marker;
+    },
   }),
   drawSelection(),
   dropCursor(),

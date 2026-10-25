@@ -30,6 +30,7 @@
     cycleKeyboardRegion,
     dispatchKeyboardCommand,
     KEYBOARD_HELP_SHORTCUTS,
+    isEditableTarget,
     registerKeyboardCommands,
     type KeyboardCommand,
   } from "$lib/keyboard";
@@ -66,7 +67,7 @@
   initNavigationHistory();
 
   afterNavigate((navigation) => {
-    if (!navigation.from || navigation.from.url.pathname === navigation.to?.url.pathname) return;
+    if (!navigation.from?.url || navigation.from.url.pathname === navigation.to?.url?.pathname) return;
     void tick().then(() => {
       const heading = document.querySelector<HTMLElement>(
         '.explorer-content h1, #app-main-content main h1, #app-main-content h1',
@@ -522,7 +523,7 @@
 
   function shouldAllowNativeContextMenu(target: EventTarget | null) {
     if (!(target instanceof Element)) return false;
-    if (target.closest('input, textarea, [contenteditable="true"], .allow-native-context-menu')) {
+    if (isEditableTarget(target) || target.closest('.allow-native-context-menu')) {
       return true;
     }
     if (

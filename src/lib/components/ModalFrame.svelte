@@ -7,6 +7,7 @@
   import { flyScale } from '$lib/motion/transitions';
   import { isMobilePlatform } from '$lib/platform';
   import Icon from '$lib/components/Icon.svelte';
+  import { FOCUSABLE_SELECTOR } from '$lib/keyboard';
 
   const DRAG_THRESHOLD = 4;
 
@@ -216,8 +217,8 @@
       && panelElement
       && !hasOwnEnterBehavior(event.target)
     ) {
-      const defaultButton = Array.from(panelElement.querySelectorAll<HTMLButtonElement>(
-        'button[data-dialog-default]:not([data-dialog-default="false"])',
+      const defaultButton = Array.from(panelElement.querySelectorAll<HTMLElement>(
+        ':is(button, fluent-button)[data-dialog-default]:not([data-dialog-default="false"])',
       )).find(isAvailableDefaultButton);
       if (defaultButton) {
         event.preventDefault();
@@ -228,9 +229,11 @@
 
     if (event.key !== 'Tab' || !panelElement) return;
     const focusable = Array.from(panelElement.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+      FOCUSABLE_SELECTOR,
     )).filter((element) => (
       !element.hidden
+      && !element.hasAttribute('disabled')
+      && element.getAttribute('aria-disabled') !== 'true'
       && element.getAttribute('aria-hidden') !== 'true'
       && !element.closest('[hidden], [inert], [aria-hidden="true"]')
     ));
@@ -266,8 +269,8 @@
     ));
   }
 
-  function isAvailableDefaultButton(button: HTMLButtonElement) {
-    if (button.matches(':disabled') || button.closest('[hidden], [inert], [aria-hidden="true"], [aria-disabled="true"]')) {
+  function isAvailableDefaultButton(button: HTMLElement) {
+    if (button.hasAttribute('disabled') || button.matches(':disabled') || button.closest('[hidden], [inert], [aria-hidden="true"], [aria-disabled="true"]')) {
       return false;
     }
     for (let element: HTMLElement | null = button; element; element = element.parentElement) {
@@ -841,11 +844,9 @@
     border: 1px solid var(--color-md3-outline);
     border-radius: var(--explorer-radius-large, 12px);
     color: var(--color-md3-on-surface);
-    background: color-mix(in srgb, var(--color-md3-surface-container) 97%, transparent);
-    box-shadow: var(--explorer-shadow, 0 24px 64px rgba(0, 0, 0, 0.38));
+    background: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow64);
     font-family: var(--font-md3-sans);
-    -webkit-backdrop-filter: blur(24px) saturate(1.08);
-    backdrop-filter: blur(24px) saturate(1.08);
     outline: none;
   }
 
@@ -1032,75 +1033,10 @@
   }
 
   .modal-backdrop {
-    --color-md3-primary: #60cdff;
-    --color-md3-primary-emphasis: #60cdff;
-    --color-md3-primary-container: rgba(96, 205, 255, 0.16);
-    --color-md3-on-primary: #0f1115;
-    --color-md3-on-primary-container: #f5f5f5;
-    --color-md3-surface: #0f1115;
-    --color-md3-surface-container: #17191d;
-    --color-md3-surface-container-high: #20232a;
-    --color-md3-surface-container-highest: #292d35;
-    --color-md3-outline: rgba(255, 255, 255, 0.11);
-    --color-md3-outline-variant: rgba(255, 255, 255, 0.18);
-    --color-md3-on-surface: #f5f5f5;
-    --color-md3-on-surface-variant: #b4b8c1;
-    --color-md3-field: #20232a;
-    --color-md3-error: #ff99a4;
-    --color-md3-error-action: #c42b1c;
-    --color-md3-error-container: rgba(255, 153, 164, 0.14);
-    --color-md3-on-error-action: #ffffff;
-    --color-md3-on-error-container: #ff99a4;
-
     padding-top: max(1rem, var(--safe-area-top, 0px));
     padding-right: max(1rem, var(--safe-area-right, 0px));
     padding-bottom: max(1rem, var(--safe-area-bottom, 0px));
     padding-left: max(1rem, var(--safe-area-left, 0px));
-    background: rgba(3, 6, 11, 0.62);
-    -webkit-backdrop-filter: blur(10px) saturate(0.9);
-    backdrop-filter: blur(10px) saturate(0.9);
-  }
-
-  :global(html[data-theme='light']) .modal-backdrop {
-    --color-md3-primary: #0067c0;
-    --color-md3-primary-emphasis: #0067c0;
-    --color-md3-primary-container: rgba(0, 103, 192, 0.12);
-    --color-md3-on-primary: #ffffff;
-    --color-md3-on-primary-container: #1a1a1a;
-    --color-md3-surface: #f3f3f3;
-    --color-md3-surface-container: #fafafa;
-    --color-md3-surface-container-high: #ffffff;
-    --color-md3-surface-container-highest: #ececec;
-    --color-md3-outline: rgba(0, 0, 0, 0.10);
-    --color-md3-outline-variant: rgba(0, 0, 0, 0.16);
-    --color-md3-on-surface: #1a1a1a;
-    --color-md3-on-surface-variant: #5d5d5d;
-    --color-md3-field: #ffffff;
-    --color-md3-error: #c42b1c;
-    --color-md3-error-action: #c42b1c;
-    --color-md3-error-container: rgba(196, 43, 28, 0.10);
-    --color-md3-on-error-action: #ffffff;
-    --color-md3-on-error-container: #c42b1c;
-
-    background: rgba(15, 23, 42, 0.28);
-  }
-
-  :global(html[data-theme='light']) .modal-panel {
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
-  }
-
-  .modal-backdrop {
-    animation: modal-backdrop-focus 220ms var(--motion-easing-standard) both;
-  }
-
-  @keyframes modal-backdrop-focus {
-    from {
-      -webkit-backdrop-filter: blur(0);
-      backdrop-filter: blur(0);
-    }
-    to {
-      -webkit-backdrop-filter: blur(10px) saturate(0.9);
-      backdrop-filter: blur(10px) saturate(0.9);
-    }
+    background: var(--cfms-smoke);
   }
 </style>

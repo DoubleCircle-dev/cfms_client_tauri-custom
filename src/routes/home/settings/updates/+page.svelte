@@ -477,7 +477,7 @@
     padding: 0.2rem 0.15rem;
   }
 
-  .update-footnote :global(.material-symbols-outlined) {
+  .update-footnote :global(.cfms-icon) {
     flex: none;
     color: var(--color-md3-success);
   }

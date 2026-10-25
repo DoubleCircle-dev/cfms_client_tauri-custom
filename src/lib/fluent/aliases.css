@@ -1,0 +1,93 @@
+/* Migration aliases. All values resolve to the Fluent runtime theme. */
+@theme inline {
+  --color-md3-primary: var(--colorBrandBackground);
+  --color-md3-primary-emphasis: var(--colorBrandForeground1);
+  --color-md3-primary-container: var(--colorBrandBackground2);
+  --color-md3-on-primary: var(--colorNeutralForegroundOnBrand);
+  --color-md3-on-primary-container: var(--colorBrandForeground2);
+  --color-md3-surface: var(--colorNeutralBackground3);
+  --color-md3-surface-container: var(--colorNeutralBackground2);
+  --color-md3-surface-container-high: var(--colorNeutralBackground1);
+  --color-md3-surface-container-highest: var(--colorNeutralBackground1Hover);
+  --color-md3-outline: var(--colorNeutralStroke1);
+  --color-md3-outline-variant: var(--colorNeutralStroke2);
+  --color-md3-on-surface: var(--colorNeutralForeground1);
+  --color-md3-on-surface-variant: var(--colorNeutralForeground3);
+  --color-md3-error: var(--colorStatusDangerForeground1);
+  --color-md3-error-action: var(--colorStatusDangerBackground3);
+  --color-md3-error-container: var(--colorStatusDangerBackground1);
+  --color-md3-on-error: var(--colorNeutralForegroundStaticInverted);
+  --color-md3-on-error-action: var(--colorNeutralForegroundStaticInverted);
+  --color-md3-on-error-container: var(--colorStatusDangerForeground1);
+  --color-md3-success: var(--colorStatusSuccessForeground1);
+  --color-md3-success-container: var(--colorStatusSuccessBackground1);
+  --color-md3-on-success: var(--colorNeutralForegroundStaticInverted);
+  --color-md3-on-success-container: var(--colorStatusSuccessForeground1);
+  --color-md3-warning: var(--colorStatusWarningForeground1);
+  --color-md3-warning-container: var(--colorStatusWarningBackground1);
+  --color-md3-on-warning-container: var(--colorStatusWarningForeground1);
+  --color-md3-tertiary: var(--colorStatusWarningForeground1);
+  --color-md3-tertiary-container: var(--colorStatusWarningBackground1);
+  --color-md3-on-tertiary: var(--colorNeutralBackground1);
+  --color-md3-on-tertiary-container: var(--colorStatusWarningForeground1);
+  --color-md3-field: var(--colorNeutralBackground1);
+  --color-md3-bg-gradient-start: var(--colorNeutralBackground3);
+  --color-md3-bg-gradient-mid-1: var(--colorNeutralBackground3);
+  --color-md3-bg-gradient-mid-2: var(--colorNeutralBackground3);
+  --color-md3-bg-gradient-end: var(--colorNeutralBackground3);
+  --radius-md3-form: var(--borderRadiusXLarge);
+  --radius-md3-button: var(--borderRadiusMedium);
+  --radius-md3-dialog: var(--borderRadius2XLarge);
+  --font-md3-sans: var(--fontFamilyBase);
+  --font-md3-serif: var(--fontFamilyBase);
+  --font-cfms-reading: "CFMS Noto Serif SC Subset", "Noto Serif SC", "Source Han Serif SC", serif;
+  --font-md3-mono: var(--fontFamilyMonospace);
+}
+
+:root {
+  --auth-panel-basis: 38.196601125%;
+  --auth-transition-duration: 600ms;
+  --auth-transition-easing: cubic-bezier(0.2, 0, 0, 1);
+  --explorer-background: var(--colorNeutralBackground3);
+  --explorer-surface: var(--colorNeutralBackground2);
+  --explorer-surface-raised: var(--colorNeutralBackground1);
+  --explorer-surface-hover: var(--colorNeutralBackground1Hover);
+  --explorer-surface-selected: var(--colorNeutralBackground1Selected);
+  --explorer-border: var(--colorNeutralStroke2);
+  --explorer-border-strong: var(--colorNeutralStroke1);
+  --explorer-text: var(--colorNeutralForeground1);
+  --explorer-text-muted: var(--colorNeutralForeground3);
+  --explorer-accent: var(--colorBrandForeground1);
+  --explorer-accent-soft: var(--colorBrandBackground2);
+  --explorer-info: var(--colorBrandForeground1);
+  --explorer-folder: var(--colorPaletteMarigoldForeground1);
+  --explorer-danger: var(--colorStatusDangerForeground1);
+  --explorer-success: var(--colorStatusSuccessForeground1);
+  --explorer-warning: var(--colorStatusWarningForeground1);
+  --explorer-shadow: var(--shadow16);
+  --explorer-radius-small: var(--borderRadiusMedium);
+  --explorer-radius-medium: var(--borderRadiusXLarge);
+  --explorer-radius-large: var(--borderRadius2XLarge);
+  --cfms-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 94%, transparent);
+  --cfms-smoke: rgba(0, 0, 0, 0.4);
+}
+
+:where(.explorer-shell, .workspace-palette) {
+  color: var(--colorNeutralForeground1);
+  background: var(--colorNeutralBackground3);
+  font-family: var(--fontFamilyBase);
+}
+
+html[data-window-backdrop="mica"],
+html[data-window-backdrop="mica"] body,
+html[data-window-backdrop="mica"] :is(.explorer-shell, .workspace-palette) {
+  background: transparent;
+}
+
+@media (forced-colors: active) {
+  :root:root {
+    --colorStrokeFocus2: Highlight;
+    --cfms-acrylic: Canvas;
+    --cfms-smoke: transparent;
+  }
+}

@@ -302,8 +302,8 @@
       opacity var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  .primary-action :global(.material-symbols-outlined),
-  .tonal-action :global(.material-symbols-outlined) {
+  .primary-action :global(.cfms-icon),
+  .tonal-action :global(.cfms-icon) {
     flex: 0 0 auto;
   }
 

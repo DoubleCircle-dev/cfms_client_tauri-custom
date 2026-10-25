@@ -474,7 +474,7 @@
     font: 600 0.78rem/1.35 var(--font-md3-sans);
   }
 
-  .expiry-switch-label :global(.material-symbols-outlined) {
+  .expiry-switch-label :global(.cfms-icon) {
     color: var(--color-md3-primary-emphasis);
   }
 

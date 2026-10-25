@@ -678,6 +678,7 @@ dependencies = [
  "unic-langid",
  "url",
  "webpki-roots 1.0.10",
+ "window-vibrancy",
  "winreg",
  "zeroize",
 ]

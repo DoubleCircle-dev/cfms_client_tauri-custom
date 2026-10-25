@@ -774,12 +774,12 @@
     font-weight: 700;
   }
 
-  .send-action :global(.material-symbols-outlined) {
+  .send-action :global(.cfms-icon) {
     font-variation-settings: 'FILL' 1;
   }
 
-  .send-action:disabled :global(.material-symbols-outlined),
-  .result-pending :global(.material-symbols-outlined) {
+  .send-action:disabled :global(.cfms-icon),
+  .result-pending :global(.cfms-icon) {
     animation: developer-console-spin 1.1s linear infinite;
   }
 

@@ -19,7 +19,7 @@
   async function setDiscardConfirmation(value: boolean) {
     confirmingDiscard = value; password = ''; error = '';
     await tick();
-    if (value) confirmationActions?.querySelector('button')?.focus();
+    if (value) confirmationActions?.querySelector<HTMLElement>('button, fluent-button')?.focus();
     else input?.focus();
   }
   async function submit(event: SubmitEvent) {

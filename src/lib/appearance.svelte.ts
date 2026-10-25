@@ -1,6 +1,8 @@
 import { loadAppearancePreference, saveAppearancePreference } from '$lib/api';
 import type { AppearancePreference } from '$lib/api';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isTauri } from '@tauri-apps/api/core';
+import { setWindowBackdrop } from '$lib/api/core';
 import {
   DEFAULT_APPEARANCE,
   normalizeAppearance,
@@ -16,6 +18,9 @@ class AppearanceStore {
 
   private colorSchemeMediaQuery: MediaQueryList | null = null;
   private reducedMotionMediaQuery: MediaQueryList | null = null;
+  private forcedColorsMediaQuery: MediaQueryList | null = null;
+  private appearanceRevision = 0;
+  private nativeAppearanceUpdate = Promise.resolve();
   private scopeKey: string | null = null;
   private globalPreference: AppearancePreference | null = null;
   private requestId = 0;
@@ -30,12 +35,18 @@ class AppearanceStore {
       this.reducedMotionMediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
       this.reducedMotionMediaQuery.addEventListener('change', this.handleSystemAppearanceChange);
     }
+    if (!this.forcedColorsMediaQuery) {
+      this.forcedColorsMediaQuery = window.matchMedia('(forced-colors: active)');
+      this.forcedColorsMediaQuery.addEventListener('change', this.handleSystemAppearanceChange);
+    }
     this.applyToDocument();
     return () => {
       this.colorSchemeMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
       this.reducedMotionMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
+      this.forcedColorsMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
       this.colorSchemeMediaQuery = null;
       this.reducedMotionMediaQuery = null;
+      this.forcedColorsMediaQuery = null;
     };
   }
 
@@ -99,8 +110,21 @@ class AppearanceStore {
     root.dataset.colorSchemePreference = this.preference.color_scheme;
     root.dataset.reduceMotion = String(reduceMotion);
     root.style.colorScheme = this.resolvedColorScheme;
-    void getCurrentWindow().setTheme(this.resolvedColorScheme).catch(() => {
-      /* Browser previews do not expose a native Tauri window. */
+    const scheme = this.resolvedColorScheme;
+    const revision = ++this.appearanceRevision;
+    void import('./fluent/runtime').then(({ applyFluentTheme }) => {
+      if (revision === this.appearanceRevision) applyFluentTheme(scheme, reduceMotion);
+    });
+    root.dataset.windowBackdrop = 'solid';
+    if (!isTauri()) return;
+    const enableMaterial = !this.forcedColorsMediaQuery?.matches;
+    this.nativeAppearanceUpdate = this.nativeAppearanceUpdate.then(async () => {
+      if (revision !== this.appearanceRevision) return;
+      await getCurrentWindow().setTheme(scheme);
+      const mode = await setWindowBackdrop(scheme, enableMaterial);
+      if (revision === this.appearanceRevision) root.dataset.windowBackdrop = mode;
+    }).catch(() => {
+      // The opaque CSS canvas is already active if native material is unavailable.
     });
   }
 }

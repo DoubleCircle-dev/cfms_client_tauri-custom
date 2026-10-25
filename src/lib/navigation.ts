@@ -39,8 +39,8 @@ export function initNavigationHistory(): void {
   initialized = true;
 
   afterNavigate((navigation) => {
-    const from = navigation.from?.url.pathname;
-    const to = navigation.to?.url.pathname;
+    const from = navigation.from?.url?.pathname;
+    const to = navigation.to?.url?.pathname;
     if (!from || !to) return;
 
     const fromPath = normalizePath(from);

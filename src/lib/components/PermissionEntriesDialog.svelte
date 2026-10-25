@@ -534,7 +534,7 @@
     font: 400 0.69rem/1.45 var(--font-md3-sans);
   }
 
-  .replacement-notice :global(.material-symbols-rounded) { margin-top: 0.08rem; }
+  .replacement-notice :global(.cfms-icon) { margin-top: 0.08rem; }
 
   .refresh-button {
     display: grid;

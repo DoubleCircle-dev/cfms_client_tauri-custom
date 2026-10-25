@@ -67,6 +67,8 @@
   import AuthServerContext from "$lib/components/AuthServerContext.svelte";
   import AccountDisabledNotice from "$lib/components/AccountDisabledNotice.svelte";
   import DialogActionButton from "$lib/components/DialogActionButton.svelte";
+  import FluentTextInput from "$lib/components/FluentTextInput.svelte";
+  import FluentButton from "$lib/components/FluentButton.svelte";
   import MdOutlinedField from "$lib/components/MdOutlinedField.svelte";
   import ModalFrame from "$lib/components/ModalFrame.svelte";
   import CorruptedPreferenceDialog from "$lib/components/CorruptedPreferenceDialog.svelte";
@@ -112,7 +114,7 @@
   let accountDisabledReason = $state<string | null>(null);
   let accountDisabledRequestTime = $state<number | null>(null);
   let returningFromAccountDisabled = $state(false);
-  let usernameInput: HTMLInputElement | null = $state(null);
+  let usernameInput: { focus(options?: FocusOptions): void; select(): void } | null = $state(null);
   let passwordInput: HTMLInputElement | null = $state(null);
   let playConnectTransition = $state(browser ? consumeConnectToLoginTransition() : false);
 
@@ -902,37 +904,27 @@
       >
         <!-- Username -->
         <div>
-          <MdOutlinedField
-            inputId="username"
+          <FluentTextInput
+            id="username"
+            controlSize="large"
             label={$t('login.username')}
-            error={Boolean(fieldErrors.username)}
+            invalid={Boolean(fieldErrors.username)}
+            validationMessage={fieldErrors.username}
+            describedBy={fieldErrors.username ? 'login-username-error' : undefined}
+            placeholder={$t('login.usernamePlaceholder')}
+            bind:value={username}
+            bind:this={usernameInput}
+            disabled={busy}
+            onkeydown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                if (loginMethod === 'password') passwordInput?.focus();
+                else document.querySelector<HTMLElement>('.key-picker')?.focus();
+              }
+            }}
           >
-            <span class="login-text-field__leading-icon">
-              <Icon name="accountCircle" size="18px" />
-            </span>
-            <input
-              id="username"
-              aria-invalid={Boolean(fieldErrors.username)}
-              aria-describedby={fieldErrors.username ? 'login-username-error' : undefined}
-              type="text"
-              data-focus-ring="delegated"
-              class="login-text-field__input"
-              placeholder={$t('login.usernamePlaceholder')}
-              bind:value={username}
-              bind:this={usernameInput}
-              disabled={busy}
-              autocomplete="off"
-              autocapitalize="none"
-              spellcheck="false"
-              onkeydown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  if (loginMethod === 'password') passwordInput?.focus();
-                  else (event.currentTarget.form?.querySelector('.key-picker') as HTMLButtonElement | null)?.focus();
-                }
-              }}
-            />
-          </MdOutlinedField>
+            {#snippet start()}<Icon name="accountCircle" size={20} />{/snippet}
+          </FluentTextInput>
           {#if fieldErrors.username}
             <p id="login-username-error" role="alert" class="text-xs text-md3-error mt-1 ml-1">
               {fieldErrors.username}
@@ -1042,7 +1034,8 @@
           </div>
         {/if}
 
-        <button type="submit" class="login-primary-action" disabled={busy || (loginMethod === 'publickey' && privateKey?.encrypted && !keyPassphrase)}>
+        <div class="login-primary-row">
+        <FluentButton appearance="primary" type="submit" class="login-primary-action" disabled={busy || (loginMethod === 'publickey' && privateKey?.encrypted && !keyPassphrase)}>
           {#if busy}
             <ProgressRing tone="inherit" size={18} strokeWidth={2.5} label={$t('common.signingIn')} />
             {$t('common.signingIn')}
@@ -1050,7 +1043,8 @@
             {$t('login.login')}
             <Icon name="login" size="19px" />
           {/if}
-        </button>
+        </FluentButton>
+        </div>
         {#if publicKeyPending}
           <button type="button" class="login-cancel" onclick={cancelKeyLogin}>{$t('common.cancel')}</button>
         {/if}
@@ -1164,12 +1158,9 @@
   .forgot-password-button:focus-visible:not(:disabled) {
     color: var(--explorer-text);
     text-decoration-color: var(--explorer-accent);
-    text-shadow: 0 0 6px color-mix(in srgb, var(--explorer-accent) 45%, transparent);
   }
 
-  .forgot-password-button:focus-visible {
-    outline: none;
-  }
+
 
   .forgot-password-button:disabled {
     opacity: 0.5;
@@ -1180,14 +1171,14 @@
     border: 0;
     padding: 0;
   }
+  .login-primary-row { margin-top: 24px; }
+  .login-primary-row :global(.login-primary-action) { width: 100%; min-height: 44px; }
+  .login-primary-row :global(.login-primary-action)::part(content) { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
   .login-credential-region { transition: height 180ms var(--motion-easing-standard, ease-out); }
   .login-credential-content { padding: 2px 0; }
   .auth-panel { max-height: calc(100dvh - var(--app-titlebar-height, 0px)); overflow-y: auto; overscroll-behavior-y: contain; }
   @media (max-height: 800px) { .auth-shell .auth-panel { padding-top: 1.5rem; padding-bottom: 1.5rem; } }
   @media (prefers-reduced-motion: reduce) { .login-credential-region { transition: none; } }
-  .login-primary-action { display: flex; align-items: center; justify-content: center; gap: 0.625rem; width: 100%; min-height: 44px; margin-top: 1.5rem; border: 0; border-radius: 8px; background: var(--explorer-accent); color: var(--color-md3-on-primary); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: filter 140ms ease; }
-  .login-primary-action:hover:not(:disabled) { filter: brightness(1.08); }
-  .login-primary-action:disabled { opacity: 0.5; cursor: default; }
   .login-cancel { display: block; margin: 0.5rem auto; padding: 0.5rem 1rem; border: 0; background: transparent; color: var(--explorer-text-muted); cursor: pointer; }
   .login-form-card :global(.sign-in-options) { padding-top: 0.5rem; }
   .login-footer-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: 0.75rem; }
@@ -1196,9 +1187,7 @@
   .login-disconnect:disabled { opacity: 0.5; cursor: default; }
   @media (pointer: coarse) {
     .login-disconnect, .forgot-password-button { min-height: 44px; }
-    .login-primary-action { min-height: 48px; }
   }
-  @media (prefers-reduced-motion: reduce) { .login-primary-action { transition: none; } }
 
   .login-text-field__leading-icon {
     display: inline-flex;
@@ -1209,7 +1198,7 @@
 
   .login-text-field__input {
     min-width: 0;
-    height: 42px;
+    height: 38px;
     flex: 1 1 auto;
     border: 0;
     background: transparent;
@@ -1232,8 +1221,8 @@
   .login-text-field__trailing-button {
     position: relative;
     display: inline-flex;
-    width: 42px;
-    height: 42px;
+    width: 38px;
+    height: 38px;
     flex: none;
     align-items: center;
     justify-content: center;
@@ -1249,7 +1238,6 @@
   .login-text-field__trailing-button:hover {
     color: var(--explorer-accent);
     background: transparent;
-    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--explorer-accent) 38%, transparent));
   }
 
   .auth-shell {
@@ -1270,13 +1258,7 @@
     align-items: safe center;
     justify-content: center;
     padding: 3rem 1.25rem;
-    background:
-      radial-gradient(
-        circle at 12% 10%,
-        color-mix(in srgb, var(--explorer-accent) 8%, transparent),
-        transparent 38%
-      ),
-      var(--explorer-background);
+    background: var(--colorNeutralBackground2);
   }
 
   .auth-form-stage {
@@ -1333,27 +1315,27 @@
     }
 
     .auth-shell--connect-intro .auth-panel {
-      animation: auth-panel-shrink var(--motion-duration-long4)
-        var(--motion-easing-emphasized) both;
+      animation: auth-panel-shrink var(--auth-transition-duration)
+        var(--auth-transition-easing) both;
       will-change: flex-basis;
     }
 
     .auth-shell--connect-intro .auth-visual {
-      animation: auth-visual-expand var(--motion-duration-long4)
-        var(--motion-easing-emphasized) both;
+      animation: auth-visual-expand var(--auth-transition-duration)
+        var(--auth-transition-easing) both;
       will-change: flex-basis, opacity;
     }
 
     .auth-shell--connect-intro .auth-visual-image {
-      animation: auth-visual-image-push var(--motion-duration-long4)
-        var(--motion-easing-emphasized) both;
+      animation: auth-visual-image-push var(--auth-transition-duration)
+        var(--auth-transition-easing) both;
       will-change: transform;
     }
   }
 
   .auth-form-stage--connect-intro {
-    animation: auth-form-crossfade var(--motion-duration-long4)
-      var(--motion-easing-emphasized) both;
+    animation: auth-form-crossfade var(--auth-transition-duration)
+      var(--auth-transition-easing) both;
     will-change: opacity, transform, filter;
   }
 

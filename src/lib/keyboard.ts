@@ -93,7 +93,7 @@ export function getRegisteredKeyboardCommands(): KeyboardCommand[] {
 export function dispatchKeyboardCommand(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || event.isComposing || event.key === 'Process') return false;
 
-  const editable = isEditableTarget(event.target);
+  const editable = event.composedPath().some(isEditableTarget) || isEditableTarget(event.target);
   const modalOpen = typeof document !== 'undefined' && document.querySelector('[role="dialog"][aria-modal="true"]');
   const menuOpen = typeof document !== 'undefined' && document.querySelector('[role="menu"]');
   const commands = [...registeredCommands.values()].sort(compareRegisteredCommands);
@@ -159,7 +159,7 @@ export function isCommandShownInHelp(command: KeyboardCommand): boolean {
 
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'));
+  return Boolean(target.closest('input, textarea, select, fluent-text-input, fluent-text-area, [contenteditable="true"], [role="textbox"]'));
 }
 
 export function isMacLikePlatform(): boolean {
@@ -267,6 +267,11 @@ export const FOCUSABLE_SELECTOR = [
   'textarea:not(:disabled)',
   'select:not(:disabled)',
   'a[href]',
+  'fluent-button:not([disabled])',
+  'fluent-text-input:not([disabled])',
+  'fluent-switch:not([disabled])',
+  'fluent-checkbox:not([disabled])',
+  'fluent-radio:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
@@ -350,5 +355,6 @@ function isFocusableItem(element: HTMLElement): boolean {
   return !element.hidden
     && element.getAttribute('aria-hidden') !== 'true'
     && element.getAttribute('aria-disabled') !== 'true'
+    && !element.hasAttribute('disabled')
     && !(element instanceof HTMLButtonElement && element.disabled);
 }

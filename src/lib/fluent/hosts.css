@@ -1,0 +1,32 @@
+/* Tailwind preflight's universal border/padding reset crosses the shadow host
+ * boundary and wins over normal :host rules. Restore only those host defaults;
+ * Fluent still owns the internal geometry, focus and background states. */
+.cfms-button {
+  border: 1px solid var(--colorNeutralStroke1);
+  border-radius: var(--borderRadiusMedium);
+  padding: 5px 12px;
+}
+.cfms-button:is([appearance="primary"], [appearance="subtle"], [appearance="transparent"]) {
+  border-color: transparent;
+}
+.cfms-button[disabled][appearance="outline"] { border-color: var(--colorNeutralStrokeDisabled); }
+.cfms-switch, .cfms-checkbox, .cfms-radio {
+  border: 1px solid var(--colorNeutralStrokeAccessible);
+}
+.cfms-switch { padding: 0 2px; }
+.cfms-switch[aria-checked="true"],
+.cfms-checkbox[aria-checked="true"],
+.cfms-radio[aria-checked="true"] { border-color: var(--colorCompoundBrandStroke); }
+.cfms-switch[aria-disabled="true"],
+.cfms-checkbox[aria-disabled="true"],
+.cfms-radio[aria-disabled="true"] { border-color: var(--colorNeutralStrokeDisabled); }
+@media (forced-colors: active) {
+  .cfms-button, .cfms-switch, .cfms-checkbox, .cfms-radio { border-color: ButtonText; }
+  .cfms-switch[aria-checked="true"],
+  .cfms-checkbox[aria-checked="true"],
+  .cfms-radio[aria-checked="true"] { border-color: Highlight; }
+  .cfms-button[aria-disabled="true"],
+  .cfms-switch[aria-disabled="true"],
+  .cfms-checkbox[aria-disabled="true"],
+  .cfms-radio[aria-disabled="true"] { border-color: GrayText; }
+}

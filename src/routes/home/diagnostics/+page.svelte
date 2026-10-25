@@ -78,7 +78,7 @@
     color: var(--color-md3-on-surface-variant);
   }
 
-  .unavailable-state :global(.material-symbols-outlined) {
+  .unavailable-state :global(.cfms-icon) {
     flex: none;
     color: var(--color-md3-on-surface-variant);
   }
