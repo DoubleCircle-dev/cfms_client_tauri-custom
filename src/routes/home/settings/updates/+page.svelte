@@ -1,5 +1,6 @@
 <script lang="ts">
   import FluentButton from '$lib/components/FluentButton.svelte';
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { getSetting, setSetting } from '$lib/api';
@@ -276,10 +277,14 @@
       </div>
 
       <div class="section-actions">
-        <a class="text-action" href="/home/about">
+        <FluentButton data-fluent-owner="routes-home-settings-updates-page"
+          type="button"
+          appearance="outline"
+          onclick={() => goto('/home/about')}
+        >
           <Icon name="update" size="18px" />
           {$t('settings.updates.checkInAbout')}
-        </a>
+        </FluentButton>
       </div>
     </section>
   </div>

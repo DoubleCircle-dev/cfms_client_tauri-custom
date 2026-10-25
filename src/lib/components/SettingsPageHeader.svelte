@@ -29,7 +29,7 @@
   <FluentButton data-fluent-owner="lib-components-settings-page-header"
     type="button"
     onclick={() => navigateUp(page.url.pathname)}
-    appearance="subtle"
+    appearance="transparent"
     class="settings-back-button"
   >
     <Icon name="arrowBack" size="18px" />
@@ -76,30 +76,19 @@
 
   :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]) {
     display: inline-flex;
-    min-height: 34px;
+    min-height: 32px;
+    min-inline-size: 0;
     width: fit-content;
+    justify-self: start;
     align-items: center;
+    justify-content: flex-start;
+    text-align: start;
     gap: 8px;
-    border: 1px solid transparent;
-    border-radius: var(--borderRadiusMedium);
-    padding: 0.35rem 0.55rem 0.35rem 0.45rem;
-    color: var(--color-md3-on-surface-variant);
-    background: transparent;
-    font: 600 12px/16px var(--font-md3-sans);
-    transition:
-      border-color var(--motion-duration-short3) var(--motion-easing-standard),
-      color var(--motion-duration-short3) var(--motion-easing-standard),
-      background-color var(--motion-duration-short3) var(--motion-easing-standard),
-      transform var(--motion-duration-short3) var(--motion-easing-standard);
+    padding: 5px 8px;
   }
 
-  :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]:hover) {
-    color: var(--color-md3-on-surface);
-    background: color-mix(in srgb, var(--color-md3-on-surface) 7%, transparent);
-  }
-
-  :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]:active) {
-    transform: none;
+  :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]::part(content)) {
+    justify-content: flex-start;
   }
 
   .settings-heading-row,
