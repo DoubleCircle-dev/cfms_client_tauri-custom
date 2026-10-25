@@ -12,14 +12,16 @@ def patchAgp9BuiltInKotlin = { descriptor ->
     }
 
     def original = buildFile.getText('UTF-8')
+    // Plugins use different JVM targets (for example 1.8 and 17). Preserve each
+    // target when migrating their legacy Kotlin DSL to AGP 9 built-in Kotlin.
     def patched = original
         .replaceAll(/(?m)^\s*id\("org\.jetbrains\.kotlin\.android"\)\s*\r?\n/, '')
         .replaceAll(
-            /(?s)\n\s*kotlinOptions\s*\{\s*jvmTarget\s*=\s*"1\.8"\s*\}/,
+            /(?s)\n\s*kotlinOptions\s*\{\s*jvmTarget\s*=\s*"(1\.8|\d+)"\s*\}/,
             '''
     kotlin {
         compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget("$1"))
         }
     }'''
         )

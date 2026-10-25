@@ -266,6 +266,7 @@ export interface DeletedItemsResponse {
 }
 
 export interface ManagedUser {
+  user_id: string;
   username: string;
   nickname?: string | null;
   /** Structured permission entries assigned directly to this user. */
@@ -285,6 +286,7 @@ export interface ManagedUser {
 export type ManagedUserStatus = "active" | "disabled";
 
 export interface ManagedUserStatusUpdate {
+  user_id: string;
   username: string;
   status: ManagedUserStatus;
   reason: string | null;
@@ -316,6 +318,7 @@ export interface UserBlockTarget {
 }
 
 export interface UserBlock {
+  user_id: string;
   block_id: string;
   block_types: string[];
   target_type?: string;
@@ -370,7 +373,7 @@ export interface UnlockAuthLockoutsResult {
 export interface AuditLogEntry {
   id: string;
   action: string;
-  username: string;
+  user_id: string | null;
   target: string;
   data: unknown;
   result: string;
@@ -390,8 +393,8 @@ export interface UserKeyMetadata {
 }
 
 export interface UserKeyDetails extends UserKeyMetadata {
-  key_id?: string;
-  username: string;
+  key_id: string;
+  user_id: string;
   key_content: string;
 }
 
@@ -526,10 +529,13 @@ export type ServiceEvent =
 // ---------------------------------------------------------------------------
 
 export interface AuthStatus {
+  user_id: string | null;
   username: string | null;
   nickname: string | null;
   has_token: boolean;
   token_exp: number | null;
+  /** Expiration read from the elevated JWT payload; tokens remain native-only. */
+  escalation_exp?: number | null;
   permissions: string[];
   groups: string[];
   /** Local filesystem path to the cached user avatar. */
@@ -542,8 +548,28 @@ export interface AuthStatus {
   needs_preference_dek_setup?: boolean;
   /** When true, the server requires 2FA verification before completing login. */
   requires_2fa?: boolean;
-  /** The 2FA method requested by the server (e.g. "totp"). */
-  "2fa_method"?: string;
+  /** Methods offered by the AUTH continuation response. */
+  authentication_methods?: string[];
+}
+
+export interface AuthPolicyStep {
+  method: string;
+  credential_ids: string[];
+}
+
+export type AuthPurpose = 'login' | 'mfa' | 'escalation';
+export interface AuthPolicy { revision: number; chains: AuthPolicyStep[][] }
+export interface AuthPolicyReplacement {
+  purpose: AuthPurpose;
+  expected_revision: number;
+  chains: AuthPolicyStep[][];
+}
+
+export interface UserAuthentication {
+  user_id: string;
+  methods: Record<string, { purposes: AuthPurpose[]; schema: JsonValue; category: string; throttle_factor: string }>;
+  credentials: { method: string; credential_id: string; active: boolean; label: string | null; key_identity: string | null }[];
+  policies: Record<AuthPurpose, AuthPolicy>;
 }
 
 export interface ServerState {

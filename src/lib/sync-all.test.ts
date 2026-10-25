@@ -5,6 +5,7 @@ import {
   DENIED_FOLDER_MARKER_FILENAME,
   EMPTY_FOLDER_MARKER_FILENAME,
   EMPTY_SHA256,
+  FOLDER_HOLDUP_MARKER_FILENAME,
   commitPendingFolderHistoryChanges,
   ensureDownloadFolderPlaceholder,
   makeDownloadPath,
@@ -203,6 +204,20 @@ describe('syncFiles (cached queue)', () => {
 
     expect(files.listDirectory).not.toHaveBeenCalled();
     expect(files.listDownloadFiles).not.toHaveBeenCalled();
+  });
+
+  it('does not apply a queued update inside a folder marked to be held', async () => {
+    files.checkDownloadsExist.mockResolvedValue([
+      `archive/${FOLDER_HOLDUP_MARKER_FILENAME}`,
+    ]);
+
+    const result = await syncFiles({
+      queue: [{ docId: 'd1', path: 'archive/old.txt', sha256: 'NEW' }],
+    });
+
+    expect(files.getDocument).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(1);
+    expect(result.changed).toBe(false);
   });
 
   it('skips documents that became current since the check ran', async () => {
@@ -426,6 +441,77 @@ describe('syncFiles (full server walk)', () => {
     expect(files.createDownloadPlaceholder).toHaveBeenCalledWith(
       `archive/${EMPTY_FOLDER_MARKER_FILENAME}`,
     );
+  });
+
+  it('preserves a held folder and downloads the renamed server folder instead of migrating its files', async () => {
+    files.listDirectory.mockImplementation(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'new-folder', name: 'new-name', created_time: null }], documents: [] }
+        : { folders: [], documents: [doc('file.txt', 'SAME')] },
+    );
+    files.listDownloadFiles.mockResolvedValue([
+      `old-name/${FOLDER_HOLDUP_MARKER_FILENAME}`,
+      'old-name/sub/file.txt',
+    ]);
+    files.computeLocalSha256.mockImplementation(async (paths: string[]) =>
+      Object.fromEntries(paths.includes('old-name/sub/file.txt')
+        ? [['old-name/sub/file.txt', 'SAME']]
+        : []),
+    );
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.deleteDownloadFile).not.toHaveBeenCalled();
+    expect(files.moveDownloadFile).not.toHaveBeenCalled();
+    expect(files.getDocument).toHaveBeenCalledWith('file.txt', 'new-name/file.txt');
+    expect(result.deleted).toBe(0);
+    expect(result.moved).toBe(0);
+    expect(result.queued).toBe(1);
+  });
+
+  it('migrates matching files from a missing folder when there is no hold marker', async () => {
+    files.listDirectory.mockImplementation(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'new-folder', name: 'new-name', created_time: null }], documents: [] }
+        : { folders: [], documents: [doc('file.txt', 'SAME')] },
+    );
+    files.listDownloadFiles.mockResolvedValue(['old-name/sub/file.txt']);
+    files.computeLocalSha256.mockImplementation(async (paths: string[]) =>
+      Object.fromEntries(paths.includes('old-name/sub/file.txt')
+        ? [['old-name/sub/file.txt', 'SAME']]
+        : []),
+    );
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.moveDownloadFile).toHaveBeenCalledWith(
+      'old-name/sub/file.txt',
+      'new-name/file.txt',
+    );
+    expect(files.getDocument).not.toHaveBeenCalled();
+    expect(result.moved).toBe(1);
+    expect(result.deleted).toBe(0);
+    expect(files.deleteDownloadDirectoryIfEmpty).toHaveBeenNthCalledWith(1, 'old-name/sub');
+    expect(files.deleteDownloadDirectoryIfEmpty).toHaveBeenNthCalledWith(2, 'old-name');
+  });
+
+  it('does not overwrite content inside a held folder that is still listed on the server', async () => {
+    files.listDirectory.mockImplementation(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'held', name: 'archive', created_time: null }], documents: [] }
+        : { folders: [], documents: [doc('file.txt', 'NEW')] },
+    );
+    files.listDownloadFiles.mockResolvedValue([
+      `archive/${FOLDER_HOLDUP_MARKER_FILENAME}`,
+      'archive/file.txt',
+    ]);
+
+    const result = await syncFiles({ overwriteStrategy: 'force_overwrite' });
+
+    expect(files.listDirectory).toHaveBeenCalledTimes(1);
+    expect(files.getDocument).not.toHaveBeenCalled();
+    expect(files.deleteDownloadFile).not.toHaveBeenCalled();
+    expect(result.changed).toBe(false);
   });
 
   it('commits new folder markers when Git tracking is enabled', async () => {

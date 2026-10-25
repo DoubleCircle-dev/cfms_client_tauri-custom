@@ -13,7 +13,7 @@ This version is customized by DoubleCircle.
 
 ## Features
 
-- **Secure connection and sign-in** — WSS connections, trusted CA certificates, recent-server history, account sign-in, two-factor authentication, password changes, and password-recovery guidance.
+- **Secure connection and sign-in** — WSS connections, trusted CA certificates, recent-server history, password or OpenSSH public-key sign-in, two-factor authentication, password changes, and password-recovery guidance.
 - **File workspace** — directory browsing, search and sorting, favorites, breadcrumbs, item details, recycle bin, drag-and-drop uploads, and context-menu actions.
 - **Reliable transfers** — upload-conflict handling, chunked transfers, a persistent download queue, pause/resume, retries, and batch controls.
 - **Access and administration** — document access grants and rules, user and group management, audit entry points, and service status, subject to server-side permissions.
@@ -96,6 +96,20 @@ pnpm tauri ios build
 5. Configure connection, language, privacy, app lock, download storage, updates, and two-factor settings in **Settings** as needed.
 
 Server addresses, account permissions, document scope, and administrative features are controlled by the CFMS server. Contact the server administrator if you have lost your account password.
+
+### Authentication protocol
+
+This client requires protocol **28**, matching the server's advertised wire version; older protocol versions are rejected. Password sign-in uses method-based credentials. Login MFA exchanges an AUTH token through `exchange_token` with target purpose `2`; required password changes use a restricted POST_AUTH token and require signing in again afterward.
+
+The sign-in screen also accepts OpenSSH private-key files for Ed25519, RSA and NIST ECDSA, including passphrase-protected keys. The native client signs server challenges locally and supports public-key login and login MFA. The private key is never uploaded. Encrypted local preferences and transfer records use an account-scoped key in the operating system's secure storage; existing data requires its original password once for migration. Device-local keys do not replace the server's password-wrapped key or synchronize between devices.
+
+Use **Elevate privileges** beside the top-bar lockdown control to request a token with purpose `6`. The account's escalation policy determines whether a password, authenticator/recovery code, or no additional proof is required. The centered timer reads expiration from the issued JWT payload. Elevated tokens stay in native memory, are used for authenticated commands while valid, and expire independently of the ordinary session. Token refresh never extends elevation. Privilege elevation currently provides password and TOTP verification interfaces; elevation policies requiring public keys or extension authentication methods display an explicit unsupported-method message.
+
+Hovering over the inactive elevation button highlights it in the caution color. While elevated, the button uses the lockdown control's danger treatment; click it again to discard the elevated token locally and return to the ordinary session immediately.
+
+**Settings → Authentication** exposes credential inventory, public-key registration, label changes and deletion, and atomic revision-checked policy editing for login, MFA and elevation. Writes require elevation. The same editor is available for an account in user management to administrators with `manage_user_authentication`. Registering a public key does not authorize it for a purpose; policy alternatives select explicit credential IDs. The server checks whether changes preserve usable login and elevation paths.
+
+Remote account operations select immutable `user_id` UUIDs, including avatars, password resets, group and permission changes, status, blocks, 2FA administration, keyring listing and direct access grants. User discovery supports explicit username or UUID selectors through `get_user_info`. Username remains the credential selector for password login and self-service password changes.
 
 ### Optional GitHub API token
 

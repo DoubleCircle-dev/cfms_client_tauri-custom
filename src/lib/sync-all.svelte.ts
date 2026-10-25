@@ -86,6 +86,28 @@ export const EMPTY_SHA256 =
 /** Git-trackable markers that distinguish empty folders from denied folders. */
 export const EMPTY_FOLDER_MARKER_FILENAME = '.cfms-empty-folder';
 export const DENIED_FOLDER_MARKER_FILENAME = '.cfms-no-folder-access';
+export const FOLDER_HOLDUP_MARKER_FILENAME = '.cfms-folder-holdup';
+
+function heldFoldersFromPaths(paths: readonly string[]): Set<string> {
+  return new Set(
+    paths
+      .map(path => path.replace(/\\/g, '/'))
+      .filter(path => path === FOLDER_HOLDUP_MARKER_FILENAME || path.endsWith(`/${FOLDER_HOLDUP_MARKER_FILENAME}`))
+      .map(path => path === FOLDER_HOLDUP_MARKER_FILENAME
+        ? ''
+        : path.slice(0, -FOLDER_HOLDUP_MARKER_FILENAME.length - 1)),
+  );
+}
+
+function isPathHeld(path: string, heldFolders: ReadonlySet<string>): boolean {
+  const normalizedPath = path.replace(/\\/g, '/');
+  for (const folder of heldFolders) {
+    if (folder === '' || normalizedPath === folder || normalizedPath.startsWith(`${folder}/`)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Whether a local copy is *provably* the server revision.
@@ -487,9 +509,9 @@ interface SyncPlan {
  * Plan from the cached results of the last check.
  *
  * The check already walked the server tree and hashed the download root, so
- * this only hashes the queued paths — a single backend call. Deletions and
- * renames are left to a full sync: deciding those needs the complete tree,
- * which is exactly what this mode avoids.
+ * this only checks hold markers for queued paths and hashes those paths.
+ * Deletions and renames are left to a full sync: deciding those needs the
+ * complete tree, which is exactly what this mode avoids.
  */
 async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPlan> {
   const plan: SyncPlan = {
@@ -501,6 +523,16 @@ async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPl
     folderHistoryMarkers: [],
   };
 
+  const markerPaths = new Set<string>();
+  for (const item of queued) {
+    const parts = item.path.replace(/\\/g, '/').split('/');
+    for (let depth = 0; depth < parts.length; depth++) {
+      markerPaths.add([...parts.slice(0, depth), FOLDER_HOLDUP_MARKER_FILENAME].join('/'));
+    }
+  }
+  const existingMarkers = await checkDownloadsExist([...markerPaths]);
+  const heldFolders = heldFoldersFromPaths(existingMarkers);
+
   let localHashes: Record<string, string> = {};
   try {
     localHashes = await computeLocalSha256(queued.map((item) => item.path));
@@ -509,6 +541,10 @@ async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPl
   }
 
   for (const item of queued) {
+    if (isPathHeld(item.path, heldFolders)) {
+      plan.skipped++;
+      continue;
+    }
     // The check may be minutes old, and the server reports no hash for some
     // documents — both cases are handled by the shared predicate.
     const localHash = localHashes[item.path] ?? null;
@@ -543,6 +579,8 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
   const serverPaths = new Set<string>();  // every path the server has
   const walkedDirs = new Set<string>();   // dirs that were listed successfully
   const failedDirs = new Set<string>();   // dirs that could not be listed
+  const allLocalFiles = (await listDownloadFiles()).map(path => path.replace(/\\/g, '/'));
+  const heldFolders = heldFoldersFromPaths(allLocalFiles);
 
   async function listWithRetry(dirId: string | null) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -565,6 +603,9 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
   }
 
   async function walk(dirId: string | null, pathParts: string[]) {
+    const dirPath = pathParts.map(sanitizeDownloadPathSegment).filter(Boolean).join('/');
+    if (isPathHeld(dirPath, heldFolders)) return;
+
     let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
     try {
       resp = await listWithRetry(dirId);
@@ -612,6 +653,7 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
 
     for (const state of states) {
       serverPaths.add(state.path);
+      if (isPathHeld(state.path, heldFolders)) continue;
       // Outdated means "the server could not prove the local copy is current" —
       // including documents the server reports no hash for.
       if (state.isCurrent) {
@@ -644,8 +686,7 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
    *  - otherwise the file's parent was listed directly (normal case) or is
    *    absent from a listed parent — i.e. its folder was deleted server-side,
    *    so the file becomes a deletion candidate.
-   * The local directory structure itself is always preserved, even when a
-   * folder ends up empty.
+   * Empty directories are pruned after their files are deleted or moved.
    */
   function shouldPreserveLocalFile(parentDir: string): boolean {
     let dir = parentDir;
@@ -660,17 +701,13 @@ async function planServerSync(runner: DownloadRunner): Promise<SyncPlan> {
   await walk(null, []);
 
   // --- Local files the server no longer has ---
-  const allLocalFiles = await listDownloadFiles();
   const deleteCandidates: string[] = [];
-  for (const rawPath of allLocalFiles) {
-    // Normalize separators — the backend may return '\' on Windows while
-    // serverPaths always uses '/'. Normalize here so the comparison is
-    // robust regardless of backend behavior.
-    const localPath = rawPath.replace(/\\/g, '/');
+  for (const localPath of allLocalFiles) {
     // Never treat git metadata as a syncable file, even if an older or
     // external listing surfaces it — deleting from .git destroys the repo,
     // and .gitignore keeps large downloads out of the repo.
     if (localPath === '.git' || localPath.startsWith('.git/') || localPath === '.gitignore') continue;
+    if (isPathHeld(localPath, heldFolders)) continue;
     // A snapshot this engine wrote when it replaced a locally modified file is
     // user data, not a stray. The server will never list it, so without this
     // rule the very next full sync deletes the backup it just made — silently,
@@ -876,11 +913,26 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     );
     skipped += plan.downloads.length - outstanding.length;
 
+    const directoriesToPrune = new Set<string>();
+    const addDirectoryAncestors = (localPath: string) => {
+      const parts = localPath.split('/');
+      parts.pop();
+      while (parts.length > 0) {
+        directoriesToPrune.add(parts.join('/'));
+        parts.pop();
+      }
+    };
+
     // Execute moves first (non-destructive, no confirmation needed).
     for (const move of plan.moves) {
+      const downloadIndex = outstanding.findIndex(
+        download => download.docId === move.download.docId && download.path === move.download.path,
+      );
+      if (downloadIndex >= 0) outstanding.splice(downloadIndex, 1);
       try {
         if (await moveDownloadFile(move.from, move.to)) {
           moved++;
+          addDirectoryAncestors(move.from);
           console.log(`%c[cfms:sync] Moved: ${move.from} → ${move.to}`, 'color:#4fc3f7');
           continue;
         }
@@ -907,30 +959,24 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
         });
       }
       if (confirmed) {
-        const directoriesToPrune = new Set<string>();
         for (const localPath of plan.deletions) {
           try {
             if (await deleteDownloadFile(localPath)) {
               deleted++;
-              const parts = localPath.split('/');
-              parts.pop();
-              while (parts.length > 0) {
-                directoriesToPrune.add(parts.join('/'));
-                parts.pop();
-              }
+              addDirectoryAncestors(localPath);
               console.log(`%c[cfms:sync] Removed: ${localPath}`, 'color:#ef9a9a');
             }
           } catch { /* ignore */ }
         }
-        for (const directory of [...directoriesToPrune].sort(
-          (a, b) => b.split('/').length - a.split('/').length,
-        )) {
-          try {
-            await deleteDownloadDirectoryIfEmpty(directory);
-          } catch (err) {
-            console.warn(`%c[cfms:sync] Could not remove empty directory ${directory}:`, 'color:#ffb74d', err);
-          }
-        }
+      }
+    }
+    for (const directory of [...directoriesToPrune].sort(
+      (a, b) => b.split('/').length - a.split('/').length,
+    )) {
+      try {
+        await deleteDownloadDirectoryIfEmpty(directory);
+      } catch (err) {
+        console.warn(`%c[cfms:sync] Could not remove empty directory ${directory}:`, 'color:#ffb74d', err);
       }
     }
 

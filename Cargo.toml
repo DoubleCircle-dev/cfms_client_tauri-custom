@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.52.0"
+version = "0.54.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/cfms-dev/cfms_client_tauri"
@@ -47,8 +47,8 @@ hmac = "0.13"
 rand = "0.10"
 zeroize = { version = "1", features = ["derive"] }
 base64ct = { version = "1", features = ["alloc"] }
-ed25519-dalek = "2"
-zip = { version = "4", default-features = false, features = ["deflate"] }
+ed25519-dalek = "3"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 # ---------------------------------------------------------------------------
 # Database
@@ -66,7 +66,6 @@ tokio-tungstenite = { version = "0.30", default-features = false, features = [
     "rustls-tls-webpki-roots",
 ] }
 rustls = "0.23"
-rustls-pemfile = "2"
 webpki-roots = "1"
 tokio-socks = "0.5"
 tokio-rustls = "0.26"
@@ -82,7 +81,7 @@ unic-langid = "0.9"
 # Tauri
 # ---------------------------------------------------------------------------
 tauri = { version = "2", features = ["protocol-asset"] }
-tauri-plugin-background-service = "0.7"
+tauri-plugin-background-service = "1.0"
 tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"

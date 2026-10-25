@@ -89,7 +89,7 @@
       tone: serverStateStore.connected ? 'enabled' : 'neutral',
       icon: serverStateStore.connected ? 'verified' : 'info',
     },
-    '/home/settings/account': statusForTwoFactor(twoFactorState),
+    '/home/settings/authentication': statusForTwoFactor(twoFactorState),
     '/home/settings/privacy': statusForScreenProtection(screenProtectionState),
     '/home/settings/app-lock': statusForAppLock(appLockState),
   }));

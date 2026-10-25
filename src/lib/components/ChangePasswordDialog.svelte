@@ -23,6 +23,7 @@
     username: string;
     /** Pre-fill the "old password" field (e.g. the password just attempted). */
     initialOldPassword?: string;
+    requireOldPassword?: boolean;
     /** Optional tip shown under the fields (e.g. why the change is required). */
     tip?: string;
     /** Submit handler. Should throw with a message on failure. */
@@ -34,6 +35,7 @@
   let {
     username,
     initialOldPassword = '',
+    requireOldPassword = true,
     tip = '',
     onSubmit,
     onCancel,
@@ -117,7 +119,7 @@
   }
 
   async function handleSubmit() {
-    if (!oldPassword) {
+    if (requireOldPassword && !oldPassword) {
       error = $t('dialog.changePassword.currentRequired');
       return;
     }
@@ -174,6 +176,7 @@
       </div>
 
       <!-- Old password -->
+      {#if requireOldPassword}
       <div>
         <label
           for="cp-old"
@@ -211,6 +214,7 @@
       </div>
 
       <!-- New password -->
+      {/if}
       <div>
         <label
           for="cp-new"
@@ -303,7 +307,7 @@
         <DialogActionButton
           type="submit"
           variant="primary"
-          disabled={busy || !oldPassword || !newPassword}
+          disabled={busy || (requireOldPassword && !oldPassword) || !newPassword}
         >
           {#if busy}
             <ProgressRing size={16} strokeWidth={2.4} label={$t('common.changing')} />

@@ -28,6 +28,7 @@ describe('settings entry visibility', () => {
     expect(groups.find((group) => group.id === 'accessSecurity')?.entries.map((entry) => entry.href)).toEqual([
       '/home/settings/connection',
       '/home/settings/account',
+      '/home/settings/authentication',
       '/home/settings/privacy',
       '/home/settings/app-lock',
     ]);

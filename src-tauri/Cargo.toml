@@ -74,3 +74,5 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [dev-dependencies]
 tempfile.workspace = true
+futures-util.workspace = true
+tokio-tungstenite.workspace = true

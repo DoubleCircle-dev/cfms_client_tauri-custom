@@ -18,11 +18,11 @@
     onVerify: (code: string, isRecoveryCode: boolean) => Promise<boolean>;
     /** Called when the user cancels 2FA. */
     onCancel: () => void;
-    /** The 2FA method label (e.g. "totp"). */
-    method?: string;
+    onBack?: () => void;
+    title?: string;
   }
 
-  let { onVerify, onCancel, method = 'totp' }: Props = $props();
+  let { onVerify, onCancel, onBack, title }: Props = $props();
 
   let code = $state('');
   let useRecoveryCode = $state(false);
@@ -185,7 +185,7 @@
 </script>
 
 <ModalFrame
-  title={$t('dialog.twoFactor.title')}
+  title={title ?? $t('dialog.twoFactor.title')}
   maxWidth="max-w-xl"
   closeLabel={$t('common.close')}
   dismissible={!busy}
@@ -229,17 +229,17 @@
               oninput={onInput}
               disabled={busy}
               autocomplete="one-time-code"
+              aria-label={$t('dialog.twoFactor.enterRecovery')}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'twofa-error' : undefined}
               autofocus
             />
           </div>
         {:else}
-          <button
-            type="button"
+          <div
             class="code-entry group relative grid w-full cursor-text grid-cols-6 gap-2 rounded-3xl px-1 py-2 transition-all sm:gap-3"
             class:code-entry-error={Boolean(error)}
             class:code-entry-shake={errorShake}
-            onclick={() => codeInput?.focus()}
-            aria-label={$t('dialog.twoFactor.enterTotp')}
           >
             <!-- svelte-ignore a11y_autofocus -->
             <input
@@ -256,6 +256,9 @@
               onclick={(e) => moveTotpCaretToEnd(e.currentTarget)}
               disabled={busy}
               autocomplete="one-time-code"
+              aria-label={$t('dialog.twoFactor.enterTotp')}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'twofa-error' : undefined}
               autofocus
             />
             {#each codeCells as digit, index}
@@ -268,11 +271,13 @@
                 {digit}
               </span>
             {/each}
-          </button>
+          </div>
         {/if}
 
         {#if error}
           <p
+            id="twofa-error"
+            role="alert"
             class="mt-3 flex items-center justify-center gap-1.5 text-sm text-md3-error"
             class:twofa-error-shake={errorShake}
           >
@@ -289,6 +294,9 @@
         </DialogActionButton>
 
         <div class="flex justify-end gap-2">
+          {#if onBack}
+            <DialogActionButton onclick={onBack} disabled={busy}>{$t('common.back')}</DialogActionButton>
+          {/if}
           <DialogActionButton onclick={handleCancel} disabled={busy}>
             {$t('common.cancel')}
           </DialogActionButton>

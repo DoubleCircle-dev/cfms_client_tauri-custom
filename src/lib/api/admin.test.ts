@@ -27,6 +27,7 @@ const invokeMock = vi.mocked(invoke);
 function managedUserInfoResponse(status: unknown) {
   return {
     username: 'alice',
+    user_id: 'aabbccdd-0000-4000-8000-000000000001',
     status,
     permissions: [],
     effective_permissions: [],
@@ -43,27 +44,27 @@ describe('admin API', () => {
   it.each([
     [0, 'active'],
     [1, 'disabled'],
-    ['active', 'active'],
-    ['disabled', 'disabled'],
   ] as const)('normalizes managed user status %j to %s', async (status, expected) => {
     invokeMock.mockResolvedValue(managedUserInfoResponse(status));
 
-    await expect(getUserInfo('alice')).resolves.toMatchObject({
+    await expect(getUserInfo({ username: 'alice' })).resolves.toMatchObject({
       username: 'alice',
+      user_id: 'aabbccdd-0000-4000-8000-000000000001',
       status: expected,
     });
     expect(invokeMock).toHaveBeenCalledWith('get_user_info', { username: 'alice' });
   });
 
-  it.each([undefined, null, 2, 'inactive'])('rejects unknown managed user status %j', async (status) => {
+  it.each([undefined, null, 2, 'active', 'disabled', 'inactive'])('rejects unknown managed user status %j', async (status) => {
     invokeMock.mockResolvedValue(managedUserInfoResponse(status));
 
-    await expect(getUserInfo('alice')).rejects.toThrow('Invalid managed user status');
+    await expect(getUserInfo({ username: 'alice' })).rejects.toThrow('Invalid managed user status');
   });
 
   it('rejects malformed permission responses at the IPC boundary', async () => {
     const user = {
       username: 'alice',
+      user_id: 'aabbccdd-0000-4000-8000-000000000001',
       status: 'active',
       permissions: ['legacy_permission'],
       own_permissions: ['legacy_permission'],
@@ -79,7 +80,7 @@ describe('admin API', () => {
     await expect(listUsers()).rejects.toThrow('list_users.users[0] response');
 
     invokeMock.mockResolvedValueOnce(user);
-    await expect(getUserInfo('alice')).rejects.toThrow(
+    await expect(getUserInfo({ username: 'alice' })).rejects.toThrow(
       'get_user_info response: permissions[0] must be a structured permission entry',
     );
 
@@ -95,7 +96,7 @@ describe('admin API', () => {
   it('maps protocol v17 security administration calls to Tauri commands', async () => {
     invokeMock.mockResolvedValueOnce(true);
     await disableManagedTwoFactor('alice');
-    expect(invokeMock).toHaveBeenLastCalledWith('disable_managed_2fa', { username: 'alice' });
+    expect(invokeMock).toHaveBeenLastCalledWith('disable_managed_2fa', { userId: 'alice' });
 
     invokeMock.mockResolvedValueOnce({ subnets: [] });
     await listBannedSubnets('active');
@@ -144,7 +145,7 @@ describe('admin API', () => {
     invokeMock.mockResolvedValueOnce({ username: 'alice', status: 'disabled', reason: null });
     await manageUserStatus('alice', 'disabled', null);
     expect(invokeMock).toHaveBeenLastCalledWith('manage_user_status', {
-      username: 'alice',
+      userId: 'alice',
       status: 'disabled',
       reason: null,
     });
@@ -191,7 +192,7 @@ describe('admin API', () => {
 
     await changeUserPermissions('alice', permissions);
     expect(invokeMock).toHaveBeenLastCalledWith('change_user_permissions', {
-      username: 'alice',
+      userId: 'alice',
       permissions,
     });
 
@@ -210,7 +211,7 @@ describe('admin API', () => {
 
     await expect(renameUser('alice', nickname)).resolves.toBe(true);
     expect(invokeMock).toHaveBeenCalledWith('rename_user', {
-      username: 'alice',
+      userId: 'alice',
       nickname: expected,
     });
   });

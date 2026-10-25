@@ -10,7 +10,11 @@
 use cfms_core::Result;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::CryptoProvider;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{
+    CertificateDer, PrivateKeyDer, PrivatePkcs1KeyDer, PrivatePkcs8KeyDer, PrivateSec1KeyDer,
+    ServerName, UnixTime,
+};
 use rustls::{ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme};
 use std::path::Path;
 use std::sync::Arc;
@@ -177,8 +181,7 @@ pub fn load_trust_store(ca_dir: &Path) -> Result<RootCertStore> {
         let pem_bytes = fs::read(&path)?;
 
         // Try loading as PEM first.
-        let mut pem_slice = pem_bytes.as_slice();
-        let certs: Vec<CertificateDer> = rustls_pemfile::certs(&mut pem_slice)
+        let certs: Vec<CertificateDer> = CertificateDer::pem_slice_iter(&pem_bytes)
             .filter_map(|r| r.ok())
             .collect();
 
@@ -230,9 +233,9 @@ fn load_client_identity_pair(
     key_path: &Path,
 ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
     let cert_pem = fs::read(cert_path)?;
-    let mut cert_reader = cert_pem.as_slice();
-    let certs: Vec<CertificateDer> =
-        rustls_pemfile::certs(&mut cert_reader).collect::<io::Result<Vec<_>>>()?;
+    let certs: Vec<CertificateDer> = CertificateDer::pem_slice_iter(&cert_pem)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
 
     if certs.is_empty() {
         return Err(cfms_core::Error::Connection(format!(
@@ -246,21 +249,24 @@ fn load_client_identity_pair(
     // Try PKCS#8 first, then RSA (PKCS#1), then SEC1 (EC).
     let private_key: PrivateKeyDer = 'key: {
         // PKCS#8
-        let mut reader = key_pem.as_slice();
-        if let Some(key) = rustls_pemfile::pkcs8_private_keys(&mut reader).next() {
-            break 'key PrivateKeyDer::Pkcs8(key?);
+        if let Some(key) = PrivatePkcs8KeyDer::pem_slice_iter(&key_pem).next() {
+            break 'key PrivateKeyDer::Pkcs8(
+                key.map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            );
         }
 
         // RSA (PKCS#1)
-        let mut reader = key_pem.as_slice();
-        if let Some(key) = rustls_pemfile::rsa_private_keys(&mut reader).next() {
-            break 'key PrivateKeyDer::Pkcs1(key?);
+        if let Some(key) = PrivatePkcs1KeyDer::pem_slice_iter(&key_pem).next() {
+            break 'key PrivateKeyDer::Pkcs1(
+                key.map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            );
         }
 
         // SEC1 (EC)
-        let mut reader = key_pem.as_slice();
-        if let Some(key) = rustls_pemfile::ec_private_keys(&mut reader).next() {
-            break 'key PrivateKeyDer::Sec1(key?);
+        if let Some(key) = PrivateSec1KeyDer::pem_slice_iter(&key_pem).next() {
+            break 'key PrivateKeyDer::Sec1(
+                key.map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            );
         }
 
         return Err(cfms_core::Error::Connection(format!(
@@ -282,5 +288,82 @@ mod tests {
         let store = load_trust_store(Path::new("/tmp/nonexistent_ca_dir_12345"));
         assert!(store.is_ok());
         assert_eq!(store.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn client_identity_loads_certificate_chains_and_all_private_key_formats() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("client.pem");
+        let key_path = dir.path().join("client.key");
+        // Synthetic DER bytes exercise PEM decoding without requiring valid signing keys.
+        fs::write(
+            &cert_path,
+            "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n\
+             -----BEGIN CERTIFICATE-----\nBAUG\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+
+        for label in ["PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY"] {
+            fs::write(
+                &key_path,
+                format!("-----BEGIN {label}-----\nBwgJ\n-----END {label}-----\n"),
+            )
+            .unwrap();
+            let (certs, key) = load_client_identity_pair(&cert_path, &key_path).unwrap();
+            assert_eq!(certs.len(), 2);
+            assert_eq!(certs[0].as_ref(), &[1, 2, 3]);
+            assert_eq!(certs[1].as_ref(), &[4, 5, 6]);
+            assert_eq!(key.secret_der(), &[7, 8, 9]);
+            assert!(match label {
+                "PRIVATE KEY" => matches!(key, PrivateKeyDer::Pkcs8(_)),
+                "RSA PRIVATE KEY" => matches!(key, PrivateKeyDer::Pkcs1(_)),
+                "EC PRIVATE KEY" => matches!(key, PrivateKeyDer::Sec1(_)),
+                _ => unreachable!(),
+            });
+        }
+    }
+
+    #[test]
+    fn client_identity_preserves_key_precedence_and_rejects_malformed_pem() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("client.pem");
+        let key_path = dir.path().join("client.key");
+        fs::write(
+            &cert_path,
+            "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        fs::write(
+            &key_path,
+            "-----BEGIN EC PRIVATE KEY-----\nBAUG\n-----END EC PRIVATE KEY-----\n\
+             -----BEGIN RSA PRIVATE KEY-----\nBwgJ\n-----END RSA PRIVATE KEY-----\n\
+             -----BEGIN PRIVATE KEY-----\nCgsM\n-----END PRIVATE KEY-----\n",
+        )
+        .unwrap();
+        let (_, key) = load_client_identity_pair(&cert_path, &key_path).unwrap();
+        assert!(matches!(key, PrivateKeyDer::Pkcs8(_)));
+        assert_eq!(key.secret_der(), &[10, 11, 12]);
+
+        fs::write(&key_path, "no private key").unwrap();
+        assert!(load_client_identity_pair(&cert_path, &key_path).is_err());
+        fs::write(
+            &key_path,
+            "-----BEGIN PRIVATE KEY-----\n!!!!\n-----END PRIVATE KEY-----\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            load_client_identity_pair(&cert_path, &key_path),
+            Err(cfms_core::Error::Io(error)) if error.kind() == io::ErrorKind::InvalidData
+        ));
+
+        fs::write(
+            &cert_path,
+            "-----BEGIN CERTIFICATE-----\n!!!!\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            load_client_identity_pair(&cert_path, &key_path),
+            Err(cfms_core::Error::Io(error)) if error.kind() == io::ErrorKind::InvalidData
+        ));
     }
 }

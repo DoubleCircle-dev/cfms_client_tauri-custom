@@ -14,10 +14,10 @@ export function canSetOtherUserAvatar(permissions: readonly string[]): boolean {
 
 export function canSetAvatarFor(
   permissions: readonly string[],
-  currentUsername: string | null,
-  targetUsername: string,
+  currentUserId: string | null,
+  targetUserId: string,
 ): boolean {
-  return currentUsername === targetUsername
+  return currentUserId === targetUserId
     ? canSetOwnAvatar(permissions)
     : canSetOtherUserAvatar(permissions);
 }

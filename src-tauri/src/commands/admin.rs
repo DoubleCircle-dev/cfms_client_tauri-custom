@@ -29,12 +29,13 @@ fn normalize_nickname(nickname: Option<String>) -> Result<Option<String>, String
 }
 
 fn current_user_nickname_update(
-    current_username: Option<&str>,
-    target_username: &str,
+    current_id: Option<&str>,
+    user_id: &str,
+    username: &str,
     nickname: Option<&str>,
 ) -> Option<String> {
-    (current_username == Some(target_username))
-        .then(|| nickname.unwrap_or(target_username).to_string())
+    (current_id == Some(user_id))
+        .then(|| nickname.unwrap_or(username).to_string())
 }
 
 #[tauri::command]
@@ -86,9 +87,9 @@ pub async fn create_user(
     username: String,
     password: String,
     nickname: String,
-) -> Result<bool, String> {
+) -> Result<serde_json::Value, String> {
     let password = zeroize::Zeroizing::new(password);
-    server_action_bool(
+    server_action_json(
         &state,
         "create_user",
         serde_json::json!({
@@ -105,21 +106,23 @@ pub async fn create_user(
 #[tauri::command]
 pub async fn rename_user(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
     nickname: Option<String>,
 ) -> Result<bool, String> {
     let nickname = normalize_nickname(nickname)?;
     let renamed = server_action_bool(
         &state,
         "rename_user",
-        serde_json::json!({ "username": &username, "nickname": &nickname }),
+        serde_json::json!({ "user_id": &user_id, "nickname": &nickname }),
     )
     .await?;
 
+    let current_id = state.inner.user_id.read().await.clone();
     let current_username = state.inner.username.read().await.clone();
     if let Some(session_nickname) = current_user_nickname_update(
-        current_username.as_deref(),
-        &username,
+        current_id.as_deref(),
+        &user_id,
+        current_username.as_deref().unwrap_or_default(),
         nickname.as_deref(),
     ) {
         *state.inner.nickname.write().await = Some(session_nickname);
@@ -151,15 +154,15 @@ mod nickname_tests {
     #[test]
     fn only_the_current_users_nickname_updates_session_state() {
         assert_eq!(
-            current_user_nickname_update(Some("alice"), "alice", Some("Alice")),
+            current_user_nickname_update(Some("id-a"), "id-a", "alice", Some("Alice")),
             Some("Alice".to_string())
         );
         assert_eq!(
-            current_user_nickname_update(Some("alice"), "alice", None),
+            current_user_nickname_update(Some("id-a"), "id-a", "alice", None),
             Some("alice".to_string())
         );
         assert_eq!(
-            current_user_nickname_update(Some("admin"), "alice", Some("Alice")),
+            current_user_nickname_update(Some("id-b"), "id-a", "alice", Some("Alice")),
             None
         );
     }
@@ -168,12 +171,12 @@ mod nickname_tests {
 #[tauri::command]
 pub async fn delete_user(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
         "delete_user",
-        serde_json::json!({ "username": username }),
+        serde_json::json!({ "user_id": user_id }),
     )
     .await
 }
@@ -181,26 +184,27 @@ pub async fn delete_user(
 #[tauri::command]
 pub async fn get_user_info(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    username: Option<String>,
+    user_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    server_action_json(
-        &state,
-        "get_user_info",
-        serde_json::json!({ "username": username }),
-    )
-    .await
+    let data = match (username, user_id) {
+        (Some(username), None) => serde_json::json!({ "username": username }),
+        (None, Some(user_id)) => serde_json::json!({ "user_id": user_id }),
+        _ => return Err("Provide exactly one of username or user_id".into()),
+    };
+    server_action_json(&state, "get_user_info", data).await
 }
 
 #[tauri::command]
 pub async fn change_user_groups(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
     groups: Vec<String>,
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
         "change_user_groups",
-        serde_json::json!({ "username": username, "groups": groups }),
+        serde_json::json!({ "user_id": user_id, "groups": groups }),
     )
     .await
 }
@@ -208,25 +212,25 @@ pub async fn change_user_groups(
 #[tauri::command]
 pub async fn change_user_permissions(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
     permissions: Vec<cfms_core::PermissionEntry>,
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
         "change_user_permissions",
-        serde_json::json!({ "username": username, "permissions": permissions }),
+        serde_json::json!({ "user_id": user_id, "permissions": permissions }),
     )
     .await
 }
 
 fn admin_password_reset_data(
-    username: &str,
+    user_id: &str,
     new_password: &str,
     bypass_passwd_requirements: bool,
     force_update_after_login: bool,
 ) -> serde_json::Value {
     serde_json::json!({
-        "username": username,
+        "user_id": user_id,
         "new_passwd": new_password,
         "bypass_passwd_requirements": bypass_passwd_requirements,
         "force_update_after_login": force_update_after_login,
@@ -236,7 +240,7 @@ fn admin_password_reset_data(
 #[tauri::command]
 pub async fn reset_user_password(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
     new_password: String,
     bypass_passwd_requirements: bool,
     force_update_after_login: bool,
@@ -246,7 +250,7 @@ pub async fn reset_user_password(
         &state,
         "set_passwd",
         admin_password_reset_data(
-            &username,
+            &user_id,
             new_password.as_str(),
             bypass_passwd_requirements,
             force_update_after_login,
@@ -266,7 +270,7 @@ mod password_reset_tests {
         assert_eq!(
             data,
             serde_json::json!({
-                "username": "alice",
+                "user_id": "alice",
                 "new_passwd": "NewPassword123!",
                 "bypass_passwd_requirements": true,
                 "force_update_after_login": true,
@@ -279,11 +283,11 @@ mod password_reset_tests {
 #[tauri::command]
 pub async fn manage_user_status(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
     status: String,
     reason: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let mut data = serde_json::json!({ "username": username, "status": status });
+    let mut data = serde_json::json!({ "user_id": user_id, "status": status });
     if status == "disabled" {
         data["reason"] = operation_reason_value(reason);
     }
@@ -329,14 +333,14 @@ pub async fn set_lockdown(
 #[tauri::command]
 pub async fn block_user(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
     block_types: Vec<String>,
     target: serde_json::Value,
     not_after: Option<f64>,
     reason: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mut data = serde_json::json!({
-        "username": username,
+        "user_id": user_id,
         "block_types": block_types,
         "target": target,
         "reason": operation_reason_value(reason),
@@ -351,12 +355,12 @@ pub async fn block_user(
 #[tauri::command]
 pub async fn list_user_blocks(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
 ) -> Result<serde_json::Value, String> {
     let items = fetch_all_cursor_items(
         &state,
         "list_user_blocks",
-        serde_json::json!({ "username": username }),
+        serde_json::json!({ "user_id": user_id }),
     )
     .await?;
 
@@ -366,12 +370,12 @@ pub async fn list_user_blocks(
 #[tauri::command]
 pub async fn get_managed_2fa_status(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
         "get_2fa_status",
-        serde_json::json!({ "target": username }),
+        serde_json::json!({ "user_id": user_id }),
     )
     .await
 }
@@ -379,12 +383,12 @@ pub async fn get_managed_2fa_status(
 #[tauri::command]
 pub async fn disable_managed_2fa(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
         "disable_2fa",
-        serde_json::json!({ "username": username }),
+        serde_json::json!({ "user_id": user_id }),
     )
     .await
 }
@@ -698,7 +702,7 @@ pub async fn server_diagnostics(
 #[tauri::command]
 pub async fn list_user_keys(
     state: tauri::State<'_, AppHandleState>,
-    target_username: Option<String>,
+    user_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mut keys = Vec::new();
     let mut offset = 0u32;
@@ -709,8 +713,8 @@ pub async fn list_user_keys(
             "offset": offset,
             "count": SERVER_CURSOR_PAGE_SIZE,
         });
-        if let Some(username) = target_username.as_deref().filter(|value| !value.trim().is_empty()) {
-            data["target_username"] = serde_json::Value::String(username.to_string());
+        if let Some(user_id) = user_id.as_deref() {
+            data["user_id"] = serde_json::Value::String(user_id.to_string());
         }
 
         let page = server_action_json(&state, "list_user_keys", data).await?;

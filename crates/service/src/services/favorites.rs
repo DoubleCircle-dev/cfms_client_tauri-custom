@@ -236,10 +236,6 @@ struct ValidationSnapshot {
 }
 
 async fn validation_snapshot(state: &AppState) -> Option<ValidationSnapshot> {
-    if state.pending_2fa.load(std::sync::atomic::Ordering::SeqCst) {
-        return None;
-    }
-
     let username = state.username.read().await.clone()?;
     let token = state.token.read().await.clone()?;
     let server_addr = state.server_address.read().await.clone()?;
