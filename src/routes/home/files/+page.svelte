@@ -8,6 +8,7 @@
   // Reference: get_directory / get_document in reference/src/include/ui/util/path.py
 
   import { onMount, tick, untrack } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -233,6 +234,8 @@
   let searchQuery = $state('');
   let searchInput = $state<HTMLInputElement | null>(null);
   let searchDialogInput = $state<HTMLInputElement | null>(null);
+  const searchCoarsePointer = new MediaQuery('(pointer: coarse)', false);
+  const searchRowHeight = $derived(searchCoarsePointer.current ? 48 : 40);
   let searchPreviewRoot = $state<HTMLDivElement | null>(null);
   let searchPreviewPanelStyle = $state('');
   let navigationRootId = $state<string | null>(null);
@@ -3399,14 +3402,6 @@
     return field === 'modified' ? 'last_modified' : field;
   }
 
-  function searchSortIndex(field: SortField) {
-    return field === 'name' ? 0 : field === 'size' ? 1 : 2;
-  }
-
-  function searchSortIndicatorStyle(field: SortField) {
-    return `width: calc((100% - 4px) / 3); transform: translateX(${searchSortIndex(field) * 100}%);`;
-  }
-
   function searchResultDate(row: SearchResultRow) {
     return row.kind === 'directory'
       ? formatDate(row.directory.created_time)
@@ -3970,13 +3965,13 @@
                 {$t('files.searchDirectories')}
               </label>
 
-              <div class="search-preview-sort" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
+              <div class="search-sort" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
                 {#each ['name', 'size', 'modified'] as field}
                   <button data-fluent-owner="routes-home-files-page"
                     data-search-sort
                     tabindex={searchPreview.sortBy === field ? 0 : -1}
                     type="button"
-                    class="search-preview-sort-option"
+                    class="search-sort-option"
                     aria-pressed={searchPreview.sortBy === field}
                     onclick={() => setSearchPreviewSort(field as SortField)}
                   >
@@ -4339,6 +4334,85 @@
     overscroll-behavior: contain;
   }
 
+  .server-search-form {
+    --files-field-height: 32px;
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+    color: var(--colorNeutralForeground1);
+  }
+  .server-search-query {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    flex: none;
+  }
+  .server-search-controls {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+    color: var(--colorNeutralForeground2);
+    font: 400 14px/20px var(--fontFamilyBase);
+  }
+  :global(.server-search-action[data-fluent-owner="routes-home-files-page"]) { font-weight: 400; }
+  .server-search-results {
+    container-type: inline-size;
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+  }
+  .server-search-summary {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    padding: 8px 12px;
+    color: var(--colorNeutralForeground2);
+    font: 400 12px/16px var(--fontFamilyBase);
+  }
+  .server-search-result {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: var(--search-row-height);
+    border: 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    border-radius: 0;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    text-align: left;
+    font: 400 14px/20px var(--fontFamilyBase);
+    transition: background-color var(--durationFaster) var(--curveEasyEase);
+  }
+  .server-search-result:hover { background: var(--colorNeutralBackground1Hover); }
+  .server-search-result:active { background: var(--colorNeutralBackground1Pressed); }
+  .server-search-result:focus-visible { outline-offset: -2px; }
+  .server-search-result--last { border-bottom: 0; }
+  .server-search-result-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .server-search-result-detail { color: var(--colorNeutralForeground2); text-align: right; font: 400 12px/16px var(--fontFamilyBase); }
+
+  @container (max-width: 480px) {
+    .server-search-result { gap: 4px 12px; }
+    .server-search-result > :first-child { grid-row: span 2; }
+    .server-search-result-name { grid-column: 2 / -1; }
+    .server-search-result-detail { grid-column: 2 / -1; text-align: left; }
+  }
+
   :global(.modal-positioner--sized .server-search-list-viewport),
   :global(.modal-positioner--maximized .server-search-list-viewport) {
     max-height: none;
@@ -4355,16 +4429,18 @@
   }
 
   .search-preview-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-  .search-preview-sort { display: flex; max-width: 100%; flex-wrap: wrap; gap: 2px; border: 1px solid var(--colorNeutralStroke1); border-radius: var(--borderRadiusMedium); padding: 2px; }
-  .search-preview-sort-option { min-height: 32px; border-radius: var(--borderRadiusMedium); padding: 4px 12px; color: var(--colorNeutralForeground2); font: 400 14px/20px var(--fontFamilyBase); }
-  .search-preview-sort-option:hover { background: var(--colorNeutralBackground1Hover); }
-  .search-preview-sort-option[aria-pressed="true"] { color: var(--colorBrandForeground1); background: var(--colorBrandBackground2); box-shadow: inset 0 -2px var(--colorBrandStroke1); }
+  .search-sort { display: flex; max-width: 100%; flex-wrap: wrap; gap: 2px; border: 1px solid var(--colorNeutralStroke1); border-radius: var(--borderRadiusMedium); padding: 2px; }
+  .search-sort-option { min-height: 32px; border-radius: var(--borderRadiusMedium); padding: 4px 12px; color: var(--colorNeutralForeground2); font: 400 14px/20px var(--fontFamilyBase); transition: background-color var(--durationFaster) var(--curveEasyEase); }
+  .search-sort-option:hover:not(:disabled) { background: var(--colorNeutralBackground1Hover); }
+  .search-sort-option[aria-pressed="true"] { color: var(--colorBrandForeground1); background: var(--colorBrandBackground2); box-shadow: inset 0 -2px var(--colorBrandStroke1); }
+  .search-sort-option:disabled { color: var(--colorNeutralForegroundDisabled); }
   :global(.search-preview-action[data-fluent-owner="routes-home-files-page"]) { font-weight: 400; }
   .search-preview-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
 
   @media (pointer: coarse) {
     .files-search-input { font-size: 16px; }
-    .search-preview-sort-option { min-height: 44px; }
+    .server-search-form { --files-field-height: 44px; }
+    .search-sort-option { min-height: 44px; }
   }
   @media (forced-colors: active) {
     :global(html[data-window-backdrop]) .files-page,
@@ -4372,11 +4448,7 @@
     :global(html[data-window-backdrop]) .files-page :global(.explorer-status-bar) { background: Canvas; }
     .files-search-field { color: FieldText; background: Field; border-color: ButtonText; }
     [data-search-box]:has([data-focus-ring="delegated"]:focus) { outline: 2px solid Highlight; outline-offset: -2px; box-shadow: none; }
-    .search-preview-sort-option[aria-pressed="true"] { color: HighlightText; background: Highlight; box-shadow: none; outline: 1px solid Highlight; }
-  }
-
-  .search-sort-indicator {
-    transition: transform var(--motion-duration-medium1) var(--motion-easing-emphasized-decelerate);
+    .search-sort-option[aria-pressed="true"] { color: HighlightText; background: Highlight; box-shadow: none; outline: 1px solid Highlight; }
   }
 
   .revision-graph-path {
@@ -4461,26 +4533,46 @@
     closeLabel={$t('common.close')}
     onClose={closeSearchDialog}
   >
-    <form class="flex h-full min-h-0 flex-col gap-4 p-5" onsubmit={(e) => { e.preventDefault(); runServerSearch(); }}>
-      <div class="grid gap-3 md:grid-cols-[1fr_auto]">
+    <form class="server-search-form" style:--search-row-height={`${searchRowHeight}px`} onsubmit={(e) => { e.preventDefault(); runServerSearch(); }}>
+      <div class="server-search-query">
+        <div class="files-search-field cfms-field-surface" data-search-box>
         <input
-          class="cfms-native-field rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
+          class="files-search-input cfms-native-field"
+          data-focus-ring="delegated"
           bind:value={searchDialog.query}
           bind:this={searchDialogInput}
           placeholder={$t('files.searchPlaceholder')}
+          aria-label={$t('files.searchPlaceholder')}
           disabled={searchDialog.loading}
         />
+        {#if searchDialog.query}
+          <FluentButton data-fluent-owner="routes-home-files-page"
+            type="button"
+            appearance="subtle"
+            class="files-search-clear"
+            iconOnly
+            aria-label={$t('common.clear')}
+            disabled={searchDialog.loading}
+            onclick={() => {
+              searchDialog.query = '';
+              searchDialogInput?.focus({ preventScroll: true });
+            }}
+          >
+            <Icon name="close" size="16px" />
+          </FluentButton>
+        {/if}
+        </div>
         <FluentButton data-fluent-owner="routes-home-files-page"
           type="submit"
           disabled={searchDialog.loading}
           appearance="primary"
-          class="rounded bg-md3-primary px-4 py-2 text-sm font-medium text-md3-on-primary transition-all  disabled:opacity-50"
+          class="server-search-action"
         >
           {$t('files.serverSearch')}
         </FluentButton>
       </div>
 
-      <div class="flex flex-wrap items-center gap-4 text-sm text-md3-on-surface-variant">
+      <div class="server-search-controls">
         <label class="flex items-center gap-2">
           <MdCheckbox
             bind:checked={searchDialog.searchDocuments}
@@ -4498,18 +4590,13 @@
           {$t('files.searchDirectories')}
         </label>
 
-        <div class="relative grid grid-cols-3 overflow-hidden rounded-full border border-md3-outline bg-md3-field p-0.5" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
-          <span
-            class="search-sort-indicator absolute bottom-0.5 left-0.5 top-0.5 rounded-full bg-md3-primary"
-            style={searchSortIndicatorStyle(searchDialog.sortBy)}
-            aria-hidden="true"
-          ></span>
+        <div class="search-sort" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
           {#each ['name', 'size', 'modified'] as field}
             <button data-fluent-owner="routes-home-files-page"
               data-search-sort
               tabindex={searchDialog.sortBy === field ? 0 : -1}
               type="button"
-              class="relative z-10 min-w-16 rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 {searchDialog.sortBy === field ? 'text-md3-on-primary' : 'text-md3-on-surface-variant hover:text-md3-on-surface'}"
+              class="search-sort-option"
               aria-pressed={searchDialog.sortBy === field}
               disabled={searchDialog.loading}
               onclick={() => setSearchDialogSort(field as SortField)}
@@ -4524,7 +4611,7 @@
           title={searchDialog.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
           onclick={toggleSearchDialogSortOrder}
           appearance="outline"
-          class="inline-flex h-8 items-center gap-1 rounded border border-md3-outline px-2.5 text-xs font-medium text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:opacity-50"
+          class="server-search-action"
         >
           <Icon name={searchDialog.sortOrder === 'asc' ? 'arrowUpward' : 'arrowDownward'} size="16px" />
           {searchDialog.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
@@ -4532,8 +4619,8 @@
       </div>
 
       {#if searchDialog.results}
-        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-md3-outline">
-          <div class="flex items-center justify-between gap-3 border-b border-md3-outline px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
+        <div class="server-search-results">
+          <div class="server-search-summary" role="status">
             <span>
               {searchDialog.results.total_count === 0 && !searchDialog.loading
                 ? $t('files.searchNoResults', { values: { query: searchDialog.resultQuery } })
@@ -4551,37 +4638,37 @@
             keyOf={(row) => row.kind === 'directory'
               ? `directory:${row.directory.id}`
               : `document:${row.document.id}`}
-            estimateSize={37}
+            estimateSize={searchRowHeight}
             overscan={10}
             threshold={120}
             resetKey={searchDialogResetKey}
             viewportClass="server-search-list-viewport"
             keyboardNavigation
-            keyboardTargetSelector="button, fluent-button"
+            keyboardTargetSelector="button"
           >
             {#snippet children(row, index)}
               {#if row.kind === 'directory'}
-                <FluentButton data-fluent-owner="routes-home-files-page"
+                <button
                   type="button"
                   onclick={() => navigateToSearchDirectory(row.directory)}
-                  appearance="outline"
-                  class={"grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors hover:bg-md3-primary-container/20" + ((index === searchResultRows.length - 1) ? " border-b-0" : '')}
+                  class="server-search-result"
+                  class:server-search-result--last={index === searchResultRows.length - 1}
                 >
                   <span class="text-md3-primary-emphasis"><Icon name="folder" size="20px" /></span>
-                  <span class="min-w-0 truncate text-sm font-medium text-md3-primary-emphasis">{row.directory.name}</span>
-                  <span class="text-xs text-md3-on-surface-variant">{formatDate(row.directory.created_time)}</span>
-                </FluentButton>
+                  <span class="server-search-result-name">{row.directory.name}</span>
+                  <span class="server-search-result-detail">{formatDate(row.directory.created_time)}</span>
+                </button>
               {:else}
-                <FluentButton data-fluent-owner="routes-home-files-page"
+                <button
                   type="button"
                   onclick={() => navigateToSearchDocument(row.document)}
-                  appearance="outline"
-                  class={"grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors hover:bg-md3-surface-container-high/40" + ((index === searchResultRows.length - 1) ? " border-b-0" : '')}
+                  class="server-search-result"
+                  class:server-search-result--last={index === searchResultRows.length - 1}
                 >
                   <span class="text-md3-on-surface-variant"><Icon name="filePresent" size="20px" /></span>
-                  <span class="min-w-0 truncate text-sm text-md3-on-surface">{row.document.name ?? row.document.title}</span>
-                  <span class="text-xs text-md3-on-surface-variant">{formatBytes(row.document.size)}</span>
-                </FluentButton>
+                  <span class="server-search-result-name">{row.document.name ?? row.document.title}</span>
+                  <span class="server-search-result-detail">{formatBytes(row.document.size)}</span>
+                </button>
               {/if}
             {/snippet}
           </VirtualList>

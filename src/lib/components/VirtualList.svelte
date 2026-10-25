@@ -44,6 +44,7 @@
 
   let scrollViewport = $state<HTMLDivElement | null>(null);
   let activeKeyboardIndex = $state(0);
+  let pendingKeyboardFocus: number | null = null;
 
   const rowCount = $derived(items.length);
   const virtualized = $derived(rowCount > threshold);
@@ -113,6 +114,7 @@
   $effect(() => {
     resetKey;
     activeKeyboardIndex = 0;
+    pendingKeyboardFocus = null;
     if (scrollViewport) {
       scrollViewport.scrollTop = 0;
     }
@@ -169,6 +171,15 @@
       const target = row.querySelector<HTMLElement>(keyboardTargetSelector);
       if (target) target.tabIndex = Number(row.dataset.index) === activeKeyboardIndex ? 0 : -1;
     }
+    // Scroll events can render the destination after the key handler's first tick.
+    if (pendingKeyboardFocus === null) return;
+    const target = scrollViewport
+      .querySelector<HTMLElement>(`.virtual-list-row[data-index="${pendingKeyboardFocus}"]`)
+      ?.querySelector<HTMLElement>(keyboardTargetSelector);
+    if (target) {
+      pendingKeyboardFocus = null;
+      target.focus({ preventScroll: true });
+    }
   }
 
   async function handleKeyboardNavigation(event: KeyboardEvent) {
@@ -188,13 +199,10 @@
     else if (event.key === 'PageDown') next += pageSize;
     else if (event.key === 'PageUp') next -= pageSize;
     activeKeyboardIndex = Math.max(0, Math.min(rowCount - 1, next));
+    pendingKeyboardFocus = activeKeyboardIndex;
     if (virtualized) $rowVirtualizer.scrollToIndex(activeKeyboardIndex, { align: 'auto' });
     await tick();
     syncKeyboardTabStops();
-    scrollViewport
-      .querySelector<HTMLElement>(`.virtual-list-row[data-index="${activeKeyboardIndex}"]`)
-      ?.querySelector<HTMLElement>(keyboardTargetSelector)
-      ?.focus({ preventScroll: true });
   }
 
   function handleFocusIn(event: FocusEvent) {
