@@ -7,7 +7,8 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 -->
 <script lang="ts">
   import FluentButton from '$lib/components/FluentButton.svelte';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
+  import { portal } from '$lib/actions/portal';
   import { _ as t } from 'svelte-i18n';
   import {
     createSchedule,
@@ -64,6 +65,95 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     );
   });
   const pageNumber = $derived(cursorStack.length + 1);
+
+  let helpAnchor: HTMLSpanElement | undefined = $state();
+  let helpTooltip: HTMLSpanElement | undefined = $state();
+  let helpOpen = $state(false);
+  let helpPosition = $state({ left: 0, top: 0 });
+  let helpHovered = false;
+  let helpFocused = false;
+  let helpPinned = false;
+  let helpTouch = false;
+  let helpHideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function cancelHelpHide() {
+    clearTimeout(helpHideTimer);
+    helpHideTimer = undefined;
+  }
+
+  function closeHelp() {
+    cancelHelpHide();
+    helpOpen = false;
+    helpPinned = false;
+  }
+
+  function showHelp() {
+    cancelHelpHide();
+    helpOpen = true;
+  }
+
+  function leaveHelp() {
+    helpHovered = false;
+    cancelHelpHide();
+    helpHideTimer = setTimeout(() => {
+      if (!helpHovered && !helpFocused && !helpPinned) helpOpen = false;
+    }, 120);
+  }
+
+  function enterHelp(event: PointerEvent) {
+    if (event.pointerType === 'touch') return;
+    helpHovered = true;
+    showHelp();
+  }
+
+  function positionHelp() {
+    if (!helpAnchor || !helpTooltip) return;
+    const anchor = helpAnchor.getBoundingClientRect();
+    const tooltip = helpTooltip.getBoundingClientRect();
+    const margin = 16;
+    const below = anchor.bottom + 8;
+    const top = below + tooltip.height <= window.innerHeight - margin
+      ? below : anchor.top - tooltip.height - 8;
+    helpPosition = {
+      left: Math.max(margin, Math.min(anchor.right - tooltip.width, window.innerWidth - tooltip.width - margin)),
+      top: Math.max(margin, Math.min(top, window.innerHeight - tooltip.height - margin)),
+    };
+  }
+
+  $effect(() => {
+    if (!noAvailableTaskTypes || !canView) {
+      closeHelp();
+      helpHovered = false;
+      helpFocused = false;
+    }
+  });
+
+  $effect(() => {
+    if (!helpOpen || !helpTooltip || !helpAnchor) return;
+    positionHelp();
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeHelp();
+      }
+    };
+    const onPointerdown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!helpAnchor?.contains(target) && !helpTooltip?.contains(target)) closeHelp();
+    };
+    window.addEventListener('resize', positionHelp);
+    window.addEventListener('scroll', positionHelp, true);
+    window.addEventListener('keydown', onKeydown);
+    window.addEventListener('pointerdown', onPointerdown);
+    return () => {
+      window.removeEventListener('resize', positionHelp);
+      window.removeEventListener('scroll', positionHelp, true);
+      window.removeEventListener('keydown', onKeydown);
+      window.removeEventListener('pointerdown', onPointerdown);
+    };
+  });
+
+  onDestroy(cancelHelpHide);
 
   function taskAllowed(schedule: Schedule): boolean {
     return schedule.task_available && taskTypes.some((task) => task.name === schedule.task_name);
@@ -287,18 +377,44 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
           </FluentButton>
         {/if}
         {#if noAvailableTaskTypes}
-          <FluentButton data-fluent-owner="routes-home-schedules-page"
-            type="button"
-            aria-label={$t('schedules.createUnavailableHelp')}
-            aria-describedby="schedule-create-unavailable"
-            appearance="subtle"
-            class="create-unavailable-help"
+          <span bind:this={helpAnchor} class="create-unavailable-anchor">
+            <FluentButton data-fluent-owner="routes-home-schedules-page"
+              type="button"
+              aria-label={$t('schedules.createUnavailableHelp')}
+              aria-describedby="schedule-create-unavailable"
+              appearance="subtle"
+              iconOnly
+              class="create-unavailable-help"
+              onpointerenter={enterHelp}
+              onpointerleave={leaveHelp}
+              onfocus={() => { helpFocused = true; showHelp(); }}
+              onblur={() => { helpFocused = false; leaveHelp(); }}
+              onpointerdown={(event) => { helpTouch = event.pointerType === 'touch'; }}
+              onclick={() => {
+                if (helpTouch) {
+                  helpPinned = !helpPinned;
+                  helpOpen = helpPinned;
+                  cancelHelpHide();
+                }
+              }}
+            >
+              <Icon name="info" size="16px" />
+            </FluentButton>
+          </span>
+          <span
+            bind:this={helpTooltip}
+            use:portal
+            id="schedule-create-unavailable"
+            class="create-unavailable-tooltip cfms-acrylic-surface"
+            role="tooltip"
+            hidden={!helpOpen}
+            style:left="{helpPosition.left}px"
+            style:top="{helpPosition.top}px"
+            onpointerenter={enterHelp}
+            onpointerleave={leaveHelp}
           >
-            <Icon name="info" size="16px" />
-            <span id="schedule-create-unavailable" class="create-unavailable-tooltip" role="tooltip">
-              {$t('schedules.noAvailableTaskTypes')}
-            </span>
-          </FluentButton>
+            {$t('schedules.noAvailableTaskTypes')}
+          </span>
         {/if}
       </div>
     {/if}
@@ -311,7 +427,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     </section>
   {:else}
     <div class="schedule-workspace" class:has-inspector={editorMode !== null || selected !== null}>
-      <section class="ledger cfms-content-surface" aria-label={$t('schedules.listLabel')}>
+      <section class="ledger" aria-label={$t('schedules.listLabel')}>
         <div class="command-bar">
           <label class="search-field cfms-field-surface">
             <Icon name="search" size="18px" />
@@ -502,11 +618,9 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   .page-header > div > p { max-width: 68ch; margin-top: 0.35rem; color: var(--color-md3-on-surface-variant); font-size: 14px; line-height: 1.5; }
   .header-actions, .row-actions, .pagination, .schedule-details footer { display: flex; align-items: center; gap: 8px; }
   .header-actions { white-space: nowrap; }
-  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]) { position: relative; display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 0; border-radius: 999px; padding: 0; color: var(--color-md3-on-surface-variant); background: transparent; cursor: help; transition: color 120ms ease, background 120ms ease; }
-  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:hover), :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:focus-visible) { color: var(--color-md3-on-surface); background: var(--color-md3-surface-container-highest); }
-  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:focus-visible) { outline: none; outline-offset: -2px; }
-  .create-unavailable-tooltip { position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 25; width: max-content; max-width: min(32rem, calc(100vw - 2rem)); border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.65rem 0.75rem; color: var(--color-md3-on-surface); background: color-mix(in srgb, var(--color-md3-surface-container-high) 96%, transparent); box-shadow: var(--explorer-shadow); font-size: 12px; line-height: 1.5; text-align: left; white-space: normal; pointer-events: none; opacity: 0; transform: translateY(-4px); transition: opacity 120ms ease, transform 120ms ease; }
-  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:hover) .create-unavailable-tooltip, :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:focus-visible) .create-unavailable-tooltip { opacity: 1; transform: translateY(0); }
+  .create-unavailable-anchor { display: inline-flex; flex: none; }
+  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]) { inline-size: 32px; min-inline-size: 32px; max-inline-size: 32px; block-size: 32px; min-block-size: 32px; flex: none; padding: 0; cursor: help; }
+  .create-unavailable-tooltip { position: fixed; z-index: 49; box-sizing: border-box; width: max-content; max-width: min(32rem, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 0.65rem 0.75rem; font: 400 12px/1.5 var(--fontFamilyBase); text-align: left; white-space: normal; overflow-wrap: anywhere; }
   :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { font-family: inherit; }
   :global(.primary-action[data-fluent-owner="routes-home-schedules-page"]), :global(.secondary-action[data-fluent-owner="routes-home-schedules-page"]), :global(.danger-action[data-fluent-owner="routes-home-schedules-page"]), .pagination :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])), .load-state :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; border-radius: var(--borderRadiusMedium); padding: 0.35rem 0.75rem; font-size: 12px; font-weight: 600; cursor: pointer; }
   :global(.primary-action[data-fluent-owner="routes-home-schedules-page"]) { border: 1px solid var(--color-md3-primary); background: var(--color-md3-primary); color: var(--color-md3-on-primary); }
@@ -516,7 +630,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   .schedule-workspace { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--color-md3-outline); }
   .schedule-workspace.has-inspector .ledger { display: none; }
   .ledger { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
-  .command-bar { display: flex; min-height: 52px; align-items: center; gap: 12px; border-bottom: 1px solid var(--color-md3-outline); padding: 0.45rem 1rem; background: var(--color-md3-surface-container); }
+  .command-bar { display: flex; min-height: 52px; align-items: center; gap: 12px; border-bottom: 1px solid var(--color-md3-outline); padding: 0.45rem 1rem; }
   .search-field { display: flex; min-width: 180px; max-width: 390px; flex: 1; align-items: center; gap: 8px; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); padding: 0 0.65rem; background: var(--color-md3-field); color: var(--color-md3-on-surface-variant); }
   .search-field:focus-within { border-color: var(--color-md3-primary); box-shadow: inset 0 0 0 1px var(--color-md3-primary); }
   .search-field input { width: 100%; min-height: 36px; border: 0; outline: 0; background: transparent; color: var(--color-md3-on-surface); font: 0.8rem var(--font-md3-sans); }
@@ -549,7 +663,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   .row-actions :global(.md-switch) { transform: scale(0.75); }
   :global(.icon-action[data-fluent-owner="routes-home-schedules-page"]) { display: grid; width: 40px; height: 40px; place-items: center; border: 0; border-radius: var(--borderRadiusMedium); padding: 0; background: transparent; color: var(--color-md3-on-surface-variant); cursor: pointer; }
   :global(.icon-action[data-fluent-owner="routes-home-schedules-page"]:hover:not(:is(:disabled, [disabled]))) { background: var(--color-md3-surface-container-highest); color: var(--color-md3-on-surface); }
-  .pagination { justify-content: center; border-top: 1px solid var(--color-md3-outline); padding: 0.55rem 1rem; background: var(--color-md3-surface-container); color: var(--color-md3-on-surface-variant); font-size: 12px; }
+  .pagination { justify-content: center; border-top: 1px solid var(--color-md3-outline); padding: 0.55rem 1rem; color: var(--color-md3-on-surface-variant); font-size: 12px; }
   .pagination :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { padding: 0.25rem 0.55rem; }
   .inspector { min-width: 0; overflow: auto; border-left: 1px solid var(--color-md3-outline); background: var(--color-md3-surface-container); }
   .inspector-empty { display: none; place-items: center; align-content: center; gap: 8px; padding: 1.5rem; color: var(--color-md3-on-surface-variant); text-align: center; }
@@ -594,7 +708,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     .page-header { align-items: flex-start; flex-direction: column; padding: 1.1rem 1rem 0.8rem; }
     .header-actions { width: 100%; }
     .header-actions :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { flex: 1; }
-    .header-actions :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]) { width: 44px; height: 44px; flex: none; }
+    .header-actions .create-unavailable-anchor { flex: none; }
     .command-bar { flex-wrap: wrap; }
     .search-field { max-width: none; flex-basis: 100%; }
     .ledger-count { margin-left: auto; }
@@ -606,6 +720,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   }
   @media (max-width: 480px) { .task-meta { max-width: 44vw; } }
   @media (pointer: coarse) {
+    :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]) { inline-size: 44px; min-inline-size: 44px; max-inline-size: 44px; block-size: 44px; min-block-size: 44px; }
     :global(.primary-action[data-fluent-owner="routes-home-schedules-page"]), :global(.secondary-action[data-fluent-owner="routes-home-schedules-page"]), :global(.danger-action[data-fluent-owner="routes-home-schedules-page"]), .pagination :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])), .load-state :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])), :global(.icon-action[data-fluent-owner="routes-home-schedules-page"]) { min-width: 44px; min-height: 44px; }
     .row-actions :global(.md-switch) { transform: none; }
   }

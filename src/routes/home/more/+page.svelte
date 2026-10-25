@@ -65,7 +65,7 @@
   </div>
 
   <!-- Menu entries -->
-  <div class="account-menu-grid bg-md3-surface-container  rounded-lg
+  <div class="account-menu-grid rounded-lg
               border border-md3-outline overflow-hidden">
     {#each visibleMenuEntries as entry, i}
       <button

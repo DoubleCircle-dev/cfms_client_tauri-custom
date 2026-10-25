@@ -1072,7 +1072,6 @@
 
     <div
       class="management-content"
-      class:cfms-content-surface={activeTab !== 'security'}
       class:management-content--contained={activeTab !== 'security'}
       class:management-content--audit={activeTab === 'logs'}
     >
@@ -1403,7 +1402,7 @@
                 <col style="width: 15%" />
                 <col style="width: 16%" />
               </colgroup>
-              <thead class="bg-md3-surface-container-high text-xs uppercase text-md3-on-surface-variant">
+              <thead class="text-xs uppercase text-md3-on-surface-variant">
                 <tr>
                   <th class="px-3 py-2">{$t('manage.id')}</th>
                   <th class="px-3 py-2">{$t('manage.action')}</th>
@@ -1740,7 +1739,6 @@
     overflow: hidden;
     border: 1px solid var(--color-md3-outline);
     border-radius: 0.75rem;
-    background: color-mix(in srgb, var(--color-md3-surface-container) 70%, transparent);
   }
 
   .identity-measure-host {

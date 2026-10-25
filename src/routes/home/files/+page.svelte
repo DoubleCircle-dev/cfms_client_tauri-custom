@@ -4203,7 +4203,6 @@
     flex-direction: column;
     overflow: hidden;
     color: var(--explorer-text);
-    background: var(--explorer-background);
   }
 
   .files-search { min-width: 0; width: 100%; }
@@ -4263,16 +4262,6 @@
     overflow: hidden;
     border-bottom: 1px solid var(--explorer-border);
     padding: 0.35rem 0.7rem;
-    background: var(--explorer-surface);
-  }
-
-  :global(html[data-window-backdrop="mica"]) .files-page,
-  :global(html[data-window-backdrop="mica"]) .files-command-row {
-    background: transparent;
-  }
-
-  :global(html[data-window-backdrop="mica"]) .files-page :global(.explorer-status-bar) {
-    background: transparent;
   }
 
   .files-primary-actions {

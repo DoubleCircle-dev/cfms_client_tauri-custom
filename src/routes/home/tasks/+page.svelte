@@ -499,7 +499,7 @@
   iconOnly
 ><Icon name="close" size="16px" /></FluentButton></div>
   {/if}
-  <section class="task-list-shell cfms-content-surface" aria-busy={loading}>
+  <section class="task-list-shell" aria-busy={loading}>
     {#if currentRows.length > 0}
       <VirtualList
         items={currentRows} keyOf={rowKey} estimateSize={estimateSize} gap={0} overscan={8}

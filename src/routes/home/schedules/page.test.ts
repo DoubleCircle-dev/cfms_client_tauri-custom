@@ -83,6 +83,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   authStore.clear();
   serverStateStore.clear();
   vi.restoreAllMocks();
@@ -143,11 +144,111 @@ describe('schedules page', () => {
     const createButton = screen.getByRole('button', { name: 'New schedule' }) as HTMLButtonElement;
     expect(createButton.disabled).toBe(true);
     expect(createButton.getAttribute('aria-describedby')).toBe('schedule-create-unavailable');
-    expect(screen.getByRole('button', { name: 'Why is New schedule unavailable?' }).getAttribute('aria-describedby')).toBe('schedule-create-unavailable');
-    expect(screen.getByRole('tooltip').id).toBe('schedule-create-unavailable');
+    const help = screen.getByRole('button', { name: 'Why is New schedule unavailable?' });
+    expect(help.getAttribute('aria-describedby')).toBe('schedule-create-unavailable');
+    expect(help.hasAttribute('icon-only')).toBe(true);
+    const tooltip = screen.getByRole('tooltip', { hidden: true });
+    expect(tooltip.id).toBe('schedule-create-unavailable');
+    expect(tooltip.hidden).toBe(true);
+    expect(tooltip.parentElement).toBe(document.body);
     expect(screen.getByText(/No schedulable task types are available to this account/)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('switch', { name: 'Toggle reports.weekly' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps the help visible while moving from the button into the portaled tooltip', async () => {
+    mocks.listScheduledTaskTypes.mockResolvedValue([]);
+    signIn(['view_schedules', 'manage_schedules']);
+    render(SchedulesPage);
+    const help = await screen.findByRole('button', { name: 'Why is New schedule unavailable?' });
+    vi.useFakeTimers();
+
+    await fireEvent.pointerEnter(help);
+    const tooltip = screen.getByRole('tooltip');
+    await fireEvent.pointerLeave(help);
+    await vi.advanceTimersByTimeAsync(60);
+    await fireEvent.pointerEnter(tooltip);
+    await vi.advanceTimersByTimeAsync(120);
+    expect(tooltip.hidden).toBe(false);
+
+    await fireEvent.pointerLeave(tooltip);
+    await vi.advanceTimersByTimeAsync(119);
+    expect(tooltip.hidden).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(tooltip.hidden).toBe(true);
+  });
+
+  it('shows keyboard help, dismisses it with Escape, and removes portal listeners on unmount', async () => {
+    mocks.listScheduledTaskTypes.mockResolvedValue([]);
+    signIn(['view_schedules', 'manage_schedules']);
+    const view = render(SchedulesPage);
+    const help = await screen.findByRole('button', { name: 'Why is New schedule unavailable?' });
+    await fireEvent.focus(help);
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip.parentElement).toBe(document.body);
+    await fireEvent.keyDown(help, { key: 'Escape' });
+    expect(tooltip.hidden).toBe(true);
+
+    await fireEvent.blur(help);
+    await fireEvent.focus(help);
+    expect(tooltip.hidden).toBe(false);
+    const removeListener = vi.spyOn(window, 'removeEventListener');
+    vi.useFakeTimers();
+    await fireEvent.blur(help);
+    view.unmount();
+    expect(document.getElementById('schedule-create-unavailable')).toBeNull();
+    expect(removeListener).toHaveBeenCalledWith('scroll', expect.any(Function), true);
+    expect(removeListener).toHaveBeenCalledWith('resize', expect.any(Function));
+    expect(removeListener).toHaveBeenCalledWith('keydown', expect.any(Function));
+    expect(removeListener).toHaveBeenCalledWith('pointerdown', expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('toggles touch help and dismisses it by touching outside the tooltip', async () => {
+    mocks.listScheduledTaskTypes.mockResolvedValue([]);
+    signIn(['view_schedules', 'manage_schedules']);
+    render(SchedulesPage);
+    const help = await screen.findByRole('button', { name: 'Why is New schedule unavailable?' });
+    const touch = () => fireEvent(help, Object.assign(new Event('pointerdown', { bubbles: true }), { pointerType: 'touch' }));
+    await touch();
+    await fireEvent.focus(help);
+    await fireEvent.click(help);
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip.hidden).toBe(false);
+
+    await touch();
+    await fireEvent.click(help);
+    expect(tooltip.hidden).toBe(true);
+    await touch();
+    await fireEvent.click(help);
+    expect(tooltip.hidden).toBe(false);
+    await fireEvent.pointerDown(document.body);
+    expect(tooltip.hidden).toBe(true);
+  });
+
+  it('keeps help inside the viewport and repositions it on scroll and resize', async () => {
+    mocks.listScheduledTaskTypes.mockResolvedValue([]);
+    signIn(['view_schedules', 'manage_schedules']);
+    render(SchedulesPage);
+    const help = await screen.findByRole('button', { name: 'Why is New schedule unavailable?' });
+    const tooltip = screen.getByRole('tooltip', { hidden: true });
+    const anchorBounds = vi.spyOn(help.parentElement!, 'getBoundingClientRect');
+    anchorBounds.mockReturnValue({ top: 20, right: 80, bottom: 52 } as DOMRect);
+    vi.spyOn(tooltip, 'getBoundingClientRect').mockReturnValue({ width: 400, height: 60 } as DOMRect);
+
+    await fireEvent.focus(help);
+    expect(tooltip.style.left).toBe('16px');
+    expect(tooltip.style.top).toBe('60px');
+
+    anchorBounds.mockReturnValue({ top: window.innerHeight - 40, right: window.innerWidth + 20, bottom: window.innerHeight - 8 } as DOMRect);
+    await fireEvent.scroll(window);
+    expect(tooltip.style.left).toBe(`${window.innerWidth - 416}px`);
+    expect(tooltip.style.top).toBe(`${window.innerHeight - 108}px`);
+
+    anchorBounds.mockReturnValue({ top: 30, right: 450, bottom: 62 } as DOMRect);
+    await fireEvent.resize(window);
+    expect(tooltip.style.left).toBe('50px');
+    expect(tooltip.style.top).toBe('70px');
   });
 
   it('delegates the search input focus ring to its composite field', async () => {

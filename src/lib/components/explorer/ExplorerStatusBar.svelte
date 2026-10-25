@@ -47,7 +47,6 @@
     padding-block-end: max(0.3rem, var(--safe-area-bottom, 0px));
     padding-inline: 0.75rem;
     color: var(--explorer-text-muted);
-    background: var(--explorer-surface);
     font-size: 12px;
   }
 
