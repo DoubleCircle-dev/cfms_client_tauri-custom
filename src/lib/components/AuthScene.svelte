@@ -66,7 +66,8 @@
     }
 
     .auth-scene--return {
-      animation-direction: reverse;
+      /* Reverse the endpoints, not the easing, so both directions start promptly. */
+      animation-name: auth-scene-progress-return;
     }
 
     .auth-scene :global(.auth-scene-panel) {
@@ -164,5 +165,10 @@
   @keyframes auth-scene-progress {
     from { --auth-scene-progress: 0; }
     to { --auth-scene-progress: 1; }
+  }
+
+  @keyframes auth-scene-progress-return {
+    from { --auth-scene-progress: 1; }
+    to { --auth-scene-progress: 0; }
   }
 </style>
