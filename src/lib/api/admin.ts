@@ -14,7 +14,7 @@ type ManagedUserResponse = Omit<
 };
 
 type ManagedUserInfoResponse = ManagedUserResponse & {
-  status: ManagedUserStatus | 0 | 1;
+  status: 0 | 1;
 };
 
 type ManagedGroupResponse = Omit<ManagedGroup, 'permissions' | 'effective_permissions'> & {
@@ -30,8 +30,8 @@ export class InvalidAdminResponseError extends Error {
 }
 
 function normalizeManagedUserStatus(status: unknown): ManagedUserStatus {
-  if (status === 'active' || status === 0) return 'active';
-  if (status === 'disabled' || status === 1) return 'disabled';
+  if (status === 0) return 'active';
+  if (status === 1) return 'disabled';
   throw new Error(`Invalid managed user status: ${String(status)}`);
 }
 
@@ -84,6 +84,9 @@ function parsePermissionEntries(value: unknown, context: string): PermissionEntr
 }
 
 function normalizeManagedUser(user: ManagedUserResponse, context: string): ManagedUser {
+  if (typeof user.user_id !== 'string' || !user.user_id) {
+    return invalidAdminResponse(context, 'user_id', 'an account UUID');
+  }
   return {
     ...user,
     permissions: parsePermissionEntries(user.permissions, context),
@@ -116,23 +119,23 @@ export async function createUser(
   username: string,
   password: string,
   nickname: string,
-): Promise<boolean> {
+): Promise<{ user_id: string; username: string }> {
   return invoke("create_user", { username, password, nickname });
 }
 
 export async function renameUser(
-  username: string,
+  userId: string,
   nickname: string | null,
 ): Promise<boolean> {
-  return invoke("rename_user", { username, nickname });
+  return invoke("rename_user", { userId, nickname });
 }
 
-export async function deleteUser(username: string): Promise<boolean> {
-  return invoke("delete_user", { username });
+export async function deleteUser(userId: string): Promise<boolean> {
+  return invoke("delete_user", { userId });
 }
 
-export async function getUserInfo(username: string): Promise<ManagedUserInfo> {
-  const info = await invoke<ManagedUserInfoResponse>("get_user_info", { username });
+export async function getUserInfo(selector: { userId: string; username?: never } | { username: string; userId?: never }): Promise<ManagedUserInfo> {
+  const info = await invoke<ManagedUserInfoResponse>("get_user_info", selector);
   return {
     ...normalizeManagedUser(info, 'get_user_info'),
     status: normalizeManagedUserStatus(info.status),
@@ -140,27 +143,27 @@ export async function getUserInfo(username: string): Promise<ManagedUserInfo> {
 }
 
 export async function changeUserGroups(
-  username: string,
+  userId: string,
   groups: string[],
 ): Promise<boolean> {
-  return invoke("change_user_groups", { username, groups });
+  return invoke("change_user_groups", { userId, groups });
 }
 
 export async function changeUserPermissions(
-  username: string,
+  userId: string,
   permissions: PermissionEntry[],
 ): Promise<boolean> {
-  return invoke("change_user_permissions", { username, permissions });
+  return invoke("change_user_permissions", { userId, permissions });
 }
 
 export async function resetUserPassword(
-  username: string,
+  userId: string,
   newPassword: string,
   bypassPasswdRequirements = false,
   forceUpdateAfterLogin = false,
 ): Promise<boolean> {
   return invoke("reset_user_password", {
-    username,
+    userId,
     newPassword,
     bypassPasswdRequirements,
     forceUpdateAfterLogin,
@@ -168,11 +171,11 @@ export async function resetUserPassword(
 }
 
 export async function manageUserStatus(
-  username: string,
+  userId: string,
   status: ManagedUserStatus,
   reason?: string | null,
 ): Promise<ManagedUserStatusUpdate> {
-  return invoke("manage_user_status", { username, status, reason: reason ?? null });
+  return invoke("manage_user_status", { userId, status, reason: reason ?? null });
 }
 
 export async function setLockdown(status: boolean, reason?: string | null): Promise<LockdownState> {
@@ -180,14 +183,14 @@ export async function setLockdown(status: boolean, reason?: string | null): Prom
 }
 
 export async function blockUser(
-  username: string,
+  userId: string,
   blockTypes: string[],
   target: UserBlockTarget,
   notAfter?: number | null,
   reason?: string | null,
 ): Promise<UserBlock> {
   return invoke("block_user", {
-    username,
+    userId,
     blockTypes,
     target,
     notAfter: notAfter ?? null,
@@ -195,9 +198,9 @@ export async function blockUser(
   });
 }
 
-export async function listUserBlocks(username: string): Promise<UserBlock[]> {
+export async function listUserBlocks(userId: string): Promise<UserBlock[]> {
   const data = await invoke<{ blocks?: UserBlock[] }>("list_user_blocks", {
-    username,
+    userId,
   });
   return data.blocks ?? [];
 }
@@ -210,12 +213,12 @@ export async function updateUserBlock(blockId: string, reason: string | null): P
   return invoke("update_user_block", { blockId, reason });
 }
 
-export async function getManagedTwoFactorStatus(username: string): Promise<TwoFactorStatus> {
-  return invoke("get_managed_2fa_status", { username });
+export async function getManagedTwoFactorStatus(userId: string): Promise<TwoFactorStatus> {
+  return invoke("get_managed_2fa_status", { userId });
 }
 
-export async function disableManagedTwoFactor(username: string): Promise<boolean> {
-  return invoke("disable_managed_2fa", { username });
+export async function disableManagedTwoFactor(userId: string): Promise<boolean> {
+  return invoke("disable_managed_2fa", { userId });
 }
 
 export async function listBannedSubnets(status?: BannedSubnetStatus): Promise<BannedSubnet[]> {
@@ -333,18 +336,18 @@ export async function getServerDiagnostics(): Promise<ServerDiagnostics> {
   return invoke('server_diagnostics');
 }
 
-export async function listUserKeys(targetUsername?: string | null): Promise<UserKeyMetadata[]> {
+export async function listUserKeys(userId?: string | null): Promise<UserKeyMetadata[]> {
   const data = await invoke<{ keys?: UserKeyMetadata[] }>("list_user_keys", {
-    targetUsername: targetUsername ?? null,
+    userId: userId ?? null,
   });
   return data.keys ?? [];
 }
 
 export async function getUserKey(id: string): Promise<UserKeyDetails> {
-  const data = await invoke<UserKeyDetails>("get_user_key", { id });
+  const data = await invoke<Omit<UserKeyDetails, 'id'>>("get_user_key", { id });
   return {
     ...data,
-    id: data.id ?? data.key_id ?? id,
+    id: data.key_id,
   };
 }
 

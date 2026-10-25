@@ -3,9 +3,9 @@ import { invoke } from '@tauri-apps/api/core';
 
 /** Get the avatar task data for a user from the server. */
 export async function getUserAvatar(
-  username: string,
+  userId: string,
 ): Promise<object | null> {
-  return invoke("get_user_avatar", { username });
+  return invoke("get_user_avatar", { userId });
 }
 
 /** Download an avatar file from the server and cache it locally.
@@ -37,10 +37,10 @@ export async function checkCachedAvatar(
 
 /** Set a user's avatar to a specific document ID on the server. */
 export async function setUserAvatar(
-  username: string,
+  userId: string,
   documentId: string,
 ): Promise<boolean> {
-  return invoke("set_user_avatar", { username, documentId });
+  return invoke("set_user_avatar", { userId, documentId });
 }
 
 // ---------------------------------------------------------------------------

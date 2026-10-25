@@ -12,9 +12,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 use zeroize::Zeroizing;
 
-#[cfg(not(target_os = "android"))]
 const SERVICE: &str = "org.crpteam.cfms_client_tauri.github-api";
-#[cfg(not(target_os = "android"))]
 const ACCOUNT: &str = "personal-access-token";
 const MAX_TOKEN_LEN: usize = 4096;
 const STORAGE_UNAVAILABLE: &str = "GitHub credential storage is unavailable on this device.";
@@ -212,130 +210,29 @@ fn clear_backend_for_reset(backend: &dyn CredentialBackend) -> Result<(), String
         .map_err(|()| STORAGE_UNAVAILABLE.to_string())
 }
 
-#[cfg(target_os = "android")]
 fn backend_for_app<R: Runtime>(app: &AppHandle<R>) -> Arc<dyn CredentialBackend> {
-    use tauri::Manager;
-    Arc::new(AndroidBackend {
-        handle: app
-            .state::<crate::AndroidGithubCredentialPlugin<R>>()
-            .handle
-            .clone(),
-    })
+    Arc::new(SystemBackend(crate::secure_store::SecretStore::new(
+        app, SERVICE, ACCOUNT,
+    )))
 }
 
-#[cfg(not(target_os = "android"))]
-fn backend_for_app<R: Runtime>(_app: &AppHandle<R>) -> Arc<dyn CredentialBackend> {
-    Arc::new(SystemBackend)
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-struct SystemBackend;
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl SystemBackend {
-    fn entry() -> Result<keyring::Entry, ()> {
-        keyring::Entry::new(SERVICE, ACCOUNT).map_err(|_| ())
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl CredentialBackend for SystemBackend {
+struct SystemBackend<R: Runtime>(crate::secure_store::SecretStore<R>);
+impl<R: Runtime> CredentialBackend for SystemBackend<R> {
     fn read(&self) -> Result<StoredCredential, ()> {
-        match Self::entry()?.get_password() {
-            Ok(value) => Ok(StoredCredential::Present(Zeroizing::new(value))),
-            Err(keyring::Error::NoEntry) => Ok(StoredCredential::Missing),
+        match self.0.read() {
+            Ok(value) => Ok(value.map_or(StoredCredential::Missing, StoredCredential::Present)),
+            #[cfg(target_os = "android")]
+            Err(error) if error == "publicKey.storageInvalidated" => {
+                Ok(StoredCredential::NeedsAttention)
+            }
             Err(_) => Err(()),
         }
     }
-
-    fn save(&self, token: &str) -> Result<(), ()> {
-        Self::entry()?.set_password(token).map_err(|_| ())
+    fn save(&self, value: &str) -> Result<(), ()> {
+        self.0.save(value).map_err(|_| ())
     }
-
     fn delete(&self) -> Result<(), ()> {
-        match Self::entry()?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(()),
-        }
-    }
-}
-
-#[cfg(target_os = "ios")]
-struct SystemBackend;
-
-#[cfg(target_os = "ios")]
-impl SystemBackend {
-    fn entry() -> Result<keyring_core::Entry, ()> {
-        use keyring_core::api::CredentialStoreApi;
-        use std::collections::HashMap;
-        let modifiers = HashMap::from([("access-policy", "AfterFirstUnlockThisDeviceOnly")]);
-        apple_native_keyring_store::protected::Store::new()
-            .and_then(|store| store.build(SERVICE, ACCOUNT, Some(&modifiers)))
-            .map_err(|_| ())
-    }
-}
-
-#[cfg(target_os = "ios")]
-impl CredentialBackend for SystemBackend {
-    fn read(&self) -> Result<StoredCredential, ()> {
-        match Self::entry()?.get_password() {
-            Ok(value) => Ok(StoredCredential::Present(Zeroizing::new(value))),
-            Err(keyring_core::Error::NoEntry) => Ok(StoredCredential::Missing),
-            Err(_) => Err(()),
-        }
-    }
-
-    fn save(&self, token: &str) -> Result<(), ()> {
-        Self::entry()?.set_password(token).map_err(|_| ())
-    }
-
-    fn delete(&self) -> Result<(), ()> {
-        match Self::entry()?.delete_credential() {
-            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
-            Err(_) => Err(()),
-        }
-    }
-}
-
-#[cfg(target_os = "android")]
-struct AndroidBackend<R: Runtime> {
-    handle: tauri::plugin::PluginHandle<R>,
-}
-
-#[cfg(target_os = "android")]
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AndroidCredentialRead {
-    token: Option<String>,
-    needs_attention: bool,
-}
-
-#[cfg(target_os = "android")]
-impl<R: Runtime> CredentialBackend for AndroidBackend<R> {
-    fn read(&self) -> Result<StoredCredential, ()> {
-        let value = self
-            .handle
-            .run_mobile_plugin::<AndroidCredentialRead>("read", serde_json::json!({}))
-            .map_err(|_| ())?;
-        if value.needs_attention {
-            Ok(StoredCredential::NeedsAttention)
-        } else if let Some(token) = value.token {
-            Ok(StoredCredential::Present(Zeroizing::new(token)))
-        } else {
-            Ok(StoredCredential::Missing)
-        }
-    }
-
-    fn save(&self, token: &str) -> Result<(), ()> {
-        self.handle
-            .run_mobile_plugin::<()>("save", serde_json::json!({ "token": token }))
-            .map_err(|_| ())
-    }
-
-    fn delete(&self) -> Result<(), ()> {
-        self.handle
-            .run_mobile_plugin::<()>("delete", serde_json::json!({}))
-            .map_err(|_| ())
+        self.0.delete().map_err(|_| ())
     }
 }
 

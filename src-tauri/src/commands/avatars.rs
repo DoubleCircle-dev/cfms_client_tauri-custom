@@ -11,14 +11,14 @@
 #[tauri::command]
 pub async fn get_user_avatar(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
 ) -> Result<Option<serde_json::Value>, String> {
     let (conn, auth_username, token) = get_connection_auth(&state).await?;
 
     let resp = send_action_request(
         &conn,
         "get_user_avatar",
-        serde_json::json!({"username": username}),
+        serde_json::json!({"user_id": user_id}),
         &auth_username,
         &token,
     )
@@ -184,13 +184,13 @@ pub async fn check_cached_avatar(
 #[tauri::command]
 pub async fn set_user_avatar(
     state: tauri::State<'_, AppHandleState>,
-    username: String,
+    user_id: String,
     document_id: String,
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
         "set_user_avatar",
-        serde_json::json!({"username": username, "document_id": document_id}),
+        serde_json::json!({"user_id": user_id, "document_id": document_id}),
     )
     .await
 }

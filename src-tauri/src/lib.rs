@@ -12,6 +12,9 @@ mod commands;
 mod github_credentials;
 mod local_data_reset;
 mod localization;
+mod preference_keys;
+mod public_key_auth;
+mod secure_store;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -214,6 +217,7 @@ mod connect_attempt_registry_tests {
 /// The shared application state managed by Tauri and accessible from every
 /// `#[tauri::command]` via `tauri::State<'_, AppHandleState>`.
 pub struct AppHandleState {
+    pub public_keys: Arc<public_key_auth::PublicKeyState>,
     /// Shared in-memory application state (auth, DEK, lockdown, events).
     pub inner: Arc<AppState>,
 
@@ -395,6 +399,7 @@ pub fn run() {
                 github_credentials.begin_reset();
             }
             app.manage(github_credentials);
+            app.manage(preference_keys::PreferenceKeys::default());
 
             let mut log_targets = Vec::new();
             if cfg!(debug_assertions) {
@@ -546,6 +551,7 @@ pub fn run() {
 
             // --- Register managed state ---
             app.manage(AppHandleState {
+                public_keys: Arc::new(public_key_auth::PublicKeyState::default()),
                 inner: state,
                 tasks,
                 upload_tasks,
@@ -689,6 +695,22 @@ pub fn run() {
             commands::get_ca_certificate_status,
             commands::update_ca_certificates,
             commands::login,
+            commands::complete_login_mfa,
+            commands::get_user_authentication,
+            commands::request_escalation,
+            commands::drop_escalation,
+            commands::set_user_auth_policies,
+            commands::register_user_auth_public_key,
+            commands::pick_auth_private_key,
+            commands::release_auth_private_key,
+            commands::login_with_public_key,
+            commands::respond_public_key_interaction,
+            commands::cancel_public_key_authentication,
+            commands::prepare_preference_unlock,
+            commands::unlock_preference_dek,
+            commands::discard_locked_preference_data,
+            commands::update_user_auth_public_key,
+            commands::delete_user_auth_public_key,
             commands::change_password,
             commands::recover_preference_dek,
             commands::logout,

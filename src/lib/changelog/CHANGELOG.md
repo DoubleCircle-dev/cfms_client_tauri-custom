@@ -4,6 +4,25 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.54.0
+**Released on:** 2026-10-24
+
+**Title:** Protocol Version 28
+
+### Added
+- Enhance escalation policy management and add clear escalation functionality
+- Replace username with user ID and implement expandable user ID functionality
+- Implement unified authentication management and settings
+- Implement discard functionality for local encrypted data and update UI components
+- Enhance sign-in options with toggle functionality and recovery help
+- Add authentication management and public key verification components
+- Implement escalation feature with multi-factor authentication
+
+### Maintenance
+- Upgrade deps
+
+--- 
+
 ## v0.53.0
 **Released on:** 2026-10-22
 

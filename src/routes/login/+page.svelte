@@ -24,6 +24,15 @@
   } from "$lib/stores.svelte";
   import {
     login,
+    loginWithPublicKey,
+    cancelPublicKeyAuthentication,
+    releaseAuthPrivateKey,
+    preparePreferenceUnlock,
+    unlockPreferenceDek,
+    discardLockedPreferenceData,
+    type AuthPrivateKeyInfo,
+    type PublicKeyInteraction,
+    completeLoginMfa,
     changePassword,
     recoverPreferenceDek,
     disconnect,
@@ -68,7 +77,7 @@
   import MdOutlinedField from "$lib/components/MdOutlinedField.svelte";
   import ModalFrame from "$lib/components/ModalFrame.svelte";
   import CorruptedPreferenceDialog from "$lib/components/CorruptedPreferenceDialog.svelte";
-  import TwoFactorVerifyDialog from "$lib/components/TwoFactorVerifyDialog.svelte";
+  import AuthenticationDialog from "$lib/components/AuthenticationDialog.svelte";
   import ChangePasswordDialog from "$lib/components/ChangePasswordDialog.svelte";
   import { consumeConnectToLoginTransition, markLoginToConnectTransition } from "$lib/auth-transition";
   import { shouldDeferPostLoginForLockdown } from '$lib/auth-lockdown';
@@ -77,6 +86,19 @@
   import { info } from '@tauri-apps/plugin-log';
   import { openKeyboardShortcutHelp } from '$lib/keyboard';
 
+  import PrivateKeyField from '$lib/components/PrivateKeyField.svelte';
+  import SignInOptions from '$lib/components/SignInOptions.svelte';
+  import PublicKeyVerification from '$lib/components/PublicKeyVerification.svelte';
+  import PreferenceUnlockDialog from '$lib/components/PreferenceUnlockDialog.svelte';
+  import { publicKeyError } from '$lib/public-key-errors';
+
+  let loginMethod = $state<'password' | 'publickey'>('password');
+  let privateKey = $state<AuthPrivateKeyInfo | null>(null);
+  let keyPassphrase = $state('');
+  let publicKeyPending = $state(false);
+  let keyInteraction = $state<string | null>(null);
+  let migrationVisible = $state(false);
+  let migrationResolver: ((unlocked: boolean) => void) | null = null;
   let username = $state("");
   let password = $state("");
   let passwordVisible = $state(false);
@@ -123,6 +145,10 @@
   // JavaScript strings cannot be reliably overwritten. Drop all live references
   // as soon as this route is destroyed to minimize their WebView residency.
   onDestroy(() => {
+    if (publicKeyPending) void cancelPublicKeyAuthentication().catch(() => {});
+    keyPassphrase = '';
+    migrationResolver?.(false);
+    migrationResolver = null;
     password = "";
     pendingPassword = "";
     corruptedPreferenceCurrentPassword = "";
@@ -155,7 +181,16 @@
 
     // Phase 2: "Setting up encryption…"
     loadingPhase = loadingPhases[1];
-    if (runPreferenceDekSetup) {
+    if (loginMethod === 'publickey') {
+      const unlock = await preparePreferenceUnlock();
+      if (unlock === 'password_required') {
+        migrationVisible = true;
+        const unlocked = await new Promise<boolean>((resolve) => { migrationResolver = resolve; });
+        migrationVisible = false;
+        migrationResolver = null;
+        if (!unlocked) { await cancelAuthenticatedSession(); return false; }
+      }
+    } else if (runPreferenceDekSetup) {
       await setupPreferenceDek(currentPassword);
     }
     await new Promise((r) => setTimeout(r, 300));
@@ -173,7 +208,7 @@
     // Phase 4: "Downloading avatar…"
     loadingPhase = loadingPhases[3];
     try {
-      const taskData = await getUserAvatar(user);
+      const taskData = await getUserAvatar(authStore.userId!);
       if (taskData) {
         const path = await downloadAvatar(taskData, user, true);
         if (path) {
@@ -596,16 +631,49 @@
       fieldErrors.username = $t('login.usernameRequired');
       valid = false;
     }
-    if (!password) {
+    if (loginMethod === 'password' && !password) {
       fieldErrors.password = $t('login.passwordRequired');
       valid = false;
     }
+    if (loginMethod === 'publickey' && !privateKey) {
+      fieldErrors.password = $t('publicKey.selectRequired'); valid = false;
+    }
+    if (!valid) void tick().then(() => {
+      if (fieldErrors.username) usernameInput?.focus();
+      else if (loginMethod === 'password') passwordInput?.focus();
+      else document.querySelector<HTMLButtonElement>('.key-picker')?.focus();
+    });
     return valid;
+  }
+
+  let credentialHeight = $state(0);
+  function measureCredential(node: HTMLDivElement) {
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => { credentialHeight = node.getBoundingClientRect().height; });
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
+  }
+
+  function switchLoginMethod(method: 'password' | 'publickey') {
+    if (busy || method === loginMethod) return;
+    password = ''; passwordVisible = false; keyPassphrase = ''; fieldErrors = {};
+    successMessage = null; passwordChangeRequired = false;
+    if (privateKey) void releaseAuthPrivateKey(privateKey.keyRef).catch(() => {});
+    privateKey = null; loginMethod = method;
+  }
+
+  function receiveKeyInteraction(event: PublicKeyInteraction) {
+    if (event.kind === 'select_key') keyInteraction = event.interaction_id;
+  }
+
+  async function cancelKeyLogin() {
+    await cancelPublicKeyAuthentication();
+    keyInteraction = null;
   }
 
   /** Format an error message for display. */
   function formatError(e: unknown): string {
-    if (typeof e === "string" || e instanceof Error) return formatUserFacingError(e);
+    if (typeof e === "string" || e instanceof Error) return publicKeyError(e, $t);
     return $t('login.unknownError');
   }
 
@@ -671,7 +739,7 @@
   }
 
   async function handleLogin() {
-    if (!validate()) return;
+    if (busy || !validate()) return;
 
     busy = true;
     successMessage = null;
@@ -682,14 +750,20 @@
     try {
       await info("Attempting login for user: {username}");
       loginRequestedAt = Date.now();
-      const authResult = await login(username, password);
+      let authResult;
+      if (loginMethod === 'publickey') {
+        publicKeyPending = true;
+        try { authResult = await loginWithPublicKey(username.trim(), privateKey!.keyRef, keyPassphrase, receiveKeyInteraction); }
+        finally { publicKeyPending = false; keyPassphrase = ''; keyInteraction = null; }
+        privateKey = null;
+      } else { authResult = await login(username.trim(), password); }
       await info("Login response received: {authResult}");
 
       // Check if server requires 2FA.
       if (authResult.requires_2fa) {
         authStore.apply(authResult);
         serverStateStore.apply(await getServerState());
-        // Keep password in memory for the 2FA re-submit.
+        // Keep the password only for post-login preference key decryption.
         pendingPassword = password;
         show2faDialog = true;
         return;
@@ -726,9 +800,10 @@
         showChangePassword = true;
       } else if (postLoginStarted) {
         await handlePostLoginFailure(e);
-      } else {
+      } else if (e !== 'publicKey.cancelled') {
         notificationStore.error(formatError(e));
       }
+      if (loginMethod === 'publickey' && e !== 'publicKey.wrongPassphrase') privateKey = null;
     } finally {
       busy = false;
       loadingPhase = "";
@@ -744,6 +819,8 @@
     newPassword: string,
   ): Promise<void> {
     await changePassword(username, oldPassword, newPassword);
+    authStore.clear();
+    pendingPassword = '';
     // Success: close the dialog and let the user sign in with the new password.
     showChangePassword = false;
     passwordChangeRequired = false;
@@ -754,18 +831,25 @@
 
   function handleChangePasswordCancel() {
     showChangePassword = false;
+    void clearAuthSession();
+    authStore.clear();
   }
 
-  /** Callback from TwoFactorVerifyDialog — re-sends login with 2FA code. */
+  /** Exchange the server-issued AUTH token for a completed login. */
   async function handle2faVerify(
-    code: string,
-    isRecoveryCode: boolean,
+    method: string,
+    data: Record<string, import('$lib/api').JsonValue>,
+    onInteraction?: (event: PublicKeyInteraction) => void,
   ): Promise<boolean> {
     let authResult;
     const loginRequestedAt = Date.now();
 
     try {
-      authResult = await login(username, pendingPassword, code);
+      if (method === 'publickey') {
+        publicKeyPending = true;
+        try { authResult = await loginWithPublicKey('', String(data.keyRef), String(data.passphrase), onInteraction ?? (() => {}), true); }
+        finally { publicKeyPending = false; }
+      } else { authResult = await completeLoginMfa(method, data); }
 
       if (authResult.requires_2fa) {
         // Still requires 2FA — shouldn't happen, but handle gracefully.
@@ -776,8 +860,15 @@
         await enterAccountDisabledState(loginRequestedAt, getAccountDisabledReason(e));
         return true;
       }
+      if (isPasswordChangeRequired(e)) {
+        show2faDialog = false;
+        passwordChangeRequired = true;
+        showChangePassword = true;
+        return true;
+      }
       const throttleError = throttledMessage(e);
       if (throttleError) throw new Error(throttleError);
+      if (method === 'publickey') throw e;
       // Let the dialog handle the verification error display.
       return false;
     }
@@ -1032,6 +1123,8 @@
             </span>
             <input
               id="username"
+              aria-invalid={Boolean(fieldErrors.username)}
+              aria-describedby={fieldErrors.username ? 'login-username-error' : undefined}
               type="text"
               data-focus-ring="delegated"
               class="login-text-field__input"
@@ -1046,19 +1139,22 @@
               onkeydown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
-                  passwordInput?.focus();
+                  if (loginMethod === 'password') passwordInput?.focus();
+                  else (event.currentTarget.form?.querySelector('.key-picker') as HTMLButtonElement | null)?.focus();
                 }
               }}
             />
           </MdOutlinedField>
           {#if fieldErrors.username}
-            <p class="text-xs text-md3-error mt-1 ml-1">
+            <p id="login-username-error" role="alert" class="text-xs text-md3-error mt-1 ml-1">
               {fieldErrors.username}
             </p>
           {/if}
         </div>
 
-        <!-- Password -->
+        <div class="login-credential-region" style:height={credentialHeight ? `${credentialHeight}px` : undefined}>
+        <div class="login-credential-content" use:measureCredential>
+        {#if loginMethod === 'password'}
         <div>
           <MdOutlinedField
             inputId="password"
@@ -1070,6 +1166,8 @@
             </span>
             <input
               id="password"
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
               type={passwordVisible ? "text" : "password"}
               data-focus-ring="delegated"
               class="login-text-field__input"
@@ -1092,10 +1190,22 @@
             </button>
           </MdOutlinedField>
           {#if fieldErrors.password}
-            <p class="text-xs text-md3-error mt-1 ml-1">
+            <p id="login-password-error" role="alert" class="text-xs text-md3-error mt-1 ml-1">
               {fieldErrors.password}
             </p>
           {/if}
+          <div class="password-field-actions">
+            <button type="button" class="forgot-password-button" onclick={() => (showForgotPasswordDialog = true)} disabled={busy}>
+              {$t('login.forgotPassword')}
+            </button>
+          </div>
+        </div>
+
+        {:else}
+          <PrivateKeyField bind:selection={privateKey} bind:passphrase={keyPassphrase} disabled={busy} invalid={Boolean(fieldErrors.password)} describedBy={fieldErrors.password ? 'login-key-error' : undefined} />
+          {#if fieldErrors.password}<p id="login-key-error" role="alert" class="text-xs text-md3-error mt-2">{fieldErrors.password}</p>{/if}
+        {/if}
+        </div>
         </div>
 
         <!-- Password change required (4001/4002) — offer in-app change. -->
@@ -1167,49 +1277,22 @@
           {/if}
         </div>
 
-        <!-- Actions row: Disconnect + Login -->
-        <div class="flex gap-3 pt-1">
-          <button
-            type="button"
-            class="py-2.5 px-4 rounded-full font-medium
-                   border border-md3-outline text-md3-on-surface-variant
-                   hover:bg-md3-surface-container-high
-                   disabled:opacity-50 transition-all flex items-center gap-1.5"
-            style="font-family: var(--font-md3-sans);"
-            onclick={handleDisconnect}
-            disabled={busy}
-          >
-            <Icon name="chevronLeft" size="18px" />
-            {$t('login.disconnect')}
-          </button>
-
-          <button
-            type="submit"
-            class="flex-1 py-2.5 px-4 rounded-full font-medium
-                   bg-md3-primary text-md3-on-primary
-                   hover:brightness-110
-                   disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-            style="font-family: var(--font-md3-sans);"
-            disabled={busy}
-          >
-            {#if busy}
-              <ProgressRing tone="inherit" size={18} strokeWidth={2.5} label={$t('common.signingIn')} />
-              {$t('common.signingIn')}
-            {:else}
-              <Icon name="login" size="20px" />
-              {$t('login.login')}
-            {/if}
-          </button>
-        </div>
-
-        <div class="flex justify-center">
-          <button
-            type="button"
-            class="forgot-password-button"
-            onclick={() => (showForgotPasswordDialog = true)}
-            disabled={busy}
-          >
-            {$t('login.forgotPassword')}
+        <button type="submit" class="login-primary-action" disabled={busy || (loginMethod === 'publickey' && privateKey?.encrypted && !keyPassphrase)}>
+          {#if busy}
+            <ProgressRing tone="inherit" size={18} strokeWidth={2.5} label={$t('common.signingIn')} />
+            {$t('common.signingIn')}
+          {:else}
+            {$t('login.login')}
+            <Icon name="login" size="19px" />
+          {/if}
+        </button>
+        {#if publicKeyPending}
+          <button type="button" class="login-cancel" onclick={cancelKeyLogin}>{$t('common.cancel')}</button>
+        {/if}
+        <SignInOptions value={loginMethod} disabled={busy} onchange={switchLoginMethod} />
+        <div class="login-footer-actions">
+          <button type="button" class="login-disconnect" onclick={handleDisconnect} disabled={busy}>
+            <Icon name="chevronLeft" size="16px" />{$t('login.disconnect')}
           </button>
         </div>
       </form>
@@ -1229,12 +1312,27 @@
   </section>
 </div>
 
+{#if keyInteraction}
+  <ModalFrame title={$t('publicKey.keyTitle')} onClose={cancelKeyLogin} maxWidth="max-w-md">
+    <PublicKeyVerification interactionId={keyInteraction} onComplete={(completed) => { if (keyInteraction === completed) keyInteraction = null; }} onCancel={() => { keyInteraction = null; }} />
+  </ModalFrame>
+{/if}
+{#if migrationVisible}
+  <PreferenceUnlockDialog
+    onUnlock={async (oldPassword) => { await unlockPreferenceDek(oldPassword); migrationResolver?.(true); }}
+    onDiscard={async () => { await discardLockedPreferenceData(); migrationResolver?.(true); }}
+    onCancel={() => migrationResolver?.(false)}
+  />
+{/if}
+
 <!-- 2FA Verification Dialog -->
 {#if show2faDialog}
-  <TwoFactorVerifyDialog
+  <AuthenticationDialog
+    title={$t('authentication.mfaTitle')}
     onVerify={handle2faVerify}
     onCancel={handle2faCancel}
-    method={authStore.twofaMethod}
+    methods={authStore.authenticationMethods}
+    allowPublicKey
   />
 {/if}
 
@@ -1258,7 +1356,6 @@
     <div class="space-y-5 p-5">
       <div class="space-y-4 text-sm leading-6 text-md3-on-surface-variant">
         <p>{$t('dialog.forgotPassword.contactAdmin')}</p>
-        <p>{$t('dialog.forgotPassword.encryptionWarning')}</p>
       </div>
 
       <div class="flex justify-end">
@@ -1274,9 +1371,15 @@
 {/if}
 
 <style>
+  .password-field-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.25rem;
+  }
+
   .forgot-password-button {
     border: 0;
-    padding: 0.375rem 0.75rem;
+    padding: 0.375rem 0;
     color: var(--explorer-accent);
     background: transparent;
     font-family: var(--font-md3-sans);
@@ -1308,8 +1411,29 @@
   }
 
   .login-form-card {
-    background: var(--explorer-surface);
+    background: transparent;
+    border: 0;
+    padding: 0;
   }
+  .login-credential-region { transition: height 180ms var(--motion-easing-standard, ease-out); }
+  .login-credential-content { padding: 2px 0; }
+  .auth-panel { max-height: calc(100dvh - var(--app-titlebar-height, 0px)); overflow-y: auto; overscroll-behavior-y: contain; }
+  @media (max-height: 800px) { .auth-shell .auth-panel { padding-top: 1.5rem; padding-bottom: 1.5rem; } }
+  @media (prefers-reduced-motion: reduce) { .login-credential-region { transition: none; } }
+  .login-primary-action { display: flex; align-items: center; justify-content: center; gap: 0.625rem; width: 100%; min-height: 44px; margin-top: 1.5rem; border: 0; border-radius: 8px; background: var(--explorer-accent); color: var(--color-md3-on-primary); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: filter 140ms ease; }
+  .login-primary-action:hover:not(:disabled) { filter: brightness(1.08); }
+  .login-primary-action:disabled { opacity: 0.5; cursor: default; }
+  .login-cancel { display: block; margin: 0.5rem auto; padding: 0.5rem 1rem; border: 0; background: transparent; color: var(--explorer-text-muted); cursor: pointer; }
+  .login-form-card :global(.sign-in-options) { padding-top: 0.5rem; }
+  .login-footer-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: 0.75rem; }
+  .login-disconnect { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.4rem 0; border: 0; background: transparent; color: var(--explorer-text-muted); font-size: 0.75rem; cursor: pointer; }
+  .login-disconnect:hover:not(:disabled) { color: var(--explorer-text); }
+  .login-disconnect:disabled { opacity: 0.5; cursor: default; }
+  @media (pointer: coarse) {
+    .login-disconnect, .forgot-password-button { min-height: 44px; }
+    .login-primary-action { min-height: 48px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .login-primary-action { transition: none; } }
 
   .login-text-field__leading-icon {
     display: inline-flex;
@@ -1497,7 +1621,8 @@
     display: flex;
     min-height: 100%;
     flex: 0 0 100%;
-    align-items: center;
+    /* Keep short forms centered while leaving overflowing forms reachable. */
+    align-items: safe center;
     justify-content: center;
     padding: 3rem 1.25rem;
     background:
@@ -1512,7 +1637,7 @@
   .auth-form-stage {
     display: grid;
     width: 100%;
-    max-width: 360px;
+    max-width: 336px;
     align-items: center;
   }
 
@@ -1646,6 +1771,7 @@
   <ChangePasswordDialog
     {username}
     initialOldPassword={password}
+    requireOldPassword={false}
     onSubmit={handleChangePassword}
     onCancel={handleChangePasswordCancel}
   />

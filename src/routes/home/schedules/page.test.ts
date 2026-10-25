@@ -54,7 +54,7 @@ const taskType = {
 
 function signIn(permissions: string[]) {
   authStore.apply({
-    username: 'admin',
+    username: 'admin', user_id: 'aabbccdd-0000-4000-8000-000000000002',
     nickname: 'Administrator',
     has_token: true,
     token_exp: 1_900_000_000,

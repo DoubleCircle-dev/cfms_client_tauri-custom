@@ -42,11 +42,10 @@ pub async fn run(state: Arc<AppState>, mut shutdown_rx: watch::Receiver<bool>) {
 
 /// A single tick of the refresh logic.
 async fn tick(state: &AppState) {
+    let generation = state
+        .auth_generation
+        .load(std::sync::atomic::Ordering::SeqCst);
     // Check if we have a valid session.
-    if state.pending_2fa.load(std::sync::atomic::Ordering::SeqCst) {
-        return;
-    }
-
     let (username, token, token_exp) = {
         let username = state.username.read().await;
         let token = state.token.read().await;
@@ -76,6 +75,14 @@ async fn tick(state: &AppState) {
         tracing::info!("Token expires in {remaining}s — refreshing…");
         match try_refresh(state, &username, &token).await {
             Ok((new_token, new_exp)) => {
+                let _update = state.auth_update.lock().await;
+                if state
+                    .auth_generation
+                    .load(std::sync::atomic::Ordering::SeqCst)
+                    != generation
+                {
+                    return;
+                }
                 let mut t = state.token.write().await;
                 let mut e = state.token_exp.write().await;
                 *t = Some(new_token);
@@ -161,13 +168,11 @@ async fn try_refresh(
 
     // Extract new token and expiry from response data.
     let mut data = response.data;
-    let new_token = match data.get_mut("token").map(std::mem::take) {
-        Some(serde_json::Value::String(token)) => SecretString::new(token),
-        _ => return Err("missing token in response".to_string()),
-    };
-    let new_exp = data["exp"].as_i64().unwrap_or_else(|| unix_now() + 3600); // default 1h
-
-    Ok((new_token, new_exp))
+    let issued = crate::authentication::IssuedToken::from_response(
+        &mut data,
+        crate::authentication::GENERAL,
+    )?;
+    Ok((issued.secret, issued.claims.exp.floor() as i64))
 }
 
 fn unix_now() -> i64 {

@@ -30,7 +30,7 @@ vi.mock('svelte-i18n', () => ({
 beforeEach(() => {
   authStore.clear();
   authStore.apply({
-    username: 'alice',
+    username: 'alice', user_id: 'aabbccdd-0000-4000-8000-000000000001',
     nickname: 'Alice',
     has_token: true,
     token_exp: 1_900_000_000,
@@ -85,6 +85,7 @@ describe('settings overview', () => {
     });
     expect(screen.getByText('settings.overview.status.connected')).toBeTruthy();
     expect(screen.getByText('settings.overview.status.twoFactorEnabled')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /authManagement\.title/ }).textContent).toContain('settings.overview.status.twoFactorEnabled');
     expect(screen.getByText('settings.overview.status.screenProtectionEnabled')).toBeTruthy();
     expect(screen.getByText('settings.overview.status.appLockEnabled')).toBeTruthy();
   });

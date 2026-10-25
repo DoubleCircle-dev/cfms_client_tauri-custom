@@ -118,7 +118,7 @@
 
   function usersToOptions(users: ManagedUser[]): EntityOption[] {
     return users.map((user) => ({
-      id: user.username,
+      id: user.user_id,
       label: user.username,
       description: user.nickname ?? '',
     }));
@@ -134,7 +134,7 @@
 
   function selectEntity(option: EntityOption) {
     selectedEntity = option;
-    entityQuery = option.id;
+    entityQuery = option.label;
     formError = null;
   }
 
@@ -256,7 +256,7 @@
               if (canSearchCurrentEntity) searchEntities();
             }
           }}
-          placeholder={entityType === 'user' ? $t('files.usernamePlaceholder') : $t('files.groupNamePlaceholder')}
+          placeholder={entityType === 'user' ? $t(canSearchCurrentEntity ? 'files.usernamePlaceholder' : 'manage.userId') : $t('files.groupNamePlaceholder')}
           disabled={saving}
         />
         {#if canSearchCurrentEntity}

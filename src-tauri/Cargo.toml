@@ -39,6 +39,7 @@ base64ct.workspace = true
 hex = "0.4.3"
 tempfile.workspace = true
 sha2.workspace = true
+base64ct.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
 semver.workspace = true
@@ -74,3 +75,5 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [dev-dependencies]
 tempfile.workspace = true
+futures-util.workspace = true
+tokio-tungstenite.workspace = true

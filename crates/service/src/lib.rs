@@ -15,8 +15,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod authentication;
 pub mod db;
 pub mod extensions;
+pub mod public_key_auth;
 pub mod scan;
 pub mod sensitive;
 pub mod service;

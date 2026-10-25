@@ -14,20 +14,22 @@
 
   let {
     username = authStore.username ?? '',
+    userId = authStore.userId ?? '',
     requireSuperPermission = false,
     onClose,
   }: {
     username?: string;
+    userId?: string;
     requireSuperPermission?: boolean;
     onClose: () => void;
   } = $props();
 
   let saving = $state(false);
-  const isCurrentUser = $derived(username === authStore.username);
+  const isCurrentUser = $derived(userId === authStore.userId);
   const hasPermission = $derived(
     requireSuperPermission
       ? canSetOtherUserAvatar(authStore.permissions)
-      : canSetAvatarFor(authStore.permissions, authStore.username, username),
+      : canSetAvatarFor(authStore.permissions, authStore.userId, userId),
   );
   const title = $derived(
     isCurrentUser
@@ -45,7 +47,7 @@
   });
 
   async function selectAvatar(document: ServerDocumentEntry) {
-    if (!username || saving) return;
+    if (!userId || saving) return;
     if (!hasPermission) {
       onClose();
       return;
@@ -53,11 +55,11 @@
     saving = true;
 
     try {
-      const success = await setUserAvatar(username, document.id);
+      const success = await setUserAvatar(userId, document.id);
       if (!success) throw new Error($t('avatar.setFailed'));
 
       if (isCurrentUser) {
-        const taskData = await getUserAvatar(username);
+        const taskData = await getUserAvatar(userId);
         if (taskData) {
           const path = await downloadAvatar(taskData, username, true);
           if (path) authStore.avatarPath = path;
