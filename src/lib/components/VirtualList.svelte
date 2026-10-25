@@ -1,5 +1,5 @@
 <script lang="ts" generics="Item">
-  import { tick, untrack, type Snippet } from 'svelte';
+  import { onMount, tick, untrack, type Snippet } from 'svelte';
   import { createVirtualizer, type VirtualItem } from '@tanstack/svelte-virtual';
 
   type ItemKey = string | number;
@@ -22,7 +22,7 @@
     initialHeight = DEFAULT_INITIAL_HEIGHT,
     onScroll,
     keyboardNavigation = false,
-    keyboardTargetSelector = 'button, [tabindex]',
+    keyboardTargetSelector = 'button, fluent-button, [tabindex]',
     children,
   }: {
     items: Item[];
@@ -73,6 +73,20 @@
     }));
   });
   const listHeight = $derived(virtualized ? $rowVirtualizer.getTotalSize() : 0);
+
+  onMount(() => {
+    let mounted = true;
+    const measure = () => {
+      if (!mounted || !virtualized) return;
+      $rowVirtualizer.measure();
+    };
+    void document.fonts?.ready.then(measure);
+    document.fonts?.addEventListener('loadingdone', measure);
+    return () => {
+      mounted = false;
+      document.fonts?.removeEventListener('loadingdone', measure);
+    };
+  });
 
   $effect(() => {
     const count = rowCount;

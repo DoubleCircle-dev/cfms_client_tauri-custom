@@ -670,7 +670,7 @@
     color: var(--color-md3-on-primary);
     background: var(--color-md3-primary);
     box-shadow: var(--explorer-shadow);
-    font-size: 0.8rem;
+    font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
   }

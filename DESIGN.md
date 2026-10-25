@@ -14,27 +14,27 @@ colors:
   dark-muted: "#d6d6d6"
 typography:
   display:
-    fontFamily: "Segoe UI Variable, Segoe UI, system-ui, Microsoft YaHei UI, CFMS Noto Sans SC Subset, sans-serif"
+    fontFamily: "Noto Sans, Noto Sans SC, sans-serif"
     fontSize: "28px"
     fontWeight: 600
     lineHeight: "36px"
   headline:
-    fontFamily: "Segoe UI Variable, Segoe UI, system-ui, Microsoft YaHei UI, CFMS Noto Sans SC Subset, sans-serif"
+    fontFamily: "Noto Sans, Noto Sans SC, sans-serif"
     fontSize: "20px"
     fontWeight: 600
     lineHeight: "26px"
   title:
-    fontFamily: "Segoe UI Variable, Segoe UI, system-ui, Microsoft YaHei UI, CFMS Noto Sans SC Subset, sans-serif"
+    fontFamily: "Noto Sans, Noto Sans SC, sans-serif"
     fontSize: "16px"
     fontWeight: 600
     lineHeight: "22px"
   body:
-    fontFamily: "Segoe UI Variable, Segoe UI, system-ui, Microsoft YaHei UI, CFMS Noto Sans SC Subset, sans-serif"
+    fontFamily: "Noto Sans, Noto Sans SC, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: "20px"
   label:
-    fontFamily: "Segoe UI Variable, Segoe UI, system-ui, Microsoft YaHei UI, CFMS Noto Sans SC Subset, sans-serif"
+    fontFamily: "Noto Sans, Noto Sans SC, sans-serif"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: "16px"
@@ -70,19 +70,23 @@ components:
 
 CFMS uses Fluent 2 with the calm hierarchy and working density of Windows 11 applications. It is an operational interface for authorized confidential-file work: familiar controls, explicit security feedback, keyboard navigation and readable information lead.
 
-All platforms share Fluent. Native fonts, safe areas and input density adapt to the device; Android does not switch back to Material. Light, dark and system preferences remain user-controlled. Use pinned Fluent UI Web Components, retaining native/custom controls when sensitive data or established behavior requires them.
+All platforms share Fluent and locally bundled Noto typography. Safe areas and input density adapt to the device; Android does not switch back to Material. Light, dark and system preferences remain user-controlled. Use pinned Fluent UI Web Components, retaining native/custom controls when sensitive data or established behavior requires them.
 
-Phase one establishes the theme, shared controls, system icons, connection/sign-in and application shell. Complex file, task, administration and settings pages inherit the foundations but await individual migration. Inherited colors do not constitute a completed page redesign.
+The shared foundations, authentication, shell and business surfaces use Fluent. File management, transfers, schedules, settings, administration, recovery, update and reading surfaces share the same control geometry, typography and semantic states. Complex tables, menus and editors retain their established interactions. See FLUENT-MIGRATION.md for the implementation inventory and validation limits.
 
 ## Colors
 
-The runtime theme module in src/lib/fluent is the authority. Extend the pinned Fluent token themes with operational blue/cyan brand states, Windows-like neutral surfaces and native fonts. Both themes define hover, pressed, selected and disabled states. Use semantic variables such as --colorNeutralForeground1, --colorNeutralBackground1, --colorBrandBackground and --colorStrokeFocus2.
+The runtime theme module in src/lib/fluent is the authority. Extend the pinned Fluent token themes with operational blue/cyan brand states, Windows-like neutral surfaces and bundled Noto fonts. Both themes define hover, pressed, selected and disabled states. Use semantic variables such as --colorNeutralForeground1, --colorNeutralBackground1, --colorBrandBackground and --colorStrokeFocus2.
 
 The --color-md3-* and --explorer-* names are migration aliases only, never an independent palette. New shared controls use Fluent tokens. Destructive actions have dedicated tokens. Distinguish errors, warnings, disabled and selected states without color alone. Accent identifies focus, selection, links and primary actions; the circular connection action is the deliberate fluid-color exception.
 
 ## Typography
 
-Use Segoe UI Variable / Segoe UI on Windows, native system UI fonts elsewhere, system Chinese fonts and bundled Noto Sans SC fallback. Do not distribute Segoe files. Standard UI is sans-serif; established long-form reading may retain the bundled serif. Technical values may use the existing JetBrains Mono stack.
+Use locally bundled Noto Sans followed by Noto Sans SC for sans-serif text on every platform. Use Noto Serif followed by Noto Serif SC at every existing serif call site, including headings, lock-screen copy and reading views; do not remove these exceptions when normalizing UI typography. Technical values use JetBrains Mono, with Noto Sans SC for Chinese characters. Generic sans-serif, serif and monospace families are final fallbacks only.
+
+The font stacks are declared in the Fluent theme module and emitted into the generated CSS. Fluent base/numeric tokens, Tailwind font utilities and legacy font aliases resolve to these same stacks. In particular, --font-md3-serif and --font-cfms-reading resolve to --font-cfms-serif, not the sans-serif base.
+
+Fonts ship as local variable WOFF2 slices covering weights 400–800. Preserve unicode ranges for dynamic filenames, user names and server content; never limit coverage to translation strings. The build-time font asset script is the only downloader. Ship the OFL license for each family and make no runtime font CDN requests.
 
 Use the 12/16, 14/20, 16/22, 20/26 and 28/36 pixel ramp. Default text is regular 14/20; semibold supplies hierarchy. Touch inputs use 16px. Prefer sentence case, baseline alignment and restrained tracking.
 
@@ -114,6 +118,8 @@ Use 4px corners for controls, 8px for content and 12px for large modal/flyout su
 - Preserve ModalFrame, complex menus and file tables where they encode focus, resizing or business behavior. Restyle shared surfaces rather than replacing behavior for appearance alone.
 - One owner paints each focus indicator. Native composites use data-focus-ring="delegated"; Fluent owns its internal focus. Shortcuts respect shadow-boundary editable targets and modal loops include enabled custom controls.
 - Ordinary controls use fill/stroke/pressed feedback rather than Material ripples or pronounced spring bounce. State changes generally take 100–200ms; floating layers 200–300ms. Preserve authentication image push/retreat and panel choreography at 600ms, triggered only for route transitions. Honor app/OS reduced motion, including shadow-root animations.
+- Shared settings groups use consistent 8px content surfaces, headings, rows and 4px fields. Business content stays opaque. Existing tab strips scroll horizontally in narrow windows. File rows use one density value for rendering, virtualization, selection and keyboard anchoring: 40px desktop and 48px coarse pointer.
+- Keep styles for adapted button hosts local to their owner through data-fluent-owner. Shared button geometry, icon/text spacing, tone and focus behavior belong in the adapter; generic names such as primary-action must not style buttons in other dialogs. Boolean icon-only is absent for labelled actions.
 
 ## Do's and Don'ts
 

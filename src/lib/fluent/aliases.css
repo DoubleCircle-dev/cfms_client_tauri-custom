@@ -39,8 +39,11 @@
   --radius-md3-button: var(--borderRadiusMedium);
   --radius-md3-dialog: var(--borderRadius2XLarge);
   --font-md3-sans: var(--fontFamilyBase);
-  --font-md3-serif: var(--fontFamilyBase);
-  --font-cfms-reading: "CFMS Noto Serif SC Subset", "Noto Serif SC", "Source Han Serif SC", serif;
+  --font-md3-serif: var(--font-cfms-serif);
+  --font-cfms-reading: var(--font-cfms-serif);
+  --font-sans: var(--fontFamilyBase);
+  --font-serif: var(--font-cfms-serif);
+  --font-mono: var(--fontFamilyMonospace);
   --font-md3-mono: var(--fontFamilyMonospace);
 }
 

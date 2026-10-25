@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import {
     listGroups,
@@ -201,7 +202,7 @@
 
 <div class="flex h-full min-h-0 max-h-[78vh] flex-col overflow-hidden">
   <div class="min-h-0 flex-1 overflow-auto p-5">
-    <div class="mb-5 rounded-lg border border-md3-outline/70 bg-md3-surface-container-high/45 px-4 py-3">
+    <div class="mb-5 rounded-lg border border-md3-outline/70 bg-md3-surface-container-high px-4 py-3">
       <div class="flex items-center gap-2 text-xs font-medium uppercase text-md3-on-surface-variant">
         <Icon name={targetType === 'document' ? 'filePresent' : 'folder'} size="16px" />
         {$t('files.authorizeTarget')}
@@ -225,29 +226,31 @@
       </div>
 
       <div class="grid grid-cols-2 gap-2 sm:w-max">
-        <button
+        <FluentButton data-fluent-owner="lib-components-authorize-access-dialog"
           type="button"
-          class="choice-button {entityType === 'user' ? 'choice-button-active' : ''}"
           onclick={() => setEntityType('user')}
           disabled={saving}
+          appearance="subtle"
+          class={"choice-button " + (entityType === 'user' ? 'choice-button-active' : '')}
         >
           <Icon name="accountCircle" size="18px" />
           {$t('files.entityUser')}
-        </button>
-        <button
+        </FluentButton>
+        <FluentButton data-fluent-owner="lib-components-authorize-access-dialog"
           type="button"
-          class="choice-button {entityType === 'group' ? 'choice-button-active' : ''}"
           onclick={() => setEntityType('group')}
           disabled={saving}
+          appearance="subtle"
+          class={"choice-button " + (entityType === 'group' ? 'choice-button-active' : '')}
         >
           <Icon name="groups" size="18px" />
           {$t('files.entityGroup')}
-        </button>
+        </FluentButton>
       </div>
 
       <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
         <input
-          class="field"
+          class="cfms-native-field field"
           bind:value={entityQuery}
           oninput={handleEntityInput}
           onkeydown={(event) => {
@@ -260,11 +263,12 @@
           disabled={saving}
         />
         {#if canSearchCurrentEntity}
-          <button
+          <FluentButton data-fluent-owner="lib-components-authorize-access-dialog"
             type="button"
-            class="filled-button"
             onclick={searchEntities}
             disabled={saving || searching}
+            appearance="subtle"
+            class="filled-button"
           >
             {#if searching}
               <ProgressRing size={17} strokeWidth={2.4} label={$t('common.loadingEllipsis')} />
@@ -272,12 +276,12 @@
               <Icon name="search" size="17px" />
             {/if}
             {$t('files.searchEntity')}
-          </button>
+          </FluentButton>
         {/if}
       </div>
 
       {#if !canSearchCurrentEntity}
-        <div class="inline-flex items-start gap-2 rounded-lg border border-md3-outline/70 bg-md3-surface-container/55 px-3 py-2 text-xs text-md3-on-surface-variant">
+        <div class="inline-flex items-start gap-2 rounded-lg border border-md3-outline/70 bg-md3-surface-container px-3 py-2 text-xs text-md3-on-surface-variant">
           <Icon name="info" size="16px" />
           <span>{$t('files.authorizeNoListPermission')}</span>
         </div>
@@ -285,7 +289,7 @@
 
       {#if canSearchCurrentEntity && (entityResults.length > 0 || searchCompleted)}
         <div class="overflow-hidden rounded-lg border border-md3-outline">
-          <div class="border-b border-md3-outline bg-md3-surface-container-high/45 px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
+          <div class="border-b border-md3-outline bg-md3-surface-container-high px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
             {$t('files.searchResults')}
           </div>
           {#if entityResults.length === 0}
@@ -295,11 +299,12 @@
           {:else}
             <div class="max-h-44 overflow-auto">
               {#each entityResults as option (option.id)}
-                <button
+                <FluentButton data-fluent-owner="lib-components-authorize-access-dialog"
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-md3-primary-container/20"
                   onclick={() => selectEntity(option)}
                   disabled={saving}
+                  appearance="outline"
+                  class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-md3-primary-container/20"
                 >
                   <Icon name={entityType === 'user' ? 'accountCircle' : 'groups'} size="18px" />
                   <span class="min-w-0">
@@ -311,7 +316,7 @@
                   {#if selectedEntity?.id === option.id}
                     <Icon name="checkCircle" size="18px" />
                   {/if}
-                </button>
+                </FluentButton>
               {/each}
             </div>
           {/if}
@@ -330,16 +335,17 @@
       </div>
       <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
         {#each accessTypeOptions as accessType}
-          <button
+          <FluentButton data-fluent-owner="lib-components-authorize-access-dialog"
             type="button"
-            class="access-button {accessTypes.has(accessType) ? 'access-button-active' : ''}"
             onclick={() => toggleAccessType(accessType)}
             disabled={saving}
             aria-pressed={accessTypes.has(accessType)}
+            appearance="subtle"
+            class={"access-button " + (accessTypes.has(accessType) ? 'access-button-active' : '')}
           >
             <Icon name={accessIcon(accessType)} size="18px" />
             {$t(`files.operation.${accessType}`)}
-          </button>
+          </FluentButton>
         {/each}
       </div>
     </section>
@@ -358,28 +364,28 @@
           {$t('files.authorizationStartDate')}
           <span class="date-field">
             <Icon name="calendarToday" size="17px" />
-            <input type="date" data-focus-ring="delegated" bind:value={startDate} disabled={saving} />
+            <input class="cfms-native-field" type="date" data-focus-ring="delegated" bind:value={startDate} disabled={saving} />
           </span>
         </label>
         <label class="field-label">
           {$t('files.authorizationStartTime')}
           <span class="date-field">
             <Icon name="accessTime" size="17px" />
-            <input type="time" data-focus-ring="delegated" bind:value={startTime} disabled={saving} />
+            <input class="cfms-native-field" type="time" data-focus-ring="delegated" bind:value={startTime} disabled={saving} />
           </span>
         </label>
         <label class="field-label">
           {$t('files.authorizationEndDate')}
           <span class="date-field">
             <Icon name="calendarToday" size="17px" />
-            <input type="date" data-focus-ring="delegated" bind:value={endDate} disabled={saving} />
+            <input class="cfms-native-field" type="date" data-focus-ring="delegated" bind:value={endDate} disabled={saving} />
           </span>
         </label>
         <label class="field-label">
           {$t('files.authorizationEndTime')}
           <span class="date-field">
             <Icon name="accessTime" size="17px" />
-            <input type="time" data-focus-ring="delegated" bind:value={endTime} disabled={saving} />
+            <input class="cfms-native-field" type="time" data-focus-ring="delegated" bind:value={endTime} disabled={saving} />
           </span>
         </label>
       </div>
@@ -413,13 +419,13 @@
 </div>
 
 <style>
-  .choice-button,
-  .access-button,
-  .filled-button {
+  :global(.choice-button[data-fluent-owner="lib-components-authorize-access-dialog"]),
+  :global(.access-button[data-fluent-owner="lib-components-authorize-access-dialog"]),
+  :global(.filled-button[data-fluent-owner="lib-components-authorize-access-dialog"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem;
+    gap: 8px;
     transition:
       background-color 150ms ease,
       border-color 150ms ease,
@@ -427,46 +433,46 @@
       filter 150ms ease;
   }
 
-  .choice-button,
-  .access-button {
+  :global(.choice-button[data-fluent-owner="lib-components-authorize-access-dialog"]),
+  :global(.access-button[data-fluent-owner="lib-components-authorize-access-dialog"]) {
     min-height: 2.45rem;
     border: 1px solid var(--color-md3-outline);
-    border-radius: 0.5rem;
+    border-radius: var(--borderRadiusMedium);
     color: var(--color-md3-on-surface-variant);
     padding: 0.55rem 0.85rem;
-    font-size: 0.875rem;
+    font-size: 14px;
   }
 
-  .choice-button:hover,
-  .access-button:hover {
+  :global(.choice-button[data-fluent-owner="lib-components-authorize-access-dialog"]):hover,
+  :global(.access-button[data-fluent-owner="lib-components-authorize-access-dialog"]:hover) {
     background: color-mix(in srgb, var(--color-md3-primary-container) 34%, transparent);
   }
 
-  .choice-button-active,
-  .access-button-active {
+  :global(.choice-button-active[data-fluent-owner="lib-components-authorize-access-dialog"]),
+  :global(.access-button-active[data-fluent-owner="lib-components-authorize-access-dialog"]) {
     border-color: transparent;
     background: var(--color-md3-primary-container);
     color: var(--color-md3-on-primary-container);
   }
 
-  .filled-button {
+  :global(.filled-button[data-fluent-owner="lib-components-authorize-access-dialog"]) {
     min-height: 2.35rem;
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     background: var(--color-md3-primary);
     color: var(--color-md3-on-primary);
     padding: 0.5rem 1rem;
-    font-size: 0.875rem;
+    font-size: 14px;
     font-weight: 500;
   }
 
   .field {
     min-height: 2.35rem;
-    border-radius: 0.5rem;
+    border-radius: var(--borderRadiusMedium);
     border: 1px solid var(--color-md3-outline);
     background: var(--color-md3-field);
     color: var(--color-md3-on-surface);
     padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
+    font-size: 14px;
     outline: none;
     transition:
       border-color 150ms ease,
@@ -480,9 +486,9 @@
 
   .field-label {
     display: grid;
-    gap: 0.4rem;
+    gap: 8px;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.8125rem;
+    font-size: 12px;
   }
 
   .date-field {
@@ -490,9 +496,9 @@
     min-height: 2.35rem;
     grid-template-columns: auto 1fr;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     border: 1px solid var(--color-md3-outline);
-    border-radius: 0.5rem;
+    border-radius: var(--borderRadiusMedium);
     background: var(--color-md3-field);
     color: var(--color-md3-on-surface-variant);
     padding: 0 0.75rem;
@@ -504,7 +510,7 @@
     background: transparent;
     color: var(--color-md3-on-surface);
     color-scheme: inherit;
-    font-size: 0.875rem;
+    font-size: 14px;
     outline: none;
   }
 
@@ -515,14 +521,14 @@
   }
 
   .date-field input::-webkit-calendar-picker-indicator:hover {
-    filter: invert(96%) sepia(8%) saturate(240%) hue-rotate(177deg) brightness(102%) contrast(95%);
+    filter: none;
   }
 
-  .choice-button:disabled,
-  .access-button:disabled,
-  .filled-button:disabled,
-  .field:disabled,
-  .date-field input:disabled {
+  :global(.choice-button[data-fluent-owner="lib-components-authorize-access-dialog"]):is(:disabled, [disabled]),
+  :global(.access-button[data-fluent-owner="lib-components-authorize-access-dialog"]:is(:disabled, [disabled])),
+  :global(.filled-button[data-fluent-owner="lib-components-authorize-access-dialog"]:is(:disabled, [disabled])),
+  .field:is(:disabled, [disabled]),
+  .date-field input:is(:disabled, [disabled]) {
     cursor: not-allowed;
     opacity: 0.55;
   }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { goto } from '$app/navigation';
   import { tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
@@ -123,17 +124,18 @@
       </div>
 
       {#if !editingNickname}
-        <button
+        <FluentButton data-fluent-owner="routes-home-settings-account-page"
           type="button"
-          class="action-button action-button--secondary identity-edit-button"
           title={$t('settings.account.editNickname')}
           aria-label={$t('settings.account.editNickname')}
           disabled={!authStore.isLoggedIn || !authStore.username}
           onclick={() => void beginNicknameEdit()}
+          appearance="subtle"
+          class="action-button action-button--secondary identity-edit-button"
         >
           <Icon name="edit" size="18px" />
           <span>{$t('settings.account.editNickname')}</span>
-        </button>
+        </FluentButton>
       {/if}
     </div>
 
@@ -159,7 +161,7 @@
               id="account-nickname-input"
               bind:this={nicknameInputElement}
               bind:value={nicknameInput}
-              class="text-field text-field--counted"
+              class="cfms-native-field text-field text-field--counted"
               class:text-field--error={nicknameTooLong}
               type="text"
               name="nickname"
@@ -191,23 +193,25 @@
         </div>
 
         <div class="nickname-editor__actions">
-          <button
+          <FluentButton data-fluent-owner="routes-home-settings-account-page"
             type="button"
-            class="action-button action-button--secondary"
             title={$t('common.cancel')}
             aria-label={$t('common.cancel')}
             disabled={nicknameBusy}
             onclick={cancelNicknameEdit}
+            appearance="subtle"
+            class="action-button action-button--secondary"
           >
             <Icon name="close" size="18px" />
             <span>{$t('common.cancel')}</span>
-          </button>
-          <button
+          </FluentButton>
+          <FluentButton data-fluent-owner="routes-home-settings-account-page"
             type="submit"
-            class="action-button action-button--primary"
             title={$t(nicknameBusy ? 'common.saving' : 'common.save')}
             aria-label={$t(nicknameBusy ? 'common.saving' : 'common.save')}
             disabled={!canSaveNickname}
+            appearance="subtle"
+            class="action-button action-button--primary"
           >
             {#if nicknameBusy}
               <ProgressRing size={17} strokeWidth={2.2} label={$t('common.saving')} tone="inherit" />
@@ -215,7 +219,7 @@
               <Icon name="check" size="18px" />
             {/if}
             <span>{$t(nicknameBusy ? 'common.saving' : 'common.save')}</span>
-          </button>
+          </FluentButton>
         </div>
       </form>
     {/if}
@@ -223,14 +227,19 @@
 
   <section class="account-section authentication-link">
     <div><h2>{$t('authManagement.title')}</h2><p>{$t('authManagement.description')}</p></div>
-    <button type="button" class="action-button action-button--secondary" onclick={() => goto('/home/settings/authentication')}><Icon name="passkey" size="18px" />{$t('authManagement.title')}</button>
+    <FluentButton data-fluent-owner="routes-home-settings-account-page"
+      type="button"
+      onclick={() => goto('/home/settings/authentication')}
+      appearance="subtle"
+      class="action-button action-button--secondary"
+    ><Icon name="passkey" size="18px" />{$t('authManagement.title')}</FluentButton>
   </section>
   </div>
 </div>
 
 <style>
   .account-settings-page {
-    gap: 1rem;
+    gap: 16px;
   }
 
   .account-sections {
@@ -250,7 +259,7 @@
     min-width: 0;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.85rem;
+    gap: 12px;
     padding: 0.9rem 0;
   }
 
@@ -271,7 +280,7 @@
   .identity-copy h2 {
     overflow: hidden;
     color: var(--color-md3-on-surface);
-    font: 700 1.08rem/1.28 var(--font-md3-sans);
+    font: 700 16px/22px var(--font-md3-sans);
     letter-spacing: -0.012em;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -281,7 +290,7 @@
   .identity-groups {
     overflow: hidden;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.74rem;
+    font-size: 12px;
     line-height: 1.45;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -294,7 +303,7 @@
   .identity-groups {
     display: flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 4px;
     margin-top: 0.35rem !important;
   }
 
@@ -307,7 +316,7 @@
     display: grid;
     grid-template-columns: 7.5rem minmax(0, 1fr) auto;
     align-items: start;
-    gap: 0.85rem;
+    gap: 12px;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
     padding: 0.9rem 0 1rem;
   }
@@ -317,7 +326,7 @@
     display: flex;
     align-items: center;
     color: var(--color-md3-on-surface);
-    font: 650 0.8rem/1.3 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
   }
 
   .nickname-editor__field {
@@ -332,11 +341,11 @@
     width: 100%;
     min-height: 42px;
     border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-medium, 8px);
+    border-radius: var(--borderRadiusMedium);
     padding: 0.58rem 0.75rem;
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-high);
-    font: 400 0.84rem/1.35 var(--font-md3-sans);
+    font: 400 14px/20px var(--font-md3-sans);
     transition:
       border-color var(--motion-duration-short3) var(--motion-easing-standard),
       background-color var(--motion-duration-short3) var(--motion-easing-standard),
@@ -351,7 +360,7 @@
     border-color: var(--color-md3-error);
   }
 
-  .text-field:disabled {
+  .text-field:is(:disabled, [disabled]) {
     cursor: not-allowed;
     opacity: 0.58;
   }
@@ -375,14 +384,14 @@
     display: block;
     margin-top: 0.35rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.68rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
   .nickname-editor__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: 8px;
   }
 
   .nickname-editor__actions {
@@ -390,17 +399,17 @@
     align-items: center;
   }
 
-  .action-button {
+  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]) {
     display: inline-flex;
     min-height: 34px;
     flex: none;
     align-items: center;
     justify-content: center;
-    gap: 0.42rem;
+    gap: 8px;
     border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 5px);
+    border-radius: var(--borderRadiusMedium);
     padding: 0.42rem 0.72rem;
-    font: 650 0.76rem/1 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
     transition:
       border-color var(--motion-duration-short3) var(--motion-easing-standard),
       color var(--motion-duration-short3) var(--motion-easing-standard),
@@ -408,42 +417,42 @@
       transform var(--motion-duration-short3) var(--motion-easing-standard);
   }
 
-  .action-button:hover:not(:disabled) {
+  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]:hover:not(:is(:disabled, [disabled]))) {
     transform: translateY(-1px);
   }
 
-  .action-button:active:not(:disabled) {
-    transform: scale(0.97);
+  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]:active:not(:is(:disabled, [disabled]))) {
+    transform: none;
   }
 
-  .action-button:disabled {
+  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.44;
   }
 
-  .action-button--primary {
+  :global(.action-button--primary[data-fluent-owner="routes-home-settings-account-page"]) {
     color: var(--color-md3-on-primary);
     background: var(--color-md3-primary);
   }
 
-  .action-button--primary:hover:not(:disabled) {
+  :global(.action-button--primary[data-fluent-owner="routes-home-settings-account-page"]:hover:not(:is(:disabled, [disabled]))) {
     background: var(--color-md3-primary-emphasis);
   }
 
-  .action-button--secondary {
+  :global(.action-button--secondary[data-fluent-owner="routes-home-settings-account-page"]) {
     border-color: var(--color-md3-outline);
     color: var(--color-md3-on-surface);
     background: transparent;
   }
 
-  .action-button--secondary:hover:not(:disabled) {
+  :global(.action-button--secondary[data-fluent-owner="routes-home-settings-account-page"]:hover:not(:is(:disabled, [disabled]))) {
     background: var(--color-md3-surface-container-high);
   }
 
-  .authentication-link { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.25rem 0; }
-  .authentication-link h2 { margin: 0; font-size: .9375rem; font-weight: 600; }
-  .authentication-link p { font-size: .8125rem; color: var(--color-md3-on-surface-variant); margin: .35rem 0 0; }
-  @media (max-width: 640px) { .nickname-editor { grid-template-columns: 1fr; } .identity-summary { grid-template-columns: auto minmax(0, 1fr); } .identity-edit-button { grid-column: 2; justify-self: start; } .authentication-link { flex-wrap: wrap; } }
-  @media (pointer: coarse) { .action-button { min-height: 44px; } }
-  @media (prefers-reduced-motion: reduce) { .action-button, .text-field { transition: none; } }
+  .authentication-link { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 1.25rem 0; }
+  .authentication-link h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .authentication-link p { font-size: 12px; color: var(--color-md3-on-surface-variant); margin: .35rem 0 0; }
+  @media (max-width: 640px) { .nickname-editor { grid-template-columns: 1fr; } .identity-summary { grid-template-columns: auto minmax(0, 1fr); } :global(.identity-edit-button[data-fluent-owner="routes-home-settings-account-page"]) { grid-column: 2; justify-self: start; } .authentication-link { flex-wrap: wrap; } }
+  @media (pointer: coarse) { :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]) { min-height: 44px; } }
+  @media (prefers-reduced-motion: reduce) { :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]), .text-field { transition: none; } }
 </style>

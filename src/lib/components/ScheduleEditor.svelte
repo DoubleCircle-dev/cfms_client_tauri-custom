@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import type {
     JsonValue,
@@ -166,9 +167,16 @@
       <p class="editor-kicker">{$t('schedules.definition')}</p>
       <h2 id="schedule-editor-title">{formTitle}</h2>
     </div>
-    <button type="button" class="icon-button" aria-label={$t('common.close')} onclick={onCancel}>
+    <FluentButton data-fluent-owner="lib-components-schedule-editor"
+      type="button"
+      aria-label={$t('common.close')}
+      onclick={onCancel}
+      appearance="subtle"
+      class="icon-button"
+      iconOnly
+    >
       <Icon name="close" size="19px" />
-    </button>
+    </FluentButton>
   </header>
 
   {#if editingUnavailableTask}
@@ -180,7 +188,7 @@
 
   <form onsubmit={submit}>
     <label class="field-label" for="schedule-task">{$t('schedules.taskType')}</label>
-    <select id="schedule-task" value={taskName} disabled={busy || editingUnavailableTask} onchange={changeTask}>
+    <select class="cfms-native-field" id="schedule-task" value={taskName} disabled={busy || editingUnavailableTask} onchange={changeTask}>
       {#if editingUnavailableTask}
         <option value={taskName}>{taskName}</option>
       {/if}
@@ -192,7 +200,7 @@
     <div class="trigger-grid">
       <div>
         <label class="field-label" for="schedule-trigger">{$t('schedules.triggerType')}</label>
-        <select id="schedule-trigger" bind:value={triggerType} disabled={busy}>
+        <select class="cfms-native-field" id="schedule-trigger" bind:value={triggerType} disabled={busy}>
           <option value="date">{$t('schedules.trigger.date')}</option>
           <option value="cron">{$t('schedules.trigger.cron')}</option>
           <option value="interval">{$t('schedules.trigger.interval')}</option>
@@ -200,26 +208,26 @@
       </div>
       <div>
         <label class="field-label" for="schedule-timezone">{$t('schedules.timezone')}</label>
-        <input id="schedule-timezone" bind:value={timezone} disabled={busy} autocomplete="off" />
+        <input class="cfms-native-field" id="schedule-timezone" bind:value={timezone} disabled={busy} autocomplete="off" />
       </div>
     </div>
 
     {#if triggerType === 'cron'}
       <label class="field-label" for="schedule-cron">{$t('schedules.cronExpression')}</label>
-      <input id="schedule-cron" bind:value={cronExpression} disabled={busy} placeholder="0 8 * * 1" />
+      <input class="cfms-native-field" id="schedule-cron" bind:value={cronExpression} disabled={busy} placeholder="0 8 * * 1" />
       <p class="field-help">{$t('schedules.cronHelp')}</p>
     {:else if triggerType === 'date'}
       <label class="field-label" for="schedule-run-at">{$t('schedules.runAt')}</label>
-      <input id="schedule-run-at" type="datetime-local" bind:value={runAt} disabled={busy} />
+      <input class="cfms-native-field" id="schedule-run-at" type="datetime-local" bind:value={runAt} disabled={busy} />
     {:else}
       <div class="trigger-grid">
         <div>
           <label class="field-label" for="schedule-interval">{$t('schedules.intervalSeconds')}</label>
-          <input id="schedule-interval" type="number" min="1" step="1" bind:value={intervalSeconds} disabled={busy} />
+          <input class="cfms-native-field" id="schedule-interval" type="number" min="1" step="1" bind:value={intervalSeconds} disabled={busy} />
         </div>
         <div>
           <label class="field-label" for="schedule-start-at">{$t('schedules.startAt')}</label>
-          <input id="schedule-start-at" type="datetime-local" bind:value={intervalStartAt} disabled={busy} />
+          <input class="cfms-native-field" id="schedule-start-at" type="datetime-local" bind:value={intervalStartAt} disabled={busy} />
         </div>
       </div>
     {/if}
@@ -263,55 +271,66 @@
     {/if}
 
     <footer>
-      <button type="button" class="secondary-button" disabled={busy} onclick={onCancel}>
+      <FluentButton data-fluent-owner="lib-components-schedule-editor"
+        type="button"
+        disabled={busy}
+        onclick={onCancel}
+        appearance="subtle"
+        class="secondary-button"
+      >
         {$t('common.cancel')}
-      </button>
-      <button type="submit" class="primary-button" disabled={busy || editingUnavailableTask || !taskName || !payloadValid}>
+      </FluentButton>
+      <FluentButton data-fluent-owner="lib-components-schedule-editor"
+        type="submit"
+        disabled={busy || editingUnavailableTask || !taskName || !payloadValid}
+        appearance="subtle"
+        class="primary-button"
+      >
         {#if busy}<span class="button-spinner" aria-hidden="true"></span>{/if}
         {schedule ? $t('common.save') : $t('schedules.createAction')}
-      </button>
+      </FluentButton>
     </footer>
   </form>
 </section>
 
 <style>
   .schedule-editor { min-height: 100%; background: var(--color-md3-surface-container); }
-  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--color-md3-outline); padding: 1rem 1.1rem 0.9rem; }
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--color-md3-outline); padding: 1rem 1.1rem 0.9rem; }
   h2, p { margin: 0; }
-  h2 { margin-top: 0.15rem; color: var(--color-md3-on-surface); font-family: var(--font-md3-sans); font-size: 1rem; line-height: 1.25; }
-  .editor-kicker { color: var(--color-md3-on-surface-variant); font-family: var(--font-md3-sans); font-size: 0.7rem; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
-  .icon-button { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 0; border-radius: 999px; padding: 0; background: transparent; color: var(--color-md3-on-surface-variant); cursor: pointer; }
-  .icon-button:hover { background: var(--color-md3-surface-container-highest); color: var(--color-md3-on-surface); }
-  form { display: grid; gap: 0.75rem; padding: 1rem 1.1rem 1.25rem; }
-  .field-label { color: var(--color-md3-on-surface); font-family: var(--font-md3-sans); font-size: 0.75rem; font-weight: 650; }
-  input, select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.84rem/1.4 var(--font-md3-sans); }
+  h2 { margin-top: 0.15rem; color: var(--color-md3-on-surface); font-family: var(--font-md3-sans); font-size: 16px; line-height: 1.25; }
+  .editor-kicker { color: var(--color-md3-on-surface-variant); font-family: var(--font-md3-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  :global(.icon-button[data-fluent-owner="lib-components-schedule-editor"]) { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 0; border-radius: var(--borderRadiusMedium); padding: 0; background: transparent; color: var(--color-md3-on-surface-variant); cursor: pointer; }
+  :global(.icon-button[data-fluent-owner="lib-components-schedule-editor"]:hover) { background: var(--color-md3-surface-container-highest); color: var(--color-md3-on-surface); }
+  form { display: grid; gap: 12px; padding: 1rem 1.1rem 1.25rem; }
+  .field-label { color: var(--color-md3-on-surface); font-family: var(--font-md3-sans); font-size: 12px; font-weight: 600; }
+  input, select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.84rem/1.4 var(--font-md3-sans); }
   input, select { min-height: 42px; padding: 0 0.7rem; }
-  input:disabled, select:disabled { cursor: not-allowed; opacity: 0.55; }
-  .trigger-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 0.75rem; }
-  .trigger-grid > div { display: grid; gap: 0.4rem; }
+  input:is(:disabled, [disabled]), select:is(:disabled, [disabled]) { cursor: not-allowed; opacity: 0.55; }
+  .trigger-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 12px; }
+  .trigger-grid > div { display: grid; gap: 8px; }
   .field-help, .payload-heading p { color: var(--color-md3-on-surface-variant); font: 0.75rem/1.45 var(--font-md3-sans); }
-  .payload-heading { display: flex; align-items: end; justify-content: space-between; gap: 0.75rem; margin-top: 0.25rem; }
-  .payload-heading > div { display: grid; gap: 0.2rem; }
+  .payload-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-top: 0.25rem; }
+  .payload-heading > div { display: grid; gap: 4px; }
   details { position: relative; color: var(--color-md3-on-surface-variant); font: 0.75rem var(--font-md3-sans); }
   summary { cursor: pointer; color: var(--color-md3-primary-emphasis); }
   details pre { position: absolute; right: 0; z-index: 5; width: min(430px, 75vw); max-height: 260px; overflow: auto; border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.7rem; background: var(--color-md3-surface-container-high); box-shadow: 0 12px 32px rgb(0 0 0 / 0.24); color: var(--color-md3-on-surface); font: 0.72rem/1.5 var(--font-md3-mono); white-space: pre-wrap; }
   .unavailable-payload { min-height: 9rem; overflow: auto; margin: 0; border-radius: 8px; padding: 0.7rem; background: var(--color-md3-surface-container-high); color: var(--color-md3-on-surface); font: 0.72rem/1.5 var(--font-md3-mono); white-space: pre-wrap; }
-  .enabled-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--color-md3-outline); padding-top: 0.8rem; }
-  .enabled-row > div { display: grid; gap: 0.15rem; }
+  .enabled-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--color-md3-outline); padding-top: 0.8rem; }
+  .enabled-row > div { display: grid; gap: 4px; }
   .enabled-row strong, .enabled-row span { font-family: var(--font-md3-sans); }
-  .enabled-row strong { font-size: 0.8rem; }
-  .enabled-row span { color: var(--color-md3-on-surface-variant); font-size: 0.72rem; }
+  .enabled-row strong { font-size: 12px; }
+  .enabled-row span { color: var(--color-md3-on-surface-variant); font-size: 12px; }
   .editor-warning, .validation-error { color: var(--color-md3-on-error-container); background: var(--color-md3-error-container); }
-  .editor-warning { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.8rem 1.1rem 0; border-radius: 8px; padding: 0.65rem 0.75rem; font: 0.78rem/1.45 var(--font-md3-sans); }
+  .editor-warning { display: flex; align-items: flex-start; gap: 8px; margin: 0.8rem 1.1rem 0; border-radius: 8px; padding: 0.65rem 0.75rem; font: 0.78rem/1.45 var(--font-md3-sans); }
   .validation-error { border-radius: 8px; padding: 0.6rem 0.7rem; font: 0.78rem/1.45 var(--font-md3-sans); }
-  footer { display: flex; justify-content: flex-end; gap: 0.55rem; padding-top: 0.25rem; }
-  footer button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 0.45rem; border-radius: 5px; padding: 0.35rem 0.85rem; font: 650 0.76rem var(--font-md3-sans); cursor: pointer; }
-  footer button:disabled { cursor: not-allowed; opacity: 0.5; }
-  .secondary-button { border: 1px solid var(--color-md3-outline); background: transparent; color: var(--color-md3-on-surface); }
-  .primary-button { border: 1px solid var(--color-md3-primary); background: var(--color-md3-primary); color: var(--color-md3-on-primary); }
-  .button-spinner { width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 999px; animation: editor-spin 700ms linear infinite; }
+  footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 0.25rem; }
+  footer :global(.cfms-button[data-fluent-owner="lib-components-schedule-editor"]) { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; border-radius: var(--borderRadiusMedium); padding: 0.35rem 0.85rem; font: 650 0.76rem var(--font-md3-sans); cursor: pointer; }
+  footer :global(.cfms-button[data-fluent-owner="lib-components-schedule-editor"]:is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.5; }
+  :global(.secondary-button[data-fluent-owner="lib-components-schedule-editor"]) { border: 1px solid var(--color-md3-outline); background: transparent; color: var(--color-md3-on-surface); }
+  :global(.primary-button[data-fluent-owner="lib-components-schedule-editor"]) { border: 1px solid var(--color-md3-primary); background: var(--color-md3-primary); color: var(--color-md3-on-primary); }
+  .button-spinner { width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent; border-radius: var(--borderRadiusMedium); animation: editor-spin 700ms linear infinite; }
   @keyframes editor-spin { to { transform: rotate(360deg); } }
   @media (max-width: 520px) { .trigger-grid { grid-template-columns: 1fr; } }
-  @media (pointer: coarse) { .icon-button, footer button { min-width: 44px; min-height: 44px; } }
+  @media (pointer: coarse) { :global(.icon-button[data-fluent-owner="lib-components-schedule-editor"]), footer :global(.cfms-button[data-fluent-owner="lib-components-schedule-editor"]) { min-width: 44px; min-height: 44px; } }
   @media (prefers-reduced-motion: reduce) { .button-spinner { animation-duration: 1.4s; } }
 </style>

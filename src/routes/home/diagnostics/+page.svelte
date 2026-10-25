@@ -39,7 +39,7 @@
 
   .page-header {
     display: grid;
-    gap: 0.4rem;
+    gap: 8px;
     margin-bottom: 1.5rem;
   }
 
@@ -56,7 +56,8 @@
   }
 
   h1 {
-    font-size: clamp(1.45rem, 4vw, 2.2rem);
+    font-size: 28px;
+    line-height: 36px;
     font-weight: 600;
     line-height: 1.15;
     letter-spacing: -0.025em;
@@ -65,14 +66,14 @@
   .page-header p {
     max-width: 65ch;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.5;
   }
 
   .unavailable-state {
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: 12px;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
     padding: 1.25rem 0;
     color: var(--color-md3-on-surface-variant);
@@ -84,8 +85,8 @@
   }
 
   .unavailable-state h2 {
-    font-size: 0.9375rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     line-height: 1.25;
   }
 
@@ -93,7 +94,7 @@
     max-width: 65ch;
     margin-top: 0.3rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.5;
   }
 

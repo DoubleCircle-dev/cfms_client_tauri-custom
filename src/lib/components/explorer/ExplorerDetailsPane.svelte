@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
   import type { FileDetailModel } from '$lib/explorer/types';
@@ -164,9 +165,17 @@
           {#if model?.subtitle}<p>{model.subtitle}</p>{/if}
         </div>
       </div>
-      <button class="explorer-command-button explorer-details-close" aria-label={closeLabel} title={closeLabel} onclick={onClose}>
+      <FluentButton data-fluent-owner="lib-components-explorer-explorer-details-pane"
+        aria-label={closeLabel}
+        title={closeLabel}
+        onclick={onClose}
+        type="button"
+        appearance="subtle"
+        class="explorer-command-button explorer-details-close"
+        iconOnly
+      >
         <Icon name="close" size="17px" />
-      </button>
+      </FluentButton>
     </header>
 
     <div class="explorer-details-body">
@@ -239,7 +248,7 @@
     min-height: 54px;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 8px;
     border-bottom: 1px solid var(--explorer-border);
     padding: 0.55rem 0.65rem 0.55rem 0.8rem;
   }
@@ -248,7 +257,7 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 0.65rem;
+    gap: 12px;
   }
 
   .explorer-details-icon {
@@ -261,15 +270,15 @@
     color: var(--explorer-accent);
     line-height: 1;
   }
-  .explorer-details-heading h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; font-weight: 600; line-height: 22px; }
-  .explorer-details-heading p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text-muted); font-size: 0.72rem; }
-  .explorer-details-close { width: 30px; min-height: 30px; padding: 0; }
+  .explorer-details-heading h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; line-height: 22px; }
+  .explorer-details-heading p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text-muted); font-size: 12px; }
+  :global(.explorer-details-close[data-fluent-owner="lib-components-explorer-explorer-details-pane"]) { width: 30px; min-height: 30px; padding: 0; }
   .explorer-details-body { min-height: 0; flex: 1; overflow: auto; padding: 0.7rem 0.8rem; }
-  .explorer-detail-row { display: grid; grid-template-columns: minmax(76px, 0.42fr) minmax(0, 1fr); gap: 0.65rem; border-bottom: 1px solid var(--explorer-border); padding: 0.55rem 0; font-size: 0.76rem; }
+  .explorer-detail-row { display: grid; grid-template-columns: minmax(76px, 0.42fr) minmax(0, 1fr); gap: 12px; border-bottom: 1px solid var(--explorer-border); padding: 0.55rem 0; font-size: 12px; }
   .explorer-detail-row dt { color: var(--explorer-text-muted); }
   .explorer-detail-row dd { overflow-wrap: anywhere; color: var(--explorer-text); }
-  .explorer-details-empty { padding: 2rem 0.5rem; text-align: center; color: var(--explorer-text-muted); font-size: 0.78rem; }
-  .explorer-details-error { color: var(--explorer-danger); font-size: 0.78rem; }
+  .explorer-details-empty { padding: 2rem 0.5rem; text-align: center; color: var(--explorer-text-muted); font-size: 12px; }
+  .explorer-details-error { color: var(--explorer-danger); font-size: 12px; }
 
   @media (max-width: 720px) {
     .explorer-details-pane {

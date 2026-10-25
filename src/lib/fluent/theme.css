@@ -31,9 +31,9 @@ html[data-theme="light"] {
   --lineHeightHero800: 40px;
   --lineHeightHero900: 52px;
   --lineHeightHero1000: 92px;
-  --fontFamilyBase: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", "CFMS Noto Sans SC Subset", "Noto Sans SC", sans-serif;
-  --fontFamilyMonospace: "CFMS JetBrains Mono Subset", "JetBrains Mono", ui-monospace, Consolas, "CFMS Noto Sans SC Subset", monospace;
-  --fontFamilyNumeric: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", "CFMS Noto Sans SC Subset", "Noto Sans SC", sans-serif;
+  --fontFamilyBase: "Noto Sans", "Noto Sans SC", sans-serif;
+  --fontFamilyMonospace: "JetBrains Mono", "Noto Sans SC", monospace;
+  --fontFamilyNumeric: "Noto Sans", "Noto Sans SC", sans-serif;
   --fontWeightRegular: 400;
   --fontWeightMedium: 500;
   --fontWeightSemibold: 600;
@@ -493,9 +493,9 @@ html[data-theme="dark"] {
   --lineHeightHero800: 40px;
   --lineHeightHero900: 52px;
   --lineHeightHero1000: 92px;
-  --fontFamilyBase: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", "CFMS Noto Sans SC Subset", "Noto Sans SC", sans-serif;
-  --fontFamilyMonospace: "CFMS JetBrains Mono Subset", "JetBrains Mono", ui-monospace, Consolas, "CFMS Noto Sans SC Subset", monospace;
-  --fontFamilyNumeric: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", "CFMS Noto Sans SC Subset", "Noto Sans SC", sans-serif;
+  --fontFamilyBase: "Noto Sans", "Noto Sans SC", sans-serif;
+  --fontFamilyMonospace: "JetBrains Mono", "Noto Sans SC", monospace;
+  --fontFamilyNumeric: "Noto Sans", "Noto Sans SC", sans-serif;
   --fontWeightRegular: 400;
   --fontWeightMedium: 500;
   --fontWeightSemibold: 600;
@@ -922,6 +922,8 @@ html[data-theme="dark"] {
   --shadow28Brand: 0 0 8px rgba(0,0,0,0.30), 0 14px 28px rgba(0,0,0,0.25);
   --shadow64Brand: 0 0 8px rgba(0,0,0,0.30), 0 32px 64px rgba(0,0,0,0.25);
 }
+
+:root { --font-cfms-serif: "Noto Serif", "Noto Serif SC", serif; }
 
 /* CSS inheritance reaches Fluent shadow roots; document-wide * does not. */
 html[data-theme][data-reduce-motion="true"] {

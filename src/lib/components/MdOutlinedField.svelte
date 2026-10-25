@@ -9,7 +9,7 @@
 </div>
 <style>
   .cfms-field { min-width: 0; }
-  .cfms-field__label { display: block; margin-block-end: 8px; color: var(--colorNeutralForeground1); font: 400 14px/20px var(--fontFamilyBase); }
+  .cfms-field__label { display: block; margin-block-end: 8px; color: var(--colorNeutralForeground1); font: 400 14px/20pxpx var(--fontFamilyBase); }
   .cfms-field__content {
     display: flex; min-block-size: 32px; align-items: center; overflow: hidden;
     border: 1px solid var(--colorNeutralStroke1); border-block-end-color: var(--colorNeutralStrokeAccessible);

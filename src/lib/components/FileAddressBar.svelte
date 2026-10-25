@@ -82,7 +82,7 @@
       <input
         bind:this={input}
         bind:value
-        class="file-address__input"
+        class="cfms-native-field file-address__input"
         type="text"
         inputmode="url"
         autocomplete="off"
@@ -181,13 +181,13 @@
     height: 34px;
     flex: 1;
     border: 0 !important;
-    border-radius: inherit !important;
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.7rem;
     outline: 0;
     color: var(--explorer-text) !important;
     background: transparent !important;
     font-family: var(--font-md3-mono);
-    font-size: 0.82rem;
+    font-size: 14px;
   }
 
   .file-address__input::placeholder {
@@ -202,7 +202,7 @@
     flex: none;
     place-items: center;
     border: 0;
-    border-radius: var(--explorer-radius-small);
+    border-radius: var(--borderRadiusMedium);
     color: var(--explorer-text-muted);
     background: transparent;
     transition:
@@ -222,7 +222,7 @@
   }
 
   .file-address__action:active:not(:disabled) {
-    transform: scale(0.92);
+    transform: none;
   }
 
   .file-address__action:disabled {
@@ -242,7 +242,7 @@
     display: block;
     padding: 0.22rem 0.7rem 0.05rem;
     color: var(--explorer-text-muted);
-    font-size: 0.69rem;
+    font-size: 12px;
     line-height: 1.35;
   }
 
@@ -252,14 +252,14 @@
 
   @media (pointer: coarse) {
     .file-address__action {
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
     }
 
     .file-address__view,
     .file-address__form,
     .file-address__input {
-      min-height: 40px;
+      min-height: 44px;
     }
   }
 

@@ -57,7 +57,7 @@
 
 <div class="workspace-page account-page p-4 sm:p-6 space-y-5 max-w-4xl mx-auto">
   <!-- Account badge -->
-  <div class="bg-md3-surface-container/70 backdrop-blur-sm rounded-xl
+  <div class="bg-md3-surface-container  rounded-xl
               border border-md3-outline p-5">
     <AccountBadge
       onAvatarClick={openAvatarPicker}
@@ -65,7 +65,7 @@
   </div>
 
   <!-- Menu entries -->
-  <div class="account-menu-grid bg-md3-surface-container/70 backdrop-blur-sm rounded-lg
+  <div class="account-menu-grid bg-md3-surface-container  rounded-lg
               border border-md3-outline overflow-hidden">
     {#each visibleMenuEntries as entry, i}
       <button
@@ -106,10 +106,10 @@
 <style>
   .account-menu-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .account-menu-grid > button { border-right: 1px solid var(--explorer-border); }
+  .account-menu-grid > button { border-right: 0; min-height: 64px; }
 
   @media (max-width: 700px) {
     .account-menu-grid { grid-template-columns: minmax(0, 1fr); }

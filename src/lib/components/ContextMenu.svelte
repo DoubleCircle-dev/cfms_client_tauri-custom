@@ -126,7 +126,7 @@
   ></div>
   <div
     bind:this={menuEl}
-    class="context-menu-surface fixed z-50 bg-md3-surface-container/95 backdrop-blur-sm
+    class="context-menu-surface fixed z-50 bg-md3-surface-container
            rounded-xl border border-md3-outline shadow-lg
            py-1 min-w-[190px] max-w-[min(260px,calc(100vw-16px))]"
     style="left: {menuX}px; top: {menuY}px; transform-origin: {originX} {originY};"

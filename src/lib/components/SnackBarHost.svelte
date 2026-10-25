@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import Icon from "$lib/components/Icon.svelte";
   import ProgressRing from "$lib/components/ProgressRing.svelte";
   import { snackbarMotion } from "$lib/motion/transitions";
@@ -237,28 +238,33 @@
         </div>
 
         {#if entry.items.length > 1}
-          <button
-            class="flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold opacity-85 transition hover:bg-white/10 hover:opacity-100"
+          <FluentButton data-fluent-owner="lib-components-snack-bar-host"
             aria-label={expandedIds.has(entry.id)
               ? "Collapse notifications"
               : "Expand notifications"}
             onclick={() => toggleExpanded(entry.id)}
+            type="button"
+            appearance="subtle"
+            class="flex shrink-0 items-center gap-0.5 rounded px-2 py-0.5 text-xs font-semibold opacity-85 transition hover:bg-white/10 hover:opacity-100"
           >
             {entry.items.length}
             <Icon
               name={expandedIds.has(entry.id) ? "expandLess" : "expandMore"}
               size="16px"
             />
-          </button>
+          </FluentButton>
         {/if}
 
-        <button
-          class="shrink-0 rounded-full p-0.5 opacity-75 transition hover:bg-white/10 hover:opacity-100"
+        <FluentButton data-fluent-owner="lib-components-snack-bar-host"
           aria-label="Close"
           onclick={() => remove(entry.id)}
+          type="button"
+          appearance="subtle"
+          class="shrink-0 rounded p-0.5 opacity-75 transition hover:bg-white/10 hover:opacity-100"
+          iconOnly
         >
           <Icon name="close" size="18px" />
-        </button>
+        </FluentButton>
 
         {#if entry.timeoutMs !== null}
           <span class="absolute inset-x-0 bottom-0 h-1 bg-white/12">
@@ -277,7 +283,7 @@
   .snackbar {
     color: white;
     border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-    backdrop-filter: blur(18px);
+    backdrop-filter: none;
     box-shadow:
       0 18px 56px rgba(0, 0, 0, 0.28),
       0 1px 10px rgba(255, 255, 255, 0.1) inset;

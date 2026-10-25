@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   // File Manager page
   //
   // Browses files and folders on the CFMS server via the `list_directory`
@@ -3804,7 +3805,7 @@
   ondrop={handleHtmlDrop}
 >
   {#if dragUploadActive}
-    <div class="drop-upload-overlay pointer-events-none absolute inset-3 z-30 grid place-items-center border border-dashed border-md3-primary bg-md3-surface/72 text-center backdrop-blur-md">
+    <div class="drop-upload-overlay pointer-events-none absolute inset-3 z-30 grid place-items-center border border-dashed border-md3-primary bg-md3-surface text-center ">
       <div class="grid gap-2 px-6 py-5">
         <span class="text-md3-primary-emphasis">
           <Icon name="uploadFile" size="36px" />
@@ -3862,7 +3863,7 @@
           </span>
           <input
             type="text"
-            class="h-9 w-48 rounded-full border border-md3-outline bg-md3-field py-1.5 pl-9 pr-9 text-sm leading-5 text-md3-on-surface
+            class="cfms-native-field h-9 w-48 rounded-full border border-md3-outline bg-md3-field py-1.5 pl-9 pr-9 text-sm leading-5 text-md3-on-surface
                    placeholder:text-md3-on-surface-variant
                    transition-all"
             placeholder={$t('files.search')}
@@ -3882,39 +3883,41 @@
               : undefined}
           />
           {#if searchQuery}
-            <button
+            <FluentButton data-fluent-owner="routes-home-files-page"
               type="button"
-              class="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface"
               aria-label={$t('common.clear')}
               onclick={() => {
                 searchQuery = '';
                 handleSearchInput();
               }}
+              appearance="subtle"
+              class="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface"
+              iconOnly
             >
               <Icon name="close" size="16px" />
-            </button>
+            </FluentButton>
           {/if}
         </div>
-        <button
+        <FluentButton data-fluent-owner="routes-home-files-page"
           type="submit"
-          class="inline-flex h-9 w-9 items-center justify-center rounded-full
-                 bg-md3-primary-container text-md3-on-primary-container
-                 transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
           title={$t('files.serverSearch')}
           aria-label={$t('files.serverSearch')}
           disabled={!searchPreviewHasQuery}
+          appearance="subtle"
+          class="inline-flex h-9 w-9 items-center justify-center rounded\r\n                 bg-md3-primary-container text-md3-on-primary-container\r\n                 transition-all   disabled:opacity-50"
+          iconOnly
         >
           <Icon name="search" size="16px" />
-        </button>
+        </FluentButton>
       </form>
 
       {#if searchPreview.open}
         <div
           id="files-search-preview-panel"
-          class="search-preview-panel fixed z-40 overflow-hidden rounded-2xl border border-md3-outline bg-md3-surface-container shadow-2xl"
+          class="search-preview-panel fixed z-40 overflow-hidden rounded-xl border border-md3-outline bg-md3-surface-container shadow-2xl"
           style={searchPreviewPanelStyle}
         >
-          <div class="border-b border-md3-outline bg-md3-surface-container-high/45 px-4 py-3">
+          <div class="border-b border-md3-outline bg-md3-surface-container-high px-4 py-3">
             <div class="flex flex-wrap items-center gap-3">
               <label class="inline-flex items-center gap-1.5 text-sm text-md3-on-surface-variant">
                 <MdCheckbox
@@ -3942,7 +3945,7 @@
                   aria-hidden="true"
                 ></span>
                 {#each ['name', 'size', 'modified'] as field}
-                  <button
+                  <button data-fluent-owner="routes-home-files-page"
                     data-search-sort
                     tabindex={searchPreview.sortBy === field ? 0 : -1}
                     type="button"
@@ -3954,15 +3957,16 @@
                   </button>
                 {/each}
               </div>
-              <button
+              <FluentButton data-fluent-owner="routes-home-files-page"
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-full border border-md3-outline px-2.5 text-xs font-medium text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface"
                 title={searchPreview.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
                 onclick={toggleSearchPreviewSortOrder}
+                appearance="outline"
+                class="inline-flex h-8 items-center gap-1 rounded border border-md3-outline px-2.5 text-xs font-medium text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface"
               >
                 <Icon name={searchPreview.sortOrder === 'asc' ? 'arrowUpward' : 'arrowDownward'} size="16px" />
                 {searchPreview.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
-              </button>
+              </FluentButton>
             </div>
           </div>
 
@@ -4004,7 +4008,7 @@
                 onScroll={handleSearchPreviewScroll}
               >
                 {#snippet children(row, index)}
-                  <button
+                  <button data-fluent-owner="routes-home-files-page"
                     id={`files-search-preview-option-${index}`}
                     type="button"
                     class="grid min-h-12 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-md3-outline/45 px-4 py-2 text-left transition-colors hover:bg-md3-primary-container/15 {searchPreviewActiveIndex === index ? 'bg-md3-primary-container/15' : ''}"
@@ -4041,23 +4045,25 @@
           </div>
 
           <div class="flex items-center justify-between gap-3 px-4 py-3">
-            <button
+            <FluentButton data-fluent-owner="routes-home-files-page"
               type="button"
-              class="text-sm font-semibold text-md3-primary-emphasis transition hover:brightness-125 disabled:opacity-50"
               disabled={!searchPreviewCanSearch}
               onclick={() => openSearchDialog(true)}
+              appearance="subtle"
+              class="text-sm font-semibold text-md3-primary-emphasis transition  disabled:opacity-50"
             >
               {$t('files.advancedSearch')}
-            </button>
-            <button
+            </FluentButton>
+            <FluentButton data-fluent-owner="routes-home-files-page"
               type="button"
-              class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-md3-primary-emphasis transition hover:bg-md3-primary-container/20 disabled:opacity-50"
               disabled={!searchPreviewCanSearch}
               onclick={() => openSearchDialog(true)}
+              appearance="subtle"
+              class="inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm font-semibold text-md3-primary-emphasis transition hover:bg-md3-primary-container/20 disabled:opacity-50"
             >
               <Icon name="search" size="16px" />
               {$t('files.allResults')}
-            </button>
+            </FluentButton>
           </div>
         </div>
       {/if}
@@ -4082,16 +4088,18 @@
       })}
     >
       {#each SORT_FIELDS as field}
-        <button
+        <FluentButton data-fluent-owner="routes-home-files-page"
           data-sort-item
+          iconOnly
           type="button"
-          class="explorer-command-button explorer-command-button--compact files-sort-button"
           data-active={sortField === field ? 'true' : undefined}
           title={sortTitle(field as SortField)}
           aria-label={sortTitle(field as SortField)}
           aria-pressed={sortField === field}
           tabindex={sortField === field ? 0 : -1}
           onclick={() => setSort(field as SortField)}
+          appearance="subtle"
+          class="explorer-command-button explorer-command-button--compact files-sort-button"
         >
           <Icon name={sortFieldIcon(field)} size="17px" />
           {#if sortField === field}
@@ -4099,7 +4107,7 @@
               <Icon name={sortDirection === 'asc' ? 'arrowUpward' : 'arrowDownward'} size="10px" />
             </span>
           {/if}
-        </button>
+        </FluentButton>
       {/each}
     </div>
   </div>
@@ -4178,7 +4186,7 @@
     display: flex;
     min-height: 58px;
     align-items: center;
-    gap: 0.45rem;
+    gap: 8px;
     border-bottom: 1px solid var(--explorer-border);
     padding: 0.55rem 0.7rem;
     background: var(--explorer-surface-raised);
@@ -4216,14 +4224,14 @@
   }
 
   .files-navigation-row :global(.md-icon-button) {
-    border-radius: var(--explorer-radius-small);
+    border-radius: var(--borderRadiusMedium);
     color: var(--explorer-text-muted);
   }
 
   .files-navigation-row :global(input:not(.file-address__input)) {
     width: min(260px, 22vw);
     border-color: var(--explorer-border) !important;
-    border-radius: var(--explorer-radius-small) !important;
+    border-radius: var(--borderRadiusMedium);
     color: var(--explorer-text) !important;
     background: var(--explorer-surface) !important;
   }
@@ -4234,7 +4242,7 @@
     display: flex;
     min-height: 48px;
     align-items: center;
-    gap: 0.7rem;
+    gap: 12px;
     overflow: hidden;
     border-bottom: 1px solid var(--explorer-border);
     padding: 0.35rem 0.7rem;
@@ -4252,13 +4260,13 @@
     display: flex;
     flex: none;
     align-items: center;
-    gap: 0.1rem;
+    gap: 4px;
     margin-left: auto;
     overflow: hidden;
     white-space: nowrap;
   }
 
-  .files-sort-button {
+  :global(.files-sort-button[data-fluent-owner="routes-home-files-page"]) {
     position: relative;
     width: 34px;
     height: 34px;
@@ -4266,6 +4274,10 @@
     overflow: hidden;
     padding: 0;
     white-space: nowrap;
+  }
+
+  @media (pointer: coarse) {
+    :global(.files-sort-button[data-fluent-owner="routes-home-files-page"]) { width: 44px; height: 44px; }
   }
 
   .files-sort-direction {
@@ -4329,7 +4341,7 @@
     box-shadow: var(--explorer-shadow);
     animation: search-preview-in 180ms var(--motion-easing-emphasized-decelerate) both;
     -webkit-backdrop-filter: blur(24px) saturate(1.12);
-    backdrop-filter: blur(24px) saturate(1.12);
+    backdrop-filter: none;
   }
 
   .search-sort-indicator {
@@ -4443,19 +4455,20 @@
     <form class="flex h-full min-h-0 flex-col gap-4 p-5" onsubmit={(e) => { e.preventDefault(); runServerSearch(); }}>
       <div class="grid gap-3 md:grid-cols-[1fr_auto]">
         <input
-          class="rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
+          class="cfms-native-field rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
           bind:value={searchDialog.query}
           bind:this={searchDialogInput}
           placeholder={$t('files.searchPlaceholder')}
           disabled={searchDialog.loading}
         />
-        <button
+        <FluentButton data-fluent-owner="routes-home-files-page"
           type="submit"
-          class="rounded-full bg-md3-primary px-4 py-2 text-sm font-medium text-md3-on-primary transition-all hover:brightness-110 disabled:opacity-50"
           disabled={searchDialog.loading}
+          appearance="primary"
+          class="rounded bg-md3-primary px-4 py-2 text-sm font-medium text-md3-on-primary transition-all  disabled:opacity-50"
         >
           {$t('files.serverSearch')}
-        </button>
+        </FluentButton>
       </div>
 
       <div class="flex flex-wrap items-center gap-4 text-sm text-md3-on-surface-variant">
@@ -4483,7 +4496,7 @@
             aria-hidden="true"
           ></span>
           {#each ['name', 'size', 'modified'] as field}
-            <button
+            <button data-fluent-owner="routes-home-files-page"
               data-search-sort
               tabindex={searchDialog.sortBy === field ? 0 : -1}
               type="button"
@@ -4496,21 +4509,22 @@
             </button>
           {/each}
         </div>
-        <button
+        <FluentButton data-fluent-owner="routes-home-files-page"
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-full border border-md3-outline px-2.5 text-xs font-medium text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:opacity-50"
           disabled={searchDialog.loading}
           title={searchDialog.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
           onclick={toggleSearchDialogSortOrder}
+          appearance="outline"
+          class="inline-flex h-8 items-center gap-1 rounded border border-md3-outline px-2.5 text-xs font-medium text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:opacity-50"
         >
           <Icon name={searchDialog.sortOrder === 'asc' ? 'arrowUpward' : 'arrowDownward'} size="16px" />
           {searchDialog.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
-        </button>
+        </FluentButton>
       </div>
 
       {#if searchDialog.results}
         <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-md3-outline">
-          <div class="flex items-center justify-between gap-3 border-b border-md3-outline bg-md3-surface-container-high/50 px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
+          <div class="flex items-center justify-between gap-3 border-b border-md3-outline bg-md3-surface-container-high px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
             <span>
               {searchDialog.results.total_count === 0 && !searchDialog.loading
                 ? $t('files.searchNoResults', { values: { query: searchDialog.resultQuery } })
@@ -4534,31 +4548,31 @@
             resetKey={searchDialogResetKey}
             viewportClass="server-search-list-viewport"
             keyboardNavigation
-            keyboardTargetSelector="button"
+            keyboardTargetSelector="button, fluent-button"
           >
             {#snippet children(row, index)}
               {#if row.kind === 'directory'}
-                <button
+                <FluentButton data-fluent-owner="routes-home-files-page"
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors hover:bg-md3-primary-container/20"
-                  class:border-b-0={index === searchResultRows.length - 1}
                   onclick={() => navigateToSearchDirectory(row.directory)}
+                  appearance="outline"
+                  class={"grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors hover:bg-md3-primary-container/20" + ((index === searchResultRows.length - 1) ? " border-b-0" : '')}
                 >
                   <span class="text-md3-primary-emphasis"><Icon name="folder" size="20px" /></span>
                   <span class="min-w-0 truncate text-sm font-medium text-md3-primary-emphasis">{row.directory.name}</span>
                   <span class="text-xs text-md3-on-surface-variant">{formatDate(row.directory.created_time)}</span>
-                </button>
+                </FluentButton>
               {:else}
-                <button
+                <FluentButton data-fluent-owner="routes-home-files-page"
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors hover:bg-md3-surface-container-high/40"
-                  class:border-b-0={index === searchResultRows.length - 1}
                   onclick={() => navigateToSearchDocument(row.document)}
+                  appearance="outline"
+                  class={"grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors hover:bg-md3-surface-container-high/40" + ((index === searchResultRows.length - 1) ? " border-b-0" : '')}
                 >
                   <span class="text-md3-on-surface-variant"><Icon name="filePresent" size="20px" /></span>
                   <span class="min-w-0 truncate text-sm text-md3-on-surface">{row.document.name ?? row.document.title}</span>
                   <span class="text-xs text-md3-on-surface-variant">{formatBytes(row.document.size)}</span>
-                </button>
+                </FluentButton>
               {/if}
             {/snippet}
           </VirtualList>
@@ -4679,14 +4693,18 @@
                   <td class="px-3 py-2 whitespace-nowrap">{formatDate(entry.start_time)}</td>
                   <td class="px-3 py-2 whitespace-nowrap">{formatDate(entry.end_time)}</td>
                   <td class="px-3 py-2 text-right">
-                    <button
-                      class="rounded-full bg-md3-error-container p-2 text-md3-on-error-container transition-all hover:brightness-110"
+                    <FluentButton data-fluent-owner="routes-home-files-page"
                       title={$t('files.revoke')}
                       aria-label={$t('files.revoke')}
                       onclick={() => handleRevokeAccess(entry.id)}
+                      type="button"
+                      appearance="subtle"
+                      tone="danger"
+                      class="rounded bg-md3-error-container p-2 text-md3-on-error-container transition-all "
+                      iconOnly
                     >
                       <Icon name="delete" size="17px" />
-                    </button>
+                    </FluentButton>
                   </td>
                 </tr>
               {/each}
@@ -4884,28 +4902,41 @@
                 </div>
 
                 <div class="flex items-center gap-1 py-3">
-                  <button
-                    class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface"
+                  <FluentButton data-fluent-owner="routes-home-files-page"
                     title={$t('common.download')}
                     onclick={() => handleDownloadRevision(row.revision)}
+                    type="button"
+                    appearance="subtle"
+                    class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface"
+                    iconOnly
+                    aria-label={$t('common.download')}
                   >
                     <Icon name="download" size="18px" />
-                  </button>
+                  </FluentButton>
                   {#if !row.revision.is_current}
-                    <button
-                      class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-primary-container hover:text-md3-on-primary-container"
+                    <FluentButton data-fluent-owner="routes-home-files-page"
                       title={$t('files.setCurrentRevision')}
                       onclick={() => handleSetCurrentRevision(row.revision)}
+                      type="button"
+                      appearance="subtle"
+                      class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-primary-container hover:text-md3-on-primary-container"
+                      iconOnly
+                      aria-label={$t('files.setCurrentRevision')}
                     >
                       <Icon name="verified" size="18px" />
-                    </button>
-                    <button
-                      class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-error-container hover:text-md3-on-error-container"
+                    </FluentButton>
+                    <FluentButton data-fluent-owner="routes-home-files-page"
                       title={$t('files.deleteRevision')}
                       onclick={() => handleDeleteRevision(row.revision)}
+                      type="button"
+                      appearance="subtle"
+                      tone="danger"
+                      class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-error-container hover:text-md3-on-error-container"
+                      iconOnly
+                      aria-label={$t('files.deleteRevision')}
                     >
                       <Icon name="delete" size="18px" />
-                    </button>
+                    </FluentButton>
                   {/if}
                 </div>
               </div>

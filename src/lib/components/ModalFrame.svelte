@@ -913,8 +913,8 @@
 
   .modal-title {
     margin: 0;
-    font-size: 0.9375rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     letter-spacing: -0.005em;
   }
 
@@ -922,7 +922,7 @@
     width: 32px;
     height: 32px;
     border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 6px);
+    border-radius: var(--borderRadiusMedium);
     background: transparent;
     transition:
       border-color var(--motion-duration-short3) var(--motion-easing-standard),
@@ -948,7 +948,7 @@
   }
 
   .modal-window-action:active {
-    transform: scale(0.94);
+    transform: none;
   }
 
   .modal-window-action:disabled {

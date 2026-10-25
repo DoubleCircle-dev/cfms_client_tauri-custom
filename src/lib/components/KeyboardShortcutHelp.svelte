@@ -77,11 +77,11 @@
 {/if}
 
 <style>
-  .shortcut-help { display: grid; gap: 1.25rem; padding: 1.25rem; }
-  .shortcut-intro { color: var(--color-md3-on-surface-variant); font-size: 0.875rem; line-height: 1.6; }
-  section { display: grid; gap: 0.55rem; }
-  h3 { color: var(--color-md3-on-surface); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .shortcut-help { display: grid; gap: 20px; padding: 1.25rem; }
+  .shortcut-intro { color: var(--color-md3-on-surface-variant); font-size: 14px; line-height: 1.6; }
+  section { display: grid; gap: 8px; }
+  h3 { color: var(--color-md3-on-surface); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
   .shortcut-list { overflow: hidden; border: 1px solid var(--color-md3-outline); border-radius: var(--explorer-radius-medium, 10px); }
-  .shortcut-row { display: flex; min-height: 45px; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--color-md3-outline); padding: 0.55rem 0.75rem; color: var(--color-md3-on-surface); font-size: 0.84rem; }
+  .shortcut-row { display: flex; min-height: 45px; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--color-md3-outline); padding: 0.55rem 0.75rem; color: var(--color-md3-on-surface); font-size: 14px; }
   .shortcut-row:last-child { border-bottom: 0; }
 </style>

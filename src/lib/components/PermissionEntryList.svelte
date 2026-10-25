@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import type { PermissionEntry } from '$lib/api';
@@ -128,20 +129,21 @@
       <h3 id="permission-rule-list-title">{$t('manage.directPermissionRules')}</h3>
       <p>{$t('manage.directPermissionRulesDescription')}</p>
     </div>
-    <button
+    <FluentButton data-fluent-owner="lib-components-permission-entry-list"
       type="button"
-      class="add-entry-button"
       disabled={disabled}
       onclick={onAdd}
+      appearance="subtle"
+      class="add-entry-button"
     >
       <Icon name="add" size="17px" />
       <span>{$t('manage.addPermissionEntry')}</span>
-    </button>
+    </FluentButton>
   </div>
 
   <div class="search-field">
     <Icon name="search" size="18px" />
-    <input
+    <input class="cfms-native-field"
       value={query}
       data-focus-ring="delegated"
       aria-label={$t('manage.searchPermissionEntries')}
@@ -150,29 +152,32 @@
       oninput={(event) => onQueryChange(event.currentTarget.value)}
     />
     {#if query}
-      <button
+      <FluentButton data-fluent-owner="lib-components-permission-entry-list"
         type="button"
         aria-label={$t('manage.clearPermissionSearch')}
         disabled={disabled}
         onclick={() => onQueryChange('')}
+        appearance="subtle"
+        iconOnly
       >
         <Icon name="close" size="16px" />
-      </button>
+      </FluentButton>
     {/if}
   </div>
 
   <div class="entry-filters" role="group" aria-label={$t('manage.filterPermissionEntries')}>
     {#each filters as item (item.value)}
-      <button
+      <FluentButton data-fluent-owner="lib-components-permission-entry-list"
         type="button"
         aria-pressed={filter === item.value}
-        class:active={filter === item.value}
         disabled={disabled}
         onclick={() => onFilterChange(item.value)}
+        appearance="subtle"
+        class={((filter === item.value) ? " active" : '')}
       >
         <span>{$t(item.label)}</span>
         <span class="filter-count">{filterCounts[item.value]}</span>
-      </button>
+      </FluentButton>
     {/each}
   </div>
 
@@ -186,9 +191,14 @@
             ? $t('manage.noPermissionEntries')
             : $t('manage.noPermissionEntriesInFilter')}</p>
         {#if !query && rows.length === 0}
-          <button type="button" disabled={disabled} onclick={onAdd}>
+          <FluentButton data-fluent-owner="lib-components-permission-entry-list"
+            type="button"
+            disabled={disabled}
+            onclick={onAdd}
+            appearance="subtle"
+          >
             {$t('manage.addPermissionEntry')}
-          </button>
+          </FluentButton>
         {/if}
       </div>
     {:else}
@@ -200,7 +210,7 @@
             class:deleted={row.change === 'deleted'}
             class:invalid={!row.valid && row.change !== 'deleted'}
           >
-            <button
+            <button data-fluent-owner="lib-components-permission-entry-list"
               id={`permission-entry-select-${row.key}`}
               type="button"
               class="entry-select"
@@ -236,9 +246,8 @@
             </button>
             <div class="entry-actions">
               {#if row.change === 'deleted' || row.change === 'modified'}
-                <button
+                <FluentButton data-fluent-owner="lib-components-permission-entry-list"
                   type="button"
-                  class="undo-action"
                   aria-label={row.change === 'deleted'
                     ? $t('manage.undoDeletePermissionEntry')
                     : $t('manage.undoPermissionEntryChanges')}
@@ -247,21 +256,26 @@
                     : $t('manage.undoPermissionEntryChanges')}
                   disabled={disabled}
                   onclick={() => onUndo(row.key)}
+                  appearance="subtle"
+                  class="undo-action"
+                  iconOnly
                 >
                   <Icon name="undo" size="18px" />
-                </button>
+                </FluentButton>
               {/if}
               {#if row.change !== 'deleted'}
-                <button
+                <FluentButton data-fluent-owner="lib-components-permission-entry-list"
                   type="button"
-                  class="delete-action"
                   aria-label={$t('manage.deletePermissionEntry')}
                   title={$t('manage.deletePermissionEntry')}
                   disabled={disabled}
                   onclick={() => onDelete(row.key)}
+                  appearance="subtle"
+                  class="delete-action"
+                  iconOnly
                 >
                   <Icon name="delete" size="18px" />
-                </button>
+                </FluentButton>
               {/if}
             </div>
           </li>
@@ -285,53 +299,53 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 0.75rem;
+    gap: 12px;
     padding: 1rem 1rem 0.75rem;
   }
 
   h3 {
     margin: 0;
     color: var(--color-md3-on-surface);
-    font: 650 0.875rem/1.3 var(--font-md3-sans);
+    font: 600 14px/20px var(--font-md3-sans);
   }
 
   .entry-list-toolbar p {
     margin: 0.2rem 0 0;
     color: var(--color-md3-on-surface-variant);
-    font: 400 0.72rem/1.45 var(--font-md3-sans);
+    font: 400 12px/16px var(--font-md3-sans);
   }
 
-  .add-entry-button {
+  :global(.add-entry-button[data-fluent-owner="lib-components-permission-entry-list"]) {
     display: inline-flex;
     min-height: 2rem;
     flex: none;
     align-items: center;
-    gap: 0.35rem;
+    gap: 4px;
     border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 6px);
+    border-radius: var(--borderRadiusMedium);
     padding: 0.3rem 0.65rem;
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
-    font: 600 0.75rem/1.2 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
     transition: background-color 100ms ease, transform 120ms cubic-bezier(0.2, 0, 0, 1);
   }
 
-  .add-entry-button:hover:not(:disabled) {
+  :global(.add-entry-button[data-fluent-owner="lib-components-permission-entry-list"]):hover:not(:is(:disabled, [disabled])) {
     background: color-mix(in srgb, var(--color-md3-primary-container) 80%, white 20%);
   }
 
-  .add-entry-button:active:not(:disabled) { transform: scale(0.97); }
-  button:disabled { cursor: not-allowed; opacity: 0.45; }
+  :global(.add-entry-button[data-fluent-owner="lib-components-permission-entry-list"]):active:not(:is(:disabled, [disabled])) { transform: none; }
+  :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"]):is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.45; }
 
   .search-field {
     display: grid;
     min-height: 2.625rem;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     margin: 0 1rem;
     border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-medium, 8px);
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.7rem;
     color: var(--color-md3-on-surface-variant);
     background: var(--color-md3-field);
@@ -350,50 +364,50 @@
     color: var(--color-md3-on-surface);
     background: transparent;
     box-shadow: none !important;
-    font: 400 0.8rem/1.4 var(--font-md3-sans);
+    font: 400 12px/16px var(--font-md3-sans);
   }
 
   .search-field input::placeholder { color: var(--color-md3-on-surface-variant); opacity: 0.9; }
 
-  .search-field button {
+  .search-field :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"])) {
     display: grid;
     width: 1.75rem;
     height: 1.75rem;
     place-items: center;
-    border-radius: var(--explorer-radius-small, 6px);
+    border-radius: var(--borderRadiusMedium);
     color: var(--color-md3-on-surface-variant);
   }
 
-  .search-field button:hover:not(:disabled) { background: var(--color-md3-surface-container-highest); }
+  .search-field :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"]):hover:not(:is(:disabled, [disabled]))) { background: var(--color-md3-surface-container-highest); }
 
   .entry-filters {
     display: flex;
-    gap: 0.25rem;
+    gap: 4px;
     overflow-x: auto;
     padding: 0.65rem 1rem 0.75rem;
     scrollbar-width: thin;
   }
 
-  .entry-filters button {
+  .entry-filters :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"])) {
     display: inline-flex;
     min-height: 1.8rem;
     flex: none;
     align-items: center;
-    gap: 0.3rem;
+    gap: 4px;
     border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 6px);
+    border-radius: var(--borderRadiusMedium);
     padding: 0.25rem 0.45rem;
     color: var(--color-md3-on-surface-variant);
-    font: 600 0.69rem/1.2 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
     transition: color 100ms ease, background-color 100ms ease, border-color 100ms ease;
   }
 
-  .entry-filters button:hover:not(:disabled) {
+  .entry-filters :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"]):hover:not(:is(:disabled, [disabled]))) {
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-high);
   }
 
-  .entry-filters button.active {
+  .entry-filters :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"]).active[data-fluent-owner="lib-components-permission-entry-list"]) {
     border-color: color-mix(in srgb, var(--color-md3-primary) 40%, transparent);
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
@@ -431,7 +445,7 @@
     box-shadow: inset 3px 0 0 var(--color-md3-primary);
   }
 
-  .entry-row.deleted { opacity: 0.68; }
+  :global(.entry-row.deleted) { opacity: 0.68; }
   .entry-row.invalid { background: color-mix(in srgb, var(--color-md3-error-container) 38%, transparent); }
 
   .entry-select {
@@ -453,17 +467,17 @@
     min-width: 0;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem;
+    gap: 4px;
   }
 
   .entry-title-line strong {
     min-width: 0;
     overflow-wrap: anywhere;
     color: var(--color-md3-on-surface);
-    font: 600 0.8rem/1.35 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
   }
 
-  .deleted .entry-title-line strong { text-decoration: line-through; }
+  :global(.deleted) .entry-title-line strong { text-decoration: line-through; }
   .entry-meta-line { margin-top: 0.38rem; }
 
   .effect-chip,
@@ -471,12 +485,12 @@
   .change-chip {
     border-radius: 9999px;
     padding: 0.12rem 0.4rem;
-    font: 600 0.64rem/1.35 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
     white-space: nowrap;
   }
 
   .effect-chip.grant,
-  .entry-state--active {
+  :global(.entry-state--active) {
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
   }
@@ -486,12 +500,12 @@
     background: var(--color-md3-error-container);
   }
 
-  .entry-state--scheduled {
+  :global(.entry-state--scheduled) {
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-highest);
   }
 
-  .entry-state--expired {
+  :global(.entry-state--expired) {
     color: var(--color-md3-on-surface-variant);
     background: var(--color-md3-surface-container-high);
   }
@@ -502,9 +516,9 @@
   .invalid-label {
     display: inline-flex;
     align-items: center;
-    gap: 0.2rem;
+    gap: 4px;
     color: var(--color-md3-error);
-    font: 600 0.65rem/1.3 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
   }
 
   .entry-time {
@@ -512,7 +526,7 @@
     margin-top: 0.35rem;
     overflow: hidden;
     color: var(--color-md3-on-surface-variant);
-    font: 400 0.69rem/1.45 var(--font-md3-sans);
+    font: 400 12px/16px var(--font-md3-sans);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -520,40 +534,40 @@
   .entry-actions {
     display: flex;
     align-items: center;
-    gap: 0.1rem;
+    gap: 4px;
     padding-right: 0.55rem;
   }
 
-  .delete-action,
-  .undo-action {
+  :global(.delete-action[data-fluent-owner="lib-components-permission-entry-list"]),
+  :global(.undo-action[data-fluent-owner="lib-components-permission-entry-list"]) {
     display: grid;
     align-self: center;
     width: 2rem;
     height: 2rem;
     place-items: center;
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     transition: background-color 100ms ease, transform 120ms cubic-bezier(0.2, 0, 0, 1);
   }
 
-  .delete-action { color: var(--color-md3-error); }
-  .undo-action { color: var(--color-md3-primary-emphasis); }
-  .delete-action:hover:not(:disabled) { background: var(--color-md3-error-container); }
-  .undo-action:hover:not(:disabled) { background: var(--color-md3-primary-container); }
-  .delete-action:active:not(:disabled), .undo-action:active:not(:disabled) { transform: scale(0.93); }
+  :global(.delete-action[data-fluent-owner="lib-components-permission-entry-list"]) { color: var(--color-md3-error); }
+  :global(.undo-action[data-fluent-owner="lib-components-permission-entry-list"]) { color: var(--color-md3-primary-emphasis); }
+  :global(.delete-action[data-fluent-owner="lib-components-permission-entry-list"]:hover:not(:is(:disabled, [disabled]))) { background: var(--color-md3-error-container); }
+  :global(.undo-action[data-fluent-owner="lib-components-permission-entry-list"]:hover:not(:is(:disabled, [disabled]))) { background: var(--color-md3-primary-container); }
+  :global(.delete-action[data-fluent-owner="lib-components-permission-entry-list"]:active:not(:is(:disabled, [disabled]))), :global(.undo-action[data-fluent-owner="lib-components-permission-entry-list"]:active:not(:is(:disabled, [disabled]))) { transform: none; }
 
   .entry-empty {
     display: grid;
     min-height: 14rem;
     place-items: center;
     align-content: center;
-    gap: 0.55rem;
+    gap: 8px;
     padding: 1.5rem;
     color: var(--color-md3-on-surface-variant);
     text-align: center;
   }
 
-  .entry-empty p { max-width: 30ch; margin: 0; font: 400 0.78rem/1.5 var(--font-md3-sans); }
-  .entry-empty button { color: var(--color-md3-primary-emphasis); font: 600 0.76rem/1.3 var(--font-md3-sans); }
+  .entry-empty p { max-width: 30ch; margin: 0; font: 400 12px/16px var(--font-md3-sans); }
+  .entry-empty :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"])) { color: var(--color-md3-primary-emphasis); font: 600 12px/16px var(--font-md3-sans); }
 
   @media (max-width: 719px) {
     .entry-list-pane {
@@ -571,17 +585,17 @@
   }
 
   @media (pointer: coarse) {
-    .add-entry-button,
-    .entry-filters button { min-height: 2.5rem; }
-    .delete-action,
-    .undo-action { width: 2.75rem; height: 2.75rem; }
+    :global(.add-entry-button[data-fluent-owner="lib-components-permission-entry-list"]),
+    .entry-filters :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"])) { min-height: 2.5rem; }
+    :global(.delete-action[data-fluent-owner="lib-components-permission-entry-list"]),
+    :global(.undo-action[data-fluent-owner="lib-components-permission-entry-list"]) { width: 2.75rem; height: 2.75rem; }
     .entry-select { min-height: 4.25rem; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .add-entry-button,
+    :global(.add-entry-button[data-fluent-owner="lib-components-permission-entry-list"]),
     .entry-row,
-    .delete-action,
-    .undo-action { transition: none; }
+    :global(.delete-action[data-fluent-owner="lib-components-permission-entry-list"]),
+    :global(.undo-action[data-fluent-owner="lib-components-permission-entry-list"]) { transition: none; }
   }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { getSetting, setSetting } from '$lib/api';
@@ -203,34 +204,37 @@
 
       <div class="section-actions">
         {#if automaticChecksPaused}
-          <button
+          <FluentButton data-fluent-owner="routes-home-settings-updates-page"
             type="button"
-            class="primary-action"
             onclick={resumeAutomaticChecks}
             disabled={loading || autoSave.saving}
+            appearance="subtle"
+            class="primary-action"
           >
             <Icon name="resume" size="18px" />
             {$t('settings.updates.resumeAutomaticChecks')}
-          </button>
-          <button
+          </FluentButton>
+          <FluentButton data-fluent-owner="routes-home-settings-updates-page"
             type="button"
-            class="text-action"
             onclick={choosePauseDuration}
             disabled={loading || autoSave.saving}
+            appearance="subtle"
+            class="text-action"
           >
             <Icon name="schedule" size="18px" />
             {$t('settings.updates.changePauseDuration')}
-          </button>
+          </FluentButton>
         {:else}
-          <button
+          <FluentButton data-fluent-owner="routes-home-settings-updates-page"
             type="button"
-            class="tonal-action"
             onclick={choosePauseDuration}
             disabled={loading || autoSave.saving}
+            appearance="subtle"
+            class="tonal-action"
           >
             <Icon name="pause" size="18px" />
             {$t('settings.updates.pauseAutomaticChecks')}
-          </button>
+          </FluentButton>
         {/if}
       </div>
     </section>
@@ -249,7 +253,7 @@
         onkeydown={handleChannelKeydown}
       >
         {#each channels as item}
-          <button
+          <button data-fluent-owner="routes-home-settings-updates-page"
             data-radio-item
             type="button"
             class="channel-row"
@@ -294,18 +298,18 @@
 
 <style>
   .update-settings-page {
-    gap: 1rem;
+    gap: 16px;
   }
 
   .update-section {
     display: grid;
-    gap: 1rem;
+    gap: 16px;
   }
 
   .automatic-check-status {
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: 12px;
     min-height: 3rem;
   }
 
@@ -325,17 +329,17 @@
   .status-copy {
     display: grid;
     min-width: 0;
-    gap: 0.2rem;
+    gap: 4px;
   }
 
   .status-copy strong {
     color: var(--color-md3-on-surface);
-    font: 650 0.875rem/1.4 var(--font-md3-sans);
+    font: 600 14px/20px var(--font-md3-sans);
   }
 
   .status-copy span {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.5;
   }
 
@@ -346,7 +350,7 @@
   .channel-row {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: 12px;
     min-height: 4rem;
     padding: 0.85rem 0;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 50%, transparent);
@@ -361,7 +365,7 @@
     border-top: 0;
   }
 
-  .channel-row:hover:not(:disabled) {
+  .channel-row:hover:not(:is(:disabled, [disabled])) {
     background: color-mix(in srgb, var(--color-md3-primary-emphasis) 7%, transparent);
   }
 
@@ -372,39 +376,39 @@
 
   .channel-copy {
     display: grid;
-    gap: 0.2rem;
+    gap: 4px;
     min-width: 0;
   }
 
   .channel-name {
     color: var(--color-md3-on-surface);
-    font: 700 0.9rem/1.35 var(--font-md3-sans);
+    font: 700 14px/20px var(--font-md3-sans);
   }
 
   .channel-description {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.78rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
   .section-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.55rem;
+    gap: 8px;
   }
 
-  .primary-action,
-  .tonal-action,
-  .text-action {
+  :global(.primary-action[data-fluent-owner="routes-home-settings-updates-page"]),
+  :global(.tonal-action[data-fluent-owner="routes-home-settings-updates-page"]),
+  :global(.text-action[data-fluent-owner="routes-home-settings-updates-page"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
+    gap: 8px;
     min-height: 2.35rem;
-    border-radius: 6px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.85rem;
     font-family: var(--font-md3-sans);
-    font-size: 0.8125rem;
+    font-size: 12px;
     font-weight: 700;
     transition:
       background-color var(--motion-duration-short4) var(--motion-easing-standard),
@@ -413,46 +417,46 @@
       transform var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  .primary-action {
+  :global(.primary-action[data-fluent-owner="routes-home-settings-updates-page"]) {
     color: var(--color-md3-on-primary);
     background: var(--color-md3-primary);
   }
 
-  .tonal-action {
+  :global(.tonal-action[data-fluent-owner="routes-home-settings-updates-page"]) {
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
   }
 
-  .text-action {
+  :global(.text-action[data-fluent-owner="routes-home-settings-updates-page"]) {
     color: var(--color-md3-primary-emphasis);
     background: transparent;
   }
 
-  .primary-action:hover:not(:disabled),
-  .tonal-action:hover:not(:disabled) {
-    filter: brightness(1.06);
+  :global(.primary-action[data-fluent-owner="routes-home-settings-updates-page"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.tonal-action[data-fluent-owner="routes-home-settings-updates-page"]:hover:not(:is(:disabled, [disabled]))) {
+    filter: none;
     transform: translateY(-1px);
   }
 
-  .text-action:hover:not(:disabled) {
+  :global(.text-action[data-fluent-owner="routes-home-settings-updates-page"]:hover:not(:is(:disabled, [disabled]))) {
     background: color-mix(in srgb, var(--color-md3-primary-emphasis) 10%, transparent);
   }
 
-  button:disabled {
+  :global(:is(button[data-fluent-owner="routes-home-settings-updates-page"], .cfms-button[data-fluent-owner="routes-home-settings-updates-page"]):is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.55;
   }
 
   .update-notes {
     display: grid;
-    gap: 0.4rem;
+    gap: 8px;
     padding-top: 0.2rem;
   }
 
   .related-settings,
   .update-footnote {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -473,7 +477,7 @@
   .update-footnote {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     padding: 0.2rem 0.15rem;
   }
 
@@ -483,13 +487,13 @@
   }
 
   @media (max-width: 640px) {
-    .section-actions > :is(button, a) {
+    .section-actions > :global(:is(:is(button[data-fluent-owner="routes-home-settings-updates-page"], .cfms-button[data-fluent-owner="routes-home-settings-updates-page"]), a)) {
       min-height: 2.75rem;
     }
   }
 
   @media (max-width: 420px) {
-    .section-actions > :is(button, a) {
+    .section-actions > :global(:is(:is(button[data-fluent-owner="routes-home-settings-updates-page"], .cfms-button[data-fluent-owner="routes-home-settings-updates-page"]), a)) {
       width: 100%;
     }
   }

@@ -6,6 +6,7 @@ FIRST VIEWPORT: Command bar and schedule ledger fill the left; selected definiti
 FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; seed 862d8542.
 -->
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -264,32 +265,40 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     </div>
     {#if canView}
       <div class="header-actions">
-        <button type="button" class="secondary-action" disabled={loading || editorMode !== null} onclick={() => void refreshAll()}>
+        <FluentButton data-fluent-owner="routes-home-schedules-page"
+          type="button"
+          disabled={loading || editorMode !== null}
+          onclick={() => void refreshAll()}
+          appearance="subtle"
+          class="secondary-action"
+        >
           <Icon name="refresh" size="18px" />{$t('common.refresh')}
-        </button>
+        </FluentButton>
         {#if canManage}
-          <button
+          <FluentButton data-fluent-owner="routes-home-schedules-page"
             type="button"
-            class="primary-action"
             disabled={taskTypes.length === 0 || editorMode !== null}
             aria-describedby={noAvailableTaskTypes ? 'schedule-create-unavailable' : undefined}
             onclick={openCreate}
+            appearance="subtle"
+            class="primary-action"
           >
             <Icon name="add" size="18px" />{$t('schedules.createAction')}
-          </button>
+          </FluentButton>
         {/if}
         {#if noAvailableTaskTypes}
-          <button
+          <FluentButton data-fluent-owner="routes-home-schedules-page"
             type="button"
-            class="create-unavailable-help"
             aria-label={$t('schedules.createUnavailableHelp')}
             aria-describedby="schedule-create-unavailable"
+            appearance="subtle"
+            class="create-unavailable-help"
           >
             <Icon name="info" size="16px" />
             <span id="schedule-create-unavailable" class="create-unavailable-tooltip" role="tooltip">
               {$t('schedules.noAvailableTaskTypes')}
             </span>
-          </button>
+          </FluentButton>
         {/if}
       </div>
     {/if}
@@ -307,7 +316,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
           <label class="search-field">
             <Icon name="search" size="18px" />
             <span class="sr-only">{$t('schedules.search')}</span>
-            <input data-focus-ring="delegated" bind:value={search} disabled={editorMode !== null} placeholder={$t('schedules.searchPlaceholder')} />
+            <input class="cfms-native-field" data-focus-ring="delegated" bind:value={search} disabled={editorMode !== null} placeholder={$t('schedules.searchPlaceholder')} />
           </label>
           <label class="deleted-filter">
             <input type="checkbox" bind:checked={includeDeleted} disabled={editorMode !== null} onchange={resetAndRefresh} />
@@ -320,7 +329,11 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
           <div class="load-state error-state" role="alert">
             <Icon name="errorFilled" size="22px" />
             <div><strong>{$t('schedules.loadFailed')}</strong><p>{loadError}</p></div>
-            <button type="button" onclick={() => void refreshAll()}>{$t('common.retry')}</button>
+            <FluentButton data-fluent-owner="routes-home-schedules-page"
+              type="button"
+              onclick={() => void refreshAll()}
+              appearance="subtle"
+            >{$t('common.retry')}</FluentButton>
           </div>
         {:else if loading && schedules.length === 0}
           <div class="load-state"><ProgressRing size={24} label={$t('schedules.loading')} /><span>{$t('schedules.loading')}</span></div>
@@ -330,7 +343,12 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
             <h2>{search ? $t('schedules.noMatches') : $t('schedules.emptyTitle')}</h2>
             <p>{search ? $t('schedules.noMatchesHelp') : $t('schedules.emptyDescription')}</p>
             {#if !search && canManage && taskTypes.length > 0}
-              <button type="button" class="primary-action" onclick={openCreate}>{$t('schedules.createFirst')}</button>
+              <FluentButton data-fluent-owner="routes-home-schedules-page"
+                type="button"
+                onclick={openCreate}
+                appearance="subtle"
+                class="primary-action"
+              >{$t('schedules.createFirst')}</FluentButton>
             {/if}
           </div>
         {:else}
@@ -344,7 +362,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
                 class:selected={selected?.id === schedule.id}
                 class:unavailable={!schedule.task_available}
               >
-                <button type="button" class="row-main" disabled={editorMode !== null} onclick={() => inspect(schedule)}>
+                <button data-fluent-owner="routes-home-schedules-page" type="button" class="row-main" disabled={editorMode !== null} onclick={() => inspect(schedule)}>
                   <span class="task-cell">
                     <span class="task-name">{schedule.task_name}</span>
                     <span class="task-meta">{triggerSummary(schedule)} · {schedule.trigger.timezone}</span>
@@ -365,9 +383,17 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
                         onChange={(enabled) => void toggleEnabled(schedule, enabled)}
                       />
                     {/if}
-                    <button type="button" class="icon-action" disabled={rowBusyId === schedule.id || editorMode !== null || !taskAllowed(schedule)} aria-label={$t('common.edit')} onclick={() => void openEdit(schedule)}>
+                    <FluentButton data-fluent-owner="routes-home-schedules-page"
+                      type="button"
+                      disabled={rowBusyId === schedule.id || editorMode !== null || !taskAllowed(schedule)}
+                      aria-label={$t('common.edit')}
+                      onclick={() => void openEdit(schedule)}
+                      appearance="subtle"
+                      class="icon-action"
+                      iconOnly
+                    >
                       <Icon name="edit" size="18px" />
-                    </button>
+                    </FluentButton>
                   </div>
                 {/if}
               </div>
@@ -376,13 +402,23 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
         {/if}
 
         <footer class="pagination">
-          <button type="button" disabled={loading || editorMode !== null || cursorStack.length === 0} onclick={goPrevious}>
+          <FluentButton data-fluent-owner="routes-home-schedules-page"
+            type="button"
+            disabled={loading || editorMode !== null || cursorStack.length === 0}
+            onclick={goPrevious}
+            appearance="subtle"
+          >
             <Icon name="navigateBefore" size="19px" />{$t('common.previous')}
-          </button>
+          </FluentButton>
           <span>{$t('schedules.page', { values: { page: pageNumber } })}</span>
-          <button type="button" disabled={loading || editorMode !== null || !nextCursor} onclick={goNext}>
+          <FluentButton data-fluent-owner="routes-home-schedules-page"
+            type="button"
+            disabled={loading || editorMode !== null || !nextCursor}
+            onclick={goNext}
+            appearance="subtle"
+          >
             {$t('common.next')}<Icon name="navigateNext" size="19px" />
-          </button>
+          </FluentButton>
         </footer>
       </section>
 
@@ -400,7 +436,14 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
         <aside class="inspector schedule-details" aria-labelledby="schedule-detail-title">
           <header>
             <div><p>{$t('schedules.definition')}</p><h2 id="schedule-detail-title">{selected.task_name}</h2></div>
-            <button type="button" class="icon-action" aria-label={$t('common.close')} onclick={() => (selected = null)}><Icon name="close" size="19px" /></button>
+            <FluentButton data-fluent-owner="routes-home-schedules-page"
+              type="button"
+              aria-label={$t('common.close')}
+              onclick={() => (selected = null)}
+              appearance="subtle"
+              class="icon-action"
+              iconOnly
+            ><Icon name="close" size="19px" /></FluentButton>
           </header>
           <dl>
             <div><dt>{$t('schedules.statusLabel')}</dt><dd>{$t(`schedules.status.${displayStatus(selected)}`)}</dd></div>
@@ -418,12 +461,25 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
           <div class="payload-preview"><strong>{$t('schedules.payload')}</strong><pre>{JSON.stringify(selected.payload, null, 2)}</pre></div>
           {#if canManage && selected.status !== 'deleted'}
             <footer>
-              <button type="button" class="danger-action" disabled={rowBusyId === selected.id} onclick={() => void removeSchedule(selected!)}>
+              <FluentButton data-fluent-owner="routes-home-schedules-page"
+                type="button"
+                disabled={rowBusyId === selected.id}
+                onclick={() => void removeSchedule(selected!)}
+                appearance="subtle"
+                tone="danger"
+                class="danger-action"
+              >
                 <Icon name="delete" size="18px" />{$t('schedules.deleteAction')}
-              </button>
-              <button type="button" class="primary-action" disabled={rowBusyId === selected.id || !taskAllowed(selected)} onclick={() => void openEdit(selected!)}>
+              </FluentButton>
+              <FluentButton data-fluent-owner="routes-home-schedules-page"
+                type="button"
+                disabled={rowBusyId === selected.id || !taskAllowed(selected)}
+                onclick={() => void openEdit(selected!)}
+                appearance="subtle"
+                class="primary-action"
+              >
                 <Icon name="edit" size="18px" />{$t('common.edit')}
-              </button>
+              </FluentButton>
             </footer>
           {/if}
         </aside>
@@ -440,49 +496,49 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 
 <style>
   .schedules-page { display: flex; height: 100%; min-height: 0; overflow: hidden; flex-direction: column; font-family: var(--font-md3-sans); }
-  .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem; padding: 1.5rem 1.5rem 1rem; }
+  .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 1.5rem 1.5rem 1rem; }
   h1, h2, p { margin: 0; }
   h1 { color: var(--color-md3-on-surface); font-size: clamp(1.45rem, 4vw, 2.2rem); font-weight: 600; line-height: 1.15; letter-spacing: -0.025em; }
-  .page-header > div > p { max-width: 68ch; margin-top: 0.35rem; color: var(--color-md3-on-surface-variant); font-size: 0.85rem; line-height: 1.5; }
-  .header-actions, .row-actions, .pagination, .schedule-details footer { display: flex; align-items: center; gap: 0.5rem; }
+  .page-header > div > p { max-width: 68ch; margin-top: 0.35rem; color: var(--color-md3-on-surface-variant); font-size: 14px; line-height: 1.5; }
+  .header-actions, .row-actions, .pagination, .schedule-details footer { display: flex; align-items: center; gap: 8px; }
   .header-actions { white-space: nowrap; }
-  .create-unavailable-help { position: relative; display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 0; border-radius: 999px; padding: 0; color: var(--color-md3-on-surface-variant); background: transparent; cursor: help; transition: color 120ms ease, background 120ms ease; }
-  .create-unavailable-help:hover, .create-unavailable-help:focus-visible { color: var(--color-md3-on-surface); background: var(--color-md3-surface-container-highest); }
-  .create-unavailable-help:focus-visible { outline: 2px solid var(--color-md3-primary-emphasis, var(--color-md3-primary)); outline-offset: -2px; }
-  .create-unavailable-tooltip { position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 25; width: max-content; max-width: min(32rem, calc(100vw - 2rem)); border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.65rem 0.75rem; color: var(--color-md3-on-surface); background: color-mix(in srgb, var(--color-md3-surface-container-high) 96%, transparent); box-shadow: var(--explorer-shadow); font-size: 0.75rem; line-height: 1.5; text-align: left; white-space: normal; pointer-events: none; opacity: 0; transform: translateY(-4px); transition: opacity 120ms ease, transform 120ms ease; }
-  .create-unavailable-help:hover .create-unavailable-tooltip, .create-unavailable-help:focus-visible .create-unavailable-tooltip { opacity: 1; transform: translateY(0); }
-  button { font-family: inherit; }
-  .primary-action, .secondary-action, .danger-action, .pagination button, .load-state button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 0.4rem; border-radius: 5px; padding: 0.35rem 0.75rem; font-size: 0.76rem; font-weight: 650; cursor: pointer; }
-  .primary-action { border: 1px solid var(--color-md3-primary); background: var(--color-md3-primary); color: var(--color-md3-on-primary); }
-  .secondary-action, .pagination button, .load-state button { border: 1px solid var(--color-md3-outline); background: transparent; color: var(--color-md3-on-surface); }
-  .danger-action { border: 1px solid var(--color-md3-error); background: transparent; color: var(--color-md3-error); }
-  button:disabled { cursor: not-allowed; opacity: 0.48; }
+  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]) { position: relative; display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 0; border-radius: 999px; padding: 0; color: var(--color-md3-on-surface-variant); background: transparent; cursor: help; transition: color 120ms ease, background 120ms ease; }
+  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:hover), :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:focus-visible) { color: var(--color-md3-on-surface); background: var(--color-md3-surface-container-highest); }
+  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:focus-visible) { outline: none; outline-offset: -2px; }
+  .create-unavailable-tooltip { position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 25; width: max-content; max-width: min(32rem, calc(100vw - 2rem)); border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.65rem 0.75rem; color: var(--color-md3-on-surface); background: color-mix(in srgb, var(--color-md3-surface-container-high) 96%, transparent); box-shadow: var(--explorer-shadow); font-size: 12px; line-height: 1.5; text-align: left; white-space: normal; pointer-events: none; opacity: 0; transform: translateY(-4px); transition: opacity 120ms ease, transform 120ms ease; }
+  :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:hover) .create-unavailable-tooltip, :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]:focus-visible) .create-unavailable-tooltip { opacity: 1; transform: translateY(0); }
+  :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { font-family: inherit; }
+  :global(.primary-action[data-fluent-owner="routes-home-schedules-page"]), :global(.secondary-action[data-fluent-owner="routes-home-schedules-page"]), :global(.danger-action[data-fluent-owner="routes-home-schedules-page"]), .pagination :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])), .load-state :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; border-radius: var(--borderRadiusMedium); padding: 0.35rem 0.75rem; font-size: 12px; font-weight: 600; cursor: pointer; }
+  :global(.primary-action[data-fluent-owner="routes-home-schedules-page"]) { border: 1px solid var(--color-md3-primary); background: var(--color-md3-primary); color: var(--color-md3-on-primary); }
+  :global(.secondary-action[data-fluent-owner="routes-home-schedules-page"]), .pagination :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])), .load-state :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { border: 1px solid var(--color-md3-outline); background: transparent; color: var(--color-md3-on-surface); }
+  :global(.danger-action[data-fluent-owner="routes-home-schedules-page"]) { border: 1px solid var(--color-md3-error); background: transparent; color: var(--color-md3-error); }
+  :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"]):is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.48; }
   .schedule-workspace { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--color-md3-outline); }
   .schedule-workspace.has-inspector .ledger { display: none; }
   .ledger { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
-  .command-bar { display: flex; min-height: 52px; align-items: center; gap: 0.75rem; border-bottom: 1px solid var(--color-md3-outline); padding: 0.45rem 1rem; background: var(--color-md3-surface-container); }
-  .search-field { display: flex; min-width: 180px; max-width: 390px; flex: 1; align-items: center; gap: 0.45rem; border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0 0.65rem; background: var(--color-md3-field); color: var(--color-md3-on-surface-variant); }
+  .command-bar { display: flex; min-height: 52px; align-items: center; gap: 12px; border-bottom: 1px solid var(--color-md3-outline); padding: 0.45rem 1rem; background: var(--color-md3-surface-container); }
+  .search-field { display: flex; min-width: 180px; max-width: 390px; flex: 1; align-items: center; gap: 8px; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); padding: 0 0.65rem; background: var(--color-md3-field); color: var(--color-md3-on-surface-variant); }
   .search-field:focus-within { border-color: var(--color-md3-primary); box-shadow: inset 0 0 0 1px var(--color-md3-primary); }
   .search-field input { width: 100%; min-height: 36px; border: 0; outline: 0; background: transparent; color: var(--color-md3-on-surface); font: 0.8rem var(--font-md3-sans); }
-  .search-field:has(input:disabled) { opacity: 0.55; }
-  .deleted-filter { display: flex; align-items: center; gap: 0.4rem; color: var(--color-md3-on-surface-variant); font-size: 0.74rem; cursor: pointer; }
+  .search-field:has(input:is(:disabled, [disabled])) { opacity: 0.55; }
+  .deleted-filter { display: flex; align-items: center; gap: 8px; color: var(--color-md3-on-surface-variant); font-size: 12px; cursor: pointer; }
   .deleted-filter input { accent-color: var(--color-md3-primary); }
-  .ledger-count { margin-left: auto; color: var(--color-md3-on-surface-variant); font-size: 0.72rem; }
-  .ledger-heading { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.8fr) minmax(110px, 0.55fr); gap: 0.75rem; border-bottom: 1px solid var(--color-md3-outline); padding: 0.55rem 8.8rem 0.55rem 1rem; color: var(--color-md3-on-surface-variant); font-size: 0.7rem; font-weight: 650; }
+  .ledger-count { margin-left: auto; color: var(--color-md3-on-surface-variant); font-size: 12px; }
+  .ledger-heading { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.8fr) minmax(110px, 0.55fr); gap: 12px; border-bottom: 1px solid var(--color-md3-outline); padding: 0.55rem 8.8rem 0.55rem 1rem; color: var(--color-md3-on-surface-variant); font-size: 12px; font-weight: 600; }
   .schedule-list { flex: 1; overflow: auto; }
   .schedule-row { display: flex; min-height: 60px; align-items: stretch; border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 70%, transparent); transition: background 120ms ease; }
   .schedule-row:hover, .schedule-row.selected { background: var(--color-md3-surface-container-high); }
   .schedule-row.selected { box-shadow: inset 3px 0 0 var(--color-md3-primary); }
   .schedule-row.unavailable { opacity: 0.78; }
-  .row-main { display: grid; min-width: 0; flex: 1; grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.8fr) minmax(110px, 0.55fr); align-items: center; gap: 0.75rem; border: 0; padding: 0.55rem 0.75rem 0.55rem 1rem; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-  .row-main:disabled { opacity: 1; cursor: default; }
-  .task-cell { display: grid; min-width: 0; gap: 0.2rem; }
-  .task-name { overflow: hidden; color: var(--color-md3-on-surface); font-size: 0.82rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-  .task-meta, .next-cell { color: var(--color-md3-on-surface-variant); font-size: 0.72rem; }
+  .row-main { display: grid; min-width: 0; flex: 1; grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.8fr) minmax(110px, 0.55fr); align-items: center; gap: 12px; border: 0; padding: 0.55rem 0.75rem 0.55rem 1rem; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+  .row-main:is(:disabled, [disabled]) { opacity: 1; cursor: default; }
+  .task-cell { display: grid; min-width: 0; gap: 4px; }
+  .task-name { overflow: hidden; color: var(--color-md3-on-surface); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .task-meta, .next-cell { color: var(--color-md3-on-surface-variant); font-size: 12px; }
   .task-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .next-cell { font-family: var(--font-md3-mono); }
-  .state-cell { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
-  .status-chip, .availability-warning { border-radius: 999px; padding: 0.2rem 0.45rem; font-size: 0.67rem; font-weight: 650; }
+  .state-cell { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .status-chip, .availability-warning { border-radius: 999px; padding: 0.2rem 0.45rem; font-size: 12px; font-weight: 600; }
   .status-active { background: var(--color-md3-success-container); color: var(--color-md3-on-success-container); }
   .status-completed { background: var(--color-md3-primary-container); color: var(--color-md3-on-primary-container); }
   .status-failed { background: var(--color-md3-error-container); color: var(--color-md3-on-error-container); }
@@ -491,39 +547,39 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   .availability-warning { color: var(--color-md3-warning); }
   .row-actions { flex: none; padding: 0 0.65rem; }
   .row-actions :global(.md-switch) { transform: scale(0.75); }
-  .icon-action { display: grid; width: 40px; height: 40px; place-items: center; border: 0; border-radius: 999px; padding: 0; background: transparent; color: var(--color-md3-on-surface-variant); cursor: pointer; }
-  .icon-action:hover:not(:disabled) { background: var(--color-md3-surface-container-highest); color: var(--color-md3-on-surface); }
-  .pagination { justify-content: center; border-top: 1px solid var(--color-md3-outline); padding: 0.55rem 1rem; background: var(--color-md3-surface-container); color: var(--color-md3-on-surface-variant); font-size: 0.72rem; }
-  .pagination button { padding: 0.25rem 0.55rem; }
+  :global(.icon-action[data-fluent-owner="routes-home-schedules-page"]) { display: grid; width: 40px; height: 40px; place-items: center; border: 0; border-radius: var(--borderRadiusMedium); padding: 0; background: transparent; color: var(--color-md3-on-surface-variant); cursor: pointer; }
+  :global(.icon-action[data-fluent-owner="routes-home-schedules-page"]:hover:not(:is(:disabled, [disabled]))) { background: var(--color-md3-surface-container-highest); color: var(--color-md3-on-surface); }
+  .pagination { justify-content: center; border-top: 1px solid var(--color-md3-outline); padding: 0.55rem 1rem; background: var(--color-md3-surface-container); color: var(--color-md3-on-surface-variant); font-size: 12px; }
+  .pagination :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { padding: 0.25rem 0.55rem; }
   .inspector { min-width: 0; overflow: auto; border-left: 1px solid var(--color-md3-outline); background: var(--color-md3-surface-container); }
-  .inspector-empty { display: none; place-items: center; align-content: center; gap: 0.45rem; padding: 1.5rem; color: var(--color-md3-on-surface-variant); text-align: center; }
-  .inspector-empty strong { color: var(--color-md3-on-surface); font-size: 0.9rem; }
-  .inspector-empty p { max-width: 32ch; font-size: 0.76rem; line-height: 1.5; }
-  .schedule-details > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--color-md3-outline); padding: 1rem 1.1rem; }
-  .schedule-details > header p { color: var(--color-md3-on-surface-variant); font-size: 0.7rem; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
-  .schedule-details > header h2 { margin-top: 0.15rem; font-size: 1rem; overflow-wrap: anywhere; }
+  .inspector-empty { display: none; place-items: center; align-content: center; gap: 8px; padding: 1.5rem; color: var(--color-md3-on-surface-variant); text-align: center; }
+  .inspector-empty strong { color: var(--color-md3-on-surface); font-size: 14px; }
+  .inspector-empty p { max-width: 32ch; font-size: 12px; line-height: 1.5; }
+  .schedule-details > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--color-md3-outline); padding: 1rem 1.1rem; }
+  .schedule-details > header p { color: var(--color-md3-on-surface-variant); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .schedule-details > header h2 { margin-top: 0.15rem; font-size: 16px; overflow-wrap: anywhere; }
   dl { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 0; padding: 0.75rem 1.1rem; }
-  dl div { display: grid; gap: 0.18rem; border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 70%, transparent); padding: 0.65rem 0; }
+  dl div { display: grid; gap: 4px; border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 70%, transparent); padding: 0.65rem 0; }
   dl div:nth-child(odd):not(.wide) { padding-right: 0.75rem; }
   dl .wide { grid-column: 1 / -1; }
-  dt { color: var(--color-md3-on-surface-variant); font-size: 0.68rem; }
-  dd { margin: 0; color: var(--color-md3-on-surface); font-size: 0.76rem; overflow-wrap: anywhere; }
+  dt { color: var(--color-md3-on-surface-variant); font-size: 12px; }
+  dd { margin: 0; color: var(--color-md3-on-surface); font-size: 12px; overflow-wrap: anywhere; }
   .mono { font-family: var(--font-md3-mono); }
-  .payload-preview { display: grid; gap: 0.45rem; padding: 0.4rem 1.1rem 1rem; }
-  .payload-preview strong { font-size: 0.74rem; }
+  .payload-preview { display: grid; gap: 8px; padding: 0.4rem 1.1rem 1rem; }
+  .payload-preview strong { font-size: 12px; }
   .payload-preview pre { max-height: 260px; overflow: auto; margin: 0; border-radius: 8px; padding: 0.7rem; background: var(--color-md3-surface-container-high); color: var(--color-md3-on-surface); font: 0.72rem/1.5 var(--font-md3-mono); white-space: pre-wrap; }
   .schedule-details footer { justify-content: flex-end; border-top: 1px solid var(--color-md3-outline); padding: 0.9rem 1.1rem; }
   .load-state, .empty-state, .unavailable-state { color: var(--color-md3-on-surface-variant); }
-  .load-state { display: flex; min-height: 0; flex: 1; align-items: center; justify-content: center; gap: 0.7rem; padding: 1rem; font-size: 0.8rem; }
+  .load-state { display: flex; min-height: 0; flex: 1; align-items: center; justify-content: center; gap: 12px; padding: 1rem; font-size: 12px; }
   .error-state { align-items: flex-start; }
-  .error-state div { display: grid; gap: 0.25rem; }
+  .error-state div { display: grid; gap: 4px; }
   .error-state strong { color: var(--color-md3-error); }
-  .error-state p { max-width: 58ch; font-size: 0.76rem; line-height: 1.45; }
-  .empty-state { display: grid; min-height: 0; flex: 1; place-items: center; align-content: center; gap: 0.45rem; padding: 1.5rem; text-align: center; }
-  .empty-state h2, .unavailable-state h2 { color: var(--color-md3-on-surface); font-size: 0.95rem; }
-  .empty-state p, .unavailable-state p { max-width: 55ch; font-size: 0.78rem; line-height: 1.5; }
-  .unavailable-state { display: flex; align-items: flex-start; gap: 0.75rem; margin: 0 1.5rem; border-top: 1px solid var(--color-md3-outline); padding: 1.25rem 0; }
-  .unavailable-state div { display: grid; gap: 0.3rem; }
+  .error-state p { max-width: 58ch; font-size: 12px; line-height: 1.45; }
+  .empty-state { display: grid; min-height: 0; flex: 1; place-items: center; align-content: center; gap: 8px; padding: 1.5rem; text-align: center; }
+  .empty-state h2, .unavailable-state h2 { color: var(--color-md3-on-surface); font-size: 16px; }
+  .empty-state p, .unavailable-state p { max-width: 55ch; font-size: 12px; line-height: 1.5; }
+  .unavailable-state { display: flex; align-items: flex-start; gap: 12px; margin: 0 1.5rem; border-top: 1px solid var(--color-md3-outline); padding: 1.25rem 0; }
+  .unavailable-state div { display: grid; gap: 4px; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   @container (min-width: 1100px) {
     .schedule-workspace { grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); }
@@ -537,8 +593,8 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     .schedules-page { height: auto; min-height: 100%; overflow: visible; }
     .page-header { align-items: flex-start; flex-direction: column; padding: 1.1rem 1rem 0.8rem; }
     .header-actions { width: 100%; }
-    .header-actions button { flex: 1; }
-    .header-actions .create-unavailable-help { width: 44px; height: 44px; flex: none; }
+    .header-actions :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { flex: 1; }
+    .header-actions :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]) { width: 44px; height: 44px; flex: none; }
     .command-bar { flex-wrap: wrap; }
     .search-field { max-width: none; flex-basis: 100%; }
     .ledger-count { margin-left: auto; }
@@ -550,7 +606,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   }
   @media (max-width: 480px) { .task-meta { max-width: 44vw; } }
   @media (pointer: coarse) {
-    .primary-action, .secondary-action, .danger-action, .pagination button, .load-state button, .icon-action { min-width: 44px; min-height: 44px; }
+    :global(.primary-action[data-fluent-owner="routes-home-schedules-page"]), :global(.secondary-action[data-fluent-owner="routes-home-schedules-page"]), :global(.danger-action[data-fluent-owner="routes-home-schedules-page"]), .pagination :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])), .load-state :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])), :global(.icon-action[data-fluent-owner="routes-home-schedules-page"]) { min-width: 44px; min-height: 44px; }
     .row-actions :global(.md-switch) { transform: none; }
   }
 </style>

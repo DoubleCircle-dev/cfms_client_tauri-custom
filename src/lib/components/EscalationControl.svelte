@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { dropEscalation, getUserAuthentication, requestEscalation, type JsonValue } from '$lib/api';
@@ -54,37 +55,24 @@
   }
 </script>
 
-<button
+<FluentButton data-fluent-owner="lib-components-escalation-control"
   type="button"
-  class="explorer-command-button escalation-button"
   data-active={active}
   title={$t(active ? 'authentication.exitEscalation' : 'authentication.escalate')}
   aria-label={$t(active ? 'authentication.exitEscalation' : 'authentication.escalate')}
   aria-pressed={active}
   disabled={busy || (!active && !serverStateStore.connected)}
   onclick={begin}
+  appearance="subtle"
+  class="explorer-command-button escalation-button"
 >
   {#if busy}
     <ProgressRing size={18} label={$t('common.verifying')} />
   {:else}
     <Icon name="adminPanelSettings" size="19px" />
   {/if}
-</button>
+</FluentButton>
 
 {#if methods && authStore.isLoggedIn}
   <AuthenticationDialog {methods} title={$t('authentication.escalationTitle')} onVerify={verify} onCancel={() => { methods = null; }} />
 {/if}
-
-<style>
-  .escalation-button { display: inline-flex; width: 34px; height: 34px; padding: 0; align-items: center; justify-content: center; }
-  .escalation-button[data-active='true'],
-  .escalation-button[data-active='true']:hover:not(:disabled) {
-    color: var(--explorer-danger);
-    background: color-mix(in srgb, var(--explorer-danger) 14%, transparent);
-  }
-  .escalation-button[data-active='false']:hover:not(:disabled),
-  .escalation-button[data-active='false']:focus-visible {
-    color: var(--explorer-warning);
-    background: color-mix(in srgb, var(--explorer-warning) 14%, transparent);
-  }
-</style>

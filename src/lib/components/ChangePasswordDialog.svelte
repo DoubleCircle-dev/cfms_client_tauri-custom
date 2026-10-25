@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   // ChangePasswordDialog — MD3 modal for the self-change password flow.
   //
   // Shown when the server rejects a login with code 4001/4002 ("password must
@@ -166,7 +167,7 @@
         handleSubmit();
       }}
     >
-      <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high/40 p-3">
+      <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high p-3">
         <span class="rounded-lg bg-md3-primary-container/70 p-2 text-md3-primary-emphasis">
           <Icon name="lockPerson" size="20px" />
         </span>
@@ -201,15 +202,16 @@
             disabled={busy}
             autocomplete="current-password"
           />
-          <button
+          <FluentButton data-fluent-owner="lib-components-change-password-dialog"
             type="button"
-            class="absolute right-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant
-                   hover:text-md3-on-surface transition-colors"
             onclick={() => (oldVisible = !oldVisible)}
             aria-label={oldVisible ? $t('login.hidePassword') : $t('login.showPassword')}
+            appearance="subtle"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant\r\n                   hover:text-md3-on-surface transition-colors"
+            iconOnly
           >
             <Icon name="visibility" size="18px" />
-          </button>
+          </FluentButton>
         </div>
       </div>
 
@@ -240,26 +242,28 @@
             autocomplete="new-password"
           />
           <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <button
+            <FluentButton data-fluent-owner="lib-components-change-password-dialog"
               type="button"
-              class="text-md3-on-surface-variant hover:text-md3-primary-emphasis
-                     transition-colors rounded-full p-1"
               onclick={handleDice}
               disabled={busy}
               title={$t('dialog.changePassword.generateStrongPassword')}
               aria-label={$t('dialog.changePassword.generateStrongPassword')}
+              appearance="subtle"
+              class="text-md3-on-surface-variant hover:text-md3-primary-emphasis\r\n                     transition-colors rounded p-1"
+              iconOnly
             >
               <Icon name="ifl" size="18px" />
-            </button>
-            <button
+            </FluentButton>
+            <FluentButton data-fluent-owner="lib-components-change-password-dialog"
               type="button"
-              class="text-md3-on-surface-variant hover:text-md3-on-surface
-                     transition-colors rounded-full p-1"
               onclick={() => (newVisible = !newVisible)}
               aria-label={newVisible ? $t('login.hidePassword') : $t('login.showPassword')}
+              appearance="subtle"
+              class="text-md3-on-surface-variant hover:text-md3-on-surface\r\n                     transition-colors rounded p-1"
+              iconOnly
             >
               <Icon name="visibility" size="18px" />
-            </button>
+            </FluentButton>
           </div>
         </div>
 

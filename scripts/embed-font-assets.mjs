@@ -1,168 +1,55 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import path from "node:path";
-import { promisify } from "node:util";
+// Build-time only: the application ships every referenced font locally.
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
-const rootDir = path.resolve(import.meta.dirname, "..");
-const fontsDir = path.join(rootDir, "static", "fonts");
-const execFileAsync = promisify(execFile);
-const curlCommand = process.platform === "win32" ? "curl.exe" : "curl";
-
-const sourceFilesForText = [
-  "src/lib/i18n/messages/en.ts",
-  "src/lib/i18n/messages/zh-CN.ts",
-  "src/app.html",
-];
-
-const asciiPrintable = Array.from({ length: 95 }, (_, index) =>
-  String.fromCharCode(32 + index),
-).join("");
-const commonUiSymbols =
-  "，。！？、；：《》（）【】“”‘’…·—–￥℃°×÷±→←↑↓•";
-
-function uniqueChars(value) {
-  return [...new Set([...value])].join("");
-}
-
-async function readUiText() {
-  const contents = await Promise.all(
-    sourceFilesForText.map((file) => readFile(path.join(rootDir, file), "utf8")),
-  );
-
-  return uniqueChars(`${asciiPrintable}${commonUiSymbols}${contents.join("\n")}`);
-}
-
-async function fetchText(url) {
-  const { stdout } = await execFileAsync(
-    curlCommand,
-    ["-L", "-sS", "--retry", "3", "-A", "Mozilla/5.0 CFMS font asset generator", url.toString()],
-    { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
-  );
-
-  return stdout;
-}
-
-async function fetchBinary(url) {
-  const { stdout } = await execFileAsync(
-    curlCommand,
-    ["-L", "-sS", "--retry", "3", "-A", "Mozilla/5.0 CFMS font asset generator", url],
-    { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 },
-  );
-
-  return stdout;
-}
-
-function googleFontsUrl({ family, display, text }) {
-  const url = new URL("https://fonts.googleapis.com/css2");
-  url.searchParams.append("family", family);
-  url.searchParams.set("display", display);
-
-  if (text) {
-    url.searchParams.set("text", text);
-  }
-
-
-  return url;
-}
-
-function extensionForFormat(format) {
-  switch (format) {
-    case "woff2":
-      return "woff2";
-    case "woff":
-      return "woff";
-    case "opentype":
-      return "otf";
-    case "truetype":
-    default:
-      return "ttf";
-  }
-}
-
-async function localizeCss({ name, url, localFamily }) {
-  const css = await fetchText(url);
-  const fontUrls = [...css.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)\s+format\('([^']+)'\)/g)];
-  let localizedCss = css;
-
-  for (const [index, match] of fontUrls.entries()) {
-    const [, remoteUrl, format] = match;
-    const ext = extensionForFormat(format);
-    const filename = `${name}-${index + 1}.${ext}`;
-    const bytes = await fetchBinary(remoteUrl);
-
-    await writeFile(path.join(fontsDir, filename), bytes);
-    localizedCss = localizedCss.replace(remoteUrl, `./${filename}`);
-  }
-
-  if (localFamily) {
-    localizedCss = localizedCss.replaceAll(
-      /font-family:\s*'([^']+)'/g,
-      `font-family: '${localFamily}'`,
-    );
-  }
-
-  return localizedCss.trim();
-}
-
-const uiText = await readUiText();
-
+const rootDir = path.resolve(import.meta.dirname, '..');
+const fontsDir = path.join(rootDir, 'static', 'fonts');
+// Google Fonts negotiates variable WOFF2 + unicode-range with modern browsers.
+const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 const specs = [
-  {
-    name: "inter",
-    localFamily: "CFMS Inter Subset",
-    url: googleFontsUrl({
-      family: "Inter:wght@400;700",
-      display: "swap",
-      text: uiText,
-    }),
-  },
-  {
-    name: "noto-sans-sc",
-    localFamily: "CFMS Noto Sans SC Subset",
-    url: googleFontsUrl({
-      family: "Noto Sans SC:wght@400;700",
-      display: "swap",
-      text: uiText,
-    }),
-  },
-  {
-    name: "noto-serif-sc",
-    localFamily: "CFMS Noto Serif SC Subset",
-    url: googleFontsUrl({
-      family: "Noto Serif SC:wght@400;700",
-      display: "swap",
-      text: uiText,
-    }),
-  },
-  {
-    name: "jetbrains-mono",
-    localFamily: "CFMS JetBrains Mono Subset",
-    url: googleFontsUrl({
-      family: "JetBrains Mono:wght@400",
-      display: "swap",
-      text: asciiPrintable,
-    }),
-  },
+  ['noto-sans', 'Noto Sans', 'notosans'],
+  ['noto-sans-sc', 'Noto Sans SC', 'notosanssc'],
+  ['noto-serif', 'Noto Serif', 'notoserif'],
+  ['noto-serif-sc', 'Noto Serif SC', 'notoserifsc'],
+  ['jetbrains-mono', 'JetBrains Mono', 'jetbrainsmono'],
 ];
 
+async function fetchBytes(url) {
+  const response = await fetch(url, { headers: { 'User-Agent': userAgent } });
+  if (!response.ok) throw new Error(`${response.status}: ${url}`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+const assets = new Map();
+const chunks = [];
+for (const [name, family, licensePath] of specs) {
+  const url = new URL('https://fonts.googleapis.com/css2');
+  url.searchParams.set('family', `${family}:wght@400..800`);
+  url.searchParams.set('display', 'swap');
+  let css = (await fetchBytes(url)).toString('utf8');
+  const matches = [...css.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)\s+format\('woff2'\)/g)];
+  if (!matches.length || /format\('(?!woff2)/.test(css)) throw new Error(`Expected WOFF2 for ${family}`);
+  // Preserve upstream unicode ranges for arbitrary filenames and server content.
+  const uniqueUrls = [...new Set(matches.map(match => match[1]))];
+  for (let start = 0; start < uniqueUrls.length; start += 6) {
+    await Promise.all(uniqueUrls.slice(start, start + 6).map(async (remoteUrl, offset) => {
+      const filename = `${name}-${start + offset + 1}.woff2`;
+      const bytes = await fetchBytes(remoteUrl);
+      if (bytes.toString('ascii', 0, 4) !== 'wOF2') throw new Error(`Invalid WOFF2: ${remoteUrl}`);
+      assets.set(filename, bytes);
+    }));
+  }
+  uniqueUrls.forEach((remoteUrl, index) => { css = css.replaceAll(remoteUrl, `./${name}-${index + 1}.woff2`); });
+  chunks.push(css.trim());
+  assets.set(`${name}-OFL.txt`, await fetchBytes(`https://raw.githubusercontent.com/google/fonts/main/ofl/${licensePath}/OFL.txt`));
+  console.log(`Prepared ${family}: ${uniqueUrls.length} local WOFF2 slices`);
+}
+
+// Only replace the known generated directory after all downloads succeed.
+if (fontsDir !== path.resolve(rootDir, 'static/fonts')) throw new Error('Unexpected font output directory');
 await rm(fontsDir, { recursive: true, force: true });
 await mkdir(fontsDir, { recursive: true });
-
-const chunks = [];
-
-for (const spec of specs) {
-  chunks.push(await localizeCss(spec));
-}
-
-await writeFile(
-  path.join(fontsDir, "fonts.css"),
-  [
-    "/* Generated by scripts/embed-font-assets.mjs. Do not edit by hand. */",
-    "",
-    ...chunks,
-  ].join("\n\n") + "\n",
-);
-
-console.log(
-  `Embedded ${specs.length} font families with ${uiText.length} UI characters; system icons are bundled as Fluent SVGs.`,
-);
+await Promise.all([...assets].map(([name, bytes]) => writeFile(path.join(fontsDir, name), bytes)));
+await writeFile(path.join(fontsDir, 'fonts.css'),
+  '/* Generated by scripts/embed-font-assets.mjs. Do not edit by hand. */\n\n' + chunks.join('\n\n') + '\n');
+console.log(`Embedded ${specs.length} font families, ${([...assets.values()].reduce((sum, value) => sum + value.length, 0) / 1024 / 1024).toFixed(1)} MiB. No runtime CDN requests.`);

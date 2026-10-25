@@ -18,5 +18,5 @@
 <style>
   .cfms-icon-button { position: relative; display: inline-flex; flex-shrink: 0; }
   .cfms-icon-button--danger { --colorNeutralForeground2: var(--colorStatusDangerForeground1); }
-  .cfms-icon-button__badge { position: absolute; pointer-events: none; top: -3px; right: -3px; min-width: 14px; padding: 1px 4px; border-radius: 99px; background: var(--colorStatusDangerBackground3); color: var(--colorNeutralForegroundStaticInverted); font: 600 10px/14px var(--fontFamilyBase); text-align: center; }
+  .cfms-icon-button__badge { position: absolute; pointer-events: none; top: -3px; right: -3px; min-width: 14px; padding: 1px 4px; border-radius: 99px; background: var(--colorStatusDangerBackground3); color: var(--colorNeutralForegroundStaticInverted); font: 600 12px/16pxpx var(--fontFamilyBase); text-align: center; }
 </style>

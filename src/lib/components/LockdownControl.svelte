@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { tick } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
@@ -107,7 +108,7 @@
       <span class="lockdown-remaining-count" aria-live="polite" aria-atomic="true">
         {remainingLabel(remainingCharacters)}
       </span>
-      <input
+      <input class="cfms-native-field"
         bind:this={reasonInput}
         bind:value={reason}
         type="text"
@@ -118,33 +119,37 @@
         disabled={busy}
         onkeydown={handleReasonKeydown}
       />
-      <button
+      <FluentButton data-fluent-owner="lib-components-lockdown-control"
         type="button"
-        class="explorer-command-button lockdown-cancel-button"
         title={cancelLabel}
         aria-label={cancelLabel}
         disabled={busy}
         onclick={cancelReasonEditor}
+        appearance="subtle"
+        class="explorer-command-button lockdown-cancel-button"
+        iconOnly
       >
         <Icon name="close" size="18px" />
-      </button>
+      </FluentButton>
     </form>
   {/if}
 
   {#if active && !editorMode}
-    <button
+    <FluentButton data-fluent-owner="lib-components-lockdown-control"
       type="button"
-      class="explorer-command-button lockdown-edit-button"
       title={editLabel}
       aria-label={editLabel}
       disabled={busy}
       onclick={() => openReasonEditor('edit')}
+      appearance="subtle"
+      class="explorer-command-button lockdown-edit-button"
+      iconOnly
     >
       <Icon name="edit" size="17px" />
-    </button>
+    </FluentButton>
   {/if}
 
-  <button
+  <button data-fluent-owner="lib-components-lockdown-control"
     bind:this={primaryButton}
     type="button"
     class="explorer-command-button lockdown-primary-button"
@@ -174,23 +179,23 @@
     display: flex;
     flex: none;
     align-items: center;
-    gap: 0.4rem;
+    gap: 8px;
   }
 
-  .lockdown-reason-entry {
+  :global(.lockdown-reason-entry) {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 0.3rem;
+    gap: 4px;
     animation: reason-entry-in 160ms var(--motion-easing-emphasized-decelerate) both;
   }
 
-  .lockdown-reason-entry input {
+  :global(.lockdown-reason-entry) input {
     width: clamp(12rem, 26vw, 22rem);
     height: 34px;
     min-width: 0;
     border: 1px solid var(--explorer-border-strong);
-    border-radius: var(--explorer-radius-small);
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.65rem;
     outline: none;
     color: var(--explorer-text);
@@ -206,20 +211,20 @@
     white-space: nowrap;
   }
 
-  .lockdown-reason-entry input::placeholder {
+  :global(.lockdown-reason-entry) input::placeholder {
     color: var(--explorer-text-muted);
   }
 
-  .lockdown-reason-entry input:focus {
+  :global(.lockdown-reason-entry) input:focus {
     background: var(--explorer-surface-raised);
   }
 
-  .lockdown-reason-entry input:disabled {
+  :global(.lockdown-reason-entry) input:is(:disabled, [disabled]) {
     opacity: 0.55;
   }
 
-  .lockdown-cancel-button,
-  .lockdown-edit-button,
+  :global(.lockdown-cancel-button[data-fluent-owner="lib-components-lockdown-control"]),
+  :global(.lockdown-edit-button[data-fluent-owner="lib-components-lockdown-control"]),
   .lockdown-primary-button {
     width: 34px;
     flex: none;
@@ -237,7 +242,7 @@
     background: var(--explorer-accent);
   }
 
-  .lockdown-primary-button[data-confirming='true']:hover:not(:disabled) {
+  .lockdown-primary-button[data-confirming='true']:hover:not(:is(:disabled, [disabled])) {
     background: color-mix(in srgb, var(--explorer-accent) 88%, var(--explorer-text));
   }
 
@@ -251,7 +256,7 @@
       position: static;
     }
 
-    .lockdown-reason-entry {
+    :global(.lockdown-reason-entry) {
       position: absolute;
       top: calc(100% + 0.35rem);
       right: 0.45rem;
@@ -262,11 +267,11 @@
       border-radius: var(--explorer-radius-medium);
       background: color-mix(in srgb, var(--explorer-surface-raised) 97%, transparent);
       box-shadow: var(--explorer-shadow);
-      backdrop-filter: blur(24px) saturate(1.2);
+      backdrop-filter: none;
       animation-name: reason-entry-mobile-in;
     }
 
-    .lockdown-reason-entry input {
+    :global(.lockdown-reason-entry) input {
       width: auto;
       flex: 1;
     }
@@ -278,6 +283,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .lockdown-reason-entry { animation: none; }
+    :global(.lockdown-reason-entry) { animation: none; }
   }
 </style>

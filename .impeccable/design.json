@@ -58,23 +58,23 @@
     "typographyMeta": {
       "display": {
         "displayName": "display",
-        "purpose": "Fluent UI hierarchy; see DESIGN.md."
+        "purpose": "Bundled Noto Sans / Noto Sans SC hierarchy; preserve Noto Serif / Noto Serif SC exceptions. See DESIGN.md."
       },
       "headline": {
         "displayName": "headline",
-        "purpose": "Fluent UI hierarchy; see DESIGN.md."
+        "purpose": "Bundled Noto Sans / Noto Sans SC hierarchy; preserve Noto Serif / Noto Serif SC exceptions. See DESIGN.md."
       },
       "title": {
         "displayName": "title",
-        "purpose": "Fluent UI hierarchy; see DESIGN.md."
+        "purpose": "Bundled Noto Sans / Noto Sans SC hierarchy; preserve Noto Serif / Noto Serif SC exceptions. See DESIGN.md."
       },
       "body": {
         "displayName": "body",
-        "purpose": "Fluent UI hierarchy; see DESIGN.md."
+        "purpose": "Bundled Noto Sans / Noto Sans SC hierarchy; preserve Noto Serif / Noto Serif SC exceptions. See DESIGN.md."
       },
       "label": {
         "displayName": "label",
-        "purpose": "Fluent UI hierarchy; see DESIGN.md."
+        "purpose": "Bundled Noto Sans / Noto Sans SC hierarchy; preserve Noto Serif / Noto Serif SC exceptions. See DESIGN.md."
       }
     },
     "shadows": [
@@ -136,19 +136,19 @@
       "refersTo": "button-primary",
       "description": "Official fluent-button with a thin Svelte adapter.",
       "html": "<button class=\"ds-primary\">Continue</button>",
-      "css": ".ds-primary { min-height:32px; padding:0 12px; border:1px solid transparent; border-radius:4px; background:#0067c0; color:#fff; font:600 14px/20px system-ui; } .ds-primary:hover { background:#005a9e; } .ds-primary:focus-visible { outline:2px solid #0067c0; outline-offset:2px; }"
+      "css": ".ds-primary { min-height:32px; padding:0 12px; border:1px solid transparent; border-radius:4px; background:#0067c0; color:#fff; font:600 14px/20px \"Noto Sans\", \"Noto Sans SC\", sans-serif; } .ds-primary:hover { background:#005a9e; } .ds-primary:focus-visible { outline:2px solid #0067c0; outline-offset:2px; }"
     },
     {
       "name": "Native Sensitive Field",
       "kind": "input",
       "description": "Native password/passphrase; Fluent external label and delegated single focus indicator.",
       "html": "<label class=\"ds-field\">Password<input type=\"password\" placeholder=\"Password\" /></label>",
-      "css": ".ds-field { display:grid; gap:8px; font:14px/20px system-ui; } .ds-field input { min-height:32px; border:1px solid #d1d1d1; border-bottom-color:#616161; border-radius:4px; padding:0 12px; background:#fff; color:#242424; }"
+      "css": ".ds-field { display:grid; gap:8px; font:14px/20px \"Noto Sans\", \"Noto Sans SC\", sans-serif; } .ds-field input { min-height:32px; border:1px solid #d1d1d1; border-bottom-color:#616161; border-radius:4px; padding:0 12px; background:#fff; color:#242424; }"
     }
   ],
   "narrative": {
     "northStar": "Fluent Operations Workspace",
-    "overview": "Windows 11 hierarchy with Fluent 2 controls, shared across desktop and Android. Phase one establishes foundations, authentication and the application shell; complex business pages inherit these tokens and await individual migration.",
+    "overview": "Windows 11 hierarchy with Fluent 2 controls and bundled Noto typography across desktop and Android. Business pages, dialogs and recovery surfaces use the shared foundations; complex lists and editors preserve their workflows.",
     "keyCharacteristics": [
       "Native UI typography and compact working density.",
       "Semantic Fluent themes and local system icons.",

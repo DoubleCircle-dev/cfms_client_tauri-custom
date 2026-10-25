@@ -59,8 +59,8 @@
     {#if adding}
       <form class="auth-form auth-inset" onsubmit={register}>
         <p>{$t('authManagement.keyHelp')}</p>
-        <label>{$t('authManagement.publicKey')}<textarea bind:value={publicKey} disabled={!writable} rows="3" spellcheck="false" placeholder="ssh-ed25519 AAAA…"></textarea></label>
-        <label>{$t('authManagement.keyLabel')}<input bind:value={label} disabled={!writable} maxlength="255" /></label>
+        <label>{$t('authManagement.publicKey')}<textarea class="cfms-native-field" bind:value={publicKey} disabled={!writable} rows="3" spellcheck="false" placeholder="ssh-ed25519 AAAA…"></textarea></label>
+        <label>{$t('authManagement.keyLabel')}<input class="cfms-native-field" bind:value={label} disabled={!writable} maxlength="255" /></label>
         <div class="auth-actions"><DialogActionButton type="submit" variant="primary" disabled={!writable || !publicKey.trim()}>{$t('authManagement.registerKey')}</DialogActionButton></div>
       </form>
     {/if}

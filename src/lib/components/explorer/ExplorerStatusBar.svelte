@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   let {
     primary,
     secondary = '',
@@ -23,9 +24,15 @@
     <span class="explorer-status-secondary">{secondary}</span>
   {/if}
   {#if actionLabel && onAction}
-    <button type="button" class="explorer-status-action" disabled={actionBusy} onclick={onAction}>
+    <FluentButton data-fluent-owner="lib-components-explorer-explorer-status-bar"
+      type="button"
+      disabled={actionBusy}
+      onclick={onAction}
+      appearance="subtle"
+      class="explorer-status-action"
+    >
       {actionLabel}
-    </button>
+    </FluentButton>
   {/if}
 </footer>
 
@@ -34,14 +41,14 @@
     display: flex;
     min-height: 30px;
     align-items: center;
-    gap: 0.65rem;
+    gap: 12px;
     border-top: 1px solid var(--explorer-border);
     padding-block-start: 0.3rem;
     padding-block-end: max(0.3rem, var(--safe-area-bottom, 0px));
     padding-inline: 0.75rem;
     color: var(--explorer-text-muted);
     background: var(--explorer-surface);
-    font-size: 0.75rem;
+    font-size: 12px;
   }
 
   .explorer-status-primary {
@@ -70,11 +77,11 @@
     white-space: nowrap;
   }
 
-  .explorer-status-action {
+  :global(.explorer-status-action[data-fluent-owner="lib-components-explorer-explorer-status-bar"]) {
     flex: none;
     margin-left: auto;
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.2rem 0.65rem;
     color: currentColor;
     background: color-mix(in srgb, currentColor 12%, transparent);
@@ -83,11 +90,11 @@
     cursor: pointer;
   }
 
-  .explorer-status-action:hover:not(:disabled) {
+  :global(.explorer-status-action[data-fluent-owner="lib-components-explorer-explorer-status-bar"]:hover:not(:is(:disabled, [disabled]))) {
     background: color-mix(in srgb, currentColor 20%, transparent);
   }
 
-  .explorer-status-action:disabled {
+  :global(.explorer-status-action[data-fluent-owner="lib-components-explorer-explorer-status-bar"]:is(:disabled, [disabled])) {
     opacity: 0.55;
     cursor: default;
   }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { readExtensionPage, type DeclarativeBlock, type DeclarativePage } from '$lib/api/extensions';
   import { runExtensionWorkflow } from '$lib/extension-workflows';
@@ -66,7 +67,11 @@
 {:else if error}
   <div class="extension-state extension-error" role="alert">
     <strong>Unable to open extension</strong><p>{error}</p>
-    <button type="button" onclick={load}>Try again</button>
+    <FluentButton data-fluent-owner="lib-components-extension-page-renderer"
+      type="button"
+      onclick={load}
+      appearance="subtle"
+    >Try again</FluentButton>
   </div>
 {:else if page}
   <article class="extension-page">
@@ -107,7 +112,7 @@
                 {#if field.type === 'toggle'}
                   <input type="checkbox" checked={Boolean(formValues[block.id]?.[field.id])} onchange={(event) => updateField(block.id, field.id, event.currentTarget.checked)} />
                 {:else if field.type === 'select'}
-                  <select value={String(formValues[block.id]?.[field.id] ?? '')} onchange={(event) => updateField(block.id, field.id, event.currentTarget.value)}>
+                  <select class="cfms-native-field" value={String(formValues[block.id]?.[field.id] ?? '')} onchange={(event) => updateField(block.id, field.id, event.currentTarget.value)}>
                     {#each field.options ?? [] as option}<option value={option}>{option}</option>{/each}
                   </select>
                 {:else}
@@ -119,7 +124,13 @@
         {:else if block.type === 'actions'}
           <div class="extension-actions extension-wide">
             {#each block.actions as action}
-              <button type="button" class:primary={action.tone === 'primary'} class:danger={action.tone === 'danger'} disabled={runningAction !== null} onclick={() => runAction(action)}>{runningAction === action.id ? 'Working…' : action.label}</button>
+              <FluentButton data-fluent-owner="lib-components-extension-page-renderer"
+                type="button"
+                disabled={runningAction !== null}
+                onclick={() => runAction(action)}
+                appearance="subtle"
+                class={((action.tone === 'primary') ? " primary" : '') + ((action.tone === 'danger') ? " danger" : '')}
+              >{runningAction === action.id ? 'Working…' : action.label}</FluentButton>
             {/each}
           </div>
         {/if}
@@ -130,17 +141,17 @@
 
 <style>
   .extension-page { max-width: 1080px; margin: 0 auto; padding: 1.5rem; color: var(--explorer-text); }
-  header { margin-bottom: 1.25rem; } h1 { font-size: 1.35rem; font-weight: 700; } header p, .muted, small { color: var(--explorer-text-muted); }
-  .extension-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
-  .extension-card, .extension-alert { display: grid; gap: .45rem; border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-medium); padding: 1rem; background: var(--explorer-surface-raised); }
-  .status-card > strong { font-size: 1.65rem; } .extension-wide { grid-column: 1 / -1; }
+  header { margin-bottom: 1.25rem; } h1 { font-size: 28px; font-weight: 700; } header p, .muted, small { color: var(--explorer-text-muted); }
+  .extension-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .extension-card, .extension-alert { display: grid; gap: 8px; border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-medium); padding: 1rem; background: var(--explorer-surface-raised); }
+  .status-card > strong { font-size: 28px; } .extension-wide { grid-column: 1 / -1; }
   .extension-alert { grid-column: 1 / -1; border-left-width: 4px; } .tone-success { border-left-color: var(--explorer-success); } .tone-warning { border-left-color: var(--explorer-warning); } .tone-danger { border-left-color: var(--explorer-danger); }
-  .extension-heading { grid-column: 1 / -1; font-size: 1.05rem; font-weight: 650; } .extension-caption { color: var(--explorer-text-muted); font-size: .75rem; }
-  ul { display: grid; gap: .25rem; } li { display: flex; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-bottom: 1px solid var(--explorer-border); } li span { display: grid; }
-  .table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; } th, td { border-bottom: 1px solid var(--explorer-border); padding: .65rem; text-align: left; font-size: .8rem; }
-  .empty { place-items: center; min-height: 140px; text-align: center; } .form-card label { display: grid; gap: .3rem; } input:not([type='checkbox']), select { min-height: 40px; border: 1px solid var(--explorer-border); border-radius: 8px; padding: .45rem .6rem; background: var(--explorer-background); }
-  progress { width: 100%; accent-color: var(--explorer-accent); } .extension-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
-  button { border: 1px solid var(--explorer-border); border-radius: 999px; padding: .55rem .9rem; background: var(--explorer-surface-raised); } button.primary { color: var(--explorer-background); background: var(--explorer-accent); } button.danger { color: var(--explorer-danger); }
-  .extension-state { display: grid; min-height: 260px; place-items: center; padding: 2rem; text-align: center; } .extension-error { align-content: center; gap: .6rem; }
+  .extension-heading { grid-column: 1 / -1; font-size: 16px; font-weight: 600; } .extension-caption { color: var(--explorer-text-muted); font-size: 12px; }
+  ul { display: grid; gap: 4px; } li { display: flex; justify-content: space-between; gap: 16px; padding: .6rem 0; border-bottom: 1px solid var(--explorer-border); } li span { display: grid; }
+  .table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; } th, td { border-bottom: 1px solid var(--explorer-border); padding: .65rem; text-align: left; font-size: 12px; }
+  .empty { place-items: center; min-height: 140px; text-align: center; } .form-card label { display: grid; gap: 4px; } input:not([type='checkbox']), select { min-height: 40px; border: 1px solid var(--explorer-border); border-radius: 8px; padding: .45rem .6rem; background: var(--explorer-background); }
+  progress { width: 100%; accent-color: var(--explorer-accent); } .extension-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  :global(.cfms-button[data-fluent-owner="lib-components-extension-page-renderer"]) { border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); padding: .55rem .9rem; background: var(--explorer-surface-raised); } :global(.cfms-button[data-fluent-owner="lib-components-extension-page-renderer"].primary[data-fluent-owner="lib-components-extension-page-renderer"]) { color: var(--explorer-background); background: var(--explorer-accent); } :global(.cfms-button[data-fluent-owner="lib-components-extension-page-renderer"].danger[data-fluent-owner="lib-components-extension-page-renderer"]) { color: var(--explorer-danger); }
+  .extension-state { display: grid; min-height: 260px; place-items: center; padding: 2rem; text-align: center; } .extension-error { align-content: center; gap: 8px; }
   @media (max-width: 700px) { .extension-page { padding: 1rem; } .extension-grid { grid-template-columns: 1fr; } .extension-wide { grid-column: auto; } }
 </style>

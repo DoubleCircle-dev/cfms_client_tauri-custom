@@ -11,6 +11,16 @@ afterEach(() => { cleanup(); document.body.innerHTML = ''; });
 const children = createRawSnippet(() => ({ render: () => '<span>Continue</span>' }));
 
 describe('Svelte / Fluent interoperability', () => {
+  it('omits icon-only on labelled actions and adds it only for compact actions', async () => {
+    const view = render(FluentButton, { children });
+    const button = screen.getByRole('button', { name: 'Continue' });
+    expect(button.hasAttribute('icon-only')).toBe(false);
+    await view.rerender({ children, iconOnly: true });
+    expect(button.hasAttribute('icon-only')).toBe(true);
+    await view.rerender({ children, iconOnly: false });
+    expect(button.hasAttribute('icon-only')).toBe(false);
+  });
+
   it('keeps a switch disabled on first connection, then synchronizes a user change', async () => {
     const onChange = vi.fn();
     const view = render(MdSwitch, { checked: true, disabled: true, ariaLabel: 'Secure transport', onChange });

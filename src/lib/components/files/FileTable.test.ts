@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FileTable from './FileTable.svelte';
 
 vi.mock('svelte-i18n', () => ({
@@ -13,9 +13,18 @@ vi.mock('svelte-i18n', () => ({
   },
 }));
 
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })));
+});
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function renderTable(
@@ -384,10 +393,6 @@ describe('FileTable item movement', () => {
 
 describe('FileTable column resizing', () => {
   it('moves a desktop column boundary while preserving the adjacent pair width', async () => {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      value: () => ({ matches: false }),
-    });
     const { container } = renderTable();
     const columnWidths = [300, 168, 112, 100];
     const columns = Array.from(container.querySelectorAll<HTMLElement>('[data-file-column]'));
@@ -617,6 +622,19 @@ describe('FileTable large directory virtualization', () => {
 });
 
 describe('FileTable programmatic row reveal', () => {
+  it.each([30, 500])('keeps touch density and viewport anchoring in the same row coordinates for %i entries', async (count) => {
+    vi.mocked(window.matchMedia).mockReturnValue({
+      matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList);
+    const documents = Array.from({ length: count }, (_, index) => ({
+      id: `document-${index}`, title: `Document ${index}`, size: 0, last_modified: null,
+    }));
+    const { component, viewport } = renderTable([], documents);
+    await component.restoreViewportAnchor(10, 12);
+    expect(viewport.scrollTop).toBe(10 * 48 + 12);
+    expect(component.captureViewportAnchor()).toMatchObject({ key: 'document:document-10', offset: 12 });
+  });
+
   it('reveals and focuses a non-virtualized row', async () => {
     const { component, container } = renderTable([], [
       { id: 'document-1', title: 'Document', size: 1, last_modified: null },

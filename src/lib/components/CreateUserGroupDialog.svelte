@@ -61,7 +61,7 @@
       submit();
     }}
   >
-    <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high/40 p-3">
+    <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high p-3">
       <span class="rounded-lg bg-md3-primary-container/70 p-2 text-md3-primary-emphasis">
         <Icon name="groups" size="20px" />
       </span>
@@ -77,7 +77,7 @@
         <input
           bind:this={groupNameInput}
           bind:value={groupName}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
           autocomplete="off"
           disabled={busy}
         />
@@ -92,7 +92,7 @@
         </span>
         <input
           bind:value={displayName}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
           autocomplete="off"
           disabled={busy}
           placeholder={groupName || $t('manage.displayNamePrompt')}

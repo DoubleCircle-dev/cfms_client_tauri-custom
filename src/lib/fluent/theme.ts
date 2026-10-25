@@ -1,7 +1,8 @@
 import { createLightTheme, createDarkTheme, type BrandVariants, type Theme } from '@fluentui/tokens';
 
-export const UI_FONT = '"Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", "CFMS Noto Sans SC Subset", "Noto Sans SC", sans-serif';
-export const MONO_FONT = '"CFMS JetBrains Mono Subset", "JetBrains Mono", ui-monospace, Consolas, "CFMS Noto Sans SC Subset", monospace';
+export const UI_FONT = '"Noto Sans", "Noto Sans SC", sans-serif';
+export const SERIF_FONT = '"Noto Serif", "Noto Serif SC", serif';
+export const MONO_FONT = '"JetBrains Mono", "Noto Sans SC", monospace';
 
 const brand: BrandVariants = {
   10: '#001326', 20: '#00233f', 30: '#003254', 40: '#004269',

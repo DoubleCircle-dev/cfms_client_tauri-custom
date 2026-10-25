@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import Icon from '$lib/components/Icon.svelte';
@@ -169,7 +170,7 @@
 </script>
 
 <div class="audit-filter" bind:this={rootElement}>
-  <button
+  <button data-fluent-owner="lib-components-audit-log-filter"
     bind:this={triggerElement}
     type="button"
     class="filter-trigger"
@@ -206,19 +207,21 @@
           <h3 id="audit-action-filter-title">{$t('manage.auditFilterTitle')}</h3>
           <p>{$t('manage.auditFilterHelp')}</p>
         </div>
-        <button
+        <FluentButton data-fluent-owner="lib-components-audit-log-filter"
           type="button"
-          class="filter-close"
           aria-label={$t('common.close')}
           onclick={() => closePanel()}
+          appearance="subtle"
+          class="filter-close"
+          iconOnly
         >
           <Icon name="close" size="17px" />
-        </button>
+        </FluentButton>
       </header>
 
       <div class="filter-search">
         <Icon name="search" size="18px" />
-        <input
+        <input class="cfms-native-field"
           bind:this={queryInput}
           bind:value={query}
           type="text"
@@ -229,22 +232,24 @@
           onkeydown={handleInputKeydown}
         />
         {#if query}
-          <button
+          <FluentButton data-fluent-owner="lib-components-audit-log-filter"
             type="button"
             aria-label={$t('manage.auditFilterClearSearch')}
             onclick={() => {
               query = '';
               queryInput?.focus({ preventScroll: true });
             }}
+            appearance="subtle"
+            iconOnly
           >
             <Icon name="close" size="15px" />
-          </button>
+          </FluentButton>
         {/if}
       </div>
 
       <div class="filter-options" role="listbox" aria-multiselectable="true" aria-label={$t('manage.auditFilterOptions')}>
         {#if customActionAvailable}
-          <button
+          <button data-fluent-owner="lib-components-audit-log-filter"
             type="button"
             class="filter-option filter-option--custom"
             role="option"
@@ -260,7 +265,7 @@
         {/if}
 
         {#each filteredActions as action (action)}
-          <button
+          <button data-fluent-owner="lib-components-audit-log-filter"
             type="button"
             class="filter-option"
             class:filter-option--selected={draftActions.includes(action)}
@@ -284,27 +289,39 @@
       </div>
 
       <footer class="filter-panel__footer">
-        <button
+        <FluentButton data-fluent-owner="lib-components-audit-log-filter"
           type="button"
-          class="filter-reset"
           disabled={draftActions.length === 0}
           onclick={() => {
             draftActions = [];
             query = '';
           }}
+          appearance="subtle"
+          class="filter-reset"
         >
           {$t('common.reset')}
-        </button>
+        </FluentButton>
         <div class="filter-panel__actions">
           <span class="filter-selection-summary">
             {$t('manage.auditFilterSelected', { values: { count: draftActions.length } })}
           </span>
-          <button type="button" class="filter-cancel" onclick={() => closePanel()}>
+          <FluentButton data-fluent-owner="lib-components-audit-log-filter"
+            type="button"
+            onclick={() => closePanel()}
+            appearance="subtle"
+            class="filter-cancel"
+          >
             {$t('common.cancel')}
-          </button>
-          <button type="button" class="filter-apply" disabled={!draftChanged} onclick={applyFilters}>
+          </FluentButton>
+          <FluentButton data-fluent-owner="lib-components-audit-log-filter"
+            type="button"
+            disabled={!draftChanged}
+            onclick={applyFilters}
+            appearance="subtle"
+            class="filter-apply"
+          >
             {$t('manage.auditFilterApply')}
-          </button>
+          </FluentButton>
         </div>
       </footer>
     </div>
@@ -322,26 +339,26 @@
     display: inline-flex;
     min-height: 2rem;
     align-items: center;
-    gap: 0.4rem;
-    border-radius: 5px;
+    gap: 8px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.3rem 0.55rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
   }
 
-  .filter-trigger:hover:not(:disabled),
+  .filter-trigger:hover:not(:is(:disabled, [disabled])),
   .filter-trigger--active {
     color: var(--color-md3-primary-emphasis);
     background: color-mix(in srgb, var(--color-md3-primary-container) 48%, transparent);
   }
 
-  .filter-trigger:active:not(:disabled) {
-    transform: scale(0.97);
+  .filter-trigger:active:not(:is(:disabled, [disabled])) {
+    transform: none;
   }
 
-  .filter-trigger:disabled {
+  .filter-trigger:is(:disabled, [disabled]) {
     cursor: not-allowed;
     opacity: 0.42;
   }
@@ -355,7 +372,7 @@
     padding: 0 0.28rem;
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
-    font-size: 0.65rem;
+    font-size: 12px;
     line-height: 1;
   }
 
@@ -374,7 +391,7 @@
     background: color-mix(in srgb, var(--color-md3-surface-container) 94%, transparent);
     box-shadow: 0 18px 48px rgb(0 0 0 / 0.24);
     -webkit-backdrop-filter: blur(20px) saturate(0.95);
-    backdrop-filter: blur(20px) saturate(0.95);
+    backdrop-filter: none;
   }
 
   .filter-panel--above {
@@ -387,13 +404,13 @@
     flex: none;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
     padding: 1rem 1rem 0.85rem;
   }
 
   .filter-panel__header h3 {
-    font-size: 0.9rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     line-height: 1.25;
   }
 
@@ -401,11 +418,11 @@
     max-width: 32ch;
     margin-top: 0.25rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.72rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
-  .filter-close {
+  :global(.filter-close[data-fluent-owner="lib-components-audit-log-filter"]) {
     display: inline-grid;
     width: 2rem;
     height: 2rem;
@@ -416,7 +433,7 @@
     transition: background-color 120ms ease, color 120ms ease;
   }
 
-  .filter-close:hover {
+  :global(.filter-close[data-fluent-owner="lib-components-audit-log-filter"]:hover) {
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-high);
   }
@@ -426,7 +443,7 @@
     flex: none;
     min-height: 2.625rem;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     margin: 0 1rem 0.75rem;
     border: 1px solid var(--color-md3-outline);
     border-radius: 8px;
@@ -448,24 +465,24 @@
     outline: 0;
     color: var(--color-md3-on-surface);
     background: transparent;
-    font-size: 0.8rem;
+    font-size: 12px;
   }
 
   .filter-search input::placeholder {
     color: var(--color-md3-on-surface-variant);
   }
 
-  .filter-search button {
+  .filter-search :global(:is(button[data-fluent-owner="lib-components-audit-log-filter"], .cfms-button[data-fluent-owner="lib-components-audit-log-filter"])) {
     display: inline-grid;
     width: 1.75rem;
     height: 1.75rem;
     flex: none;
     place-items: center;
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     transition: background-color 120ms ease, color 120ms ease;
   }
 
-  .filter-search button:hover {
+  .filter-search :global(:is(button[data-fluent-owner="lib-components-audit-log-filter"], .cfms-button[data-fluent-owner="lib-components-audit-log-filter"]):hover) {
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-high);
   }
@@ -486,7 +503,7 @@
     width: 100%;
     min-height: 2.35rem;
     align-items: center;
-    gap: 0.6rem;
+    gap: 8px;
     padding: 0.45rem 1rem;
     text-align: left;
     transition: background-color 120ms ease, color 120ms ease;
@@ -519,15 +536,15 @@
     overflow-wrap: anywhere;
     color: inherit;
     font-family: var(--font-md3-mono);
-    font-size: 0.76rem;
+    font-size: 12px;
   }
 
   .filter-option__content {
     display: grid;
     min-width: 0;
-    gap: 0.12rem;
+    gap: 4px;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.7rem;
+    font-size: 12px;
   }
 
   .filter-option__content code {
@@ -539,7 +556,7 @@
     min-height: 7rem;
     place-items: center;
     align-content: center;
-    gap: 0.5rem;
+    gap: 8px;
     padding: 1rem;
     color: var(--color-md3-on-surface-variant);
     text-align: center;
@@ -547,7 +564,7 @@
 
   .filter-empty p {
     max-width: 30ch;
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -557,63 +574,63 @@
     min-height: 3.4rem;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
+    gap: 12px;
     padding: 0.65rem 0.8rem;
   }
 
   .filter-panel__actions {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 8px;
   }
 
   .filter-selection-summary {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.68rem;
+    font-size: 12px;
     white-space: nowrap;
   }
 
-  .filter-reset,
-  .filter-cancel,
-  .filter-apply {
+  :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]),
+  :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]),
+  :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]) {
     min-height: 2rem;
     border-radius: 5px;
     padding: 0.35rem 0.65rem;
-    font-size: 0.72rem;
+    font-size: 12px;
     font-weight: 600;
     transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
   }
 
-  .filter-reset,
-  .filter-cancel {
+  :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]),
+  :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]) {
     color: var(--color-md3-on-surface-variant);
   }
 
-  .filter-reset:hover:not(:disabled),
-  .filter-cancel:hover {
+  :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]:hover) {
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-high);
   }
 
-  .filter-apply {
+  :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]) {
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
   }
 
-  .filter-apply:hover:not(:disabled) {
-    filter: brightness(1.06);
+  :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]:hover:not(:is(:disabled, [disabled]))) {
+    filter: none;
   }
 
-  .filter-reset:disabled,
-  .filter-apply:disabled {
+  :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]:is(:disabled, [disabled])),
+  :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.42;
   }
 
-  .filter-reset:active:not(:disabled),
-  .filter-cancel:active,
-  .filter-apply:active:not(:disabled) {
-    transform: scale(0.97);
+  :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]:active:not(:is(:disabled, [disabled]))),
+  :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]:active),
+  :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]:active:not(:is(:disabled, [disabled]))) {
+    transform: none;
   }
 
   @media (max-width: 520px) {
@@ -631,14 +648,14 @@
   @media (pointer: coarse) {
     .filter-trigger,
     .filter-option,
-    .filter-reset,
-    .filter-cancel,
-    .filter-apply {
+    :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]),
+    :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]),
+    :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]) {
       min-height: 2.75rem;
     }
 
-    .filter-close,
-    .filter-search button {
+    :global(.filter-close[data-fluent-owner="lib-components-audit-log-filter"]),
+    .filter-search :global(:is(button[data-fluent-owner="lib-components-audit-log-filter"], .cfms-button[data-fluent-owner="lib-components-audit-log-filter"])) {
       width: 2.75rem;
       height: 2.75rem;
     }
@@ -646,20 +663,20 @@
 
   @media (prefers-reduced-motion: reduce) {
     .filter-trigger,
-    .filter-close,
+    :global(.filter-close[data-fluent-owner="lib-components-audit-log-filter"]),
     .filter-search,
-    .filter-search button,
+    .filter-search :global(:is(button[data-fluent-owner="lib-components-audit-log-filter"], .cfms-button[data-fluent-owner="lib-components-audit-log-filter"])),
     .filter-option,
-    .filter-reset,
-    .filter-cancel,
-    .filter-apply {
+    :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]),
+    :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]),
+    :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]) {
       transition: none;
     }
 
-    .filter-trigger:active:not(:disabled),
-    .filter-reset:active:not(:disabled),
-    .filter-cancel:active,
-    .filter-apply:active:not(:disabled) {
+    .filter-trigger:active:not(:is(:disabled, [disabled])),
+    :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]:active:not(:is(:disabled, [disabled]))),
+    :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]:active),
+    :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]:active:not(:is(:disabled, [disabled]))) {
       transform: none;
     }
   }

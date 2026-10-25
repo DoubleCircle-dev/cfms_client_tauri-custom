@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import Icon from '$lib/components/Icon.svelte';
@@ -65,7 +66,7 @@
             bind:value={inputValue}
             maxlength={dialogStore.current.maxLength}
             rows="9"
-            class="min-h-44 w-full resize-y rounded-md border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
+            class="cfms-native-field min-h-44 w-full resize-y rounded-md border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
             placeholder={dialogStore.current.placeholder}
           ></textarea>
         {:else}
@@ -114,15 +115,16 @@
         <div class="choice-actions" aria-label={dialogStore.current.title}>
           {#each dialogStore.current.choices as choice, index (choice.value)}
             <!-- svelte-ignore a11y_autofocus -->
-            <button
+            <button data-fluent-owner="lib-components-dialog-host"
               type="button"
               data-focus-ring="delegated"
               data-intent={choice.intent ?? 'neutral'}
               autofocus={choice.intent === 'primary' || (
                 index === 0 && !dialogStore.current.choices.some((item) => item.intent === 'primary')
               )}
-              class={`choice-action choice-action--${choice.intent ?? 'neutral'} ${index > 0 ? 'choice-action--divided' : ''}`}
               onclick={() => choose(choice.value)}
+
+              class={(`choice-action choice-action--${choice.intent ?? 'neutral'} ${index > 0 ? 'choice-action--divided' : ''}`)}
             >
               <span class="choice-action-icon">
                 <Icon name={choice.icon ?? (choice.intent === 'danger' ? 'refresh' : 'block')} size="22px" />
@@ -181,7 +183,7 @@
   .choice-dialog {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 16px;
     padding: 1.25rem 1.5rem 1rem;
   }
 
@@ -189,7 +191,7 @@
     max-width: 68ch;
     margin: 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.5;
   }
 
@@ -205,7 +207,7 @@
     padding: 0.5rem 0.75rem;
     color: var(--color-md3-on-surface-variant);
     background: color-mix(in srgb, var(--color-md3-surface-container-high) 58%, transparent);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     line-height: 1.25;
   }
@@ -219,7 +221,7 @@
     display: grid;
     grid-template-columns: 2.25rem minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.75rem;
+    gap: 12px;
     padding: 0.75rem;
   }
 
@@ -234,7 +236,7 @@
     height: 2.25rem;
     flex: none;
     place-items: center;
-    border-radius: var(--explorer-radius-small, 5px);
+    border-radius: var(--borderRadiusMedium);
   }
 
   .choice-conflict-icon {
@@ -257,15 +259,15 @@
 
   .choice-conflict-name {
     color: var(--color-md3-on-surface);
-    font-size: 0.875rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     line-height: 1.35;
   }
 
   .choice-conflict-meta {
     margin-top: 0.2rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -275,8 +277,8 @@
     padding: 0.22rem 0.55rem;
     color: var(--color-md3-on-error-container);
     background: var(--color-md3-error-container);
-    font-size: 0.6875rem;
-    font-weight: 650;
+    font-size: 12px;
+    font-weight: 600;
     line-height: 1.25;
     white-space: nowrap;
   }
@@ -284,17 +286,17 @@
   .choice-actions {
     overflow: hidden;
     border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-medium, 8px);
+    border-radius: var(--borderRadiusMedium);
     background: color-mix(in srgb, var(--color-md3-surface-container) 84%, transparent);
   }
 
-  .choice-action {
+  :global(.choice-action[data-fluent-owner="lib-components-dialog-host"]) {
     display: grid;
     width: 100%;
     min-height: 4.125rem;
     grid-template-columns: 2.25rem minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.75rem;
+    gap: 12px;
     border: 0;
     padding: 0.75rem;
     color: var(--color-md3-on-surface);
@@ -307,11 +309,11 @@
       box-shadow 120ms ease;
   }
 
-  .choice-action--divided {
+  :global(.choice-action--divided[data-fluent-owner="lib-components-dialog-host"]) {
     border-top: 1px solid var(--color-md3-outline);
   }
 
-  .choice-action:focus-visible {
+  :global(.choice-action[data-fluent-owner="lib-components-dialog-host"]):focus-visible {
     position: relative;
     z-index: 1;
     outline: none;
@@ -327,15 +329,15 @@
   }
 
   .choice-action-label {
-    font-size: 0.875rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     line-height: 1.35;
   }
 
   .choice-action-description {
     margin-top: 0.2rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -382,20 +384,20 @@
     background: var(--color-md3-surface-container-high);
   }
 
-  .choice-action:hover :global(.choice-action-arrow) {
+  :global(.choice-action[data-fluent-owner="lib-components-dialog-host"]):hover :global(.choice-action-arrow) {
     color: currentColor;
     opacity: 0.9;
     transform: translateX(2px);
   }
 
-  .choice-action:active {
+  :global(.choice-action[data-fluent-owner="lib-components-dialog-host"]):active {
     background: var(--color-md3-surface-container-highest);
   }
 
   .choice-footer {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 12px;
     border-top: 1px solid var(--color-md3-outline);
     padding-top: 0.875rem;
   }
@@ -406,11 +408,11 @@
     min-height: 2.75rem;
     flex: 1;
     align-items: center;
-    gap: 0.625rem;
+    gap: 12px;
     border-radius: var(--explorer-radius-small, 5px);
     padding: 0.375rem 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.4;
     cursor: pointer;
   }
@@ -444,13 +446,13 @@
     display: flex;
     flex: none;
     justify-content: flex-end;
-    gap: 0.5rem;
+    gap: 8px;
     margin-left: auto;
   }
 
   @media (max-width: 39.999rem) {
     .choice-dialog {
-      gap: 0.875rem;
+      gap: 16px;
       padding: 1rem;
     }
 
@@ -466,7 +468,7 @@
     .choice-footer {
       align-items: stretch;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 8px;
     }
 
     .choice-footer-actions {
@@ -476,7 +478,7 @@
   }
 
   @media (pointer: coarse) {
-    .choice-action {
+    :global(.choice-action[data-fluent-owner="lib-components-dialog-host"]) {
       min-height: 4.75rem;
       padding-block: 0.875rem;
     }
@@ -487,14 +489,14 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .choice-action,
+    :global(.choice-action[data-fluent-owner="lib-components-dialog-host"]),
     .choice-action-icon,
     .choice-checkbox,
     :global(.choice-action-arrow) {
       transition-duration: 0.01ms;
     }
 
-    .choice-action:hover :global(.choice-action-arrow) {
+    :global(.choice-action[data-fluent-owner="lib-components-dialog-host"]):hover :global(.choice-action-arrow) {
       transform: none;
     }
   }

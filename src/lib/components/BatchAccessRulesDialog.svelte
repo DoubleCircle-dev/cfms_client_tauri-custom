@@ -340,7 +340,7 @@
   function focusEditor() {
     void tick().then(() => {
       if (!disposed && stage === 'edit') editorElement?.querySelector<HTMLElement>(
-        '[contenteditable="true"], input:not(:disabled), select:not(:disabled), button:not(:disabled)',
+        '[contenteditable="true"], input:not(:disabled), select:not(:disabled), button:not(:disabled), fluent-button:not([disabled])',
       )?.focus({ preventScroll: true });
     });
   }
@@ -360,7 +360,7 @@
         {#if canReadTemplate}
           <div class="batch-rules-template">
             {#if roots.length > 1}
-              <select bind:value={templateKey} aria-label={$t('files.batchRules.templateObject')} disabled={templateLoading}>
+              <select class="cfms-native-field" bind:value={templateKey} aria-label={$t('files.batchRules.templateObject')} disabled={templateLoading}>
                 {#each roots as target (batchRulesTargetKey(target))}
                   <option value={batchRulesTargetKey(target)}>{$t('files.' + target.objectType)} · {target.name}</option>
                 {/each}
@@ -429,7 +429,7 @@
       {#if snapshot.started}
         <div class="batch-rules-filter">
           <label for={progressId + ':filter'}>{$t('files.batchRules.filter')}</label>
-          <select id={progressId + ':filter'} bind:value={filter}>
+          <select class="cfms-native-field" id={progressId + ':filter'} bind:value={filter}>
             <option value="all">{$t('files.batchRules.allResults')}</option>
             {#each ['success', 'failed', 'unconfirmed', 'pending'] as status}<option value={status}>{$t('files.batchRules.item.' + status)}</option>{/each}
           </select>
@@ -507,17 +507,17 @@
 {/if}
 
 <style>
-  .batch-rules-layout { display: flex; min-height: 0; max-height: 78vh; flex-direction: column; color: var(--color-md3-on-surface); font-size: 0.875rem; }
+  .batch-rules-layout { display: flex; min-height: 0; max-height: 78vh; flex-direction: column; color: var(--color-md3-on-surface); font-size: 14px; }
   .batch-rules-context, .batch-rules-summary { flex: none; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--color-md3-outline); }
   .batch-rules-context p, .batch-rules-summary p { margin-block: 0.25rem; overflow-wrap: anywhere; }
-  .batch-rules-step { font-weight: 650; }
-  .batch-rules-muted { color: var(--color-md3-on-surface-variant); font-size: 0.78rem; }
+  .batch-rules-step { font-weight: 600; }
+  .batch-rules-muted { color: var(--color-md3-on-surface-variant); font-size: 12px; }
   .batch-rules-warning { color: var(--color-md3-error); overflow-wrap: anywhere; }
-  .batch-rules-template, .batch-rules-choice, .batch-rules-status, .batch-rules-filter { display: flex; align-items: center; gap: 0.65rem; }
+  .batch-rules-template, .batch-rules-choice, .batch-rules-status, .batch-rules-filter { display: flex; align-items: center; gap: 12px; }
   .batch-rules-template { min-width: 0; flex-wrap: wrap; margin-block: 0.5rem; }
-  .batch-rules-choice { font-size: 0.8125rem; cursor: pointer; }
+  .batch-rules-choice { font-size: 12px; cursor: pointer; }
   .batch-rules-choice > span { min-width: 0; }
-  select { max-width: 100%; min-height: 2rem; min-width: 0; border: 1px solid var(--color-md3-outline); border-radius: 6px; padding: 0.3rem 0.5rem; background: var(--color-md3-field); color: var(--color-md3-on-surface); }
+  select { max-width: 100%; min-height: 2rem; min-width: 0; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); padding: 0.3rem 0.5rem; background: var(--color-md3-field); color: var(--color-md3-on-surface); }
   .batch-rules-template select { max-width: 22rem; }
   .batch-rules-editor { display: flex; min-height: 0; flex: 1; flex-direction: column; }
   .batch-rules-editor[hidden] { display: none; }
@@ -526,19 +526,19 @@
   .batch-rules-editor-footer .batch-rules-actions { border: 0; }
   .batch-rules-filter { flex: none; padding: 0.6rem 1.25rem; }
   .batch-rules-layout :global(.batch-rules-results) { flex: 1; min-height: 100px; max-height: 38vh; overflow: auto; }
-  .batch-rules-result { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--color-md3-outline); }
+  .batch-rules-result { display: flex; align-items: flex-start; gap: 12px; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--color-md3-outline); }
   .batch-rules-result-copy { min-width: 0; flex: 1; overflow-wrap: anywhere; }
   .batch-rules-result p { margin-top: 0.2rem; }
-  .batch-rules-result > span { flex: none; font-size: 0.78rem; }
+  .batch-rules-result > span { flex: none; font-size: 12px; }
   .batch-rules-success { color: var(--color-md3-success); }
   .batch-rules-current { font-weight: 600; }
   .batch-rules-issue-row { padding-block: 0.5rem; overflow-wrap: anywhere; border-bottom: 1px solid var(--color-md3-outline); }
   .batch-rules-issue-row p { margin-block: 0.25rem 0; }
-  .batch-rules-actions, .batch-rules-recovery { display: flex; flex: none; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 1.25rem; }
+  .batch-rules-actions, .batch-rules-recovery { display: flex; flex: none; flex-wrap: wrap; gap: 8px; padding: 0.75rem 1.25rem; }
   .batch-rules-actions { justify-content: flex-end; border-top: 1px solid var(--color-md3-outline); }
   .batch-rules-empty { padding: 1rem 1.25rem; }
   progress { width: 100%; height: 0.3rem; accent-color: var(--color-md3-primary); margin-top: 0.65rem; }
-  .batch-rules-confirmation { padding: 1.25rem; font-size: 0.875rem; }
+  .batch-rules-confirmation { padding: 1.25rem; font-size: 14px; }
   .batch-rules-confirmation > * + * { margin-top: 0.75rem; }
   .batch-rules-confirmation :global(.batch-rules-issues), .batch-rules-confirmation :global(.batch-rules-scope-list) { max-height: 24vh; overflow: auto; margin-top: 0.5rem; }
   summary { cursor: pointer; font-weight: 600; }

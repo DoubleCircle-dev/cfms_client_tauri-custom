@@ -10,6 +10,15 @@
   border-color: transparent;
 }
 .cfms-button[disabled][appearance="outline"] { border-color: var(--colorNeutralStrokeDisabled); }
+.cfms-button[data-tone="primary"] { --colorNeutralForeground2: var(--colorBrandForeground1); }
+.cfms-button[data-tone="warning"] { --colorNeutralForeground2: var(--colorStatusWarningForeground1); }
+.cfms-button[data-tone="danger"] {
+  --colorNeutralForeground2: var(--colorStatusDangerForeground1);
+  --colorBrandBackground: var(--colorStatusDangerBackground3);
+  --colorBrandBackgroundHover: var(--colorStatusDangerBackground3Hover);
+  --colorBrandBackgroundPressed: var(--colorStatusDangerBackground3Pressed);
+  --colorNeutralForegroundOnBrand: var(--colorNeutralForegroundStaticInverted);
+}
 .cfms-switch, .cfms-checkbox, .cfms-radio {
   border: 1px solid var(--colorNeutralStrokeAccessible);
 }
@@ -30,3 +39,26 @@
   .cfms-checkbox[aria-disabled="true"],
   .cfms-radio[aria-disabled="true"] { border-color: GrayText; }
 }
+
+/* EscalationControl.svelte */
+.escalation-button[data-fluent-owner="lib-components-escalation-control"] { display: inline-flex; width: 34px; height: 34px; padding: 0; align-items: center; justify-content: center; }
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='true'],
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='true']:hover:not(:is(:disabled, [disabled])) {
+    color: var(--explorer-danger);
+    background: color-mix(in srgb, var(--explorer-danger) 14%, transparent);
+  }
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='false']:hover:not(:is(:disabled, [disabled])),
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='false']:focus-visible {
+    color: var(--explorer-warning);
+    background: color-mix(in srgb, var(--explorer-warning) 14%, transparent);
+  }
+
+/* DialogActionButton.svelte */
+.dialog-action-button--danger {
+    --colorBrandBackground: var(--colorStatusDangerBackground3);
+    --colorBrandBackgroundHover: var(--colorStatusDangerBackground3Hover);
+    --colorBrandBackgroundPressed: var(--colorStatusDangerBackground3Pressed);
+    --colorNeutralForegroundOnBrand: var(--colorNeutralForegroundStaticInverted);
+  }
+  .dialog-action-button--tonal { --colorNeutralBackground1: var(--colorBrandBackground2); }
+  .dialog-action-button .md-progress-ring { color: inherit; }

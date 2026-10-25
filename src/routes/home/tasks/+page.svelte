@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { open } from '@tauri-apps/plugin-dialog';
   import { _ as t } from 'svelte-i18n';
@@ -443,27 +444,42 @@
         tone="primary"
         onclick={openDirectDownloadDialog}
       />
-      <button class="icon-button" onclick={refresh} disabled={loading} title={$t('common.refresh')} aria-label={$t('common.refresh')}>
+      <FluentButton data-fluent-owner="routes-home-tasks-page"
+        onclick={refresh}
+        disabled={loading}
+        title={$t('common.refresh')}
+        aria-label={$t('common.refresh')}
+        type="button"
+        appearance="subtle"
+        class="icon-button"
+        iconOnly
+      >
         <Icon name="refresh" size="20px" />
-      </button>
+      </FluentButton>
     </div>
   </header>
 
   <div class="task-tabs" role="tablist" aria-label={$t('tasks.title')}>
-    <button role="tab" aria-selected={activeTab === 'downloads'} tabindex={activeTab === 'downloads' ? 0 : -1} class:active={activeTab === 'downloads'} onclick={() => (activeTab = 'downloads')} onkeydown={handleTabKeydown}><Icon name="download" size="18px" /> {$t('tasks.downloads')} <span>{downloadTasks.length}</span></button>
-    <button role="tab" aria-selected={activeTab === 'uploads'} tabindex={activeTab === 'uploads' ? 0 : -1} class:active={activeTab === 'uploads'} onclick={() => (activeTab = 'uploads')} onkeydown={handleTabKeydown}><Icon name="upload" size="18px" /> {$t('tasks.uploads')} <span>{uploadTasks.length}</span></button>
+    <button data-fluent-owner="routes-home-tasks-page" role="tab" aria-selected={activeTab === 'downloads'} tabindex={activeTab === 'downloads' ? 0 : -1} class:active={activeTab === 'downloads'} onclick={() => (activeTab = 'downloads')} onkeydown={handleTabKeydown}><Icon name="download" size="18px" /> {$t('tasks.downloads')} <span>{downloadTasks.length}</span></button>
+    <button data-fluent-owner="routes-home-tasks-page" role="tab" aria-selected={activeTab === 'uploads'} tabindex={activeTab === 'uploads' ? 0 : -1} class:active={activeTab === 'uploads'} onclick={() => (activeTab = 'uploads')} onkeydown={handleTabKeydown}><Icon name="upload" size="18px" /> {$t('tasks.uploads')} <span>{uploadTasks.length}</span></button>
   </div>
 
   <div class="task-toolbar" role="toolbar" aria-label={$t('tasks.filters')}>
     <label class="search-field">
       <Icon name="search" size="18px" />
       <span class="sr-only">{$t('tasks.search')}</span>
-      <input data-focus-ring="delegated" bind:value={searchQuery} placeholder={$t('tasks.searchPlaceholder')} />
-      {#if searchQuery}<button onclick={() => (searchQuery = '')} aria-label={$t('common.clear')}><Icon name="close" size="16px" /></button>{/if}
+      <input class="cfms-native-field" data-focus-ring="delegated" bind:value={searchQuery} placeholder={$t('tasks.searchPlaceholder')} />
+      {#if searchQuery}<FluentButton data-fluent-owner="routes-home-tasks-page"
+  onclick={() => (searchQuery = '')}
+  aria-label={$t('common.clear')}
+  type="button"
+  appearance="subtle"
+  iconOnly
+><Icon name="close" size="16px" /></FluentButton>{/if}
     </label>
     <label class="section-filter">
       <span>{$t('files.filter')}</span>
-      <select bind:value={sectionFilter}>
+      <select class="cfms-native-field" bind:value={sectionFilter}>
         <option value="all">{$t('tasks.all')}</option>
         {#each TRANSFER_SECTION_ORDER as section}<option value={section}>{sectionLabel(section)}</option>{/each}
       </select>
@@ -475,7 +491,13 @@
   </div>
 
   {#if errorMessage}
-    <div class="error-banner" role="alert" in:flyScale={{ y: -4, duration: 180 }}><Icon name="errorFilled" size="18px" /><span>{errorMessage}</span><button onclick={() => (errorMessage = '')} aria-label={$t('common.close')}><Icon name="close" size="16px" /></button></div>
+    <div class="error-banner" role="alert" in:flyScale={{ y: -4, duration: 180 }}><Icon name="errorFilled" size="18px" /><span>{errorMessage}</span><FluentButton data-fluent-owner="routes-home-tasks-page"
+  onclick={() => (errorMessage = '')}
+  aria-label={$t('common.close')}
+  type="button"
+  appearance="subtle"
+  iconOnly
+><Icon name="close" size="16px" /></FluentButton></div>
   {/if}
   <section class="task-list-shell" aria-busy={loading}>
     {#if currentRows.length > 0}
@@ -483,15 +505,21 @@
         items={currentRows} keyOf={rowKey} estimateSize={estimateSize} gap={0} overscan={8}
         threshold={32} resetKey={`${activeTab}:${sectionFilter}:${searchQuery}`}
         viewportClass="task-list-viewport" contentClass="task-list-content" itemClass="task-list-item"
-        keyboardNavigation keyboardTargetSelector="button"
+        keyboardNavigation keyboardTargetSelector="button, fluent-button"
       >
         {#snippet children(row)}
           {#if row.kind === 'section'}
             <div class="section-header">
-              <button class="section-toggle" onclick={() => toggleSection(row.section)} aria-expanded={!collapsedSections.has(row.section)}>
+              <FluentButton data-fluent-owner="routes-home-tasks-page"
+                onclick={() => toggleSection(row.section)}
+                aria-expanded={!collapsedSections.has(row.section)}
+                type="button"
+                appearance="subtle"
+                class="section-toggle"
+              >
                 <span class:section-chevron-expanded={!collapsedSections.has(row.section)} class="section-chevron"><Icon name="expandMore" size="18px" /></span>
                 <strong>{sectionLabel(row.section)}</strong><span>{row.count}</span>
-              </button>
+              </FluentButton>
               {#if sectionActionAvailable(row.section)}
                 <TaskActionButton presentation="labelled" icon={sectionActionIcon(row.section)} label={sectionActionLabel(row.section)} tone={sectionActionTone(row.section)} onclick={() => handleSectionAction(row.section)} />
               {/if}
@@ -528,58 +556,58 @@
     min-width: 0;
     min-height: 0;
     flex-direction: column;
-    gap: 0.9rem;
+    gap: 16px;
     overflow: hidden;
     padding: 1rem clamp(1rem, 2vw, 1.5rem) 1.5rem;
   }
 
-  .task-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-  .task-header h1 { color: var(--explorer-text); font-size: 1.25rem; font-weight: 700; }
-  .task-header p { max-width: 68ch; margin-top: 0.2rem; color: var(--explorer-text-muted); font-size: 0.8125rem; }
-  .task-header-actions { display: flex; flex: none; align-items: center; gap: 0.25rem; }
+  .task-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .task-header h1 { color: var(--explorer-text); font-size: 28px; font-weight: 700; }
+  .task-header p { max-width: 68ch; margin-top: 0.2rem; color: var(--explorer-text-muted); font-size: 12px; }
+  .task-header-actions { display: flex; flex: none; align-items: center; gap: 4px; }
 
-  .icon-button { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: 999px; color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
-  .icon-button:hover:not(:disabled) { background: var(--explorer-surface-hover); color: var(--explorer-text); }
-  .icon-button:active:not(:disabled) { transform: scale(0.94); }
-  .icon-button:disabled { opacity: 0.45; }
+  :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]) { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: var(--borderRadiusMedium); color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
+  :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]:hover:not(:is(:disabled, [disabled]))) { background: var(--explorer-surface-hover); color: var(--explorer-text); }
+  :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]:active:not(:is(:disabled, [disabled]))) { transform: none; }
+  :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]:is(:disabled, [disabled])) { opacity: 0.45; }
 
-  .task-tabs { display: flex; width: fit-content; gap: 0.2rem; border-bottom: 1px solid var(--explorer-border); }
-  .task-tabs button { display: flex; min-height: 38px; align-items: center; gap: 0.4rem; border-bottom: 2px solid transparent; padding: 0.35rem 0.65rem; color: var(--explorer-text-muted); font-size: 0.8125rem; font-weight: 600; transition: color 140ms var(--motion-easing-standard), border-color 180ms var(--motion-easing-standard), background-color 140ms var(--motion-easing-standard); }
-  .task-tabs button:hover { color: var(--explorer-text); background: var(--explorer-surface-hover); }
-  .task-tabs button.active { border-color: var(--explorer-accent); color: var(--explorer-text); }
-  .task-tabs span { color: var(--explorer-text-muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+  .task-tabs { display: flex; width: fit-content; gap: 4px; border-bottom: 1px solid var(--explorer-border); }
+  .task-tabs :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"])) { display: flex; min-height: 38px; align-items: center; gap: 8px; border-bottom: 2px solid transparent; padding: 0.35rem 0.65rem; color: var(--explorer-text-muted); font-size: 12px; font-weight: 600; transition: color 140ms var(--motion-easing-standard), border-color 180ms var(--motion-easing-standard), background-color 140ms var(--motion-easing-standard); }
+  .task-tabs :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"]):hover) { color: var(--explorer-text); background: var(--explorer-surface-hover); }
+  .task-tabs :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"]).active) { border-color: var(--explorer-accent); color: var(--explorer-text); }
+  .task-tabs span { color: var(--explorer-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
-  .task-toolbar { display: grid; min-width: 0; grid-template-columns: minmax(240px, 1fr) auto auto; align-items: center; gap: 0.65rem; }
-  .search-field { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: 0.5rem; border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-medium); padding: 0 0.65rem; color: var(--explorer-text-muted); background: var(--explorer-surface-raised); transition: border-color 140ms var(--motion-easing-standard), box-shadow 140ms var(--motion-easing-standard), background-color 140ms var(--motion-easing-standard); }
+  .task-toolbar { display: grid; min-width: 0; grid-template-columns: minmax(240px, 1fr) auto auto; align-items: center; gap: 12px; }
+  .search-field { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: 8px; border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); padding: 0 0.65rem; color: var(--explorer-text-muted); background: var(--explorer-surface-raised); transition: border-color 140ms var(--motion-easing-standard), box-shadow 140ms var(--motion-easing-standard), background-color 140ms var(--motion-easing-standard); }
   .search-field:focus-within { border-color: var(--explorer-accent); box-shadow: inset 0 0 0 1px var(--explorer-accent); }
-  .search-field input { min-width: 0; width: 100%; flex: 1; appearance: none; border: 0 !important; outline: 0; padding: 0; color: var(--explorer-text); background: transparent; box-shadow: none !important; font: 400 0.8125rem/1.4 var(--font-md3-sans); }
+  .search-field input { min-width: 0; width: 100%; flex: 1; appearance: none; border: 0 !important; outline: 0; padding: 0; color: var(--explorer-text); background: transparent; box-shadow: none !important; font: 400 12px/16px var(--font-md3-sans); }
   .search-field input::placeholder { color: var(--explorer-text-muted); opacity: 1; }
-  .search-field button { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 999px; color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
-  .search-field button:hover { color: var(--explorer-text); background: var(--explorer-surface-hover); }
-  .search-field button:active { transform: scale(0.92); }
+  .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"])) { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: var(--borderRadiusMedium); color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
+  .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"]):hover) { color: var(--explorer-text); background: var(--explorer-surface-hover); }
+  .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"]):active) { transform: none; }
 
-  .section-filter { display: flex; align-items: center; gap: 0.45rem; color: var(--explorer-text-muted); font-size: 0.75rem; white-space: nowrap; }
-  .section-filter select { min-width: 112px; min-height: 36px; border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-small); padding: 0 1.8rem 0 0.55rem; color: var(--explorer-text); background-color: var(--explorer-surface-raised); }
-  .task-summary { display: flex; justify-self: end; gap: 0.75rem; color: var(--explorer-text-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .task-summary .attention { color: var(--explorer-danger); }
+  .section-filter { display: flex; align-items: center; gap: 8px; color: var(--explorer-text-muted); font-size: 12px; white-space: nowrap; }
+  .section-filter select { min-width: 112px; min-height: 36px; border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); padding: 0 1.8rem 0 0.55rem; color: var(--explorer-text); background-color: var(--explorer-surface-raised); }
+  .task-summary { display: flex; justify-self: end; gap: 12px; color: var(--explorer-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .task-summary :global(.attention) { color: var(--explorer-danger); }
 
-  .error-banner { display: flex; align-items: center; gap: 0.5rem; border: 1px solid color-mix(in srgb, var(--explorer-danger) 45%, transparent); border-radius: var(--explorer-radius-medium); padding: 0.55rem 0.7rem; color: var(--explorer-danger); background: color-mix(in srgb, var(--explorer-danger) 12%, var(--explorer-surface)); font-size: 0.8125rem; }
+  .error-banner { display: flex; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--explorer-danger) 45%, transparent); border-radius: var(--explorer-radius-medium); padding: 0.55rem 0.7rem; color: var(--explorer-danger); background: color-mix(in srgb, var(--explorer-danger) 12%, var(--explorer-surface)); font-size: 12px; }
   .error-banner span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 
   .task-list-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: transparent; }
   :global(.task-list-viewport) { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  .section-header { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--explorer-border); padding: 0.35rem 0.55rem; background: transparent; }
-  .section-toggle { display: flex; min-width: 0; align-items: center; gap: 0.4rem; color: var(--explorer-text); }
+  .section-header { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--explorer-border); padding: 0.35rem 0.55rem; background: transparent; }
+  :global(.section-toggle[data-fluent-owner="routes-home-tasks-page"]) { display: flex; min-width: 0; align-items: center; gap: 8px; color: var(--explorer-text); }
   .section-chevron { display: inline-flex; transition: transform 180ms var(--motion-easing-emphasized-decelerate); }
   .section-chevron-expanded { transform: rotate(180deg); }
-  .section-toggle strong { font-size: 0.8125rem; }
-  .section-toggle span { color: var(--explorer-text-muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+  :global(.section-toggle[data-fluent-owner="routes-home-tasks-page"]) strong { font-size: 12px; }
+  :global(.section-toggle[data-fluent-owner="routes-home-tasks-page"]) span { color: var(--explorer-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
   .group-child { position: relative; padding-left: 1.5rem; background: transparent; }
   .group-child::before { position: absolute; top: 0; bottom: 0; left: 0.72rem; width: 1px; background: color-mix(in srgb, var(--explorer-accent) 45%, var(--explorer-border)); content: ''; }
-  .empty-state { display: grid; min-height: 0; flex: 1; place-items: center; align-content: center; gap: 0.45rem; padding: 2rem; color: var(--explorer-text-muted); text-align: center; }
-  .empty-state h2 { color: var(--explorer-text); font-size: 0.9375rem; font-weight: 650; }
-  .empty-state p { max-width: 52ch; font-size: 0.8125rem; }
+  .empty-state { display: grid; min-height: 0; flex: 1; place-items: center; align-content: center; gap: 8px; padding: 2rem; color: var(--explorer-text-muted); text-align: center; }
+  .empty-state h2 { color: var(--explorer-text); font-size: 14px; font-weight: 600; }
+  .empty-state p { max-width: 52ch; font-size: 12px; }
 
   @media (max-width: 780px) {
     .task-toolbar { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
@@ -601,17 +629,17 @@
   }
 
   @media (pointer: coarse) {
-    .icon-button { width: 44px; height: 44px; }
-    .task-tabs button { min-height: 44px; }
+    :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]) { width: 44px; height: 44px; }
+    .task-tabs :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"])) { min-height: 44px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .icon-button,
-    .task-tabs button,
+    :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]),
+    .task-tabs :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"])),
     .search-field,
-    .search-field button,
+    .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"])),
     .section-chevron { transition: none; }
-    .icon-button:active:not(:disabled),
-    .search-field button:active { transform: none; }
+    :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]:active:not(:is(:disabled, [disabled]))),
+    .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"]):active) { transform: none; }
   }
 </style>

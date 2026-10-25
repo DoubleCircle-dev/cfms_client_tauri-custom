@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { _ as t } from 'svelte-i18n';
@@ -319,15 +320,18 @@
       <p>{$t('trash.description')}</p>
     </div>
 
-    <button
-      class="icon-button"
+    <FluentButton data-fluent-owner="routes-home-trash-page"
       title={$t('common.refresh')}
       aria-label={$t('common.refresh')}
       onclick={() => loadItems(currentFolderId)}
       disabled={loading}
+      type="button"
+      appearance="subtle"
+      class="icon-button"
+      iconOnly
     >
       <Icon name="refresh" size="20px" />
-    </button>
+    </FluentButton>
   </header>
 
   <form
@@ -340,7 +344,7 @@
   >
     <label class="scope-field">
       <span>{$t('trash.folderId')}</span>
-      <input
+      <input class="cfms-native-field"
         data-focus-ring="delegated"
         bind:value={folderId}
         disabled={loading}
@@ -348,27 +352,28 @@
       />
     </label>
 
-    <button
+    <FluentButton data-fluent-owner="routes-home-trash-page"
       type="submit"
-      class="load-button"
       disabled={loading}
+      appearance="subtle"
+      class="load-button"
     >
       <Icon name="search" size="18px" />
       {$t('trash.load')}
-    </button>
+    </FluentButton>
 
     <span class="toolbar-divider" aria-hidden="true"></span>
 
-    <button
+    <FluentButton data-fluent-owner="routes-home-trash-page"
       type="button"
-      class="select-button"
-      class:active={selectMode}
       aria-pressed={selectMode}
       onclick={toggleSelectMode}
+      appearance="subtle"
+      class={"select-button" + ((selectMode) ? " active" : '')}
     >
       <Icon name="checklist" size="18px" />
       {$t('files.select')}
-    </button>
+    </FluentButton>
   </form>
 
   {#if selectMode}
@@ -449,7 +454,7 @@
             resetKey={`${currentFolderId}:${selectMode}`}
             viewportClass="trash-list-viewport"
             keyboardNavigation
-            keyboardTargetSelector="button"
+            keyboardTargetSelector="button, fluent-button"
           >
             {#snippet children(item, index)}
               <div
@@ -459,7 +464,7 @@
                 role="row"
               >
                 {#if selectMode}
-                  <button
+                  <button data-fluent-owner="routes-home-trash-page"
                     type="button"
                     class="row-select"
                     class:checked={isSelected(item)}
@@ -516,7 +521,7 @@
     min-width: 0;
     min-height: 0;
     flex-direction: column;
-    gap: 0.9rem;
+    gap: 16px;
     overflow: hidden;
     padding: 1rem clamp(1rem, 2vw, 1.5rem) 1.5rem;
   }
@@ -525,12 +530,12 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
   }
 
   .trash-header h1 {
     color: var(--explorer-text);
-    font-size: 1.25rem;
+    font-size: 28px;
     font-weight: 700;
   }
 
@@ -538,16 +543,16 @@
     max-width: 68ch;
     margin-top: 0.2rem;
     color: var(--explorer-text-muted);
-    font-size: 0.8125rem;
+    font-size: 12px;
   }
 
-  .icon-button {
+  :global(.icon-button[data-fluent-owner="routes-home-trash-page"]) {
     display: grid;
     width: 36px;
     height: 36px;
     flex: none;
     place-items: center;
-    border-radius: 999px;
+    border-radius: var(--borderRadiusMedium);
     color: var(--explorer-text-muted);
     transition:
       color 120ms var(--motion-easing-standard),
@@ -555,20 +560,20 @@
       transform 120ms var(--motion-easing-standard);
   }
 
-  .icon-button:hover:not(:disabled) {
+  :global(.icon-button[data-fluent-owner="routes-home-trash-page"]:hover:not(:is(:disabled, [disabled]))) {
     color: var(--explorer-text);
     background: var(--explorer-surface-hover);
   }
 
-  .icon-button:active:not(:disabled) { transform: scale(0.94); }
-  .icon-button:disabled { opacity: 0.45; }
+  :global(.icon-button[data-fluent-owner="routes-home-trash-page"]:active:not(:is(:disabled, [disabled]))) { transform: none; }
+  :global(.icon-button[data-fluent-owner="routes-home-trash-page"]:is(:disabled, [disabled])) { opacity: 0.45; }
 
   .trash-toolbar {
     display: grid;
     min-width: 0;
     grid-template-columns: minmax(240px, 1fr) auto 1px auto;
     align-items: center;
-    gap: 0.55rem;
+    gap: 8px;
   }
 
   .scope-field {
@@ -576,13 +581,13 @@
     min-width: 0;
     min-height: 40px;
     align-items: center;
-    gap: 0.65rem;
+    gap: 12px;
     border: 1px solid var(--explorer-border);
-    border-radius: var(--explorer-radius-medium);
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.7rem;
     color: var(--explorer-text-muted);
     background: var(--explorer-surface-raised);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
     transition:
@@ -607,22 +612,22 @@
     color: var(--explorer-text);
     background: transparent;
     box-shadow: none !important;
-    font: 400 0.8125rem/1.4 var(--font-md3-mono, var(--font-md3-sans));
+    font: 400 12px/16px var(--font-md3-mono, var(--font-md3-sans));
   }
 
-  .scope-field input:disabled { opacity: 0.55; }
+  .scope-field input:is(:disabled, [disabled]) { opacity: 0.55; }
 
-  .load-button,
-  .select-button {
+  :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
+  :global(.select-button[data-fluent-owner="routes-home-trash-page"]) {
     display: inline-flex;
     min-height: 36px;
     flex: none;
     align-items: center;
     justify-content: center;
-    gap: 0.35rem;
-    border-radius: var(--explorer-radius-small);
+    gap: 4px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.3rem 0.7rem;
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     transition:
       color 120ms var(--motion-easing-standard),
@@ -631,18 +636,18 @@
       opacity 120ms var(--motion-easing-standard);
   }
 
-  .load-button {
+  :global(.load-button[data-fluent-owner="routes-home-trash-page"]) {
     color: var(--explorer-accent);
     background: var(--explorer-accent-soft);
   }
 
-  .select-button { color: var(--explorer-text-muted); }
-  .select-button.active { color: var(--explorer-accent); background: var(--explorer-accent-soft); }
-  .load-button:hover:not(:disabled) { background: var(--explorer-surface-selected); }
-  .select-button:hover { color: var(--explorer-text); background: var(--explorer-surface-hover); }
-  .load-button:active:not(:disabled),
-  .select-button:active { transform: scale(0.96); }
-  .load-button:disabled { opacity: 0.45; }
+  :global(.select-button[data-fluent-owner="routes-home-trash-page"]) { color: var(--explorer-text-muted); }
+  :global(.select-button[data-fluent-owner="routes-home-trash-page"].active[data-fluent-owner="routes-home-trash-page"]) { color: var(--explorer-accent); background: var(--explorer-accent-soft); }
+  :global(.load-button[data-fluent-owner="routes-home-trash-page"]:hover:not(:is(:disabled, [disabled]))) { background: var(--explorer-surface-selected); }
+  :global(.select-button[data-fluent-owner="routes-home-trash-page"]:hover) { color: var(--explorer-text); background: var(--explorer-surface-hover); }
+  :global(.load-button[data-fluent-owner="routes-home-trash-page"]:active:not(:is(:disabled, [disabled]))),
+  :global(.select-button[data-fluent-owner="routes-home-trash-page"]:active) { transform: none; }
+  :global(.load-button[data-fluent-owner="routes-home-trash-page"]:is(:disabled, [disabled])) { opacity: 0.45; }
 
   .toolbar-divider {
     width: 1px;
@@ -655,7 +660,7 @@
     min-height: 40px;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
+    gap: 12px;
     border-block: 1px solid var(--explorer-border);
     padding: 0.25rem 0.35rem 0.25rem 0.7rem;
     background: color-mix(in srgb, var(--explorer-accent) 5%, transparent);
@@ -664,7 +669,7 @@
   .selection-summary {
     flex: none;
     color: var(--explorer-text);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
@@ -674,16 +679,16 @@
     min-width: 0;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.15rem;
+    gap: 4px;
   }
 
   .permission-note {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 8px;
     padding: 0.2rem 0.7rem;
     color: var(--explorer-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
   }
 
   .trash-list-shell {
@@ -701,7 +706,7 @@
     display: grid;
     grid-template-columns: 36px minmax(220px, 1fr) minmax(140px, 180px) 84px;
     align-items: center;
-    gap: 0.65rem;
+    gap: 12px;
     padding-inline: 0.55rem;
   }
 
@@ -710,7 +715,7 @@
     flex: none;
     border-bottom: 1px solid var(--explorer-border);
     color: var(--explorer-text-muted);
-    font-size: 0.6875rem;
+    font-size: 12px;
     font-weight: 600;
   }
 
@@ -750,11 +755,11 @@
     width: 36px;
     height: 36px;
     place-items: center;
-    border-radius: 999px;
+    border-radius: var(--borderRadiusMedium);
     color: var(--explorer-text-muted);
   }
 
-  .kind-icon.folder { color: var(--explorer-folder); }
+  :global(.kind-icon.folder) { color: var(--explorer-folder); }
   .row-select:hover { color: var(--explorer-text); background: var(--explorer-surface-selected); }
   .row-select.checked { color: var(--explorer-accent); }
 
@@ -762,7 +767,7 @@
   .item-name {
     overflow: hidden;
     color: var(--explorer-text);
-    font-size: 0.8125rem;
+    font-size: 12px;
     line-height: 1.35;
     text-decoration: line-through;
     text-decoration-color: color-mix(in srgb, var(--explorer-danger) 65%, transparent);
@@ -774,23 +779,23 @@
   .item-meta {
     display: flex;
     min-width: 0;
-    gap: 0.55rem;
+    gap: 8px;
     overflow: hidden;
     color: var(--explorer-text-muted);
-    font: 400 0.6875rem/1.4 var(--font-md3-mono, var(--font-md3-sans));
+    font: 400 12px/16px var(--font-md3-mono, var(--font-md3-sans));
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .item-created {
     color: var(--explorer-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
   .mobile-created { display: none; }
-  .row-actions { display: flex; justify-content: flex-end; gap: 0.1rem; }
+  .row-actions { display: flex; justify-content: flex-end; gap: 4px; }
 
   .loading-state,
   .empty-state {
@@ -805,18 +810,18 @@
 
   .loading-state {
     grid-template-columns: auto auto;
-    gap: 0.5rem;
-    font-size: 0.8125rem;
+    gap: 8px;
+    font-size: 12px;
   }
 
-  .empty-state { gap: 0.4rem; padding: 2rem; }
-  .empty-state h2 { color: var(--explorer-text); font-size: 0.9375rem; font-weight: 650; }
-  .empty-state p { max-width: 52ch; font-size: 0.8125rem; }
+  .empty-state { gap: 8px; padding: 2rem; }
+  .empty-state h2 { color: var(--explorer-text); font-size: 14px; font-weight: 600; }
+  .empty-state p { max-width: 52ch; font-size: 12px; }
 
   @media (max-width: 720px) {
     .trash-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
     .toolbar-divider { display: none; }
-    .select-button { grid-column: 2; }
+    :global(.select-button[data-fluent-owner="routes-home-trash-page"]) { grid-column: 2; }
     .selection-toolbar { align-items: flex-start; flex-direction: column; }
     .selection-actions { width: 100%; justify-content: flex-start; overflow-x: auto; }
     .trash-list-header,
@@ -831,28 +836,28 @@
     .trash-header p { display: none; }
     .trash-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
     .scope-field { grid-column: 1 / -1; }
-    .load-button { grid-column: 1; }
-    .select-button { grid-column: 2; }
+    :global(.load-button[data-fluent-owner="routes-home-trash-page"]) { grid-column: 1; }
+    :global(.select-button[data-fluent-owner="routes-home-trash-page"]) { grid-column: 2; }
     .trash-list-header,
     .trash-row { padding-inline: 0.25rem; }
     .empty-state p { display: none; }
   }
 
   @media (pointer: coarse) {
-    .icon-button { width: 44px; height: 44px; }
-    .load-button,
-    .select-button { min-height: 44px; }
+    :global(.icon-button[data-fluent-owner="routes-home-trash-page"]) { width: 44px; height: 44px; }
+    :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
+    :global(.select-button[data-fluent-owner="routes-home-trash-page"]) { min-height: 44px; }
     .trash-row { min-height: 66px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .icon-button,
+    :global(.icon-button[data-fluent-owner="routes-home-trash-page"]),
     .scope-field,
-    .load-button,
-    .select-button,
+    :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
+    :global(.select-button[data-fluent-owner="routes-home-trash-page"]),
     .trash-row { transition: none; }
-    .icon-button:active:not(:disabled),
-    .load-button:active:not(:disabled),
-    .select-button:active { transform: none; }
+    :global(.icon-button[data-fluent-owner="routes-home-trash-page"]:active:not(:is(:disabled, [disabled]))),
+    :global(.load-button[data-fluent-owner="routes-home-trash-page"]:active:not(:is(:disabled, [disabled]))),
+    :global(.select-button[data-fluent-owner="routes-home-trash-page"]:active) { transform: none; }
   }
 </style>

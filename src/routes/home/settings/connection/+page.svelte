@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -16,6 +17,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import MdSwitch from '$lib/components/MdSwitch.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
+  import FluentTextInput from '$lib/components/FluentTextInput.svelte';
 
   const defaultConfig: ConnectionSettings = {
     enable_proxy: false,
@@ -179,18 +181,19 @@
       </div>
 
       {#if showCustomProxy}
-        <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-          {$t('settings.connection.customProxy')}
+        <div class="space-y-2">
+          <label for="connection-custom-proxy">{$t('settings.connection.customProxy')}</label>
+          <!-- Proxy URLs can contain credentials; keep the value in a native field. -->
           <input
-            class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
-                   px-3 py-2 text-md3-on-surface"
+            id="connection-custom-proxy"
+            class="cfms-native-field w-full"
             type="text"
             value={config.custom_proxy}
             oninput={(event) => applyConnection({ ...config, custom_proxy: event.currentTarget.value })}
             placeholder={$t('settings.connection.customProxyHint')}
             disabled={loading}
           />
-        </label>
+        </div>
       {/if}
 
       <div class="settings-row text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
@@ -235,29 +238,21 @@
         </p>
       </div>
 
-      <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-        {$t('settings.connection.certPath')}
-        <input
-          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
-                 px-3 py-2 text-md3-on-surface"
-          type="text"
+      <FluentTextInput
+          id="connection-client-cert-path"
+          label={$t('settings.connection.certPath')}
           value={config.client_cert_path}
-          oninput={(event) => applyConnection({ ...config, client_cert_path: event.currentTarget.value })}
+          oninput={(value) => applyConnection({ ...config, client_cert_path: value })}
           disabled={loading}
         />
-      </label>
 
-      <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-        {$t('settings.connection.keyPath')}
-        <input
-          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
-                 px-3 py-2 text-md3-on-surface"
-          type="text"
+      <FluentTextInput
+          id="connection-client-key-path"
+          label={$t('settings.connection.keyPath')}
           value={config.client_key_path}
-          oninput={(event) => applyConnection({ ...config, client_key_path: event.currentTarget.value })}
+          oninput={(value) => applyConnection({ ...config, client_key_path: value })}
           disabled={loading}
         />
-      </label>
     </section>
 
     <section class="settings-section space-y-3">
@@ -270,7 +265,7 @@
         </p>
       </div>
 
-      <div class="rounded-lg bg-md3-surface-container-high/70 p-3 text-xs text-md3-on-surface-variant space-y-1">
+      <div class="rounded-lg bg-md3-surface-container-high p-3 text-xs text-md3-on-surface-variant space-y-1">
         <div class="flex justify-between gap-3">
           <span>{$t('settings.connection.caCertificateCount')}</span>
           <span class="text-md3-on-surface">{caStatus?.certificateCount ?? '-'}</span>
@@ -281,17 +276,17 @@
         </div>
       </div>
 
-      <button
-        class="px-4 py-2 rounded-md font-medium text-sm
-               bg-md3-secondary-container text-md3-on-secondary-container
-               hover:brightness-110 disabled:opacity-50 transition-all flex items-center gap-2"
+      <FluentButton data-fluent-owner="routes-home-settings-connection-page"
         style="font-family: var(--font-md3-sans);"
         onclick={updateCertificates}
         disabled={loading || caUpdating}
+        type="button"
+        appearance="subtle"
+        class="px-4 py-2 rounded-md font-medium text-sm\r\n               bg-md3-secondary-container text-md3-on-secondary-container\r\n                disabled:opacity-50 transition-all flex items-center gap-2"
       >
         <Icon name="refresh" size="18px" />
         {caUpdating ? $t('common.checking') : $t('settings.connection.caUpdateNow')}
-      </button>
+      </FluentButton>
 
       {#if caResult}
         <p class="text-xs text-md3-on-surface-variant">{caResult}</p>

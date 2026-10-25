@@ -14,13 +14,14 @@
     appearance?: 'primary' | 'outline' | 'subtle' | 'transparent';
     shape?: 'circular' | 'rounded' | 'square';
     iconOnly?: boolean;
+    tone?: 'neutral' | 'primary' | 'warning' | 'danger';
     class?: string;
     children?: Snippet;
     start?: Snippet;
     end?: Snippet;
   }
   let {
-    appearance = 'outline', shape = 'rounded', iconOnly = false,
+    appearance = 'outline', shape = 'rounded', iconOnly = false, tone = 'neutral',
     class: className = '', children, start, end, type = 'button',
     onclick, disabled = false, ...attributes
   }: Props = $props();
@@ -39,7 +40,8 @@
   disabled={Boolean(disabled)}
   aria-disabled={disabled || undefined}
   data-focus-ring="fluent"
-  icon-only={iconOnly}
+  icon-only={iconOnly || undefined}
+  data-tone={tone}
   class="cfms-button {className}"
   onclickcapture={(event) => {
     if (disabled) { event.preventDefault(); event.stopImmediatePropagation(); return; }
@@ -57,8 +59,10 @@
     box-sizing: border-box;
     min-block-size: 32px;
     max-inline-size: 100%;
+    gap: 8px;
     vertical-align: middle;
   }
+  .cfms-button::part(content) { display: inline-flex; align-items: center; justify-content: center; gap: inherit; white-space: nowrap; }
   .cfms-button[icon-only] { inline-size: 32px; padding: 0; }
   .cfms-button :global([slot]) { display: inline-flex; align-items: center; justify-content: center; }
   @media (pointer: coarse) {

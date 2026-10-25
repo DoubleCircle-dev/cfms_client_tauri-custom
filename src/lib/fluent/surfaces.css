@@ -1,0 +1,89 @@
+/* Shared operational surfaces. Complex lists/editors keep their own geometry. */
+.settings-page-shell {
+  display: grid;
+  align-content: start;
+  width: min(100%, 48rem);
+  gap: 24px;
+  margin-inline: auto;
+  padding: 24px;
+}
+.settings-section-list { display: grid; gap: 8px; border: 0; }
+.settings-section {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: var(--borderRadiusLarge);
+  background: var(--colorNeutralBackground1);
+}
+.settings-section-heading { display: grid; min-width: 0; gap: 4px; }
+.settings-section-heading h2, .settings-section-heading p { margin: 0; }
+.settings-section-heading h2 {
+  color: var(--colorNeutralForeground1);
+  font: 600 14px/20px var(--fontFamilyBase);
+}
+.settings-section-heading p {
+  max-width: 70ch;
+  color: var(--colorNeutralForeground3);
+  font: 400 12px/16px var(--fontFamilyBase);
+}
+.settings-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 16px; }
+.settings-row__copy { min-width: 0; }
+.settings-row__icon { display: grid; width: 24px; flex: none; place-items: center; color: var(--colorBrandForeground1); }
+.settings-row > :is(.cfms-choice-target, .cfms-button) { flex-shrink: 0; }
+.workspace-page [role="tablist"] { min-inline-size: 0; overflow-x: auto; overscroll-behavior-inline: contain; }
+.workspace-page [role="tablist"] > [role="tab"] { flex-shrink: 0; }
+
+/* Native fields intentionally cover secrets, number/date/select controls and
+ * established composites. Delegated fields keep their wrapper's geometry. */
+:root .cfms-native-field:not([data-focus-ring="delegated"]) {
+  box-sizing: border-box;
+  min-inline-size: 0;
+  min-block-size: 32px;
+  border: 1px solid var(--colorNeutralStroke1);
+  border-block-end-color: var(--colorNeutralStrokeAccessible);
+  border-radius: var(--borderRadiusMedium);
+  padding: 5px 12px;
+  color: var(--colorNeutralForeground1);
+  background: var(--colorNeutralBackground1);
+  font-family: var(--fontFamilyBase);
+  font-size: 14px;
+  line-height: 20px;
+  transition: border-color var(--durationFaster) var(--curveEasyEase), background-color var(--durationFaster) var(--curveEasyEase);
+}
+:root textarea.cfms-native-field { min-block-size: 96px; resize: vertical; }
+:root .cfms-native-field::placeholder { color: var(--colorNeutralForeground4); opacity: 1; }
+:root .cfms-native-field:hover:not(:disabled) { border-color: var(--colorNeutralStroke1Hover); }
+:root .cfms-native-field:disabled { color: var(--colorNeutralForegroundDisabled); background: var(--colorNeutralBackgroundDisabled); border-color: var(--colorNeutralStrokeDisabled); }
+:root .cfms-native-field[aria-invalid="true"] { border-color: var(--colorStatusDangerBorder1); }
+
+.context-menu-surface {
+  border: 1px solid var(--colorNeutralStroke1);
+  border-radius: var(--borderRadius2XLarge);
+  color: var(--colorNeutralForeground1);
+  background: var(--cfms-acrylic);
+  box-shadow: var(--shadow64);
+  backdrop-filter: blur(20px);
+}
+.context-menu-surface [role="menuitem"] { min-block-size: 32px; margin-inline: 4px; width: calc(100% - 8px); border-radius: var(--borderRadiusMedium); padding-block: 6px; }
+.context-menu-surface [role="menuitem"]:active:not(:disabled) { background: var(--colorNeutralBackground1Pressed); }
+
+@media (pointer: coarse) {
+  :root .cfms-native-field:not([data-focus-ring="delegated"]) { min-block-size: 44px; font-size: 16px; }
+  .context-menu-surface [role="menuitem"] { min-block-size: 44px; }
+  .workspace-page [role="tablist"] > [role="tab"] { min-block-size: 44px; }
+}
+@media (max-width: 520px) {
+  .settings-page-shell { gap: 16px; padding: 16px; }
+  .settings-section { padding: 12px; }
+  .settings-row { gap: 12px; flex-wrap: wrap; }
+  .settings-row__copy { flex: 1 1 180px; }
+}
+@media (forced-colors: active) {
+  .settings-section, .context-menu-surface { border-color: CanvasText; background: Canvas; box-shadow: none; backdrop-filter: none; }
+  :root .cfms-native-field:not([data-focus-ring="delegated"]) { color: FieldText; background: Field; border-color: ButtonText; }
+  :root .cfms-native-field:disabled { color: GrayText; border-color: GrayText; }
+  .context-menu-surface [role="menuitem"]:is(:hover, :focus-visible) { color: HighlightText; background: Highlight; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .context-menu-surface { background: var(--colorNeutralBackground1); backdrop-filter: none; }
+}

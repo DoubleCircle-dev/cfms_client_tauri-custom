@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import {
     canDeleteDownloadTaskGroupFiles, canRemoveDownloadTaskGroupRecords,
@@ -189,48 +190,123 @@
     </span>
     <span class="batch-row-actions">
       {#if primaryAction === 'retry'}
-        <button class="batch-primary-action batch-action-primary" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.retryAction')} aria-label={$t('tasks.retryAction')} onclick={() => runAction(onRetry)}><Icon name="restartAlt" size="16px" /><span class="batch-action-label">{$t('tasks.retryAction')}</span></button>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction) || isDeleting}
+          title={$t('tasks.retryAction')}
+          aria-label={$t('tasks.retryAction')}
+          onclick={() => runAction(onRetry)}
+          appearance="subtle"
+          class="batch-primary-action batch-action-primary"
+        ><Icon name="restartAlt" size="16px" /><span class="batch-action-label">{$t('tasks.retryAction')}</span></FluentButton>
       {:else if primaryAction === 'resume'}
-        <button class="batch-primary-action batch-action-primary" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.resume')} aria-label={$t('tasks.resume')} onclick={() => runAction(onResume)}><Icon name="resume" size="16px" /><span class="batch-action-label">{$t('tasks.resume')}</span></button>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction) || isDeleting}
+          title={$t('tasks.resume')}
+          aria-label={$t('tasks.resume')}
+          onclick={() => runAction(onResume)}
+          appearance="subtle"
+          class="batch-primary-action batch-action-primary"
+        ><Icon name="resume" size="16px" /><span class="batch-action-label">{$t('tasks.resume')}</span></FluentButton>
       {:else if primaryAction === 'pause'}
-        <button class="batch-primary-action batch-action-warning" type="button" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.pause')} aria-label={$t('tasks.pause')} onclick={() => runAction(onPause)}><Icon name="pause" size="16px" /><span class="batch-action-label">{$t('tasks.pause')}</span></button>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction) || isDeleting}
+          title={$t('tasks.pause')}
+          aria-label={$t('tasks.pause')}
+          onclick={() => runAction(onPause)}
+          appearance="subtle"
+          class="batch-primary-action batch-action-warning"
+        ><Icon name="pause" size="16px" /><span class="batch-action-label">{$t('tasks.pause')}</span></FluentButton>
       {/if}
       {#if canPause && primaryAction !== 'pause'}
-        <button type="button" class="batch-action batch-action-warning" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.pause')} aria-label={$t('tasks.pause')} onclick={() => runAction(onPause)}><Icon name="pause" size="16px" /><span class="batch-action-label">{$t('tasks.pause')}</span></button>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction) || isDeleting}
+          title={$t('tasks.pause')}
+          aria-label={$t('tasks.pause')}
+          onclick={() => runAction(onPause)}
+          appearance="subtle"
+          class="batch-action batch-action-warning"
+        ><Icon name="pause" size="16px" /><span class="batch-action-label">{$t('tasks.pause')}</span></FluentButton>
       {/if}
       {#if canResume && primaryAction !== 'resume'}
-        <button type="button" class="batch-action batch-action-primary" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.resume')} aria-label={$t('tasks.resume')} onclick={() => runAction(onResume)}><Icon name="resume" size="16px" /><span class="batch-action-label">{$t('tasks.resume')}</span></button>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction) || isDeleting}
+          title={$t('tasks.resume')}
+          aria-label={$t('tasks.resume')}
+          onclick={() => runAction(onResume)}
+          appearance="subtle"
+          class="batch-action batch-action-primary"
+        ><Icon name="resume" size="16px" /><span class="batch-action-label">{$t('tasks.resume')}</span></FluentButton>
       {/if}
       {#if canRetry && primaryAction !== 'retry'}
-        <button type="button" class="batch-action batch-action-primary" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.retryAction')} aria-label={$t('tasks.retryAction')} onclick={() => runAction(onRetry)}><Icon name="restartAlt" size="16px" /><span class="batch-action-label">{$t('tasks.retryAction')}</span></button>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction) || isDeleting}
+          title={$t('tasks.retryAction')}
+          aria-label={$t('tasks.retryAction')}
+          onclick={() => runAction(onRetry)}
+          appearance="subtle"
+          class="batch-action batch-action-primary"
+        ><Icon name="restartAlt" size="16px" /><span class="batch-action-label">{$t('tasks.retryAction')}</span></FluentButton>
       {/if}
       {#if canCancel}
-        <button type="button" class="batch-action batch-action-danger" disabled={Boolean(pendingAction) || isDeleting} title={$t('tasks.cancel')} aria-label={$t('tasks.cancel')} onclick={() => runAction(onCancel)}><Icon name="cancel" size="16px" /><span class="batch-action-label">{$t('tasks.cancel')}</span></button>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction) || isDeleting}
+          title={$t('tasks.cancel')}
+          aria-label={$t('tasks.cancel')}
+          onclick={() => runAction(onCancel)}
+          appearance="subtle"
+          tone="danger"
+          class="batch-action batch-action-danger"
+        ><Icon name="cancel" size="16px" /><span class="batch-action-label">{$t('tasks.cancel')}</span></FluentButton>
       {/if}
       {#if canDeleteFiles}
-        <button type="button" class="batch-action batch-action-danger" disabled={Boolean(pendingAction) || isDeleting} title={isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')} aria-label={isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')} onclick={() => runAction(onDeleteFiles)}>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction) || isDeleting}
+          title={isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')}
+          aria-label={isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')}
+          onclick={() => runAction(onDeleteFiles)}
+          appearance="subtle"
+          tone="danger"
+          class="batch-action batch-action-danger"
+        >
           {#if isDeleting}<ProgressRing class="batch-delete-ring" size={16} strokeWidth={2.4} label={$t('tasks.batchDeleting')} />{:else}<Icon name="delete" size="16px" />{/if}
           <span class="batch-action-label">{isDeleting ? $t('tasks.batchDeleting') : $t('tasks.deleteBatchFiles')}</span>
-        </button>
+        </FluentButton>
       {/if}
       {#if canRemoveRecords}
-        <button type="button" class="batch-action" disabled={Boolean(pendingAction)} title={isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')} aria-label={isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')} onclick={() => runAction(onRemoveRecords)}>
+        <FluentButton data-fluent-owner="lib-components-download-task-group-header"
+          type="button"
+          disabled={Boolean(pendingAction)}
+          title={isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')}
+          aria-label={isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')}
+          onclick={() => runAction(onRemoveRecords)}
+          appearance="subtle"
+          class="batch-action"
+        >
           {#if isRemoving}<ProgressRing size={16} strokeWidth={2.4} label={$t('tasks.batchRemoving')} />{:else}<Icon name="playlistRemove" size="16px" />{/if}
           <span class="batch-action-label">{isRemoving ? $t('tasks.batchRemoving') : $t('tasks.removeBatchRecords')}</span>
-        </button>
+        </FluentButton>
       {/if}
       {#if hasActions}<span class="batch-action-divider" aria-hidden="true"></span>{/if}
-      <button
+      <FluentButton data-fluent-owner="lib-components-download-task-group-header"
         type="button"
-        class="batch-expand"
         aria-expanded={expanded}
         aria-label={expanded ? $t('tasks.collapseBatch') : $t('tasks.expandBatch')}
         title={expanded ? $t('tasks.collapseBatch') : $t('tasks.expandBatch')}
         disabled={isBusy}
         onclick={() => onToggle(group.id)}
+        appearance="subtle"
+        class="batch-expand"
       >
         <span class:batch-chevron-expanded={expanded} class="batch-chevron"><Icon name="expandMore" size="18px" /></span>
-      </button>
+      </FluentButton>
     </span>
   </div>
 </div>
@@ -290,7 +366,7 @@
     display: grid;
     grid-area: copy;
     min-width: 0;
-    gap: 0.2rem;
+    gap: 4px;
   }
 
   .batch-title {
@@ -299,8 +375,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--explorer-text);
-    font-size: 0.875rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
   }
 
   .batch-meta {
@@ -309,7 +385,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--explorer-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
   }
 
   .batch-state {
@@ -317,9 +393,9 @@
     grid-area: state;
     min-width: 0;
     align-items: flex-start;
-    gap: 0.35rem;
+    gap: 4px;
     color: var(--explorer-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.45;
     overflow-wrap: anywhere;
     white-space: normal;
@@ -343,12 +419,12 @@
     display: grid;
     grid-area: progress;
     min-width: 0;
-    gap: 0.35rem;
+    gap: 4px;
   }
 
   .batch-percent {
     color: var(--explorer-accent);
-    font-size: 0.8rem;
+    font-size: 12px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
@@ -380,7 +456,7 @@
     min-width: 0;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.3rem;
+    gap: 4px;
   }
 
   .batch-progress-meta {
@@ -388,29 +464,29 @@
     min-width: 0;
     align-items: baseline;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 8px;
   }
 
   .batch-speed {
     overflow: hidden;
     color: var(--explorer-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .batch-primary-action,
-  .batch-action {
+  :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]),
+  :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]) {
     display: inline-flex;
     flex: none;
     align-items: center;
     justify-content: center;
-    gap: 0.25rem;
+    gap: 4px;
     min-height: 34px;
-    border-radius: 5px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.25rem 0.55rem;
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
     transition:
@@ -428,7 +504,7 @@
     background: var(--explorer-border);
   }
 
-  .batch-expand {
+  :global(.batch-expand[data-fluent-owner="lib-components-download-task-group-header"]) {
     display: grid;
     width: 36px;
     height: 36px;
@@ -441,31 +517,31 @@
   .batch-chevron { display: inline-flex; transition: transform 180ms var(--motion-easing-emphasized-decelerate); }
   .batch-chevron-expanded { transform: rotate(180deg); }
 
-  .batch-expand:hover:not(:disabled) {
+  :global(.batch-expand[data-fluent-owner="lib-components-download-task-group-header"]:hover:not(:is(:disabled, [disabled]))) {
     background: var(--explorer-surface-selected);
     color: var(--explorer-text);
   }
 
-  .batch-primary-action:hover:not(:disabled),
-  .batch-action:hover:not(:disabled) {
+  :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]:hover:not(:is(:disabled, [disabled]))) {
     background: var(--explorer-surface-selected);
-    filter: brightness(1.08);
+    filter: none;
   }
 
-  .batch-primary-action:focus-visible,
-  .batch-action:focus-visible,
-  .batch-expand:focus-visible {
-    outline: 2px solid var(--explorer-accent);
+  :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]:focus-visible),
+  :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]:focus-visible),
+  :global(.batch-expand[data-fluent-owner="lib-components-download-task-group-header"]:focus-visible) {
+    outline: none;
     outline-offset: -2px;
   }
 
-  .batch-primary-action:active:not(:disabled),
-  .batch-action:active:not(:disabled),
-  .batch-expand:active:not(:disabled) { transform: scale(0.94); }
+  :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]:active:not(:is(:disabled, [disabled]))),
+  :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]:active:not(:is(:disabled, [disabled]))),
+  :global(.batch-expand[data-fluent-owner="lib-components-download-task-group-header"]:active:not(:is(:disabled, [disabled]))) { transform: none; }
 
-  .batch-primary-action:disabled,
-  .batch-action:disabled,
-  .batch-expand:disabled {
+  :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]:is(:disabled, [disabled])),
+  :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]:is(:disabled, [disabled])),
+  :global(.batch-expand[data-fluent-owner="lib-components-download-task-group-header"]:is(:disabled, [disabled])) {
     opacity: 0.5;
   }
 
@@ -473,15 +549,15 @@
     color: currentColor;
   }
 
-  .batch-action-warning {
+  :global(.batch-action-warning[data-fluent-owner="lib-components-download-task-group-header"]) {
     color: var(--explorer-warning);
   }
 
-  .batch-action-primary {
+  :global(.batch-action-primary[data-fluent-owner="lib-components-download-task-group-header"]) {
     color: var(--explorer-accent);
   }
 
-  .batch-action-danger {
+  :global(.batch-action-danger[data-fluent-owner="lib-components-download-task-group-header"]) {
     color: var(--explorer-danger);
   }
 
@@ -495,8 +571,8 @@
   }
 
   @container download-batch (max-width: 64rem) {
-    .batch-primary-action,
-    .batch-action {
+    :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]),
+    :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]) {
       width: 36px;
       height: 36px;
       padding: 0;
@@ -531,12 +607,12 @@
   }
 
   @media (pointer: coarse) {
-    .batch-primary-action,
-    .batch-action {
+    :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]),
+    :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]) {
       min-width: 44px;
       min-height: 44px;
     }
-    .batch-expand { width: 44px; height: 44px; }
+    :global(.batch-expand[data-fluent-owner="lib-components-download-task-group-header"]) { width: 44px; height: 44px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -544,13 +620,13 @@
     .batch-card,
     .batch-folder,
     .batch-progress span,
-    .batch-primary-action,
-    .batch-action,
-    .batch-expand,
+    :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]),
+    :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]),
+    :global(.batch-expand[data-fluent-owner="lib-components-download-task-group-header"]),
     .batch-chevron { transition: none; }
-    .batch-primary-action:active:not(:disabled),
-    .batch-action:active:not(:disabled),
-    .batch-expand:active:not(:disabled) { transform: none; }
+    :global(.batch-primary-action[data-fluent-owner="lib-components-download-task-group-header"]:active:not(:is(:disabled, [disabled]))),
+    :global(.batch-action[data-fluent-owner="lib-components-download-task-group-header"]:active:not(:is(:disabled, [disabled]))),
+    :global(.batch-expand[data-fluent-owner="lib-components-download-task-group-header"]:active:not(:is(:disabled, [disabled]))) { transform: none; }
   }
 
 </style>

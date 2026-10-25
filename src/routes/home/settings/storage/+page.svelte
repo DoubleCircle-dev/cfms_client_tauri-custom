@@ -12,6 +12,8 @@
   import Icon from '$lib/components/Icon.svelte';
   import MdSwitch from '$lib/components/MdSwitch.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
+  import FluentTextInput from '$lib/components/FluentTextInput.svelte';
+  import FluentButton from '$lib/components/FluentButton.svelte';
 
   let preferences = $state<UserPreference | null>(null);
   let loading = $state(true);
@@ -114,30 +116,23 @@
       />
     </div>
 
-    <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
-      {$t('settings.storage.externalPath')}
-      <div class="flex min-w-0 flex-col gap-2 sm:flex-row">
-        <input
-          class="min-w-0 flex-1 rounded-lg border border-md3-outline bg-md3-surface-container-high
-                 px-3 py-2 text-md3-on-surface disabled:opacity-60"
-          type="text"
-          value={externalStoragePath}
-          oninput={(event) => applyStoragePreference(useExternalStorage, event.currentTarget.value)}
-          placeholder={$t('settings.storage.externalPathPlaceholder')}
-          disabled={loading || !preferences || !useExternalStorage}
-        />
-        <button
-          type="button"
-          class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-md3-primary-container px-3 py-2
-                 text-sm font-semibold text-md3-on-primary-container transition-colors
-                 hover:bg-md3-primary-container/80 disabled:opacity-60"
-          disabled={loading || !preferences || selectingPath}
-          onclick={chooseExternalStoragePath}
-        >
-          <Icon name="folderOpen" size="18px" />
-          {$t('settings.storage.selectFolder')}
-        </button>
-      </div>
-    </label>
+    <div class="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-end">
+      <FluentTextInput
+        id="external-storage-path"
+        label={$t('settings.storage.externalPath')}
+        value={externalStoragePath}
+        oninput={(value) => applyStoragePreference(useExternalStorage, value)}
+        placeholder={$t('settings.storage.externalPathPlaceholder')}
+        disabled={loading || !preferences || !useExternalStorage}
+      />
+      <FluentButton data-fluent-owner="routes-home-settings-storage-page"
+        appearance="outline"
+        disabled={loading || !preferences || selectingPath}
+        onclick={chooseExternalStoragePath}
+      >
+        <Icon name="folderOpen" size="18px" />
+        {$t('settings.storage.selectFolder')}
+      </FluentButton>
+    </div>
   </section>
 </div>

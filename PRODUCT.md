@@ -43,7 +43,7 @@ Authorized files are decrypted locally. Users therefore work in trusted environm
 
 ## Brand Commitments
 
-Use Fluent 2 across desktop and Android, with Windows 11 application hierarchy as the visual reference. Adapt native fonts and input density without switching design languages. Preserve the circular connection action and authentication image push/retreat as signature interactions.
+Use Fluent 2 across desktop and Android, with Windows 11 application hierarchy as the visual reference. Bundle Noto Sans and Noto Serif with their Simplified Chinese counterparts across platforms, preserving established serif usage and JetBrains Mono for technical values. Adapt safe areas and input density without switching design languages. Preserve the circular connection action and authentication image push/retreat as signature interactions.
 
 Preserve the product name **CFMS** and the expanded name **Confidential File Management System** where identification or technical clarity requires them. Do not deliberately repeat or emphasize the name at every turn; ordinary interface copy should naturally use terms such as “this application” or “the client” when the product name adds no value.
 

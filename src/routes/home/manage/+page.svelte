@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount, tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -1027,15 +1028,18 @@
     </h1>
 
     {#if isAdmin}
-      <button
-        class="p-2 rounded-full text-md3-on-surface-variant
-               hover:bg-md3-surface-container-high transition-colors disabled:opacity-50"
+      <FluentButton data-fluent-owner="routes-home-manage-page"
         title={$t('common.refresh')}
         onclick={loadActiveTab}
         disabled={loadingUsers || loadingGroups || loadingLogs || busyKey !== null}
+        type="button"
+        appearance="subtle"
+        class="p-2 rounded text-md3-on-surface-variant\n               hover:bg-md3-surface-container-high transition-colors disabled:opacity-50"
+        iconOnly
+        aria-label={$t('common.refresh')}
       >
         <Icon name="refresh" size="20px" />
-      </button>
+      </FluentButton>
     {/if}
   </div>
 
@@ -1045,9 +1049,9 @@
       {$t('manage.noPermission')}
     </div>
   {:else}
-    <div class="flex gap-1 bg-md3-surface-container-high/50 rounded-xl p-1 w-fit" role="tablist" tabindex="-1" aria-label={$t('manage.title')} onkeydown={handleManageTabKeydown}>
+    <div class="flex gap-1 bg-md3-surface-container-high rounded-xl p-1 w-fit" role="tablist" tabindex="-1" aria-label={$t('manage.title')} onkeydown={handleManageTabKeydown}>
       {#each tabs as tab}
-        <button
+        <button data-fluent-owner="routes-home-manage-page"
           data-tab-item
           role="tab"
           aria-selected={activeTab === tab.key}
@@ -1076,17 +1080,17 @@
           <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
             {$t('manage.userAccounts')}
           </h2>
-          <button
-            class="px-3 py-1.5 text-xs rounded-full font-medium
-                   bg-md3-primary-container text-md3-on-primary-container
-                   hover:brightness-110 disabled:opacity-50 transition-all flex items-center gap-1.5"
+          <FluentButton data-fluent-owner="routes-home-manage-page"
             style="font-family: var(--font-md3-sans);"
             onclick={handleCreateUser}
             disabled={!canListUsers || busyKey !== null}
+            type="button"
+            appearance="subtle"
+            class="px-3 py-1.5 text-xs rounded font-medium\n                   bg-md3-primary-container text-md3-on-primary-container\n                    disabled:opacity-50 transition-all flex items-center gap-1.5"
           >
             <Icon name="groupAdd" size="14px" />
             {$t('manage.addAccount')}
-          </button>
+          </FluentButton>
         </div>
 
         {#if !canListUsers}
@@ -1128,8 +1132,7 @@
                   {@render MetadataLine($t('manage.groups'), formatList(user.groups))}
                   {@render MetadataLine($t('manage.effectivePermissions'), formatList(user.effective_permissions))}
                 </div>
-                <button
-                  class="manage-action-toggle rounded-full p-1.5 text-md3-on-surface-variant transition-colors hover:bg-md3-primary-container/40 hover:text-md3-primary-emphasis"
+                <FluentButton data-fluent-owner="routes-home-manage-page"
                   title={$t('tasks.moreActions')}
                   aria-label={$t('tasks.moreActions')}
                   onclick={() => toggleActionRow(actionKey)}
@@ -1139,9 +1142,13 @@
                       showUserContextMenu(event, user);
                     }
                   }}
+                  type="button"
+                  appearance="subtle"
+                  class="manage-action-toggle rounded p-1.5 text-md3-on-surface-variant transition-colors hover:bg-md3-primary-container/40 hover:text-md3-primary-emphasis"
+                  iconOnly
                 >
                   <Icon name={expandedActionRow === actionKey ? 'expandLess' : 'moreVert'} size="20px" />
-                </button>
+                </FluentButton>
                 <div class="manage-list-actions">
                   {@render ActionButton('info', $t('manage.properties'), () => handleViewUser(user), busyKey !== null)}
                   {@render ActionButton('edit', $t('manage.changeNickname'), () => handleRenameUser(user), busyKey !== null)}
@@ -1156,7 +1163,7 @@
                   {@render ActionButton('delete', $t('common.delete'), () => handleDeleteUser(user), busyKey !== null, true)}
                 </div>
                 {#if expandedActionRow === actionKey}
-                  <div class="manage-list-expanded rounded-lg border border-md3-outline/50 bg-md3-surface-container-high/40 px-2 py-2 animate-fade-scale-in">
+                  <div class="manage-list-expanded rounded-lg border border-md3-outline/50 bg-md3-surface-container-high px-2 py-2 animate-fade-scale-in">
                     <div class="flex flex-wrap justify-end gap-1">
                       {@render ActionButton('info', $t('manage.properties'), () => handleViewUser(user), busyKey !== null)}
                       {@render ActionButton('edit', $t('manage.changeNickname'), () => handleRenameUser(user), busyKey !== null)}
@@ -1181,17 +1188,17 @@
           <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
             {$t('manage.userGroups')}
           </h2>
-          <button
-            class="px-3 py-1.5 text-xs rounded-full font-medium
-                   bg-md3-primary-container text-md3-on-primary-container
-                   hover:brightness-110 disabled:opacity-50 transition-all flex items-center gap-1.5"
+          <FluentButton data-fluent-owner="routes-home-manage-page"
             style="font-family: var(--font-md3-sans);"
             onclick={handleCreateGroup}
             disabled={!canListGroups || busyKey !== null}
+            type="button"
+            appearance="subtle"
+            class="px-3 py-1.5 text-xs rounded font-medium\n                   bg-md3-primary-container text-md3-on-primary-container\n                    disabled:opacity-50 transition-all flex items-center gap-1.5"
           >
             <Icon name="groupAdd" size="14px" />
             {$t('manage.addGroup')}
-          </button>
+          </FluentButton>
         </div>
 
         {#if !canListGroups}
@@ -1232,8 +1239,7 @@
                   {@render MetadataLine($t('manage.effectivePermissions'), formatList(group.effective_permissions))}
                   {@render MetadataLine($t('manage.members'), formatList(group.members))}
                 </div>
-                <button
-                  class="manage-action-toggle rounded-full p-1.5 text-md3-on-surface-variant transition-colors hover:bg-md3-primary-container/40 hover:text-md3-primary-emphasis"
+                <FluentButton data-fluent-owner="routes-home-manage-page"
                   title={$t('tasks.moreActions')}
                   aria-label={$t('tasks.moreActions')}
                   onclick={() => toggleActionRow(actionKey)}
@@ -1243,16 +1249,20 @@
                       showGroupContextMenu(event, group);
                     }
                   }}
+                  type="button"
+                  appearance="subtle"
+                  class="manage-action-toggle rounded p-1.5 text-md3-on-surface-variant transition-colors hover:bg-md3-primary-container/40 hover:text-md3-primary-emphasis"
+                  iconOnly
                 >
                   <Icon name={expandedActionRow === actionKey ? 'expandLess' : 'moreVert'} size="20px" />
-                </button>
+                </FluentButton>
                 <div class="manage-list-actions">
                   {@render ActionButton('edit', $t('manage.rename'), () => handleRenameGroup(group), busyKey !== null)}
                   {@render ActionButton('settings', $t('manage.setPermissions'), () => handleEditGroupPermissions(group), busyKey !== null)}
                   {@render ActionButton('groupRemove', $t('common.delete'), () => handleDeleteGroup(group), busyKey !== null, true)}
                 </div>
                 {#if expandedActionRow === actionKey}
-                  <div class="manage-list-expanded rounded-lg border border-md3-outline/50 bg-md3-surface-container-high/40 px-2 py-2 animate-fade-scale-in">
+                  <div class="manage-list-expanded rounded-lg border border-md3-outline/50 bg-md3-surface-container-high px-2 py-2 animate-fade-scale-in">
                     <div class="flex flex-wrap justify-end gap-1">
                       {@render ActionButton('edit', $t('manage.rename'), () => handleRenameGroup(group), busyKey !== null)}
                       {@render ActionButton('settings', $t('manage.setPermissions'), () => handleEditGroupPermissions(group), busyKey !== null)}
@@ -1294,22 +1304,30 @@
                     },
                   })}
             </span>
-            <button
-              class="p-1.5 rounded-full text-md3-on-surface-variant hover:bg-md3-surface-container-high disabled:opacity-40"
+            <FluentButton data-fluent-owner="routes-home-manage-page"
               title={$t('common.previous')}
               onclick={() => loadAuditLogPage(auditCursorStack[Math.max(0, auditPageIndex - 1)] ?? null, 'previous')}
               disabled={auditPageIndex <= 0 || loadingLogs}
+              type="button"
+              appearance="subtle"
+              class="p-1.5 rounded text-md3-on-surface-variant hover:bg-md3-surface-container-high disabled:opacity-40"
+              iconOnly
+              aria-label={$t('common.previous')}
             >
               <Icon name="navigateBefore" size="18px" />
-            </button>
-            <button
-              class="p-1.5 rounded-full text-md3-on-surface-variant hover:bg-md3-surface-container-high disabled:opacity-40"
+            </FluentButton>
+            <FluentButton data-fluent-owner="routes-home-manage-page"
               title={$t('common.next')}
               onclick={() => loadAuditLogPage(auditNextCursor, 'next')}
               disabled={!auditNextCursor || loadingLogs}
+              type="button"
+              appearance="subtle"
+              class="p-1.5 rounded text-md3-on-surface-variant hover:bg-md3-surface-container-high disabled:opacity-40"
+              iconOnly
+              aria-label={$t('common.next')}
             >
               <Icon name="navigateNext" size="18px" />
-            </button>
+            </FluentButton>
           </div>
         </div>
 
@@ -1323,25 +1341,28 @@
               {#each auditFilters as action (action)}
                 <span class="audit-filter-chip">
                   <code>{action}</code>
-                  <button
+                  <FluentButton data-fluent-owner="routes-home-manage-page"
                     type="button"
                     aria-label={$t('manage.auditFilterRemove', { values: { action } })}
                     disabled={loadingLogs}
                     onclick={() => removeAuditFilter(action)}
+                    appearance="subtle"
+                    iconOnly
                   >
                     <Icon name="close" size="14px" />
-                  </button>
+                  </FluentButton>
                 </span>
               {/each}
             </div>
-            <button
+            <FluentButton data-fluent-owner="routes-home-manage-page"
               type="button"
-              class="audit-filter-clear"
               disabled={loadingLogs}
               onclick={() => applyAuditFilters([])}
+              appearance="subtle"
+              class="audit-filter-clear"
             >
               {$t('manage.auditFilterClearAll')}
-            </button>
+            </FluentButton>
           </div>
         {/if}
 
@@ -1356,9 +1377,13 @@
             <div class="audit-filter-empty">
               <span class="audit-filter-empty__icon"><Icon name="filterList" size="22px" /></span>
               <p>{$t('manage.noAuditLogsMatchingFilters')}</p>
-              <button type="button" onclick={() => applyAuditFilters([])}>
+              <FluentButton data-fluent-owner="routes-home-manage-page"
+                type="button"
+                onclick={() => applyAuditFilters([])}
+                appearance="subtle"
+              >
                 {$t('manage.auditFilterClearAll')}
-              </button>
+              </FluentButton>
             </div>
           {:else}
             <p class="text-sm text-md3-on-surface-variant text-center py-8">
@@ -1377,7 +1402,7 @@
                 <col style="width: 15%" />
                 <col style="width: 16%" />
               </colgroup>
-              <thead class="bg-md3-surface-container-high/50 text-xs uppercase text-md3-on-surface-variant">
+              <thead class="bg-md3-surface-container-high text-xs uppercase text-md3-on-surface-variant">
                 <tr>
                   <th class="px-3 py-2">{$t('manage.id')}</th>
                   <th class="px-3 py-2">{$t('manage.action')}</th>
@@ -1496,22 +1521,34 @@
             <span class="font-medium">
               {activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonLabel') : $t('manage.disableReasonLabel')}
             </span>
-            <textarea bind:value={accountDisableReason} maxlength="1024" rows="3" placeholder={$t('manage.disableReasonPlaceholder')} class="w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition disabled:opacity-50" disabled={busyKey !== null}></textarea>
+            <textarea bind:value={accountDisableReason} maxlength="1024" rows="3" placeholder={$t('manage.disableReasonPlaceholder')} class="cfms-native-field w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition disabled:opacity-50" disabled={busyKey !== null}></textarea>
             <span class="text-xs text-md3-on-surface-variant">
               {activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonHelp') : $t('manage.reasonOptional')}
             </span>
           </label>
           <div class="flex flex-wrap gap-2">
             {#if activeDialog.info.status === 'disabled'}
-              <button type="button" class="flex items-center gap-2 rounded-full bg-md3-primary-container px-4 py-2 text-sm font-medium text-md3-on-primary-container transition-colors hover:brightness-105 disabled:opacity-50" disabled={busyKey !== null} onclick={updateActiveAccountReason}>
+              <FluentButton data-fluent-owner="routes-home-manage-page"
+                type="button"
+                disabled={busyKey !== null}
+                onclick={updateActiveAccountReason}
+                appearance="subtle"
+                class="flex items-center gap-2 rounded bg-md3-primary-container px-4 py-2 text-sm font-medium text-md3-on-primary-container transition-colors  disabled:opacity-50"
+              >
                 <Icon name="edit" size="18px" />
                 {$t('manage.updateDisableReasonAction')}
-              </button>
+              </FluentButton>
             {/if}
-            <button type="button" class="flex items-center gap-2 rounded-full bg-md3-surface-container-high px-4 py-2 text-sm font-medium text-md3-on-surface transition-colors hover:bg-md3-surface-container-highest disabled:opacity-50" disabled={busyKey !== null} onclick={toggleActiveUserStatus}>
+            <FluentButton data-fluent-owner="routes-home-manage-page"
+              type="button"
+              disabled={busyKey !== null}
+              onclick={toggleActiveUserStatus}
+              appearance="subtle"
+              class="flex items-center gap-2 rounded bg-md3-surface-container-high px-4 py-2 text-sm font-medium text-md3-on-surface transition-colors hover:bg-md3-surface-container-highest disabled:opacity-50"
+            >
               <Icon name={activeDialog.info.status === 'disabled' ? 'verifiedUser' : 'block'} size="18px" />
               {activeDialog.info.status === 'disabled' ? $t('manage.enableAccountAction') : $t('manage.disableAccountAction')}
-            </button>
+            </FluentButton>
           </div>
         </section>
       {/if}
@@ -1535,10 +1572,17 @@
               <dt class="text-md3-on-surface-variant">{$t('manage.backupCodesRemaining')}</dt>
               <dd class="text-md3-on-surface">{activeDialog.twoFactor.backup_codes_count}</dd>
             </dl>
-            <button type="button" class="flex items-center gap-2 rounded-full bg-md3-error-container px-4 py-2 text-sm font-medium text-md3-on-error-container transition-all hover:brightness-110 disabled:opacity-50" disabled={busyKey !== null} onclick={disableActiveUserTwoFactor}>
+            <FluentButton data-fluent-owner="routes-home-manage-page"
+              type="button"
+              disabled={busyKey !== null}
+              onclick={disableActiveUserTwoFactor}
+              appearance="subtle"
+              tone="danger"
+              class="flex items-center gap-2 rounded bg-md3-error-container px-4 py-2 text-sm font-medium text-md3-on-error-container transition-all  disabled:opacity-50"
+            >
               <Icon name="lockOpen" size="18px" />
               {$t('manage.disableUserTwoFactor')}
-            </button>
+            </FluentButton>
           {/if}
         </section>
       {/if}
@@ -1612,21 +1656,25 @@
                 </p>
               </div>
               <div class="flex flex-none gap-1.5">
-                <button
-                  class="px-3 py-1 text-xs rounded-full bg-md3-primary-container text-md3-on-primary-container hover:brightness-105 disabled:opacity-50"
+                <FluentButton data-fluent-owner="routes-home-manage-page"
                   onclick={() => handleEditBlockReason(block)}
                   disabled={busyKey !== null}
+                  type="button"
+                  appearance="subtle"
+                  class="px-3 py-1 text-xs rounded bg-md3-primary-container text-md3-on-primary-container  disabled:opacity-50"
                 >
                   {$t('common.edit')}
-                </button>
-                <button
-                  class="px-3 py-1 text-xs rounded-full bg-md3-error-container
-                         text-md3-on-error-container hover:brightness-110 disabled:opacity-50"
+                </FluentButton>
+                <FluentButton data-fluent-owner="routes-home-manage-page"
                   onclick={() => handleUnblock(block.block_id)}
                   disabled={busyKey !== null}
+                  type="button"
+                  appearance="subtle"
+                  tone="danger"
+                  class="px-3 py-1 text-xs rounded bg-md3-error-container\n                         text-md3-on-error-container  disabled:opacity-50"
                 >
                   {$t('files.revoke')}
-                </button>
+                </FluentButton>
               </div>
             </div>
             <p class="text-xs text-md3-on-surface-variant">
@@ -1669,19 +1717,21 @@
 {/snippet}
 
 {#snippet ActionButton(icon: IconName, title: string, onClick: () => void | Promise<void>, disabled = false, danger = false)}
-  <button
+  <FluentButton data-fluent-owner="routes-home-manage-page"
     type="button"
-    class="p-1.5 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40
-           {danger
-             ? 'text-md3-error hover:bg-md3-error-container/40'
-             : 'text-md3-on-surface-variant hover:bg-md3-primary-container/40 hover:text-md3-primary-emphasis'}"
     {title}
     aria-label={title}
     onclick={onClick}
     {disabled}
+    appearance="subtle"
+    tone="danger"
+    class={"p-1.5 rounded transition-colors disabled:cursor-not-allowed disabled:opacity-40\n           " + (danger
+             ? 'text-md3-error hover:bg-md3-error-container/40'
+             : 'text-md3-on-surface-variant hover:bg-md3-primary-container/40 hover:text-md3-primary-emphasis')}
+    iconOnly
   >
     <Icon name={icon} size="18px" />
-  </button>
+  </FluentButton>
 {/snippet}
 
 <style>
@@ -1691,7 +1741,7 @@
     border-radius: 0.75rem;
     background: color-mix(in srgb, var(--color-md3-surface-container) 70%, transparent);
     -webkit-backdrop-filter: blur(4px);
-    backdrop-filter: blur(4px);
+    backdrop-filter: none;
   }
 
   .identity-measure-host {
@@ -1755,7 +1805,7 @@
     min-width: max-content;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 0.25rem;
+    gap: 4px;
   }
 
   .management-content--audit {
@@ -1778,7 +1828,7 @@
     min-height: 2.9rem;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 65%, transparent);
     padding: 0.5rem 1rem;
     background: color-mix(in srgb, var(--color-md3-surface-container-high) 38%, transparent);
@@ -1789,9 +1839,9 @@
     display: inline-flex;
     flex: none;
     align-items: center;
-    gap: 0.35rem;
+    gap: 4px;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.7rem;
+    font-size: 12px;
     font-weight: 600;
   }
 
@@ -1800,7 +1850,7 @@
     min-width: 0;
     flex: 1;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: 4px;
   }
 
   .audit-filter-chip {
@@ -1809,7 +1859,7 @@
     max-width: min(20rem, 100%);
     min-height: 1.75rem;
     align-items: center;
-    gap: 0.25rem;
+    gap: 4px;
     border-radius: 9999px;
     padding: 0.18rem 0.25rem 0.18rem 0.55rem;
     color: var(--color-md3-on-primary-container);
@@ -1821,10 +1871,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-md3-mono);
-    font-size: 0.7rem;
+    font-size: 12px;
   }
 
-  .audit-filter-chip button {
+  .audit-filter-chip :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"])) {
     display: inline-grid;
     width: 1.4rem;
     height: 1.4rem;
@@ -1834,28 +1884,28 @@
     transition: background-color 120ms ease, opacity 120ms ease;
   }
 
-  .audit-filter-chip button:hover:not(:disabled) {
+  .audit-filter-chip :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"]):hover:not(:is(:disabled, [disabled]))) {
     background: color-mix(in srgb, var(--color-md3-on-primary-container) 12%, transparent);
   }
 
-  .audit-filter-chip button:disabled,
-  .audit-filter-clear:disabled {
+  .audit-filter-chip :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"]):is(:disabled, [disabled])),
+  :global(.audit-filter-clear[data-fluent-owner="routes-home-manage-page"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.45;
   }
 
-  .audit-filter-clear {
+  :global(.audit-filter-clear[data-fluent-owner="routes-home-manage-page"]) {
     min-height: 1.9rem;
     flex: none;
     border-radius: 5px;
     padding: 0.25rem 0.5rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.7rem;
+    font-size: 12px;
     font-weight: 600;
     transition: background-color 120ms ease, color 120ms ease;
   }
 
-  .audit-filter-clear:hover:not(:disabled) {
+  :global(.audit-filter-clear[data-fluent-owner="routes-home-manage-page"]:hover:not(:is(:disabled, [disabled]))) {
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-high);
   }
@@ -1865,7 +1915,7 @@
     min-height: 11rem;
     place-items: center;
     align-content: center;
-    gap: 0.65rem;
+    gap: 12px;
     padding: 2rem 1rem;
     color: var(--color-md3-on-surface-variant);
     text-align: center;
@@ -1884,27 +1934,27 @@
 
   .audit-filter-empty p {
     max-width: 42ch;
-    font-size: 0.8rem;
+    font-size: 12px;
     line-height: 1.5;
   }
 
-  .audit-filter-empty button {
+  .audit-filter-empty :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"])) {
     min-height: 2rem;
-    border-radius: 5px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.35rem 0.7rem;
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
-    font-size: 0.72rem;
+    font-size: 12px;
     font-weight: 600;
     transition: filter 120ms ease, transform 120ms ease;
   }
 
-  .audit-filter-empty button:hover {
-    filter: brightness(1.06);
+  .audit-filter-empty :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"]):hover) {
+    filter: none;
   }
 
-  .audit-filter-empty button:active {
-    transform: scale(0.97);
+  .audit-filter-empty :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"]):active) {
+    transform: none;
   }
 
   @media (pointer: coarse) {
@@ -1912,26 +1962,26 @@
       min-height: 2.5rem;
     }
 
-    .audit-filter-chip button,
-    .audit-filter-clear,
-    .audit-filter-empty button {
+    .audit-filter-chip :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"])),
+    :global(.audit-filter-clear[data-fluent-owner="routes-home-manage-page"]),
+    .audit-filter-empty :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"])) {
       min-width: 2.75rem;
       min-height: 2.75rem;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .audit-filter-chip button,
-    .audit-filter-clear,
-    .audit-filter-empty button {
+    .audit-filter-chip :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"])),
+    :global(.audit-filter-clear[data-fluent-owner="routes-home-manage-page"]),
+    .audit-filter-empty :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"])) {
       transition: none;
     }
 
-    .audit-filter-empty button:active {
+    .audit-filter-empty :global(:is(button[data-fluent-owner="routes-home-manage-page"], .cfms-button[data-fluent-owner="routes-home-manage-page"]):active) {
       transform: none;
     }
   }
-  .manage-action-toggle {
+  :global(.manage-action-toggle[data-fluent-owner="routes-home-manage-page"]) {
     display: none;
     grid-column: 4;
   }
@@ -1965,7 +2015,7 @@
   }
 
   .manage-list--metadata-hidden .manage-list-actions,
-  .manage-list--metadata-hidden .manage-action-toggle {
+  .manage-list--metadata-hidden :global(.manage-action-toggle[data-fluent-owner="routes-home-manage-page"]) {
     grid-column: 4;
   }
 
@@ -1979,7 +2029,7 @@
     }
 
     .manage-list-actions,
-    .manage-action-toggle {
+    :global(.manage-action-toggle[data-fluent-owner="routes-home-manage-page"]) {
       grid-column: 3;
     }
   }
@@ -1989,7 +2039,7 @@
       display: none;
     }
 
-    .manage-list--accounts .manage-action-toggle {
+    .manage-list--accounts :global(.manage-action-toggle[data-fluent-owner="routes-home-manage-page"]) {
       display: inline-flex;
     }
 
@@ -2003,7 +2053,7 @@
       display: none;
     }
 
-    .manage-list--groups .manage-action-toggle {
+    .manage-list--groups :global(.manage-action-toggle[data-fluent-owner="routes-home-manage-page"]) {
       display: inline-flex;
     }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onDestroy } from 'svelte';
   import { tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
@@ -103,7 +104,7 @@
       submit();
     }}
   >
-    <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high/40 p-3">
+    <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high p-3">
       <span class="rounded-lg bg-md3-primary-container/70 p-2 text-md3-primary-emphasis">
         <Icon name="groupAdd" size="20px" />
       </span>
@@ -119,7 +120,7 @@
         <input
           bind:this={usernameInput}
           bind:value={username}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
           autocomplete="username"
           disabled={busy}
         />
@@ -134,7 +135,7 @@
         </span>
         <input
           bind:value={nickname}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
           autocomplete="off"
           disabled={busy}
           placeholder={username || $t('manage.nickname')}
@@ -156,24 +157,29 @@
           disabled={busy}
         />
         <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-          <button
+          <FluentButton data-fluent-owner="lib-components-create-user-account-dialog"
             type="button"
-            class="rounded-full p-1 text-md3-on-surface-variant transition-colors hover:text-md3-primary-emphasis disabled:opacity-45"
             title={$t('dialog.changePassword.generateStrongPassword')}
             disabled={busy}
             onclick={generate}
+            appearance="subtle"
+            class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-primary-emphasis disabled:opacity-45"
+            iconOnly
+            aria-label={$t('dialog.changePassword.generateStrongPassword')}
           >
             <Icon name="ifl" size="18px" />
-          </button>
-          <button
+          </FluentButton>
+          <FluentButton data-fluent-owner="lib-components-create-user-account-dialog"
             type="button"
-            class="rounded-full p-1 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface disabled:opacity-45"
             aria-label={passwordVisible ? $t('login.hidePassword') : $t('login.showPassword')}
             disabled={busy}
             onclick={() => (passwordVisible = !passwordVisible)}
+            appearance="subtle"
+            class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface disabled:opacity-45"
+            iconOnly
           >
             <Icon name="visibility" size="18px" />
-          </button>
+          </FluentButton>
         </div>
       </div>
     </label>

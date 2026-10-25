@@ -23,7 +23,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <nav
   aria-label={$t('common.breadcrumb')}
-  class="flex flex-nowrap items-center gap-1 whitespace-nowrap text-sm no-select"
+  class="cfms-breadcrumb flex flex-nowrap items-center gap-1 whitespace-nowrap text-sm no-select"
   tabindex="-1"
   onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, {
     selector: '[data-breadcrumb-item]',
@@ -66,3 +66,10 @@
     {/if}
   {/each}
 </nav>
+
+<style>
+  .cfms-breadcrumb [data-breadcrumb-item] { min-block-size: 32px; border-radius: var(--borderRadiusMedium); padding-inline: 4px; }
+  @media (pointer: coarse) {
+    .cfms-breadcrumb [data-breadcrumb-item] { min-inline-size: 44px; min-block-size: 44px; }
+  }
+</style>

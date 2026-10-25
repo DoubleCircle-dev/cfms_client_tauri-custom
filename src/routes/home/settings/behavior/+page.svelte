@@ -137,7 +137,7 @@
       {#if backgroundBehaviorUnavailable}
         <div
           class="flex flex-wrap items-center gap-3 rounded-lg border border-md3-outline/70
-                 bg-md3-surface-container-high/55 px-3 py-3 text-sm text-md3-on-surface"
+                 bg-md3-surface-container-high px-3 py-3 text-sm text-md3-on-surface"
         >
           <span class="shrink-0 text-md3-primary-emphasis">
             <Icon name="warningAmber" size="20px" />

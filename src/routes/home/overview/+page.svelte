@@ -201,7 +201,8 @@
   }
 
   .blueprint-home h1 {
-    font-size: clamp(1.45rem, 4vw, 2.2rem);
+    font-size: 28px;
+    line-height: 36px;
     letter-spacing: -0.025em;
   }
 
@@ -216,7 +217,7 @@
   .blueprint-status-chip {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     min-height: 2.2rem;
     padding: 0.42rem 0.75rem;
     color: var(--color-md3-on-surface);

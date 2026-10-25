@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { page } from '$app/state';
   import { _ as t } from 'svelte-i18n';
   import { navigateUp } from '$lib/navigation';
@@ -25,14 +26,15 @@
 </script>
 
 <div class="settings-page-header">
-  <button
-    class="settings-back-button"
+  <FluentButton data-fluent-owner="lib-components-settings-page-header"
     type="button"
     onclick={() => navigateUp(page.url.pathname)}
+    appearance="subtle"
+    class="settings-back-button"
   >
     <Icon name="arrowBack" size="18px" />
     {$t('common.back')}
-  </button>
+  </FluentButton>
 
   <div class="settings-heading-row">
     <div class="settings-heading">
@@ -50,16 +52,18 @@
     </div>
 
     {#if onReset}
-      <button
-        class="settings-reset-button"
+      <FluentButton data-fluent-owner="lib-components-settings-page-header"
         type="button"
         onclick={onReset}
         disabled={resetDisabled}
         title={resetLabel ?? $t('common.reset')}
         aria-label={resetLabel ?? $t('common.reset')}
+        appearance="subtle"
+        class="settings-reset-button"
+        iconOnly
       >
         <Icon name="resetSettings" size="20px" />
-      </button>
+      </FluentButton>
     {/if}
   </div>
 </div>
@@ -67,21 +71,21 @@
 <style>
   .settings-page-header {
     display: grid;
-    gap: 0.7rem;
+    gap: 12px;
   }
 
-  .settings-back-button {
+  :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]) {
     display: inline-flex;
     min-height: 34px;
     width: fit-content;
     align-items: center;
-    gap: 0.42rem;
+    gap: 8px;
     border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 5px);
+    border-radius: var(--borderRadiusMedium);
     padding: 0.35rem 0.55rem 0.35rem 0.45rem;
     color: var(--color-md3-on-surface-variant);
     background: transparent;
-    font: 600 0.78rem/1 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
     transition:
       border-color var(--motion-duration-short3) var(--motion-easing-standard),
       color var(--motion-duration-short3) var(--motion-easing-standard),
@@ -89,13 +93,13 @@
       transform var(--motion-duration-short3) var(--motion-easing-standard);
   }
 
-  .settings-back-button:hover {
+  :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]:hover) {
     color: var(--color-md3-on-surface);
     background: color-mix(in srgb, var(--color-md3-on-surface) 7%, transparent);
   }
 
-  .settings-back-button:active {
-    transform: scale(0.97);
+  :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]:active) {
+    transform: none;
   }
 
   .settings-heading-row,
@@ -107,12 +111,12 @@
 
   .settings-heading-row {
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
   }
 
   .settings-heading {
     align-items: center;
-    gap: 0.68rem;
+    gap: 12px;
   }
 
   .settings-heading-icon {
@@ -131,7 +135,7 @@
   .settings-heading-copy h1 {
     margin: 0;
     color: var(--color-md3-on-surface);
-    font: 700 1.3rem/1.2 var(--font-md3-sans);
+    font: 700 28px/36px var(--font-md3-sans);
     letter-spacing: -0.018em;
     text-wrap: balance;
   }
@@ -140,11 +144,11 @@
     max-width: 68ch;
     margin: 0.28rem 0 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.78rem;
+    font-size: 12px;
     line-height: 1.5;
   }
 
-  .settings-reset-button {
+  :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]) {
     display: inline-flex;
     inline-size: 40px;
     block-size: 40px;
@@ -152,7 +156,7 @@
     align-items: center;
     justify-content: center;
     border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 5px);
+    border-radius: var(--borderRadiusMedium);
     background: transparent;
     color: var(--color-md3-on-surface-variant);
     padding: 0;
@@ -163,24 +167,24 @@
       transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate);
   }
 
-  .settings-reset-button:hover:not(:disabled) {
+  :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]:hover:not(:is(:disabled, [disabled]))) {
     background: color-mix(in srgb, var(--color-md3-on-surface) 7%, transparent);
     color: var(--color-md3-on-surface);
     transform: translateY(-1px);
   }
 
-  .settings-reset-button:disabled {
+  :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.45;
   }
 
   @media (pointer: coarse) {
-    .settings-back-button,
-    .settings-reset-button {
+    :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]),
+    :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]) {
       min-height: 44px;
     }
 
-    .settings-reset-button {
+    :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]) {
       width: 44px;
       height: 44px;
     }

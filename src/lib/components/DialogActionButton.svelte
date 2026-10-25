@@ -10,13 +10,3 @@
     class="dialog-action-button dialog-action-button--{variant} {className}">
     {@render children()}
   </FluentButton>
-<style>
-  :global(.dialog-action-button--danger) {
-    --colorBrandBackground: var(--colorStatusDangerBackground3);
-    --colorBrandBackgroundHover: var(--colorStatusDangerBackground3Hover);
-    --colorBrandBackgroundPressed: var(--colorStatusDangerBackground3Pressed);
-    --colorNeutralForegroundOnBrand: var(--colorNeutralForegroundStaticInverted);
-  }
-  :global(.dialog-action-button--tonal) { --colorNeutralBackground1: var(--colorBrandBackground2); }
-  :global(.dialog-action-button .md-progress-ring) { color: inherit; }
-</style>

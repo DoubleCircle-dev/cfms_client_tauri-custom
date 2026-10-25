@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import type { JsonValue } from '$lib/api';
   import {
@@ -290,7 +291,7 @@
 <div class="payload-editor">
   <div class="mode-bar">
     <div class="mode-tabs" role="tablist" aria-label={$t('schedules.payloadEditorMode')}>
-      <button
+      <button data-fluent-owner="lib-components-schema-payload-editor"
         bind:this={formTab}
         type="button"
         role="tab"
@@ -302,7 +303,7 @@
       >
         <Icon name="edit" size="16px" />{$t('schedules.payloadFormMode')}
       </button>
-      <button
+      <button data-fluent-owner="lib-components-schema-payload-editor"
         bind:this={sourceTab}
         type="button"
         role="tab"
@@ -353,9 +354,14 @@
     <div id="schedule-payload-source" role="tabpanel" class="source-panel">
       <div class="source-toolbar">
         <span>{$t('schedules.payloadSourceHelp')}</span>
-        <button type="button" disabled={disabled || sourceError !== null} onclick={formatSource}>
+        <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+          type="button"
+          disabled={disabled || sourceError !== null}
+          onclick={formatSource}
+          appearance="subtle"
+        >
           <Icon name="formatListBulleted" size="16px" />{$t('schedules.formatJson')}
-        </button>
+        </FluentButton>
       </div>
       <JsonCodeEditor
         value={sourceText}
@@ -400,25 +406,38 @@
         {#if node.title && node.title !== fallbackLabel}<code>{fallbackLabel}</code>{/if}
       </div>
       {#if !required && current === undefined}
-        <button type="button" class="field-action" disabled={disabled} onclick={() => setValue(path, starterValue(node))}>
+        <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+          type="button"
+          disabled={disabled}
+          onclick={() => setValue(path, starterValue(node))}
+          appearance="subtle"
+          class="field-action"
+        >
           <Icon name="add" size="15px" />{$t('schedules.payloadAddField')}
-        </button>
+        </FluentButton>
       {:else}
         <div class="field-actions">
           {#if node.nullable}
-            <button
+            <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
               type="button"
-              class="field-action"
               disabled={disabled}
               onclick={() => setValue(path, current === null ? starterValue(node, true) : null)}
+              appearance="subtle"
+              class="field-action"
             >
               {current === null ? $t('schedules.payloadUseValue') : $t('schedules.payloadSetNull')}
-            </button>
+            </FluentButton>
           {/if}
           {#if !required}
-            <button type="button" class="field-action" disabled={disabled} onclick={() => removeValue(path)}>
+            <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+              type="button"
+              disabled={disabled}
+              onclick={() => removeValue(path)}
+              appearance="subtle"
+              class="field-action"
+            >
               {$t('schedules.payloadRemoveField')}
-            </button>
+            </FluentButton>
           {/if}
         </div>
       {/if}
@@ -434,7 +453,7 @@
       {#if node.constValue !== undefined}
         <output class="constant-value"><code>{JSON.stringify(node.constValue)}</code></output>
       {:else if node.enumValues}
-        <select
+        <select class="cfms-native-field"
           id={`payload-field-${pointer}`}
           value={JSON.stringify(current)}
           disabled={disabled}
@@ -448,7 +467,7 @@
         </select>
       {:else if node.kind === 'string'}
         {#if (node.maxLength ?? 0) > 240}
-          <textarea
+          <textarea class="cfms-native-field"
             id={`payload-field-${pointer}`}
             value={current === undefined ? '' : String(current)}
             maxlength={node.maxLength}
@@ -472,7 +491,7 @@
           />
         {/if}
       {:else if node.kind === 'integer' || node.kind === 'number'}
-        <input
+        <input class="cfms-native-field"
           id={`payload-field-${pointer}`}
           type="number"
           value={current === undefined ? '' : String(current)}
@@ -488,7 +507,7 @@
           }}
         />
       {:else if node.kind === 'boolean'}
-        <select
+        <select class="cfms-native-field"
           id={`payload-field-${pointer}`}
           value={String(current)}
           disabled={disabled}
@@ -516,27 +535,49 @@
               <div class="array-item-bar">
                 <strong>{$t('schedules.payloadItem', { values: { index: index + 1 } })}</strong>
                 <div>
-                  <button type="button" aria-label={$t('schedules.payloadMoveUp')} disabled={disabled || index === 0} onclick={() => moveArrayItem(path, index, -1)}><Icon name="arrowUpward" size="16px" /></button>
-                  <button type="button" aria-label={$t('schedules.payloadMoveDown')} disabled={disabled || index === (current as JsonValue[]).length - 1} onclick={() => moveArrayItem(path, index, 1)}><Icon name="arrowDownward" size="16px" /></button>
-                  <button type="button" aria-label={$t('schedules.payloadRemoveItem')} disabled={disabled} onclick={() => removeValue([...path, index])}><Icon name="delete" size="16px" /></button>
+                  <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+                    type="button"
+                    aria-label={$t('schedules.payloadMoveUp')}
+                    disabled={disabled || index === 0}
+                    onclick={() => moveArrayItem(path, index, -1)}
+                    appearance="subtle"
+                    iconOnly
+                  ><Icon name="arrowUpward" size="16px" /></FluentButton>
+                  <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+                    type="button"
+                    aria-label={$t('schedules.payloadMoveDown')}
+                    disabled={disabled || index === (current as JsonValue[]).length - 1}
+                    onclick={() => moveArrayItem(path, index, 1)}
+                    appearance="subtle"
+                    iconOnly
+                  ><Icon name="arrowDownward" size="16px" /></FluentButton>
+                  <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+                    type="button"
+                    aria-label={$t('schedules.payloadRemoveItem')}
+                    disabled={disabled}
+                    onclick={() => removeValue([...path, index])}
+                    appearance="subtle"
+                    iconOnly
+                  ><Icon name="delete" size="16px" /></FluentButton>
                 </div>
               </div>
               {@render field(node.items, [...path, index], $t('schedules.payloadItemValue'), true)}
             </div>
           {/each}
-          <button
+          <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
             type="button"
-            class="add-item"
             disabled={disabled || (node.maxItems !== undefined && Array.isArray(current) && current.length >= node.maxItems)}
             onclick={() => addArrayItem(path, node.items!)}
-          ><Icon name="add" size="16px" />{$t('schedules.payloadAddItem')}</button>
+            appearance="subtle"
+            class="add-item"
+          ><Icon name="add" size="16px" />{$t('schedules.payloadAddItem')}</FluentButton>
         </div>
       {/if}
     {:else if current === null}
       <div class="null-value"><code>null</code><span>{$t('schedules.payloadNullHelp')}</span></div>
     {:else if required}
       {#if node.enumValues}
-        <select
+        <select class="cfms-native-field"
           id={`payload-field-${pointer}`}
           value=""
           disabled={disabled}
@@ -550,15 +591,27 @@
           {/each}
         </select>
       {:else if node.kind === 'boolean'}
-        <select id={`payload-field-${pointer}`} value="" disabled={disabled} aria-invalid="true" aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined} onchange={(event) => event.currentTarget.value && setValue(path, event.currentTarget.value === 'true')}>
+        <select class="cfms-native-field" id={`payload-field-${pointer}`} value="" disabled={disabled} aria-invalid="true" aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined} onchange={(event) => event.currentTarget.value && setValue(path, event.currentTarget.value === 'true')}>
           <option value="">{$t('schedules.payloadChooseValue')}</option>
           <option value="true">{$t('common.yes')}</option>
           <option value="false">{$t('common.no')}</option>
         </select>
       {:else if node.kind === 'object'}
-        <button type="button" class="initialize-field" disabled={disabled} onclick={() => setValue(path, starterValue(node))}>{$t('schedules.payloadInitializeObject')}</button>
+        <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+          type="button"
+          disabled={disabled}
+          onclick={() => setValue(path, starterValue(node))}
+          appearance="subtle"
+          class="initialize-field"
+        >{$t('schedules.payloadInitializeObject')}</FluentButton>
       {:else if node.kind === 'array'}
-        <button type="button" class="initialize-field" disabled={disabled} onclick={() => setValue(path, [])}>{$t('schedules.payloadInitializeArray')}</button>
+        <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+          type="button"
+          disabled={disabled}
+          onclick={() => setValue(path, [])}
+          appearance="subtle"
+          class="initialize-field"
+        >{$t('schedules.payloadInitializeArray')}</FluentButton>
       {:else}
         <input
           id={`payload-field-${pointer}`}
@@ -589,57 +642,57 @@
 {/snippet}
 
 <style>
-  .payload-editor { display: grid; gap: 0.65rem; }
-  .mode-bar, .mode-tabs, .validation-state, .field-heading, .field-heading > div, .field-actions, .source-toolbar, .source-toolbar button, .editor-notice, .array-item-bar, .array-item-bar > div, .add-item, .null-value { display: flex; align-items: center; }
-  .mode-bar { justify-content: space-between; gap: 0.75rem; }
-  .mode-tabs { gap: 0.2rem; border-bottom: 1px solid var(--color-md3-outline); }
-  .mode-tabs button { display: inline-flex; min-height: 36px; align-items: center; gap: 0.35rem; border: 0; border-bottom: 2px solid transparent; padding: 0.35rem 0.55rem; background: transparent; color: var(--color-md3-on-surface-variant); font: 650 0.74rem var(--font-md3-sans); cursor: pointer; }
-  .mode-tabs button[aria-selected="true"] { border-bottom-color: var(--color-md3-primary); color: var(--color-md3-primary-emphasis); }
-  .mode-tabs button:disabled { cursor: not-allowed; opacity: 0.45; }
-  .validation-state { flex: none; gap: 0.3rem; font: 650 0.68rem var(--font-md3-sans); }
+  .payload-editor { display: grid; gap: 12px; }
+  .mode-bar, .mode-tabs, .validation-state, .field-heading, .field-heading > div, .field-actions, .source-toolbar, .source-toolbar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])), .editor-notice, .array-item-bar, .array-item-bar > div, :global(.add-item[data-fluent-owner="lib-components-schema-payload-editor"]), .null-value { display: flex; align-items: center; }
+  .mode-bar { justify-content: space-between; gap: 12px; }
+  .mode-tabs { gap: 4px; border-bottom: 1px solid var(--color-md3-outline); }
+  .mode-tabs :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])) { display: inline-flex; min-height: 36px; align-items: center; gap: 4px; border: 0; border-bottom: 2px solid transparent; padding: 0.35rem 0.55rem; background: transparent; color: var(--color-md3-on-surface-variant); font: 650 0.74rem var(--font-md3-sans); cursor: pointer; }
+  .mode-tabs :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])[aria-selected="true"]) { border-bottom-color: var(--color-md3-primary); color: var(--color-md3-primary-emphasis); }
+  .mode-tabs :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"]):is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.45; }
+  .validation-state { flex: none; gap: 4px; font: 650 0.68rem var(--font-md3-sans); }
   .validation-state.valid { color: var(--color-md3-success); }
   .validation-state.error { color: var(--color-md3-error); }
-  .editor-notice { align-items: flex-start; gap: 0.45rem; border-radius: 8px; padding: 0.55rem 0.65rem; background: var(--color-md3-surface-container-high); color: var(--color-md3-on-surface-variant); font: 0.72rem/1.45 var(--font-md3-sans); }
-  .schema-form { display: grid; gap: 0.8rem; }
-  .schema-field { display: grid; gap: 0.38rem; min-width: 0; }
+  .editor-notice { align-items: flex-start; gap: 8px; border-radius: 8px; padding: 0.55rem 0.65rem; background: var(--color-md3-surface-container-high); color: var(--color-md3-on-surface-variant); font: 0.72rem/1.45 var(--font-md3-sans); }
+  .schema-form { display: grid; gap: 12px; }
+  .schema-field { display: grid; gap: 8px; min-width: 0; }
   .schema-field.field-error > .field-heading label, .schema-field.field-error > .field-heading .field-title { color: var(--color-md3-error); }
-  .field-heading { min-height: 26px; justify-content: space-between; gap: 0.55rem; }
-  .field-heading > div { min-width: 0; gap: 0.42rem; flex-wrap: wrap; }
+  .field-heading { min-height: 26px; justify-content: space-between; gap: 8px; }
+  .field-heading > div { min-width: 0; gap: 8px; flex-wrap: wrap; }
   .field-heading label, .field-title { color: var(--color-md3-on-surface); font: 650 0.75rem var(--font-md3-sans); }
   .field-heading code { color: var(--color-md3-on-surface-variant); font: 0.68rem var(--font-md3-mono); }
   .required-mark { margin-left: 0.18rem; color: var(--color-md3-error); }
-  .field-actions { gap: 0.2rem; }
-  .field-action, .initialize-field, .source-toolbar button, .add-item, .array-item-bar button { border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--color-md3-primary-emphasis); font: 650 0.69rem var(--font-md3-sans); cursor: pointer; }
-  .field-action { display: inline-flex; min-height: 28px; align-items: center; gap: 0.25rem; padding: 0.2rem 0.35rem; }
-  .field-action:hover:not(:disabled), .source-toolbar button:hover:not(:disabled), .add-item:hover:not(:disabled), .array-item-bar button:hover:not(:disabled) { background: var(--color-md3-surface-container-highest); }
-  button:disabled { cursor: not-allowed; opacity: 0.48; }
-  input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: 8px; background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.82rem/1.4 var(--font-md3-sans); }
+  .field-actions { gap: 4px; }
+  :global(.field-action[data-fluent-owner="lib-components-schema-payload-editor"]), :global(.initialize-field[data-fluent-owner="lib-components-schema-payload-editor"]), .source-toolbar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])), :global(.add-item[data-fluent-owner="lib-components-schema-payload-editor"]), .array-item-bar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])) { border: 1px solid transparent; border-radius: var(--borderRadiusMedium); background: transparent; color: var(--color-md3-primary-emphasis); font: 650 0.69rem var(--font-md3-sans); cursor: pointer; }
+  :global(.field-action[data-fluent-owner="lib-components-schema-payload-editor"]) { display: inline-flex; min-height: 28px; align-items: center; gap: 4px; padding: 0.2rem 0.35rem; }
+  :global(.field-action[data-fluent-owner="lib-components-schema-payload-editor"]:hover:not(:is(:disabled, [disabled]))), .source-toolbar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"]):hover:not(:is(:disabled, [disabled]))), :global(.add-item[data-fluent-owner="lib-components-schema-payload-editor"]):hover:not(:is(:disabled, [disabled])), .array-item-bar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"]):hover:not(:is(:disabled, [disabled]))) { background: var(--color-md3-surface-container-highest); }
+  :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"]):is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.48; }
+  input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.82rem/1.4 var(--font-md3-sans); }
   input, select { min-height: 40px; padding: 0 0.65rem; }
   textarea { min-height: 6.5rem; resize: vertical; padding: 0.65rem; }
   input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--color-md3-error); }
   .schema-description, .constraint-summary, .additional-properties-note { margin: 0; color: var(--color-md3-on-surface-variant); font: 0.7rem/1.45 var(--font-md3-sans); }
   .constraint-summary { font-family: var(--font-md3-mono); }
-  .nested-object { display: grid; gap: 0.75rem; min-width: 0; margin: 0; border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.75rem; }
+  .nested-object { display: grid; gap: 12px; min-width: 0; margin: 0; border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.75rem; }
   .nested-object legend { padding: 0 0.3rem; color: var(--color-md3-on-surface-variant); font: 650 0.68rem var(--font-md3-sans); }
   .constant-value, .null-value, .empty-payload { border-radius: 8px; padding: 0.65rem; background: var(--color-md3-surface-container-high); }
   .constant-value { color: var(--color-md3-on-surface); }
-  .null-value { gap: 0.55rem; color: var(--color-md3-on-surface-variant); font: 0.72rem var(--font-md3-sans); }
+  .null-value { gap: 8px; color: var(--color-md3-on-surface-variant); font: 0.72rem var(--font-md3-sans); }
   .null-value code, .constant-value code { font-family: var(--font-md3-mono); }
-  .array-editor { display: grid; gap: 0.55rem; }
-  .array-item { display: grid; gap: 0.55rem; border-top: 1px solid var(--color-md3-outline); padding-top: 0.55rem; }
-  .array-item-bar { justify-content: space-between; gap: 0.5rem; color: var(--color-md3-on-surface-variant); font: 650 0.69rem var(--font-md3-sans); }
-  .array-item-bar > div { gap: 0.1rem; }
-  .array-item-bar button { display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border-radius: 999px; }
-  .add-item, .initialize-field { min-height: 36px; justify-content: center; gap: 0.35rem; border-color: var(--color-md3-outline); padding: 0.35rem 0.6rem; }
-  .source-panel { display: grid; gap: 0.55rem; }
-  .source-toolbar { min-height: 32px; justify-content: space-between; gap: 0.75rem; color: var(--color-md3-on-surface-variant); font: 0.7rem/1.4 var(--font-md3-sans); }
-  .source-toolbar button { min-height: 30px; flex: none; gap: 0.3rem; padding: 0.25rem 0.45rem; }
+  .array-editor { display: grid; gap: 8px; }
+  .array-item { display: grid; gap: 8px; border-top: 1px solid var(--color-md3-outline); padding-top: 0.55rem; }
+  .array-item-bar { justify-content: space-between; gap: 8px; color: var(--color-md3-on-surface-variant); font: 650 0.69rem var(--font-md3-sans); }
+  .array-item-bar > div { gap: 4px; }
+  .array-item-bar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])) { display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border-radius: var(--borderRadiusMedium); }
+  :global(.add-item[data-fluent-owner="lib-components-schema-payload-editor"]), :global(.initialize-field[data-fluent-owner="lib-components-schema-payload-editor"]) { min-height: 36px; justify-content: center; gap: 4px; border-color: var(--color-md3-outline); padding: 0.35rem 0.6rem; }
+  .source-panel { display: grid; gap: 8px; }
+  .source-toolbar { min-height: 32px; justify-content: space-between; gap: 12px; color: var(--color-md3-on-surface-variant); font: 0.7rem/1.4 var(--font-md3-sans); }
+  .source-toolbar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])) { min-height: 30px; flex: none; gap: 4px; padding: 0.25rem 0.45rem; }
   .source-error, .source-errors, .field-errors { margin: 0; color: var(--color-md3-error); font: 0.7rem/1.45 var(--font-md3-sans); }
   .source-errors, .field-errors { padding-left: 1.1rem; }
   .source-errors code, .field-errors code { font-family: var(--font-md3-mono); }
-  .empty-payload { display: flex; align-items: center; gap: 0.5rem; color: var(--color-md3-on-surface-variant); font: 0.74rem var(--font-md3-sans); }
+  .empty-payload { display: flex; align-items: center; gap: 8px; color: var(--color-md3-on-surface-variant); font: 0.74rem var(--font-md3-sans); }
   @media (pointer: coarse) {
-    .mode-tabs button, .field-action, .source-toolbar button, .add-item, .initialize-field { min-height: 44px; }
-    .array-item-bar button { width: 44px; height: 44px; }
+    .mode-tabs :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])), :global(.field-action[data-fluent-owner="lib-components-schema-payload-editor"]), .source-toolbar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])), :global(.add-item[data-fluent-owner="lib-components-schema-payload-editor"]), :global(.initialize-field[data-fluent-owner="lib-components-schema-payload-editor"]) { min-height: 44px; }
+    .array-item-bar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"])) { width: 44px; height: 44px; }
   }
 </style>

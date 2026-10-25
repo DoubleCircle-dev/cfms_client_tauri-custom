@@ -15,7 +15,7 @@
   <legend>{$t('authManagement.selectedStep', { values: { alternative: chainIndex + 1, step: stepIndex + 1 } })}</legend>
   {#if step}
     <label>{$t('authManagement.method')}
-      <select value={step.method} onchange={(event) => onMethod(event.currentTarget.value)}>
+      <select class="cfms-native-field" value={step.method} onchange={(event) => onMethod(event.currentTarget.value)}>
         {#if !inventory.methods[step.method]}<option value={step.method}>{authMethodName(step.method, $t)}</option>{/if}
         {#each Object.entries(inventory.methods) as [method, metadata]}{#if metadata.purposes.includes(purpose)}<option value={method}>{authMethodName(method, $t)}</option>{/if}{/each}
       </select>
