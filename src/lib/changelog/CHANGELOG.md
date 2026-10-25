@@ -4,6 +4,42 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.55.0
+**Released on:** 2026-10-25
+
+**Title:** Fluent Design
+
+### Maintenance
+- Mock navigation and update button click behavior in settings updates
+
+### Fixed
+- Refine animation behavior in AuthScene component for improved user experience
+- Update input styles across multiple components for consistency
+- Refactor styles and structure for improved UI consistency and accessibility across home, settings, and tasks pages
+- Update dependencies and improve public key authentication flow
+
+### Added
+- Introduce AuthScene component for improved authentication UI handling
+- Implement ServerDocumentPicker component with filtering and empty state handling
+- Enhance context menus and icons with new duotone variants
+- Enhance snackbar motion and notification duration
+- Add user ID copy functionality with visual confirmation and enhance icon mapping
+- Enhance authentication management UI and functionality
+- Implement user preview cache and clipboard functionality
+- Enhance MdSwitch styles with improved transitions and pressed state feedback
+- Update SettingsPageHeader and +page.svelte for improved button styles and navigation
+- Enhance account and menu surfaces with acrylic styles and add duotone icons
+- Remove unnecessary background material;
+- Refactor file navigation and enhance UI components
+- Update design documentation and layout for Fluent Operations Workspace, enhancing Mica integration and responsive settings entries
+- Migrate existing UI components to Fluent Design
+- Add Fluent theme implementation and tests
+
+### Improved
+- Replace input fields with MdOutlinedField component for improved styling and consistency across various components
+
+--- 
+
 ## v0.54.0
 **Released on:** 2026-10-24
 
