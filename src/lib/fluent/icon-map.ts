@@ -134,5 +134,6 @@ export const ICON_MAP = {
   "supervisedUserCircleOff": "person_prohibited",
   "ifl": "wand",
   "api": "plug_connected",
-  "arrowForward": "arrow_right"
+  "arrowForward": "arrow_right",
+  "contentCopy": "copy",
 } as const;

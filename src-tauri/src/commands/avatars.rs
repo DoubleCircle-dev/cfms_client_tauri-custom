@@ -65,6 +65,10 @@ pub async fn download_avatar(
         a.clone()
     }
     .ok_or_else(|| "No server address".to_string())?;
+    let auth_generation = state
+        .inner
+        .auth_generation
+        .load(std::sync::atomic::Ordering::SeqCst);
 
     let server_hash = cfms_core::get_server_hash(&server_addr);
     let username_hash = cfms_core::get_username_hash(&username);
@@ -106,28 +110,76 @@ pub async fn download_avatar(
         .inner
         .download_max_chunk_size
         .load(std::sync::atomic::Ordering::Relaxed) as u32;
-    let result = cfms_transfer::download::receive(
-        &conn,
-        task_id,
-        &cache_path,
-        max_chunk_size,
-        &progress,
-    )
-        .await
-        .map_err(|e| format!("Avatar download failed: {e}"));
+    let result =
+        cfms_transfer::download::receive(&conn, task_id, &cache_path, max_chunk_size, &progress)
+            .await
+            .map_err(|e| format!("Avatar download failed: {e}"));
     conn.close().await;
     result?;
 
     if cache_path.exists() {
         let path_str = cache_path.to_string_lossy().into_owned();
-        // Store path in app state.
-        {
-            let mut a = state.inner.avatar_path.write().await;
-            *a = Some(path_str.clone());
-        }
+        update_current_avatar(
+            &state.inner,
+            &username,
+            &server_addr,
+            auth_generation,
+            &path_str,
+        )
+        .await;
         Ok(Some(path_str))
     } else {
         Ok(None)
+    }
+}
+
+/// A preview may download another user's avatar; only the original login may
+/// publish its own avatar back into the authentication snapshot.
+async fn update_current_avatar(
+    state: &cfms_service::state::AppState,
+    username: &str,
+    server_address: &str,
+    auth_generation: u64,
+    path: &str,
+) {
+    let _update = state.auth_update.lock().await;
+    if state
+        .auth_generation
+        .load(std::sync::atomic::Ordering::SeqCst)
+        != auth_generation
+        || state.username.read().await.as_deref() != Some(username)
+        || state.server_address.read().await.as_deref() != Some(server_address)
+    {
+        return;
+    }
+    *state.avatar_path.write().await = Some(path.to_string());
+}
+
+#[cfg(test)]
+mod avatar_preview_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn preview_downloads_never_replace_another_users_avatar_or_a_new_session() {
+        let state = cfms_service::state::AppState::new();
+        *state.username.write().await = Some("admin".into());
+        *state.server_address.write().await = Some("server-a".into());
+        *state.avatar_path.write().await = Some("admin.png".into());
+        update_current_avatar(&state, "alice", "server-a", 0, "alice.png").await;
+        update_current_avatar(&state, "admin", "server-b", 0, "other-server.png").await;
+        state
+            .auth_generation
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        update_current_avatar(&state, "admin", "server-a", 0, "old-session.png").await;
+        assert_eq!(state.avatar_path.read().await.as_deref(), Some("admin.png"));
+        update_current_avatar(&state, "admin", "server-a", 1, "updated.png").await;
+        assert_eq!(
+            state.avatar_path.read().await.as_deref(),
+            Some("updated.png")
+        );
+        state.clear_auth().await;
+        update_current_avatar(&state, "admin", "server-a", 1, "late.png").await;
+        assert!(state.avatar_path.read().await.is_none());
     }
 }
 

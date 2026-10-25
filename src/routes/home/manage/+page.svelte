@@ -1,6 +1,6 @@
 <script lang="ts">
   import FluentButton from '$lib/components/FluentButton.svelte';
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import {
     blockUser,
@@ -37,11 +37,13 @@
   } from '$lib/api';
   import { dialogStore } from '$lib/dialogs.svelte';
   import { canSetOtherUserAvatar } from '$lib/avatar-permissions';
-  import { authStore, notificationStore } from '$lib/stores.svelte';
+  import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
+  import { createAuditUserPreviewCache } from '$lib/audit-user-preview';
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import AuditLogFilter from '$lib/components/AuditLogFilter.svelte';
   import AuditIdentifier from '$lib/components/AuditIdentifier.svelte';
+  import AuditUserIdentity from '$lib/components/AuditUserIdentity.svelte';
   import CreateUserAccountDialog from '$lib/components/CreateUserAccountDialog.svelte';
   import CreateUserGroupDialog from '$lib/components/CreateUserGroupDialog.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -121,6 +123,27 @@
   let auditFilters = $state<string[]>([]);
   let auditKnownActions = $state<string[]>([]);
   const auditPageSize = 128;
+  const userPreviewCache = createAuditUserPreviewCache();
+  let activeUserPreviewKey = $state<string | null>(null);
+  let userPreviewRevision = $state(0);
+
+  function resetUserPreviews() {
+    userPreviewCache.clear();
+    activeUserPreviewKey = null;
+    userPreviewRevision += 1;
+  }
+
+  $effect(() => {
+    authStore.userId;
+    authStore.username;
+    authStore.hasToken;
+    authStore.permissionSnapshotRevision;
+    authStore.permissions.join(',');
+    serverStateStore.remoteAddress;
+    serverStateStore.connected;
+    activeTab;
+    untrack(resetUserPreviews);
+  });
 
   let loadingUsers = $state(false);
   let loadingGroups = $state(false);
@@ -553,6 +576,7 @@
     filters: readonly string[] = auditFilters,
   ) {
     if (!canViewLogs) return;
+    resetUserPreviews();
     const requestFilters = normalizeAuditActions(filters);
     if (direction === 'reset') {
       auditCursorStack = [cursor];
@@ -661,27 +685,40 @@
     });
   }
 
-  async function handleViewUser(user: ManagedUser) {
+  async function handleViewUser(user: Pick<ManagedUser, 'user_id'>, knownInfo?: ManagedUserInfo) {
+    if (busyKey !== null) return;
+    if (knownInfo) {
+      showUserDetails(knownInfo);
+      return;
+    }
+    const revision = userPreviewRevision;
     await runBusy(`view-user:${user.user_id}`, async () => {
-      const info = await getUserInfo({ userId: user.user_id });
-      detailTitle = $t('manage.userDetailsFor', { values: { username: info.username } });
-      detailRows = [
-        { label: $t('manage.userId'), value: info.user_id },
-        { label: $t('manage.username'), value: info.username },
-        { label: $t('manage.nickname'), value: info.nickname || '-' },
-        {
-          label: $t('manage.accountStatus'),
-          value: info.status === 'active' ? $t('manage.statusActive') : $t('manage.statusDisabled'),
-        },
-        { label: $t('manage.effectivePermissions'), value: formatList(info.effective_permissions) },
-        { label: $t('manage.ownPermissions'), value: formatList(info.effective_own_permissions) },
-        { label: $t('manage.inheritedPermissions'), value: formatList(info.effective_inherited_permissions) },
-        { label: $t('manage.groups'), value: formatList(info.groups) },
-        { label: $t('manage.registered'), value: formatDate(info.created_time) },
-        { label: $t('manage.lastLogin'), value: formatDate(info.last_login) },
-        { label: $t('manage.passwordChangedAt'), value: formatDate(info.passwd_last_modified) },
-      ];
+      const info = activeTab === 'logs'
+        ? await userPreviewCache.info(user.user_id)
+        : await getUserInfo({ userId: user.user_id });
+      if (revision !== userPreviewRevision) return;
+      showUserDetails(info);
     });
+  }
+
+  function showUserDetails(info: ManagedUserInfo) {
+    detailTitle = $t('manage.userDetailsFor', { values: { username: info.username } });
+    detailRows = [
+      { label: $t('manage.userId'), value: info.user_id },
+      { label: $t('manage.username'), value: info.username },
+      { label: $t('manage.nickname'), value: info.nickname || '-' },
+      {
+        label: $t('manage.accountStatus'),
+        value: info.status === 'active' ? $t('manage.statusActive') : $t('manage.statusDisabled'),
+      },
+      { label: $t('manage.effectivePermissions'), value: formatList(info.effective_permissions) },
+      { label: $t('manage.ownPermissions'), value: formatList(info.effective_own_permissions) },
+      { label: $t('manage.inheritedPermissions'), value: formatList(info.effective_inherited_permissions) },
+      { label: $t('manage.groups'), value: formatList(info.groups) },
+      { label: $t('manage.registered'), value: formatDate(info.created_time) },
+      { label: $t('manage.lastLogin'), value: formatDate(info.last_login) },
+      { label: $t('manage.passwordChangedAt'), value: formatDate(info.passwd_last_modified) },
+    ];
   }
 
   async function handleDeleteUser(user: ManagedUser) {
@@ -1420,7 +1457,14 @@
                       <AuditIdentifier value={entry.id} />
                     </td>
                     <td class="px-3 py-2 align-top">{entry.action}</td>
-                    <td class="px-3 py-2 align-top"><AuditIdentifier value={entry.user_id} kind="user" /></td>
+                    <td class="px-3 py-2 align-top">
+                      {#key userPreviewRevision}
+                      <AuditUserIdentity value={entry.user_id} previewKey={entry.id}
+                        bind:activeKey={activeUserPreviewKey} cache={userPreviewCache}
+                        disabled={busyKey !== null}
+                        onViewDetails={(userId, info) => handleViewUser({ user_id: userId }, info)} />
+                      {/key}
+                    </td>
                     <td class="px-3 py-2 align-top">{entry.target}</td>
                     <td class="px-3 py-2 align-top">{entry.result}</td>
                     <td class="px-3 py-2 align-top">{entry.remote_address}</td>
