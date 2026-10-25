@@ -33,10 +33,12 @@
   let top = $state(0);
   let maxHeight = $state(0);
   let ready = $state(false);
+  let copied = $state(false);
   const open = $derived(Boolean(value) && activeKey === previewKey);
   let openTimer: ReturnType<typeof setTimeout> | undefined;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   let pressTimer: ReturnType<typeof setTimeout> | undefined;
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   let pointerType = '';
   let pointerFocusing = false;
   let keyboardFocus = false;
@@ -54,7 +56,10 @@
     clearTimeout(closeTimer);
     clearTimeout(pressTimer);
   }
-  onDestroy(clearTimers);
+  onDestroy(() => {
+    clearTimers();
+    clearTimeout(copiedTimer);
+  });
 
   function close(returnFocus = false) {
     clearTimers();
@@ -96,8 +101,12 @@
     if (!value) return;
     try {
       await copyText(value);
-      notificationStore.success($t('manage.userIdCopied'), 1600);
+      clearTimeout(copiedTimer);
+      copied = true;
+      copiedTimer = setTimeout(() => { copied = false; }, 1600);
     } catch {
+      clearTimeout(copiedTimer);
+      copied = false;
       notificationStore.error($t('manage.userIdCopyFailed'));
     }
   }
@@ -124,6 +133,8 @@
 
   $effect(() => {
     if (!open || !value) return;
+    clearTimeout(copiedTimer);
+    copied = false;
     const userId = value;
     let current = true;
     info = null;
@@ -311,7 +322,7 @@
       <div><span>{$t('manage.userId')}</span><code>{value}</code></div>
       <FluentButton appearance="subtle" iconOnly data-preview-action
         aria-label={$t('manage.copyUserId')} title={$t('manage.copyUserId')} onclick={copy}
-      ><Icon name="contentCopy" size="18px" /></FluentButton>
+      ><Icon name={copied ? 'check' : 'contentCopy'} size="18px" /></FluentButton>
     </div>
     <div class="user-preview__summary" aria-live="polite">
       {#if info}

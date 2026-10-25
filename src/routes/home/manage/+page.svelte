@@ -36,6 +36,7 @@
     type UserBlockTarget,
   } from '$lib/api';
   import { dialogStore } from '$lib/dialogs.svelte';
+  import { copyText } from '$lib/clipboard';
   import { canSetOtherUserAvatar } from '$lib/avatar-permissions';
   import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
   import { createAuditUserPreviewCache } from '$lib/audit-user-preview';
@@ -411,6 +412,12 @@
         onSelect: () => handleViewUser(user),
         disabled,
       },
+      {
+        id: 'copy-user-id',
+        label: $t('manage.copyUserId'),
+        icon: 'contentCopy',
+        onSelect: () => handleCopyUserId(user),
+      },
       { type: 'divider' },
       {
         id: 'rename-user',
@@ -437,7 +444,7 @@
       {
         id: 'reset-user-password',
         label: $t('manage.resetPassword'),
-        icon: 'password',
+        icon: 'passwordReset',
         onSelect: () => handleResetPassword(user),
         disabled,
       },
@@ -492,6 +499,14 @@
         danger: true,
       },
     ];
+  }
+
+  async function handleCopyUserId(user: ManagedUser) {
+    try {
+      await copyText(user.user_id);
+    } catch {
+      notificationStore.error($t('manage.userIdCopyFailed'));
+    }
   }
 
   function getGroupContextMenuItems(group: ManagedGroup): ContextMenuItem[] {
@@ -1192,7 +1207,7 @@
                   {@render ActionButton('formatListBulleted', $t('manage.editGroups'), () => handleEditUserGroups(user), busyKey !== null)}
                   {@render ActionButton('accountCircle', canManageUserAvatars ? $t('manage.changeUserAvatar') : $t('manage.avatarPermissionRequired'), () => handleChangeUserAvatar(user), !canManageUserAvatars || busyKey !== null)}
                   {@render ActionButton('adminPanelSettings', $t('manage.editPermissions'), () => handleEditUserPermissions(user), !canSetUserPermissions || busyKey !== null)}
-                  {@render ActionButton('password', $t('manage.resetPassword'), () => handleResetPassword(user), busyKey !== null)}
+                  {@render ActionButton('passwordReset', $t('manage.resetPassword'), () => handleResetPassword(user), busyKey !== null)}
                   {#if user.user_id === authStore.userId || hasAnyPermission('manage_user_authentication')}{@render ActionButton('passkey', $t('authManagement.title'), () => { activeDialog = { kind: 'user-authentication', user }; }, busyKey !== null)}{/if}
                   {@render ActionButton('manageAccounts', $t('manage.accountManagement'), () => handleManageAccount(user), (!canManageUserStatus && !canManage2fa) || busyKey !== null)}
                   {@render ActionButton('block', $t('manage.blockUser'), () => handleBlockUser(user), !canBlock || busyKey !== null)}
@@ -1207,7 +1222,7 @@
                       {@render ActionButton('formatListBulleted', $t('manage.editGroups'), () => handleEditUserGroups(user), busyKey !== null)}
                       {@render ActionButton('accountCircle', canManageUserAvatars ? $t('manage.changeUserAvatar') : $t('manage.avatarPermissionRequired'), () => handleChangeUserAvatar(user), !canManageUserAvatars || busyKey !== null)}
                       {@render ActionButton('adminPanelSettings', $t('manage.editPermissions'), () => handleEditUserPermissions(user), !canSetUserPermissions || busyKey !== null)}
-                      {@render ActionButton('password', $t('manage.resetPassword'), () => handleResetPassword(user), busyKey !== null)}
+                      {@render ActionButton('passwordReset', $t('manage.resetPassword'), () => handleResetPassword(user), busyKey !== null)}
                       {#if user.user_id === authStore.userId || hasAnyPermission('manage_user_authentication')}{@render ActionButton('passkey', $t('authManagement.title'), () => { activeDialog = { kind: 'user-authentication', user }; }, busyKey !== null)}{/if}
                       {@render ActionButton('manageAccounts', $t('manage.accountManagement'), () => handleManageAccount(user), (!canManageUserStatus && !canManage2fa) || busyKey !== null)}
                       {@render ActionButton('block', $t('manage.blockUser'), () => handleBlockUser(user), !canBlock || busyKey !== null)}

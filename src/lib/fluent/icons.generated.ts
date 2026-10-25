@@ -475,6 +475,8 @@ import svg472 from '@fluentui/svg-icons/icons/laptop_briefcase_24_regular.svg?ra
 import svg473 from '@fluentui/svg-icons/icons/laptop_briefcase_24_filled.svg?raw';
 import svg474 from '@fluentui/svg-icons/icons/laptop_briefcase_20_regular.svg?raw';
 import svg475 from '@fluentui/svg-icons/icons/laptop_briefcase_20_filled.svg?raw';
+import svg476 from '@fluentui/svg-icons/icons/password_reset_48_regular.svg?raw';
+import svg477 from '@fluentui/svg-icons/icons/password_reset_48_filled.svg?raw';
 import duotone0 from './assets/duotone/folder_add_24.svg?raw';
 import duotone1 from './assets/duotone/folder_add_20.svg?raw';
 import duotone2 from './assets/duotone/folder_arrow_right_24.svg?raw';
@@ -621,4 +623,5 @@ export const ICON_VARIANTS = {
   contentCopy: { regular: svg464, filled: svg465, small: svg466, smallFilled: svg467 },
   personPasskey: { regular: svg468, filled: svg469, small: svg470, smallFilled: svg471 },
   laptopBriefcase: { regular: svg472, filled: svg473, small: svg474, smallFilled: svg475 },
+  passwordReset: { regular: svg476, filled: svg477, small: svg476, smallFilled: svg477 },
 } as const;

@@ -15,7 +15,7 @@ function duotoneAsset(slug, size) {
   return duotoneImports.get(file);
 }
 function asset(slug, size, style) {
-  const sizes = [...new Set([size, 24, 20])];
+  const sizes = [...new Set([size, 24, 20, 48])];
   const styles = [...new Set([style, 'regular'])];
   const file = styles.flatMap((variant) => sizes.map((dimension) => `${slug}_${dimension}_${variant}.svg`))
     .find((candidate) => existsSync(new URL(candidate, packageRoot)));

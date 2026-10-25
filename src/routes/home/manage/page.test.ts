@@ -4,13 +4,14 @@ import '$lib/i18n';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { locale } from 'svelte-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authStore, serverStateStore } from '$lib/stores.svelte';
+import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
 import ManagePage from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
   viewAuditLogs: vi.fn(),
   getUserInfo: vi.fn(),
   getUserAvatar: vi.fn(),
+  listUsers: vi.fn(),
 }));
 const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
 
@@ -19,6 +20,7 @@ vi.mock('$lib/api', async (importOriginal) => ({
   viewAuditLogs: mocks.viewAuditLogs,
   getUserInfo: mocks.getUserInfo,
   getUserAvatar: mocks.getUserAvatar,
+  listUsers: mocks.listUsers,
 }));
 
 vi.mock('$lib/motion/transitions', () => ({
@@ -28,6 +30,8 @@ vi.mock('$lib/motion/transitions', () => ({
   snackbarMotion: () => ({ duration: 0 }),
   staggeredList: () => ({ duration: 0 }),
 }));
+
+vi.mock('svelte/transition', () => ({ fade: () => ({ duration: 0 }) }));
 
 function auditEntry(id: string, action: string) {
   return {
@@ -70,6 +74,7 @@ beforeEach(() => {
     groups: [],
   });
   mocks.viewAuditLogs.mockReset();
+  mocks.listUsers.mockReset();
   mocks.getUserInfo.mockReset().mockResolvedValue({
     user_id: 'aabbccdd-0000-4000-8000-000000000002', username: 'alice', nickname: 'Alice',
     status: 'active', permissions: [], effective_permissions: [], effective_own_permissions: [],
@@ -83,11 +88,42 @@ afterEach(() => {
   cleanup();
   authStore.clear();
   serverStateStore.clear();
+  notificationStore.clear();
   vi.useRealTimers();
   if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
   else Reflect.deleteProperty(navigator, 'clipboard');
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('management account context menu', () => {
+  it.each([false, true])('copies the selected account ID and reports clipboard failure=%s', async (fails) => {
+    authStore.permissions = ['list_users'];
+    const users = ['alice', 'bob'].map((username) => ({
+      user_id: `${username}-full-user-id`, username, nickname: username,
+      groups: [], effective_permissions: [], last_login: null,
+    }));
+    mocks.listUsers.mockResolvedValue(users);
+    const writeText = fails
+      ? vi.fn().mockRejectedValue(new Error('denied'))
+      : vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+
+    render(ManagePage);
+    const rows = await screen.findAllByRole('listitem');
+    await fireEvent.contextMenu(rows[1]);
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith(users[1].user_id));
+    if (fails) {
+      await waitFor(() => expect(notificationStore.entries[0]).toMatchObject({
+        type: 'error', text: 'Failed to copy user ID.',
+      }));
+    } else {
+      expect(notificationStore.entries).toHaveLength(0);
+    }
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
 });
 
 describe('management audit logs', () => {

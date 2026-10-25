@@ -49,6 +49,7 @@ beforeEach(() => {
   cache.avatar.mockReset().mockResolvedValue(null);
   writeText.mockReset().mockResolvedValue(undefined);
   details.mockReset();
+  notificationStore.clear();
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
 });
 
@@ -220,6 +221,26 @@ describe('audit user preview', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Copy user ID' }));
     expect(error).toHaveBeenCalledWith('Failed to copy user ID.');
     expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy user ID' }).querySelector('[data-icon="contentCopy"]')).toBeTruthy();
     await tick();
+  });
+
+  it('silently confirms copies with a temporary checkmark and restarts its duration on another copy', async () => {
+    mount();
+    await hover();
+    const button = screen.getByRole('button', { name: 'Copy user ID' });
+    await fireEvent.click(button);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(button.querySelector('[data-icon="check"]')).toBeTruthy();
+    expect(notificationStore.entries).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await fireEvent.click(button);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(button.querySelector('[data-icon="check"]')).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(button.querySelector('[data-icon="contentCopy"]')).toBeTruthy();
+    expect(writeText).toHaveBeenCalledTimes(2);
+    expect(notificationStore.entries).toHaveLength(0);
   });
 });

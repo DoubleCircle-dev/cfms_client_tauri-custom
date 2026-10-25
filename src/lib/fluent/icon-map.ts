@@ -138,4 +138,5 @@ export const ICON_MAP = {
   "contentCopy": "copy",
   "personPasskey": "person_passkey",
   "laptopBriefcase": "laptop_briefcase",
+  "passwordReset": "password_reset",
 } as const;
