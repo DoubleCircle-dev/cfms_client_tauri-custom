@@ -41,16 +41,22 @@
   onchange={() => { if (element && !disabled) { checked = element.checked; onChange?.(checked); } }}
 ></fluent-switch></label>
 <style>
-  .cfms-switch { vertical-align: middle; flex-shrink: 0; }
+  .cfms-switch {
+    vertical-align: middle;
+    flex-shrink: 0;
+    transition: background-color var(--durationFaster) var(--curveEasyEase),
+      border-color var(--durationFaster) var(--curveEasyEase);
+  }
   .cfms-switch::part(checked-indicator) {
     margin-inline-start: 0;
-    transform: translateX(var(--switch-offset, 0px)) scale(var(--switch-scale-x, 1), var(--switch-scale-y, 1));
+    transform: translateX(var(--switch-offset, 0px)) scale(var(--switch-scale, 1));
     transform-origin: left center;
     transition: none;
   }
   .cfms-switch[data-motion-ready]::part(checked-indicator) {
     transition: transform calc(var(--durationNormal) * 0.9) cubic-bezier(0.16, 1, 0.3, 1),
-      background-color var(--durationFaster) var(--curveEasyEase);
+      background-color var(--durationFaster) var(--curveEasyEase),
+      opacity var(--durationFaster) var(--curveEasyEase);
   }
   .cfms-switch[aria-checked="true"] { --switch-offset: 20px; }
   .cfms-switch[aria-checked="true"]::part(checked-indicator) { transform-origin: right center; }
@@ -58,13 +64,29 @@
   .cfms-switch:dir(rtl)::part(checked-indicator) { transform-origin: right center; }
   .cfms-switch:dir(rtl)[aria-checked="true"]::part(checked-indicator) { transform-origin: left center; }
   @media (hover: hover) {
-    .cfms-switch:hover:not([aria-disabled="true"]) { --switch-scale-x: 1.08; --switch-scale-y: 1.08; }
+    .cfms-switch:hover:not([aria-disabled="true"]) { --switch-scale: 1.08; }
   }
-  .cfms-switch[data-pressed]:not([aria-disabled="true"]) { --switch-scale-x: 1.24; --switch-scale-y: 0.92; }
-  :global(html[data-reduce-motion="true"]) .cfms-switch:not([aria-disabled="true"]) { --switch-scale-x: 1; --switch-scale-y: 1; }
+  .cfms-switch[data-pressed]:not([aria-disabled="true"]) {
+    border-color: var(--colorNeutralStrokeAccessiblePressed);
+  }
+  .cfms-switch[data-pressed][aria-checked="true"]:not([aria-disabled="true"]) {
+    background-color: var(--colorCompoundBrandBackgroundPressed);
+    border-color: var(--colorCompoundBrandBackgroundPressed);
+  }
+  .cfms-switch[data-pressed]:not([aria-disabled="true"])::part(checked-indicator) { opacity: 0.8; }
+  @media (forced-colors: active) {
+    .cfms-switch[data-pressed]:not([aria-disabled="true"]) { border-color: ButtonText; }
+    .cfms-switch[data-pressed][aria-checked="true"]:not([aria-disabled="true"]) {
+      background-color: Highlight;
+      border-color: Highlight;
+    }
+    .cfms-switch[data-pressed]:not([aria-disabled="true"])::part(checked-indicator) { opacity: 1; }
+  }
+  :global(html[data-reduce-motion="true"]) .cfms-switch:not([aria-disabled="true"]) { --switch-scale: 1; }
   :global(html[data-reduce-motion="true"]) .cfms-switch::part(checked-indicator) { transition: none; }
   @media (prefers-reduced-motion: reduce) {
-    :global(html:not([data-reduce-motion="false"])) .cfms-switch:not([aria-disabled="true"]) { --switch-scale-x: 1; --switch-scale-y: 1; }
+    :global(html:not([data-reduce-motion="false"])) .cfms-switch:not([aria-disabled="true"]) { --switch-scale: 1; }
+    :global(html:not([data-reduce-motion="false"])) .cfms-switch { transition: none; }
     :global(html:not([data-reduce-motion="false"])) .cfms-switch::part(checked-indicator) { transition: none; }
   }
   .cfms-choice-target { display: inline-flex; align-items: center; justify-content: center; min-inline-size: 28px; min-block-size: 28px; position: relative; }
