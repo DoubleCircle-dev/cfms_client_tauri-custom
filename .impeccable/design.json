@@ -148,11 +148,11 @@
   ],
   "narrative": {
     "northStar": "Fluent Operations Workspace",
-    "overview": "Windows 11 hierarchy with Fluent 2 controls and bundled Noto typography across desktop and Android. One opaque workspace content background, settings entries in two columns at workspace widths of 800px and above, explicit selected radio dots, regular explorer commands, and an integrated server search field share the foundations; complex lists and editors preserve their workflows.",
+    "overview": "Windows 11 hierarchy with Fluent 2 controls and bundled Noto typography across desktop and Android. A shared confirmed Mica workspace base with an opaque fallback, settings entries in two columns at workspace widths of 800px and above with side-by-side copy and status at entry widths of 360px and above, explicit selected radio dots, regular explorer commands, and an integrated server search field share the foundations; complex lists and editors preserve their workflows.",
     "keyCharacteristics": [
       "Native UI typography and compact working density.",
       "Semantic Fluent themes and local system icons.",
-      "Native Windows Mica under stable content surfaces.",
+      "Native Windows Mica across persistent chrome and the workspace base under readable content surfaces.",
       "Acrylic-style transient surfaces and Smoke modal dimming.",
       "Preserved circular fluid connection action and authentication image transition."
     ],
@@ -164,7 +164,7 @@
       },
       {
         "name": "Material Has a Job",
-        "body": "Mica is the window base; Acrylic-style CSS is transient; Smoke dims blocking dialogs.",
+        "body": "Confirmed Mica is shared by persistent chrome and the full workspace base, with an opaque fallback and stable content fills; Acrylic-style CSS is transient; Smoke dims blocking dialogs.",
         "section": "elevation"
       },
       {

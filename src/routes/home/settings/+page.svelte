@@ -195,6 +195,7 @@
             <li>
               <button
                 class="settings-entry"
+                class:settings-entry--has-status={!!status}
                 class:settings-entry--danger={entry.tone === 'danger'}
                 type="button"
                 onclick={() => goto(entry.href)}
@@ -340,6 +341,7 @@
 
   .settings-group__entries li {
     min-width: 0;
+    container: settings-entry / inline-size;
   }
 
   .settings-entry {
@@ -349,11 +351,11 @@
     min-width: 0;
     height: 100%;
     min-height: 68px;
-    grid-template-areas: 'icon copy arrow' 'icon status arrow';
+    grid-template-areas: 'icon copy arrow';
     grid-template-columns: 28px minmax(0, 1fr) 20px;
     align-items: center;
     gap: 12px;
-    row-gap: 4px;
+    row-gap: 8px;
     border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 62%, transparent);
     padding: 0.72rem 0.35rem;
     color: var(--color-md3-on-surface);
@@ -362,6 +364,10 @@
     transition:
       color var(--motion-duration-short4) var(--motion-easing-standard),
       background-color var(--motion-duration-short4) var(--motion-easing-standard);
+  }
+
+  .settings-entry--has-status {
+    grid-template-areas: 'icon copy arrow' '. status arrow';
   }
 
   .settings-entry::after {
@@ -460,6 +466,8 @@
   }
 
   .settings-entry__scope {
+    min-width: 0;
+    overflow-wrap: anywhere;
     color: var(--color-md3-on-surface-variant);
     font-size: 12px;
     font-weight: 500;
@@ -485,6 +493,22 @@
   @container (min-width: 800px) {
     .settings-group__entries {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @container settings-entry (min-width: 360px) {
+    .settings-entry--has-status {
+      grid-template-areas: 'icon copy status arrow';
+      grid-template-columns: 28px minmax(0, 1fr) fit-content(40%) 20px;
+    }
+
+    .settings-entry__status {
+      justify-items: end;
+      text-align: right;
+    }
+
+    .settings-entry__status-value {
+      justify-content: flex-end;
     }
   }
 
