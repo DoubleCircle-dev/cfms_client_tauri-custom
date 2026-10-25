@@ -15,6 +15,8 @@
   import { dialogStore } from '$lib/dialogs.svelte';
   import { authStore, floatingProgressStore, notificationStore } from '$lib/stores.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
+  import PageHeading from '$lib/components/PageHeading.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
   import TaskActionButton from '$lib/components/TaskActionButton.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
@@ -315,23 +317,14 @@
 
 <div class="workspace-page trash-page">
   <header class="trash-header">
-    <div>
-      <h1>{$t('trash.title')}</h1>
-      <p>{$t('trash.description')}</p>
-    </div>
+    <PageHeading title={$t('trash.title')} description={$t('trash.description')} />
 
-    <FluentButton data-fluent-owner="routes-home-trash-page"
-      title={$t('common.refresh')}
-      aria-label={$t('common.refresh')}
+    <IconButton
+      icon="refresh"
+      label={$t('common.refresh')}
       onclick={() => loadItems(currentFolderId)}
       disabled={loading}
-      type="button"
-      appearance="subtle"
-      class="icon-button"
-      iconOnly
-    >
-      <Icon name="refresh" size="20px" />
-    </FluentButton>
+    />
   </header>
 
   <form
@@ -523,7 +516,7 @@
     flex-direction: column;
     gap: 16px;
     overflow: hidden;
-    padding: 1rem clamp(1rem, 2vw, 1.5rem) 1.5rem;
+    padding: 24px clamp(1rem, 2vw, 1.5rem) 1.5rem;
   }
 
   .trash-header {
@@ -532,41 +525,6 @@
     justify-content: space-between;
     gap: 16px;
   }
-
-  .trash-header h1 {
-    color: var(--explorer-text);
-    font-size: 28px;
-    font-weight: 700;
-  }
-
-  .trash-header p {
-    max-width: 68ch;
-    margin-top: 0.2rem;
-    color: var(--explorer-text-muted);
-    font-size: 12px;
-  }
-
-  :global(.icon-button[data-fluent-owner="routes-home-trash-page"]) {
-    display: grid;
-    width: 36px;
-    height: 36px;
-    flex: none;
-    place-items: center;
-    border-radius: var(--borderRadiusMedium);
-    color: var(--explorer-text-muted);
-    transition:
-      color 120ms var(--motion-easing-standard),
-      background-color 120ms var(--motion-easing-standard),
-      transform 120ms var(--motion-easing-standard);
-  }
-
-  :global(.icon-button[data-fluent-owner="routes-home-trash-page"]:hover:not(:is(:disabled, [disabled]))) {
-    color: var(--explorer-text);
-    background: var(--explorer-surface-hover);
-  }
-
-  :global(.icon-button[data-fluent-owner="routes-home-trash-page"]:active:not(:is(:disabled, [disabled]))) { transform: none; }
-  :global(.icon-button[data-fluent-owner="routes-home-trash-page"]:is(:disabled, [disabled])) { opacity: 0.45; }
 
   .trash-toolbar {
     display: grid;
@@ -831,9 +789,7 @@
   }
 
   @media (max-width: 520px) {
-    .trash-page { padding: 0.85rem; }
-    .trash-header { align-items: center; }
-    .trash-header p { display: none; }
+    .trash-page { padding: 16px; }
     .trash-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
     .scope-field { grid-column: 1 / -1; }
     :global(.load-button[data-fluent-owner="routes-home-trash-page"]) { grid-column: 1; }
@@ -844,19 +800,16 @@
   }
 
   @media (pointer: coarse) {
-    :global(.icon-button[data-fluent-owner="routes-home-trash-page"]) { width: 44px; height: 44px; }
     :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
     :global(.select-button[data-fluent-owner="routes-home-trash-page"]) { min-height: 44px; }
     .trash-row { min-height: 66px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :global(.icon-button[data-fluent-owner="routes-home-trash-page"]),
     .scope-field,
     :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
     :global(.select-button[data-fluent-owner="routes-home-trash-page"]),
     .trash-row { transition: none; }
-    :global(.icon-button[data-fluent-owner="routes-home-trash-page"]:active:not(:is(:disabled, [disabled]))),
     :global(.load-button[data-fluent-owner="routes-home-trash-page"]:active:not(:is(:disabled, [disabled]))),
     :global(.select-button[data-fluent-owner="routes-home-trash-page"]:active) { transform: none; }
   }

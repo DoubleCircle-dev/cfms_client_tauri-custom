@@ -5,6 +5,7 @@
   import { navigateUp } from '$lib/navigation';
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
+  import PageHeading from '$lib/components/PageHeading.svelte';
   import type { IconName } from '$lib/icons';
 
   interface Props {
@@ -49,12 +50,7 @@
             <Icon name={icon} size="28px" />
           </span>
         {/if}
-        <div class="settings-heading-copy">
-          <h1>{title}</h1>
-          {#if description}
-            <p class="settings-heading-description">{description}</p>
-          {/if}
-        </div>
+        <PageHeading {title} {description} />
       </div>
 
       {#if onRefresh || onReset}
@@ -132,28 +128,6 @@
     flex: none;
     place-items: center;
     color: var(--color-md3-primary-emphasis);
-  }
-
-  .settings-heading-copy {
-    display: grid;
-    gap: 4px;
-    min-width: 0;
-  }
-
-  .settings-heading-copy h1 {
-    margin: 0;
-    color: var(--color-md3-on-surface);
-    font: 600 28px/36px var(--font-md3-sans);
-    letter-spacing: -0.018em;
-    text-wrap: balance;
-  }
-
-  .settings-heading-description {
-    max-width: 68ch;
-    margin: 0;
-    color: var(--color-md3-on-surface-variant);
-    font-size: 14px;
-    line-height: 20px;
   }
 
   :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]) {

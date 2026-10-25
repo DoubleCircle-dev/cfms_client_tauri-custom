@@ -351,12 +351,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 <div class="schedules-page">
   <header class="page-header">
     <div class="schedule-heading cfms-heading-copy">
-      <div class="cfms-heading-row">
-        <h1>{$t('schedules.title')}</h1>
-        {#if canView}
-          <IconButton icon="refresh" label={$t('common.refresh')} disabled={loading || editorMode !== null} onclick={() => void refreshAll()} />
-        {/if}
-      </div>
+      <h1>{$t('schedules.title')}</h1>
       <p>{$t('schedules.description')}</p>
     </div>
     {#if canView}
@@ -413,6 +408,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
             {$t('schedules.noAvailableTaskTypes')}
           </span>
         {/if}
+        <IconButton icon="refresh" label={$t('common.refresh')} disabled={loading || editorMode !== null} onclick={() => void refreshAll()} />
       </div>
     {/if}
   </header>
@@ -615,7 +611,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   h1 { color: var(--color-md3-on-surface); font-size: clamp(1.45rem, 4vw, 2.2rem); font-weight: 600; line-height: 1.15; letter-spacing: -0.025em; }
   .page-header > div > p { max-width: 68ch; color: var(--color-md3-on-surface-variant); font-size: 14px; line-height: 20px; }
   .header-actions, .row-actions, .pagination, .schedule-details footer { display: flex; align-items: center; gap: 8px; }
-  .header-actions { white-space: nowrap; }
+  .header-actions { justify-content: flex-end; white-space: nowrap; }
   .create-unavailable-anchor { display: inline-flex; flex: none; }
   :global(.create-unavailable-help[data-fluent-owner="routes-home-schedules-page"]) { inline-size: 32px; min-inline-size: 32px; max-inline-size: 32px; block-size: 32px; min-block-size: 32px; flex: none; padding: 0; cursor: help; }
   .create-unavailable-tooltip { position: fixed; z-index: 49; box-sizing: border-box; width: max-content; max-width: min(32rem, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 0.65rem 0.75rem; font: 400 12px/1.5 var(--fontFamilyBase); text-align: left; white-space: normal; overflow-wrap: anywhere; }

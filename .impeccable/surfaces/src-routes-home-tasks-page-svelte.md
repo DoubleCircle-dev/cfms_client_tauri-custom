@@ -13,3 +13,4 @@ related_targets: ["src/routes/home/schedules/+page.svelte", "src/lib/components/
 - Virtual list keyboard targets include native and Fluent actions; remeasure variable rows when fonts load. Coarse-pointer controls remain at least 44px.
 - Transfer headings have 24px top spacing, reduced to 16px below 520px; titles use 28/36px, descriptions 14/20px with a 4px gap. Refresh uses an Arrow Clockwise icon button aligned with the title. Descriptions remain visible on narrow windows.
 - Implementation/validation inventory: FLUENT-MIGRATION.md.
+- Schedule header commands stay grouped at the right in DOM and visual order: New schedule, availability help when applicable, then Refresh. Narrow windows move the group below the heading and keep Refresh at its right edge.

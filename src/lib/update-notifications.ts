@@ -97,7 +97,8 @@ class UpdateNotificationReporter {
       return;
     }
 
-    const total = snapshot.totalBytes ?? Math.max(snapshot.downloadedBytes, 1);
+    // Download byte counts cannot describe preparation or installation progress.
+    const total = snapshot.phase === 'downloading' ? snapshot.totalBytes ?? 0 : 0;
     floatingProgressStore.upsert(
       UPDATE_PROGRESS_ID,
       title,

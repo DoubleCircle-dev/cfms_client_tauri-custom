@@ -833,7 +833,7 @@ class NotificationStoreImpl {
   push(
     type: NotificationType,
     text: string,
-    timeoutMs = 3000,
+    timeoutMs = 7000,
     options: NotificationOptions = {},
   ) {
     if (options.groupKey) {
@@ -871,19 +871,19 @@ class NotificationStoreImpl {
     return entry.id;
   }
 
-  info(text: string, timeoutMs = 3000, options?: NotificationOptions) {
+  info(text: string, timeoutMs = 7000, options?: NotificationOptions) {
     return this.push("info", text, timeoutMs, options);
   }
 
-  success(text: string, timeoutMs = 3000, options?: NotificationOptions) {
+  success(text: string, timeoutMs = 7000, options?: NotificationOptions) {
     return this.push("success", text, timeoutMs, options);
   }
 
-  warning(text: string, timeoutMs = 3000, options?: NotificationOptions) {
+  warning(text: string, timeoutMs = 7000, options?: NotificationOptions) {
     return this.push("warning", text, timeoutMs, options);
   }
 
-  error(text: string, timeoutMs = 3000, options?: NotificationOptions) {
+  error(text: string, timeoutMs = 7000, options?: NotificationOptions) {
     return this.push("error", text, timeoutMs, options);
   }
 
