@@ -1041,7 +1041,7 @@
             {$t('common.signingIn')}
           {:else}
             {$t('login.login')}
-            <Icon name="login" size="19px" />
+            <Icon name="arrowForward" size="19px" />
           {/if}
         </FluentButton>
         </div>

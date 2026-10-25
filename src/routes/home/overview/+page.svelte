@@ -128,7 +128,7 @@
         <h1 class="text-[clamp(1.75rem,7vw,3.25rem)] font-semibold leading-tight text-md3-on-surface">
           {$t('home.workspace')}
         </h1>
-        <p class="mt-3 max-w-xl text-sm text-md3-on-surface-variant sm:text-base">
+        <p class="mt-1 max-w-xl text-sm text-md3-on-surface-variant sm:text-base">
           {$t('home.welcomeBack')}
           {#if authStore.nickname ?? authStore.username}
             , {authStore.nickname ?? authStore.username}

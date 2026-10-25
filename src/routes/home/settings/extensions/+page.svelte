@@ -1,5 +1,6 @@
 <script lang="ts">
   import FluentButton from '$lib/components/FluentButton.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { open } from '@tauri-apps/plugin-dialog';
@@ -129,7 +130,7 @@
 {#if USER_EXTENSIONS_ENABLED}
 <div class="extensions-page">
   <header>
-    <div><h1>{$t('settings.extensions.title')}</h1><p>{$t('settings.extensions.description')}</p></div>
+    <div class="cfms-heading-copy"><h1>{$t('settings.extensions.title')}</h1><p>{$t('settings.extensions.description')}</p></div>
     {#if !mobile}<FluentButton data-fluent-owner="routes-home-settings-extensions-page"
   type="button"
   disabled={busy !== null}
@@ -147,7 +148,7 @@
   {/if}
 
   <section class="section">
-    <div class="section-title"><div><h2>{$t('settings.extensions.installedTitle')}</h2><p>{$t('settings.extensions.installedHint')}</p></div></div>
+    <div class="section-title"><div class="cfms-heading-copy"><h2>{$t('settings.extensions.installedTitle')}</h2><p>{$t('settings.extensions.installedHint')}</p></div></div>
     {#if extensionsStore.loading && !extensionsStore.overview}
       <div class="loading"><ProgressRing size={26} label={$t('common.loading')} /></div>
     {:else if (extensionsStore.overview?.installed.length ?? 0) === 0}
@@ -196,13 +197,13 @@
 
   {#if !mobile}
     <section class="section">
-      <div class="section-title"><div><h2>{$t('settings.extensions.catalogTitle')}</h2><p>{$t('settings.extensions.catalogHint')}</p></div><FluentButton data-fluent-owner="routes-home-settings-extensions-page"
-  type="button"
-  disabled={catalogBusy || !extensionsStore.overview?.trustedKeysConfigured}
-  onclick={refreshCatalog}
-  appearance="subtle"
-  class="icon-button"
-><Icon name="refresh" size="19px" />{catalogBusy ? $t('common.loading') : $t('common.refresh')}</FluentButton></div>
+      <div class="section-title cfms-heading-copy">
+        <div class="cfms-heading-row">
+          <h2>{$t('settings.extensions.catalogTitle')}</h2>
+          <IconButton icon="refresh" label={$t('common.refresh')} disabled={catalogBusy || !extensionsStore.overview?.trustedKeysConfigured} onclick={refreshCatalog} />
+        </div>
+        <p>{$t('settings.extensions.catalogHint')}</p>
+      </div>
       <div class="cards">
         {#each extensionsStore.overview?.catalog?.extensions ?? [] as entry (entry.manifest.id)}
           {@const isInstalled = extensionsStore.overview?.installed.some((item) => item.manifest.id === entry.manifest.id && item.manifest.version === entry.manifest.version)}
@@ -229,6 +230,7 @@
   :global(.cfms-button[data-fluent-owner="routes-home-settings-extensions-page"]) { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); padding: .4rem .8rem; background: var(--explorer-surface-raised); font-size: 12px; } :global(.cfms-button[data-fluent-owner="routes-home-settings-extensions-page"]:hover:not(:is(:disabled, [disabled]))) { background: var(--explorer-surface-hover); } :global(.cfms-button[data-fluent-owner="routes-home-settings-extensions-page"]:is(:disabled, [disabled])) { opacity: .5; } :global(.cfms-button[data-fluent-owner="routes-home-settings-extensions-page"].danger[data-fluent-owner="routes-home-settings-extensions-page"]) { color: var(--explorer-danger); }
   .notice { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 1rem; border: 1px solid var(--explorer-border); border-left: 1px solid var(--explorer-accent); border-radius: 10px; padding: .8rem; background: var(--explorer-surface-raised); } .notice.warning { border-left-color: var(--explorer-warning, #c77d00); }
   .section { margin-top: 1.25rem; } .section-title { margin-bottom: .65rem; } .cards { display: grid; gap: 12px; }
+  .section-title.cfms-heading-copy { display: grid; align-items: stretch; gap: 4px; }
   .extension-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-medium); padding: .85rem; background: var(--explorer-surface-raised); }
   .extension-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: var(--explorer-accent); background: var(--explorer-accent-soft); } .extension-copy { min-width: 0; } .extension-copy h3 { font-size: 14px; font-weight: 600; } .extension-copy p { margin: .1rem 0 .25rem; } .extension-copy small { color: var(--explorer-text-muted); font-size: 12px; } .extension-copy b { display: block; margin-top: .3rem; color: var(--explorer-danger); font-size: 12px; }
   details, .card-actions { grid-column: 2 / -1; } details { font-size: 12px; color: var(--explorer-text-muted); } details ul { padding: .4rem 1rem; list-style: disc; } .card-actions { display: flex; flex-wrap: wrap; gap: 8px; }

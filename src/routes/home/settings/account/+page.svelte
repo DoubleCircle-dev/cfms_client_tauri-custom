@@ -226,7 +226,7 @@
   </section>
 
   <section class="account-section authentication-link">
-    <div><h2>{$t('authManagement.title')}</h2><p>{$t('authManagement.description')}</p></div>
+    <div class="cfms-heading-copy"><h2>{$t('authManagement.title')}</h2><p>{$t('authManagement.description')}</p></div>
     <FluentButton data-fluent-owner="routes-home-settings-account-page"
       type="button"
       onclick={() => goto('/home/settings/authentication')}
@@ -451,7 +451,7 @@
 
   .authentication-link { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 1.25rem 0; }
   .authentication-link h2 { margin: 0; font-size: 14px; font-weight: 600; }
-  .authentication-link p { font-size: 12px; color: var(--color-md3-on-surface-variant); margin: .35rem 0 0; }
+  .authentication-link p { font-size: 12px; line-height: 16px; color: var(--color-md3-on-surface-variant); margin: 0; }
   @media (max-width: 640px) { .nickname-editor { grid-template-columns: 1fr; } .identity-summary { grid-template-columns: auto minmax(0, 1fr); } :global(.identity-edit-button[data-fluent-owner="routes-home-settings-account-page"]) { grid-column: 2; justify-self: start; } .authentication-link { flex-wrap: wrap; } }
   @media (pointer: coarse) { :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]) { min-height: 44px; } }
   @media (prefers-reduced-motion: reduce) { :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]), .text-field { transition: none; } }

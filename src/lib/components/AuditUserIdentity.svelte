@@ -369,6 +369,9 @@
   dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   dd { margin: 0; text-align: end; overflow-wrap: anywhere; }
   .user-preview__error { display: flex; align-items: start; gap: 8px; color: var(--colorNeutralForeground2); }
+  @supports ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+    .user-preview { --cfms-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 90%, transparent); }
+  }
   @media (pointer: coarse) { .user-identity { min-block-size: 44px; min-inline-size: 44px; } }
   @media (forced-colors: active) { .user-preview { border: 1px solid CanvasText; box-shadow: none; } }
 </style>

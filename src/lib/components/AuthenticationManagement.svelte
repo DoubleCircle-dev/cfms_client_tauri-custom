@@ -2,6 +2,7 @@
   // Methods explain what the account owns; flows explain when and how to use it.
   // The diagram and editor share one draft in the established Material workspace.
   import { onMount } from 'svelte';
+  import type { Snippet } from 'svelte';
   import { beforeNavigate, goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
   import { getUserAuthentication, setUserAuthPolicies, registerUserAuthPublicKey, updateUserAuthPublicKey, deleteUserAuthPublicKey, changePassword, clearAuthSession, resetUserPassword, getManagedTwoFactorStatus, disableManagedTwoFactor, serverErrorData, type AuthPolicyStep, type AuthPurpose, type UserAuthentication } from '$lib/api';
@@ -10,6 +11,7 @@
   import { dialogStore } from '$lib/dialogs.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import DialogActionButton from './DialogActionButton.svelte';
+  import IconButton from './IconButton.svelte';
   import ProgressRing from './ProgressRing.svelte';
   import ChangePasswordDialog from './ChangePasswordDialog.svelte';
   import ResetUserPasswordDialog from './ResetUserPasswordDialog.svelte';
@@ -19,7 +21,11 @@
   import AuthenticatorSettings from './authentication/AuthenticatorSettings.svelte';
   import './authentication/authentication.css';
 
-  let { userId, username }: { userId?: string; username?: string } = $props();
+  let { userId, username, header }: {
+    userId?: string;
+    username?: string;
+    header?: Snippet<[() => Promise<void>, boolean]>;
+  } = $props();
   let inventory = $state<UserAuthentication | null>(null);
   let draft = $state<Record<AuthPurpose, AuthPolicyStep[][]>>({ login: [], mfa: [], escalation: [] });
   let loading = $state(true);
@@ -199,7 +205,17 @@
 </script>
 
 <div class="authentication-management">
-  <div class="auth-toolbar"><p>{$t('authManagement.description')}</p><DialogActionButton disabled={busy || methodBusy || loading} onclick={reload}>{$t('common.refresh')}</DialogActionButton></div>
+  {#if header}
+    {@render header(reload, busy || methodBusy || loading)}
+  {:else}
+    <div class="auth-heading">
+      <div class="auth-toolbar">
+        <h2>{$t('authManagement.title')}</h2>
+        <IconButton icon="refresh" label={$t('common.refresh')} disabled={busy || methodBusy || loading} onclick={reload} />
+      </div>
+      <p>{$t('authManagement.description')}</p>
+    </div>
+  {/if}
   {#if managed}<p>{$t('authManagement.adminAccount', { values: { username: username ?? userId! } })}</p>{/if}
   {#if error}<p role="alert" class="auth-error auth-feedback">{error}</p>{/if}
   {#if loading}<ProgressRing label={$t('common.loading')} />
@@ -211,7 +227,6 @@
       {/each}
     </div>
     <div id="auth-panel-methods" role="tabpanel" aria-labelledby="auth-tab-methods" hidden={tab !== 'methods'}>
-      <p>{$t('authManagement.methodsHelp')}</p>
       <AuthenticationMethods {inventory} {writable} {managed} busy={busy || methodBusy} canChangePassword={canPassword} onPassword={beginPassword} onRegister={registerKey} onEdit={editKey} onDelete={deleteKey}>
         {#snippet authenticator()}
           <AuthenticatorSettings bind:this={authenticatorSettings} {userId} bind:busy={methodBusy} disabled={busy || loading || !authStore.isLoggedIn} beforeChange={beforeMethodChange} onChanged={load} />

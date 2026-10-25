@@ -563,7 +563,7 @@
 
   .task-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .task-header h1 { margin: 0; color: var(--explorer-text); font: 600 28px/36px var(--fontFamilyBase); }
-  .task-header p { max-width: 68ch; margin: 8px 0 0; color: var(--explorer-text-muted); font: 400 14px/20px var(--fontFamilyBase); }
+  .task-header p { max-width: 68ch; margin: 4px 0 0; color: var(--explorer-text-muted); font: 400 14px/20px var(--fontFamilyBase); }
   .task-header-actions { display: flex; flex: none; align-items: center; gap: 4px; }
 
   :global(.icon-button[data-fluent-owner="routes-home-tasks-page"]) { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: var(--borderRadiusMedium); color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
@@ -617,7 +617,7 @@
 
   @media (max-width: 520px) {
     .task-page { padding: 16px; }
-    .task-header { align-items: center; }
+    .task-header { align-items: flex-start; }
     .task-toolbar { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
     .section-filter,
     .task-summary { grid-column: 1; justify-self: stretch; }

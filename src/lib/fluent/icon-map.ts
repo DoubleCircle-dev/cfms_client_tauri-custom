@@ -136,4 +136,6 @@ export const ICON_MAP = {
   "api": "plug_connected",
   "arrowForward": "arrow_right",
   "contentCopy": "copy",
+  "personPasskey": "person_passkey",
+  "laptopBriefcase": "laptop_briefcase",
 } as const;

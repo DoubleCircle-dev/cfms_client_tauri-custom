@@ -11,5 +11,5 @@ related_targets: ["src/routes/home/schedules/+page.svelte", "src/lib/components/
 - Authority: DESIGN.md. Shared Fluent actions, readable Noto status/data typography, fixed type ramp, compact progress rows and explicit error/warning states.
 - Preserve pause/resume/cancel/retry, grouped transfers, batching, conflict decisions, direct-ID downloads and schedule semantics. Filters/tabs stay keyboard operable and narrow tab strips scroll.
 - Virtual list keyboard targets include native and Fluent actions; remeasure variable rows when fonts load. Coarse-pointer controls remain at least 44px.
-- Transfer headings have 24px top spacing, reduced to 16px below 520px; titles use 28/36px, descriptions 14/20px with an 8px gap. Descriptions remain visible on narrow windows.
+- Transfer headings have 24px top spacing, reduced to 16px below 520px; titles use 28/36px, descriptions 14/20px with a 4px gap. Refresh uses an Arrow Clockwise icon button aligned with the title. Descriptions remain visible on narrow windows.
 - Implementation/validation inventory: FLUENT-MIGRATION.md.

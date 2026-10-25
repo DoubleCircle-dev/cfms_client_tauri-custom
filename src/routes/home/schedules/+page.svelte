@@ -7,6 +7,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 -->
 <script lang="ts">
   import FluentButton from '$lib/components/FluentButton.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { portal } from '$lib/actions/portal';
   import { _ as t } from 'svelte-i18n';
@@ -349,21 +350,17 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 
 <div class="schedules-page">
   <header class="page-header">
-    <div>
-      <h1>{$t('schedules.title')}</h1>
+    <div class="schedule-heading cfms-heading-copy">
+      <div class="cfms-heading-row">
+        <h1>{$t('schedules.title')}</h1>
+        {#if canView}
+          <IconButton icon="refresh" label={$t('common.refresh')} disabled={loading || editorMode !== null} onclick={() => void refreshAll()} />
+        {/if}
+      </div>
       <p>{$t('schedules.description')}</p>
     </div>
     {#if canView}
       <div class="header-actions">
-        <FluentButton data-fluent-owner="routes-home-schedules-page"
-          type="button"
-          disabled={loading || editorMode !== null}
-          onclick={() => void refreshAll()}
-          appearance="subtle"
-          class="secondary-action"
-        >
-          <Icon name="refresh" size="18px" />{$t('common.refresh')}
-        </FluentButton>
         {#if canManage}
           <FluentButton data-fluent-owner="routes-home-schedules-page"
             type="button"
@@ -612,10 +609,11 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 
 <style>
   .schedules-page { display: flex; height: 100%; min-height: 0; overflow: hidden; flex-direction: column; font-family: var(--font-md3-sans); }
-  .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 1.5rem 1.5rem 1rem; }
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 1.5rem 1.5rem 1rem; }
+  .schedule-heading { flex: 1; }
   h1, h2, p { margin: 0; }
   h1 { color: var(--color-md3-on-surface); font-size: clamp(1.45rem, 4vw, 2.2rem); font-weight: 600; line-height: 1.15; letter-spacing: -0.025em; }
-  .page-header > div > p { max-width: 68ch; margin-top: 0.35rem; color: var(--color-md3-on-surface-variant); font-size: 14px; line-height: 1.5; }
+  .page-header > div > p { max-width: 68ch; color: var(--color-md3-on-surface-variant); font-size: 14px; line-height: 20px; }
   .header-actions, .row-actions, .pagination, .schedule-details footer { display: flex; align-items: center; gap: 8px; }
   .header-actions { white-space: nowrap; }
   .create-unavailable-anchor { display: inline-flex; flex: none; }
@@ -706,6 +704,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   @media (max-width: 700px) {
     .schedules-page { height: auto; min-height: 100%; overflow: visible; }
     .page-header { align-items: flex-start; flex-direction: column; padding: 1.1rem 1rem 0.8rem; }
+    .schedule-heading { width: 100%; }
     .header-actions { width: 100%; }
     .header-actions :global(:is(button[data-fluent-owner="routes-home-schedules-page"], .cfms-button[data-fluent-owner="routes-home-schedules-page"])) { flex: 1; }
     .header-actions .create-unavailable-anchor { flex: none; }

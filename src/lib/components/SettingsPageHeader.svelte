@@ -4,6 +4,7 @@
   import { _ as t } from 'svelte-i18n';
   import { navigateUp } from '$lib/navigation';
   import Icon from '$lib/components/Icon.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import type { IconName } from '$lib/icons';
 
   interface Props {
@@ -13,6 +14,8 @@
     resetDisabled?: boolean;
     resetLabel?: string;
     onReset?: () => void | Promise<void>;
+    onRefresh?: () => void | Promise<void>;
+    refreshDisabled?: boolean;
   }
 
   let {
@@ -22,6 +25,8 @@
     resetDisabled = false,
     resetLabel,
     onReset,
+    onRefresh,
+    refreshDisabled = false,
   }: Props = $props();
 </script>
 
@@ -36,35 +41,44 @@
     {$t('common.back')}
   </FluentButton>
 
-  <div class="settings-heading-row">
-    <div class="settings-heading">
-      {#if icon}
-        <span class="settings-heading-icon" aria-hidden="true">
-          <Icon name={icon} size="28px" />
-        </span>
-      {/if}
-      <div class="settings-heading-copy">
-        <h1>{title}</h1>
-        {#if description}
-          <p>{description}</p>
+  <div class="settings-heading-group">
+    <div class="settings-heading-row">
+      <div class="settings-heading">
+        {#if icon}
+          <span class="settings-heading-icon" aria-hidden="true">
+            <Icon name={icon} size="28px" />
+          </span>
         {/if}
+        <div class="settings-heading-copy">
+          <h1>{title}</h1>
+          {#if description}
+            <p class="settings-heading-description">{description}</p>
+          {/if}
+        </div>
       </div>
-    </div>
 
-    {#if onReset}
-      <FluentButton data-fluent-owner="lib-components-settings-page-header"
-        type="button"
-        onclick={onReset}
-        disabled={resetDisabled}
-        title={resetLabel ?? $t('common.reset')}
-        aria-label={resetLabel ?? $t('common.reset')}
-        appearance="subtle"
-        class="settings-reset-button"
-        iconOnly
-      >
-        <Icon name="resetSettings" size="20px" />
-      </FluentButton>
-    {/if}
+      {#if onRefresh || onReset}
+        <div class="settings-heading-actions">
+          {#if onRefresh}
+            <IconButton icon="refresh" label={$t('common.refresh')} disabled={refreshDisabled} onclick={onRefresh} />
+          {/if}
+          {#if onReset}
+            <FluentButton data-fluent-owner="lib-components-settings-page-header"
+              type="button"
+              onclick={onReset}
+              disabled={resetDisabled}
+              title={resetLabel ?? $t('common.reset')}
+              aria-label={resetLabel ?? $t('common.reset')}
+              appearance="subtle"
+              class="settings-reset-button"
+              iconOnly
+            >
+              <Icon name="resetSettings" size="20px" />
+            </FluentButton>
+          {/if}
+        </div>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -73,6 +87,9 @@
     display: grid;
     gap: 12px;
   }
+
+  .settings-heading-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+  .settings-heading-group { display: grid; min-width: 0; gap: 4px; }
 
   :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]) {
     display: inline-flex;
@@ -95,7 +112,7 @@
   .settings-heading {
     display: flex;
     min-width: 0;
-    align-items: flex-start;
+    align-items: center;
   }
 
   .settings-heading-row {
@@ -118,6 +135,8 @@
   }
 
   .settings-heading-copy {
+    display: grid;
+    gap: 4px;
     min-width: 0;
   }
 
@@ -129,9 +148,9 @@
     text-wrap: balance;
   }
 
-  .settings-heading-copy p {
+  .settings-heading-description {
     max-width: 68ch;
-    margin: 8px 0 0;
+    margin: 0;
     color: var(--color-md3-on-surface-variant);
     font-size: 14px;
     line-height: 20px;

@@ -39,7 +39,7 @@
 
   .page-header {
     display: grid;
-    gap: 8px;
+    gap: 4px;
     margin-bottom: 1.5rem;
   }
 

@@ -89,6 +89,8 @@
     title={$t('settings.githubApi.title')}
     description={$t('settings.githubApi.description')}
     icon="api"
+    onRefresh={refreshStatus}
+    refreshDisabled={loading || busy}
   />
 
   <div class="settings-section-list">
@@ -106,18 +108,6 @@
         </div>
       </div>
 
-      {#if mode === 'unavailable' && !loading}
-        <FluentButton data-fluent-owner="routes-home-settings-github-api-page"
-          type="button"
-          onclick={refreshStatus}
-          disabled={busy}
-          appearance="subtle"
-          class="secondary-action"
-        >
-          <Icon name="refresh" size="18px" />
-          {$t('settings.githubApi.retryStatus')}
-        </FluentButton>
-      {/if}
     </section>
 
     <section class="settings-section github-api-section" aria-labelledby="github-api-token-title">

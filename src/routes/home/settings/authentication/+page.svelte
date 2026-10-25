@@ -6,10 +6,20 @@
 </script>
 
 <div class="workspace-page settings-page-shell">
-  <SettingsPageHeader title={$t('authManagement.title')} icon="passkey" />
   {#if authStore.isLoggedIn}
-    <AuthenticationManagement />
+    <AuthenticationManagement>
+      {#snippet header(onRefresh, refreshDisabled)}
+        <SettingsPageHeader
+          title={$t('authManagement.title')}
+          description={$t('authManagement.description')}
+          icon="passkey"
+          {onRefresh}
+          {refreshDisabled}
+        />
+      {/snippet}
+    </AuthenticationManagement>
   {:else}
+    <SettingsPageHeader title={$t('authManagement.title')} description={$t('authManagement.description')} icon="passkey" />
     <p>{$t('authManagement.signInRequired')}</p>
   {/if}
 </div>

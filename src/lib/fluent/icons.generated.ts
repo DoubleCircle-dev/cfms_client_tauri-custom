@@ -467,6 +467,14 @@ import svg464 from '@fluentui/svg-icons/icons/copy_24_regular.svg?raw';
 import svg465 from '@fluentui/svg-icons/icons/copy_24_filled.svg?raw';
 import svg466 from '@fluentui/svg-icons/icons/copy_20_regular.svg?raw';
 import svg467 from '@fluentui/svg-icons/icons/copy_20_filled.svg?raw';
+import svg468 from '@fluentui/svg-icons/icons/person_passkey_24_regular.svg?raw';
+import svg469 from '@fluentui/svg-icons/icons/person_passkey_24_filled.svg?raw';
+import svg470 from '@fluentui/svg-icons/icons/person_passkey_20_regular.svg?raw';
+import svg471 from '@fluentui/svg-icons/icons/person_passkey_20_filled.svg?raw';
+import svg472 from '@fluentui/svg-icons/icons/laptop_briefcase_24_regular.svg?raw';
+import svg473 from '@fluentui/svg-icons/icons/laptop_briefcase_24_filled.svg?raw';
+import svg474 from '@fluentui/svg-icons/icons/laptop_briefcase_20_regular.svg?raw';
+import svg475 from '@fluentui/svg-icons/icons/laptop_briefcase_20_filled.svg?raw';
 import duotone0 from './assets/duotone/folder_add_24.svg?raw';
 import duotone1 from './assets/duotone/folder_add_20.svg?raw';
 import duotone2 from './assets/duotone/folder_arrow_right_24.svg?raw';
@@ -611,4 +619,6 @@ export const ICON_VARIANTS = {
   api: { regular: svg0, filled: svg1, small: svg2, smallFilled: svg3 },
   arrowForward: { regular: svg460, filled: svg461, small: svg462, smallFilled: svg463 },
   contentCopy: { regular: svg464, filled: svg465, small: svg466, smallFilled: svg467 },
+  personPasskey: { regular: svg468, filled: svg469, small: svg470, smallFilled: svg471 },
+  laptopBriefcase: { regular: svg472, filled: svg473, small: svg474, smallFilled: svg475 },
 } as const;

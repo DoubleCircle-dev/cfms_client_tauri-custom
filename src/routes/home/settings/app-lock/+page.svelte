@@ -1,5 +1,6 @@
 <script lang="ts">
   import FluentButton from '$lib/components/FluentButton.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { _ as t } from 'svelte-i18n';
@@ -389,7 +390,7 @@
 
     {#if isMobile}
       <section class="settings-section">
-        <div class="flex items-start justify-between gap-4">
+        <div class="flex flex-wrap items-start justify-between gap-4">
           <div class="min-w-0">
             <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
               {$t('appLock.settings.biometricTitle')}
@@ -409,6 +410,7 @@
               <Icon name={appLockStore.biometricAvailable ? 'verified' : 'warningAmber'} size="16px" />
               {biometricStatus}
             </span>
+            <IconButton icon="refresh" label={$t('common.refresh')} disabled={busy !== null} onclick={refreshBiometricAvailability} />
             <MdSwitch
               checked={appLockStore.settings.biometricEnabled}
               disabled={!appLockStore.biometricAvailable || busy !== null}
@@ -418,18 +420,6 @@
           </div>
         </div>
 
-        <div class="mt-4 flex flex-wrap gap-2">
-          <FluentButton data-fluent-owner="routes-home-settings-app-lock-page"
-            onclick={refreshBiometricAvailability}
-            disabled={busy !== null}
-            type="button"
-            appearance="subtle"
-            class="app-lock-action"
-          >
-            <Icon name="refresh" size="18px" />
-            {$t('common.refresh')}
-          </FluentButton>
-        </div>
       </section>
     {/if}
 
@@ -443,16 +433,19 @@
             {$t('appLock.settings.platformDescription')}
           </p>
         </div>
-        <span
-          class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
-          class:bg-md3-primary-container={appLockStore.platformAvailable}
-          class:text-md3-on-primary-container={appLockStore.platformAvailable}
-          class:bg-md3-surface-container-high={!appLockStore.platformAvailable}
-          class:text-md3-on-surface-variant={!appLockStore.platformAvailable}
-        >
-          <Icon name={appLockStore.platformAvailable ? 'verified' : 'warningAmber'} size="16px" />
-          {platformStatus}
-        </span>
+        <div class="flex shrink-0 items-center gap-2">
+          <span
+            class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
+            class:bg-md3-primary-container={appLockStore.platformAvailable}
+            class:text-md3-on-primary-container={appLockStore.platformAvailable}
+            class:bg-md3-surface-container-high={!appLockStore.platformAvailable}
+            class:text-md3-on-surface-variant={!appLockStore.platformAvailable}
+          >
+            <Icon name={appLockStore.platformAvailable ? 'verified' : 'warningAmber'} size="16px" />
+            {platformStatus}
+          </span>
+          <IconButton icon="refresh" label={$t('common.refresh')} disabled={busy !== null} onclick={() => appLockStore.refreshPlatformAvailability()} />
+        </div>
       </div>
 
       {#if appLockStore.settings.platformCredentials.length > 0}
@@ -497,16 +490,6 @@
         >
           <Icon name="passkey" size="18px" />
           {$t('appLock.settings.addPlatform')}
-        </FluentButton>
-        <FluentButton data-fluent-owner="routes-home-settings-app-lock-page"
-          onclick={() => appLockStore.refreshPlatformAvailability()}
-          disabled={busy !== null}
-          type="button"
-          appearance="subtle"
-          class="app-lock-action"
-        >
-          <Icon name="refresh" size="18px" />
-          {$t('common.refresh')}
         </FluentButton>
       </div>
     </section>
