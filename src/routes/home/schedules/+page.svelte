@@ -311,9 +311,9 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     </section>
   {:else}
     <div class="schedule-workspace" class:has-inspector={editorMode !== null || selected !== null}>
-      <section class="ledger" aria-label={$t('schedules.listLabel')}>
+      <section class="ledger cfms-content-surface" aria-label={$t('schedules.listLabel')}>
         <div class="command-bar">
-          <label class="search-field">
+          <label class="search-field cfms-field-surface">
             <Icon name="search" size="18px" />
             <span class="sr-only">{$t('schedules.search')}</span>
             <input class="cfms-native-field" data-focus-ring="delegated" bind:value={search} disabled={editorMode !== null} placeholder={$t('schedules.searchPlaceholder')} />
@@ -423,7 +423,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
       </section>
 
       {#if editorMode !== null}
-        <aside class="inspector">
+        <aside class="cfms-content-surface inspector">
           <ScheduleEditor
             {taskTypes}
             schedule={editorMode === 'edit' ? selected : null}
@@ -433,7 +433,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
           />
         </aside>
       {:else if selected}
-        <aside class="inspector schedule-details" aria-labelledby="schedule-detail-title">
+        <aside class="cfms-content-surface inspector schedule-details" aria-labelledby="schedule-detail-title">
           <header>
             <div><p>{$t('schedules.definition')}</p><h2 id="schedule-detail-title">{selected.task_name}</h2></div>
             <FluentButton data-fluent-owner="routes-home-schedules-page"
@@ -484,7 +484,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
           {/if}
         </aside>
       {:else}
-        <aside class="inspector inspector-empty" aria-label={$t('schedules.inspectorLabel')}>
+        <aside class="cfms-content-surface inspector inspector-empty" aria-label={$t('schedules.inspectorLabel')}>
           <Icon name="eventUpcoming" size="28px" />
           <strong>{$t('schedules.inspectTitle')}</strong>
           <p>{$t('schedules.inspectDescription')}</p>
@@ -567,7 +567,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   .mono { font-family: var(--font-md3-mono); }
   .payload-preview { display: grid; gap: 8px; padding: 0.4rem 1.1rem 1rem; }
   .payload-preview strong { font-size: 12px; }
-  .payload-preview pre { max-height: 260px; overflow: auto; margin: 0; border-radius: 8px; padding: 0.7rem; background: var(--color-md3-surface-container-high); color: var(--color-md3-on-surface); font: 0.72rem/1.5 var(--font-md3-mono); white-space: pre-wrap; }
+  .payload-preview pre { max-height: 260px; overflow: auto; margin: 0; border-radius: 8px; padding: 0.7rem; background: var(--colorNeutralBackground1); color: var(--color-md3-on-surface); font: 0.72rem/1.5 var(--font-md3-mono); white-space: pre-wrap; }
   .schedule-details footer { justify-content: flex-end; border-top: 1px solid var(--color-md3-outline); padding: 0.9rem 1.1rem; }
   .load-state, .empty-state, .unavailable-state { color: var(--color-md3-on-surface-variant); }
   .load-state { display: flex; min-height: 0; flex: 1; align-items: center; justify-content: center; gap: 12px; padding: 1rem; font-size: 12px; }

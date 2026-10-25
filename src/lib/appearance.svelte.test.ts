@@ -44,3 +44,18 @@ it('serializes native theme changes, ignores stale Mica acknowledgements, and di
   await waitFor(() => expect(mocks.backdrop).toHaveBeenLastCalledWith('light', false));
   dispose();
 });
+
+it('uses the native solid fallback when reduced transparency is requested', async () => {
+  mocks.backdrop.mockReset().mockResolvedValue('solid');
+  const transparency = { matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  vi.stubGlobal('matchMedia', (query: string) => query.includes('reduced-transparency')
+    ? transparency : { matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  const dispose = appearanceStore.init();
+  await waitFor(() => expect(mocks.backdrop).toHaveBeenLastCalledWith(expect.any(String), false));
+  expect(document.documentElement.dataset.windowBackdrop).toBe('solid');
+  transparency.matches = false;
+  appearanceStore.apply({ color_scheme: 'dark', reduce_motion: 'system' });
+  await waitFor(() => expect(mocks.backdrop).toHaveBeenLastCalledWith('dark', true));
+  dispose();
+  expect(transparency.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+});

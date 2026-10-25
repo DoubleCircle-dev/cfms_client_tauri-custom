@@ -51,7 +51,7 @@
   }
 </script>
 
-<section class="blueprint-panel min-w-0 overflow-hidden">
+<section class="blueprint-panel cfms-content-surface min-w-0 overflow-hidden">
   <div class="flex items-center gap-2.5 px-4 pt-4">
     <div class="flex min-w-0 flex-1 items-center gap-2.5">
       <span class="blueprint-panel-icon {iconClass}">

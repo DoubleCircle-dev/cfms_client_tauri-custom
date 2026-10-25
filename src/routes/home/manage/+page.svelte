@@ -1072,6 +1072,7 @@
 
     <div
       class="management-content"
+      class:cfms-content-surface={activeTab !== 'security'}
       class:management-content--contained={activeTab !== 'security'}
       class:management-content--audit={activeTab === 'logs'}
     >
@@ -1740,8 +1741,6 @@
     border: 1px solid var(--color-md3-outline);
     border-radius: 0.75rem;
     background: color-mix(in srgb, var(--color-md3-surface-container) 70%, transparent);
-    -webkit-backdrop-filter: blur(4px);
-    backdrop-filter: none;
   }
 
   .identity-measure-host {

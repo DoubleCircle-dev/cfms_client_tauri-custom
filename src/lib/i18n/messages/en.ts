@@ -518,6 +518,7 @@ export const en = {
     serverSearch: 'Search',
     searchTitle: 'Search Files',
     searchPlaceholder: 'Search documents and folders on the server',
+    directorySearchPlaceholder: 'Search in {directory}',
     searchDocuments: 'Documents',
     searchDirectories: 'Folders',
     searchPreviewResults: 'Preview results',
@@ -827,6 +828,8 @@ export const en = {
     documentAccessDeniedTitle: 'Access denied',
     documentAccessDeniedDescription: 'You do not currently have permission to access this document. If you have any questions, please contact your system administrator.',
     accessDeniedAt: 'Access time',
+    goBack: 'Back',
+    goForward: 'Forward',
     parentDirectory: 'Up one level',
   },
   tasks: {

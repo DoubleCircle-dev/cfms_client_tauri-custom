@@ -152,8 +152,8 @@
     "keyCharacteristics": [
       "Native UI typography and compact working density.",
       "Semantic Fluent themes and local system icons.",
-      "Native Windows Mica across persistent chrome and the workspace base under readable content surfaces.",
-      "Acrylic-style transient surfaces and Smoke modal dimming.",
+      "Native Windows Mica across persistent chrome and workspace, with 60% content and 55% field materials above it.",
+        "Shared menus, file-search previews and dialogs use 72% neutral tint with 20px blur and 1.2 saturation, solid accessibility fallbacks and Smoke modal dimming.",
       "Preserved circular fluid connection action and authentication image transition."
     ],
     "rules": [
@@ -164,7 +164,7 @@
       },
       {
         "name": "Material Has a Job",
-        "body": "Confirmed Mica is shared by persistent chrome and the full workspace base, with an opaque fallback and stable content fills; Acrylic-style CSS is transient; Smoke dims blocking dialogs.",
+          "body": "Confirmed Mica is shared by persistent chrome and the full workspace base, including file navigation, commands and status, with an opaque fallback, 60% content material and 55% field material. Shared menus, file-search previews and dialogs use cfms-acrylic-surface with 72% neutral tint, 20px blur, 1.2 saturation and Fluent stroke/shadow; unsupported blur, reduced transparency and forced colors use solid surfaces. File address/search outer heights are 32px desktop and 44px coarse pointer. The toolbar says Search in {directory} while preserving server-wide search; the search dialog retains its explicit server-wide placeholder. Smoke dims blocking dialogs on a separately animated sibling layer. Content/field filters paint on pseudo-elements; viewport dialogs and context menus mount at the document body. File navigation adds a per-server/account session history with Alt+Left/Right and keeps Refresh after Search.",
         "section": "elevation"
       },
       {

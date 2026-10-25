@@ -464,7 +464,7 @@
         </button>
 
         {#if accountMenuOpen}
-          <div class="explorer-account-menu" role="menu" tabindex="-1" onkeydown={handleAccountMenuKeydown}>
+          <div class="explorer-account-menu cfms-acrylic-surface" role="menu" tabindex="-1" onkeydown={handleAccountMenuKeydown}>
             <div class="explorer-account-summary" role="presentation">
               {#if canChangeOwnAvatar}
                 <button
@@ -670,7 +670,7 @@
   .explorer-account-trigger > strong { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; font-weight: 600; }
   .explorer-connection-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; background: var(--explorer-danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--explorer-danger) 15%, transparent); }
   .explorer-connection-dot.connected { background: var(--explorer-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--explorer-success) 15%, transparent); }
-  .explorer-account-menu { position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 80; display: grid; min-width: 220px; overflow: hidden; border: 1px solid var(--explorer-border-strong); border-radius: var(--explorer-radius-medium); padding: 0.3rem; background: var(--cfms-acrylic); box-shadow: var(--explorer-shadow); backdrop-filter: blur(24px); animation: menu-enter 120ms ease-out both; }
+  .explorer-account-menu { position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 80; display: grid; min-width: 220px; overflow: hidden; padding: 0.3rem; animation: menu-enter 120ms ease-out both; }
   .explorer-account-menu button { display: flex; align-items: center; gap: 0.65rem; border-radius: var(--borderRadiusMedium); padding: 0.5rem 0.6rem; color: var(--explorer-text); font-size: 0.78rem; text-align: left; }
   .explorer-account-menu button:hover:not(:disabled) { background: var(--explorer-surface-hover); }
   .explorer-account-menu button:disabled { opacity: 0.45; }
@@ -730,9 +730,10 @@
       border-right-color: var(--explorer-border-strong);
       border-radius: 0 12px 12px 0;
       padding: 0.75rem 0.7rem max(0.75rem, var(--safe-area-bottom));
-      background: color-mix(in srgb, var(--explorer-surface-raised) 96%, transparent);
-      box-shadow: var(--explorer-shadow);
-      backdrop-filter: blur(24px) saturate(1.2);
+      background: var(--cfms-acrylic);
+      box-shadow: var(--shadow64);
+      -webkit-backdrop-filter: var(--cfms-material-filter);
+      backdrop-filter: var(--cfms-material-filter);
       transition: transform 220ms var(--motion-easing-emphasized-decelerate);
     }
     .explorer-navigation--open { transform: translateX(0); }
@@ -757,7 +758,6 @@
       display: block;
       border: 0;
       background: rgba(0, 0, 0, 0.42);
-      backdrop-filter: blur(2px);
       animation: drawer-scrim-in 180ms ease-out both;
     }
 
@@ -788,5 +788,8 @@
     .explorer-public-utility-close,
     .explorer-topbar-actions :global(button) { min-height: 44px; min-width: 44px; }
     .explorer-topbar :global(.explorer-mobile-menu) { min-width: 44px; min-height: 44px; }
+  }
+  @media (forced-colors: active) {
+    .explorer-navigation { box-shadow: none; }
   }
 </style>

@@ -9,7 +9,7 @@ related_targets: []
 
 - Visitor mode: Operate. Navigate permitted document workflows and account/session actions.
 - Authority: Fluent Operations Workspace in DESIGN.md; all platforms share Fluent with input-aware density.
-- Keep top bar, 244px navigation, route structure, existing keyboard regions, favorite entries and 820px drawer breakpoint. Mica appears in persistent Windows chrome and the shared workspace base only after native confirmation; content cards, forms and tables retain their readable fills. Menus and mobile drawer use Acrylic-style CSS.
+- Keep top bar, 244px navigation, route structure, existing keyboard regions, favorite entries and 820px drawer breakpoint. Mica appears in persistent Windows chrome and the shared workspace base only after native confirmation; content cards and tables use the shared 60% neutral material, fields 55%, and menus/dialogs/drawers 72%, with 20px blur and solid accessibility fallbacks. Viewport dialogs and context menus mount at the document body; content filters live on paint layers.
 - Preserve authentication, permissions, connection state, screen protection and English/Simplified Chinese. Support both themes, reduced motion, keyboard, touch and narrow/short windows.
 - Brand moment: the circular action and image choreography belong only to authentication; ordinary controls use restrained Fluent feedback.
 - Business-page migration is tracked in FLUENT-MIGRATION.md. All platforms use bundled Noto Sans / Noto Sans SC; existing serif text uses Noto Serif / Noto Serif SC.

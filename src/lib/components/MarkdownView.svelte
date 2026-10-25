@@ -86,7 +86,7 @@
   .markdown-view :global(:where(code, kbd)) {
     border-radius: 4px;
     padding: 0.1rem 0.28rem;
-    background: color-mix(in srgb, var(--color-md3-surface-container-high) 82%, transparent);
+    background: color-mix(in srgb, var(--colorNeutralBackground1) 82%, transparent);
     color: var(--color-md3-on-surface);
     font: 0.8rem/1.45 var(--font-md3-mono);
   }

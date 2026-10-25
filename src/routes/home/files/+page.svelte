@@ -62,7 +62,6 @@
     ServerDocumentEntry,
     ServerObjectType,
   } from '$lib/api';
-  import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import FileAddressBar from '$lib/components/FileAddressBar.svelte';
   import AccessDeniedDialog from '$lib/components/AccessDeniedDialog.svelte';
   import AccessDeniedNotice from '$lib/components/AccessDeniedNotice.svelte';
@@ -89,6 +88,7 @@
     type FileTableViewportAnchor,
   } from '$lib/components/files/FileTable.svelte';
   import ExplorerCommandBar from '$lib/components/explorer/ExplorerCommandBar.svelte';
+  import ExplorerNavigationBar from '$lib/components/explorer/ExplorerNavigationBar.svelte';
   import ExplorerDetailsPane from '$lib/components/explorer/ExplorerDetailsPane.svelte';
   import ExplorerStatusBar from '$lib/components/explorer/ExplorerStatusBar.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -124,6 +124,10 @@
   import { graphWidth, laneX, buildRevisionRows } from '$lib/files/revision-graph';
   import {
     fileManagerNavigationStore,
+    recordDirectoryVisit,
+    resolveDirectoryVisit,
+    directoryHistoryTarget,
+    type DirectoryNavigationTimeline,
     type DirectoryNavigationSnapshot,
   } from '$lib/files/file-manager-navigation';
   import type { SortDirection, SortField } from '$lib/files/sorting';
@@ -234,6 +238,9 @@
   let navigationRootId = $state<string | null>(null);
   let navigationRootLabel = $state<string | null>(null);
   let navigationStateReady = $state(false);
+  let navigationScope = $state<FilePreferenceScope | null>(null);
+  let navigationTimeline = $state<DirectoryNavigationTimeline>({ entries: [], cursor: -1 });
+  let navigationBusy = $state(false);
   let userPreference = $state<UserPreference | null>(null);
   let batchBusy = $state(false);
   let dropMoveBusy = $state(false);
@@ -491,6 +498,9 @@
     return buildSearchResultRows(searchPreview.results);
   });
   const searchPreviewHasQuery = $derived(searchQuery.trim().length > 0);
+  const directorySearchPlaceholder = $derived(
+    $t('files.directorySearchPlaceholder', { values: { directory: currentDirectoryName() } }),
+  );
   const hasSearchPermission = $derived(canSearchFiles(authStore.permissions));
   const canUseServerSearch = $derived(hasSearchPermission && !searchDeniedByServer);
   const searchPreviewCanSearch = $derived(
@@ -577,11 +587,11 @@
   });
 
   $effect(() => {
-    if (!navigationStateReady) return;
-    fileManagerNavigationStore.remember(
-      serverStateStore.remoteAddress,
-      authStore.username,
-      captureDirectoryNavigation(),
+    if (!navigationStateReady || !navigationScope) return;
+    fileManagerNavigationStore.rememberTimeline(
+      navigationScope.serverAddress,
+      navigationScope.username,
+      navigationTimeline,
     );
   });
 
@@ -769,8 +779,6 @@
       markFilePerformance('files:list-request-start');
       const resp = await directoryLoader.requestPage(generation, normalizedFolderId, null, DIRECTORY_PAGE_SIZE);
       if (!resp || generation !== directoryGeneration) return false;
-      currentFolderId = normalizedFolderId;
-      parentId = normalizeDirectoryId(resp.parent_id);
       directoryNextCursor = resp.next_cursor;
       const firstSnapshot = new Promise<boolean>((resolve) => {
         firstDirectorySnapshotGeneration = generation;
@@ -779,6 +787,8 @@
       directorySorter?.append(generation, revision, resp.folders, resp.documents, !resp.has_more);
       const firstVisible = await firstSnapshot;
       if (!firstVisible || generation !== directoryGeneration) return false;
+      currentFolderId = normalizedFolderId;
+      parentId = normalizeDirectoryId(resp.parent_id);
       if (resp.has_more) {
         if (!resp.next_cursor) throw new Error('Directory page reported more items without a cursor.');
         void continueDirectoryLoad(generation, resp.next_cursor);
@@ -805,6 +815,44 @@
   }
 
   // --- Navigation ---
+
+  const navigationUnavailable = $derived(navigationBusy || addressLookupBusy || directoryLoadPhase === 'initial-loading');
+  const canGoBack = $derived(navigationTimeline.cursor > 0);
+  const canGoForward = $derived(navigationTimeline.cursor + 1 < navigationTimeline.entries.length);
+
+  // All location changes commit their breadcrumb and timeline together. Reloads
+  // remain loadDirectory calls, so file operations never create history entries.
+  async function navigateDirectory(snapshot: DirectoryNavigationSnapshot, historyCursor?: number): Promise<boolean> {
+    if (navigationBusy) return false;
+    navigationBusy = true;
+    closeSearchPreview();
+    const previous = captureDirectoryNavigation();
+    try {
+      const request = loadDirectory(snapshot.folderId, true, previous);
+      const generation = directoryGeneration;
+      const visit = await resolveDirectoryVisit(
+        navigationTimeline, snapshot,
+        async () => await request ? 'loaded' : isDeniedDirectory(snapshot.folderId) ? 'denied' : 'failed',
+        () => generation === directoryGeneration,
+        historyCursor,
+      );
+      if (!visit) {
+        if (generation === directoryGeneration) applyDirectoryNavigation(previous);
+        return false;
+      }
+      applyDirectoryNavigation(visit.snapshot);
+      navigationTimeline = visit.timeline;
+      return visit.loaded;
+    } finally {
+      navigationBusy = false;
+    }
+  }
+
+  async function handleHistoryNavigate(direction: -1 | 1) {
+    if (navigationUnavailable) return;
+    const target = directoryHistoryTarget(navigationTimeline, direction);
+    if (target) await navigateDirectory(target.snapshot, target.cursor);
+  }
 
   function handleAddressBeginEdit() {
     addressLookupError = null;
@@ -851,6 +899,7 @@
   }
 
   async function handleAddressSubmit(rawPath: string) {
+    if (navigationUnavailable) return;
     const path = rawPath.trim();
     if (!path) {
       addressLookupError = $t('files.addressRequired');
@@ -866,18 +915,15 @@
       const resolvedSegments = decodeResolvedNodePath(path, response.node_ids);
 
       if (resolvedSegments.length === 0) {
-        const ok = await loadDirectory(null, true, undefined, false);
+        const ok = await navigateDirectory({ folderId: null, navigationRootId: null, navigationRootLabel: null, navHistory: [] });
         if (runId !== addressLookupRunId) return;
-        if (!ok) {
+        if (!ok && !isDeniedDirectory(null)) {
           error = null;
           addressLookupError = $t('files.addressRequestFailed');
           return;
         }
-        navigationRootId = null;
-        navigationRootLabel = null;
-        navHistory = [];
         addressBar?.finishEdit();
-        status = $t('files.addressDirectoryOpened');
+        if (ok) status = $t('files.addressDirectoryOpened');
         return;
       }
 
@@ -893,31 +939,35 @@
       if (runId !== addressLookupRunId) return;
 
       if (target.kind === 'directory') {
-        const ok = await loadDirectory(terminal.id, true, undefined, false);
+        const ok = await navigateDirectory({
+          folderId: terminal.id, navigationRootId: null, navigationRootLabel: null,
+          navHistory: resolvedDirectoryHistory(resolvedSegments),
+        });
         if (runId !== addressLookupRunId) return;
-        if (!ok) {
+        if (!ok && !isDeniedDirectory(terminal.id)) {
           error = null;
           addressLookupError = $t('files.addressRequestFailed');
           return;
         }
-        navigationRootId = null;
-        navigationRootLabel = null;
-        navHistory = resolvedDirectoryHistory(resolvedSegments);
         addressBar?.finishEdit();
-        status = $t('files.addressDirectoryOpened');
+        if (ok) status = $t('files.addressDirectoryOpened');
         return;
       }
 
-      const ok = await loadDirectory(expectedParentId, true, undefined, false);
+      const ok = await navigateDirectory({
+        folderId: expectedParentId, navigationRootId: null, navigationRootLabel: null,
+        navHistory: resolvedDirectoryHistory(resolvedSegments.slice(0, -1)),
+      });
       if (runId !== addressLookupRunId) return;
-      if (!ok) {
+      if (!ok && !isDeniedDirectory(expectedParentId)) {
         error = null;
         addressLookupError = $t('files.addressRequestFailed');
         return;
       }
-      navigationRootId = null;
-      navigationRootLabel = null;
-      navHistory = resolvedDirectoryHistory(resolvedSegments.slice(0, -1));
+      if (!ok) {
+        addressBar?.finishEdit();
+        return;
+      }
       pendingAddressDocument = {
         id: target.id,
         label: target.label,
@@ -934,74 +984,50 @@
   }
 
   async function handleNavigate(folderId: string, folderName: string) {
+    if (navigationUnavailable) return;
     const previousFolderId = currentFolderId;
-    const ok = await loadDirectory(folderId);
-    if (ok || isDeniedDirectory(folderId)) {
-      navHistory = [...navHistory, { label: folderName, id: folderId }];
-    }
+    const ok = await navigateDirectory({
+      ...captureDirectoryNavigation(),
+      folderId,
+      navHistory: [...navHistory, { label: folderName, id: folderId }],
+    });
     if (ok) {
-      await rememberVisit(
-        currentFilePreferenceScope(),
-        {
-          type: 'directory',
-          id: folderId,
-          name: folderName,
-          parentId: previousFolderId,
-        },
-      );
+      await rememberVisit(currentFilePreferenceScope(), {
+        type: 'directory', id: folderId, name: folderName, parentId: previousFolderId,
+      });
     }
   }
 
   async function handleBreadcrumbNavigate(targetId: string) {
-    // ROOT_DIRECTORY_ID means root
+    if (navigationUnavailable) return;
     if (targetId === ROOT_DIRECTORY_ID) {
-      const returnNavigation = captureDirectoryNavigation();
-      navigationRootId = null;
-      navigationRootLabel = null;
-      navHistory = [];
-      await loadDirectory(null, false, returnNavigation);
+      await navigateDirectory({ folderId: null, navigationRootId: null, navigationRootLabel: null, navHistory: [] });
       return;
     }
-    if (sameDirectoryId(targetId, navigationRootId)) {
-      const ok = await loadDirectory(navigationRootId);
-      if (ok || isDeniedDirectory(navigationRootId)) navHistory = [];
-      return;
-    }
-    // Truncate history to the clicked segment
-    const idx = navHistory.findIndex((h) => h.id === targetId);
-    if (idx >= 0) {
-      const ok = await loadDirectory(targetId);
-      if (ok || isDeniedDirectory(targetId)) navHistory = navHistory.slice(0, idx + 1);
-      return;
-    }
-    await loadDirectory(targetId);
+    const idx = navHistory.findIndex((entry) => entry.id === targetId);
+    await navigateDirectory({
+      ...captureDirectoryNavigation(),
+      folderId: targetId,
+      navHistory: sameDirectoryId(targetId, navigationRootId) ? [] : idx >= 0 ? navHistory.slice(0, idx + 1) : navHistory,
+    });
   }
 
   async function handleGoToParent() {
+    if (navigationUnavailable) return;
     if (directoryAccessDenied) {
       await handleReturnFromDeniedDirectory();
       return;
     }
     if (parentTargetId === undefined) return;
-    const targetParentId = parentTargetId;
-
-    const ok = await loadDirectory(targetParentId);
-    if (ok && navHistory.length > 0) {
-      navHistory = navHistory.slice(0, -1);
-    }
+    await navigateDirectory({ ...captureDirectoryNavigation(), folderId: parentTargetId, navHistory: navHistory.slice(0, -1) });
   }
 
   async function handleReturnFromDeniedDirectory() {
-    const deniedState = directoryAccessDenied;
-    if (!deniedState) return;
-
-    const previous = deniedState.returnNavigation;
-    const ok = await loadDirectory(previous.folderId);
-    if (!ok) return;
-    applyDirectoryNavigation(previous);
+    if (directoryAccessDenied) await navigateDirectory(directoryAccessDenied.returnNavigation);
   }
 
   async function handleJumpToDirectory() {
+    if (navigationUnavailable) return;
     const value = await dialogStore.prompt({
       title: $t('files.jumpToDirectory'),
       message: $t('files.jumpToDirectoryPrompt'),
@@ -1011,14 +1037,11 @@
       selectOnOpen: true,
     });
     if (value === null) return;
-
     const target = normalizeDirectoryId(value);
-    const ok = await loadDirectory(target, true);
-    if (!ok && !isDeniedDirectory(target)) return;
-
-    navigationRootId = target;
-    navigationRootLabel = target === null ? null : shortIdentifier(target);
-    navHistory = [];
+    const ok = await navigateDirectory({
+      folderId: target, navigationRootId: target,
+      navigationRootLabel: target === null ? null : shortIdentifier(target), navHistory: [],
+    });
     if (ok) status = $t('files.jumpToDirectorySuccess');
   }
 
@@ -1365,10 +1388,10 @@
   function executeFileManagerShortcut(shortcut: FileManagerShortcut, event: KeyboardEvent) {
     if (shortcut === 'go-parent') {
       event.preventDefault();
-      if (canGoToParent && !loading) void handleGoToParent();
+      if (canGoToParent && !navigationUnavailable) void handleGoToParent();
     } else if (shortcut === 'refresh') {
       event.preventDefault();
-      if (!loading) void loadDirectory(currentFolderId, true);
+      if (!navigationUnavailable) void loadDirectory(currentFolderId, true);
     } else if (shortcut === 'create-folder') {
       event.preventDefault();
       if (!loading && !batchBusy) void handleCreateFolder();
@@ -3499,14 +3522,12 @@
   }
 
   async function navigateToSearchDirectory(directory: { id: string; name: string }) {
+    if (navigationUnavailable) return;
     closeSearchPreview();
     closeSearchDialog();
-    const ok = await loadDirectory(directory.id);
-    if (ok || isDeniedDirectory(directory.id)) {
-      navigationRootId = directory.id;
-      navigationRootLabel = directory.name;
-      navHistory = [];
-    }
+    const ok = await navigateDirectory({
+      folderId: directory.id, navigationRootId: directory.id, navigationRootLabel: directory.name, navHistory: [],
+    });
     if (ok) {
       await rememberVisit(currentFilePreferenceScope(), directoryToRecord(directory, null));
     }
@@ -3520,14 +3541,15 @@
   }
 
   async function navigateToSearchDocument(document: { parent_id?: string | null; name?: string; title?: string }) {
+    if (navigationUnavailable) return;
     closeSearchPreview();
     closeSearchDialog();
     const parent = normalizeDirectoryId(document.parent_id);
-    const ok = await loadDirectory(parent);
+    const ok = await navigateDirectory({
+      folderId: parent, navigationRootId: parent,
+      navigationRootLabel: parent === null ? null : shortIdentifier(parent), navHistory: [],
+    });
     if (ok) {
-      navigationRootId = parent;
-      navigationRootLabel = parent === null ? null : shortIdentifier(parent);
-      navHistory = [];
       status = $t('files.searchOpenedParent', { values: { name: document.name ?? document.title ?? '' } });
     }
   }
@@ -3612,6 +3634,15 @@
     let disposed = false;
     directorySorter = createProgressiveDirectorySorter(handleDirectorySnapshot, handleDirectorySorterError);
     const unregisterKeyboardCommands = registerKeyboardCommands([
+      ...([-1, 1] as const).map((direction) => ({
+        id: direction === -1 ? 'files.back' : 'files.forward',
+        label: () => $t(direction === -1 ? 'files.goBack' : 'files.goForward'),
+        group: () => $t('files.title'),
+        shortcuts: [{ key: direction === -1 ? 'ArrowLeft' : 'ArrowRight', alt: true }],
+        scope: 'page' as const,
+        enabled: () => (direction === -1 ? canGoBack : canGoForward) && !navigationUnavailable && !hasBlockingFilesDialog(),
+        handler: () => handleHistoryNavigate(direction),
+      })),
       {
         id: 'files.find',
         label: () => $t('files.search'),
@@ -3628,7 +3659,7 @@
         group: () => $t('files.title'),
         shortcuts: [{ key: 'd', alt: true }, { key: 'F4' }],
         scope: 'page',
-        enabled: () => nodeLookupEnabled && !addressLookupBusy && !hasBlockingFilesDialog(),
+        enabled: () => nodeLookupEnabled && !navigationUnavailable && !hasBlockingFilesDialog(),
         allowInEditable: true,
         handler: () => { void addressBar?.beginEdit(); },
       },
@@ -3638,7 +3669,7 @@
         group: () => $t('files.title'),
         shortcuts: [{ key: 'Backspace' }, { key: 'ArrowUp', alt: true }],
         scope: 'page',
-        enabled: () => canGoToParent && !loading && !hasBlockingFilesDialog(),
+        enabled: () => canGoToParent && !navigationUnavailable && !hasBlockingFilesDialog(),
         handler: (event) => executeFileManagerShortcut('go-parent', event),
       },
       {
@@ -3647,7 +3678,7 @@
         group: () => $t('files.title'),
         shortcuts: [{ key: 'F5' }, { key: 'r', primary: true }],
         scope: 'page',
-        enabled: () => !loading && !hasBlockingFilesDialog(),
+        enabled: () => !navigationUnavailable && !hasBlockingFilesDialog(),
         handler: (event) => executeFileManagerShortcut('refresh', event),
       },
       {
@@ -3757,21 +3788,32 @@
     const hasRequestedFolder = page.url.searchParams.has('folder');
     const requestedFolder = normalizeDirectoryId(page.url.searchParams.get('folder'));
     const requestedName = page.url.searchParams.get('name');
-    const initialReturnNavigation = hasRequestedFolder ? captureDirectoryNavigation() : undefined;
-    const rememberedNavigation = hasRequestedFolder
-      ? null
-      : fileManagerNavigationStore.restore(serverStateStore.remoteAddress, authStore.username);
-    const initialNavigation = rememberedNavigation ?? {
-      folderId: requestedFolder,
-      navigationRootId: requestedFolder,
-      navigationRootLabel: requestedFolder
-        ? requestedName || shortIdentifier(requestedFolder)
-        : null,
-      navHistory: [],
+    navigationScope = currentFilePreferenceScope();
+    const rememberedTimeline = fileManagerNavigationStore.restoreTimeline(navigationScope.serverAddress, navigationScope.username);
+    const initialNavigation = rememberedTimeline?.entries[rememberedTimeline.cursor] ?? {
+      folderId: null, navigationRootId: null, navigationRootLabel: null, navHistory: [],
     };
     applyDirectoryNavigation(initialNavigation);
+    navigationTimeline = rememberedTimeline ?? { entries: [], cursor: -1 };
     navigationStateReady = true;
-    loadDirectory(initialNavigation.folderId, false, initialReturnNavigation);
+    if (hasRequestedFolder) {
+      const visit = navigateDirectory({
+        folderId: requestedFolder, navigationRootId: requestedFolder,
+        navigationRootLabel: requestedFolder ? requestedName || shortIdentifier(requestedFolder) : null,
+        navHistory: [],
+      });
+      const generation = directoryGeneration;
+      void visit.then((ok) => {
+        if (ok || disposed || generation !== directoryGeneration || isDeniedDirectory(requestedFolder)) return;
+        // This route has no cached rows yet. Reload the previous location when
+        // an explicit URL/favorite cannot be opened, without recording a visit.
+        if (navigationTimeline.entries.length === 0) navigationTimeline = recordDirectoryVisit(navigationTimeline, initialNavigation);
+        if (!sameDirectoryId(requestedFolder, initialNavigation.folderId)) void loadDirectory(initialNavigation.folderId, true);
+      });
+    } else {
+      navigationTimeline = recordDirectoryVisit(navigationTimeline, initialNavigation);
+      void loadDirectory(initialNavigation.folderId);
+    }
     reloadUserPreference();
     return () => {
       disposed = true;
@@ -3820,41 +3862,37 @@
     </div>
   {/if}
 
-  <div class="files-navigation-row">
-    <IconButton
-      icon="arrowUpward"
-      label={$t('files.parentDirectory')}
-      disabled={!canGoToParent}
-      onclick={handleGoToParent}
-    />
-    <div
-      class="files-address-bar"
-      class:files-address-bar--editable={nodeLookupEnabled}
-    >
-      {#if nodeLookupEnabled}
-        <FileAddressBar
-          bind:this={addressBar}
-          segments={breadcrumbSegments}
-          lookupEnabled={nodeLookupEnabled}
-          knownPath={knownAddressPath}
-          busy={addressLookupBusy}
-          error={addressLookupError}
-          onNavigate={handleBreadcrumbNavigate}
-          onSubmit={handleAddressSubmit}
-          onCancel={handleAddressCancel}
-          onBeginEdit={handleAddressBeginEdit}
-        />
-      {:else}
-        <Breadcrumb segments={breadcrumbSegments} onNavigate={handleBreadcrumbNavigate} />
-      {/if}
-    </div>
-    <span class="files-navigation-spacer" aria-hidden="true"></span>
+  <ExplorerNavigationBar
+    {canGoBack} {canGoForward} {canGoToParent}
+    search={canUseServerSearch ? serverSearch : undefined}
+    busy={navigationUnavailable}
+    onBack={() => { void handleHistoryNavigate(-1); }}
+    onForward={() => { void handleHistoryNavigate(1); }}
+    onParent={() => { void handleGoToParent(); }}
+    onRefresh={() => { void loadDirectory(currentFolderId, true); }}
+  >
+    {#snippet address()}
+      <FileAddressBar
+        bind:this={addressBar}
+        segments={breadcrumbSegments}
+        lookupEnabled={nodeLookupEnabled}
+        knownPath={knownAddressPath}
+        busy={navigationUnavailable}
+        error={addressLookupError}
+        onNavigate={handleBreadcrumbNavigate}
+        onSubmit={handleAddressSubmit}
+        onCancel={handleAddressCancel}
+        onBeginEdit={handleAddressBeginEdit}
+      />
+    {/snippet}
+  </ExplorerNavigationBar>
 
+  {#snippet serverSearch()}
     <!-- Search -->
     {#if canUseServerSearch}
       <div bind:this={searchPreviewRoot} class="files-search relative">
       <form
-        class="files-search-field"
+        class="files-search-field cfms-field-surface"
         data-search-box
         onsubmit={(e) => { e.preventDefault(); openSearchDialog(true); }}
       >
@@ -3862,7 +3900,7 @@
             type="text"
             class="files-search-input cfms-native-field"
             data-focus-ring="delegated"
-            placeholder={$t('files.searchPlaceholder')}
+            placeholder={directorySearchPlaceholder}
             bind:value={searchQuery}
             bind:this={searchInput}
             onfocus={openSearchPreview}
@@ -3871,7 +3909,7 @@
             role="combobox"
             aria-expanded={searchPreview.open}
             aria-controls="files-search-preview-list"
-            aria-label={$t('files.searchPlaceholder')}
+            aria-label={directorySearchPlaceholder}
             aria-keyshortcuts="Control+F Meta+F"
             aria-autocomplete="list"
             aria-activedescendant={searchPreview.open && searchPreviewActiveIndex >= 0
@@ -3910,10 +3948,10 @@
       {#if searchPreview.open}
         <div
           id="files-search-preview-panel"
-          class="search-preview-panel fixed z-40 overflow-hidden rounded-xl border border-md3-outline bg-md3-surface-container shadow-2xl"
+          class="search-preview-panel cfms-acrylic-surface fixed z-40 overflow-hidden"
           style={searchPreviewPanelStyle}
         >
-          <div class="border-b border-md3-outline bg-md3-surface-container-high px-4 py-3">
+          <div class="border-b border-md3-outline px-4 py-3">
             <div class="search-preview-controls">
               <label class="inline-flex items-center gap-1.5 text-sm text-md3-on-surface-variant">
                 <MdCheckbox
@@ -4059,8 +4097,7 @@
       </div>
     {/if}
 
-    <IconButton icon="refresh" label={$t('common.refresh')} onclick={() => loadDirectory(currentFolderId)} />
-  </div>
+  {/snippet}
 
   <div class="files-command-row">
     <div class="files-primary-actions">
@@ -4169,63 +4206,21 @@
     background: var(--explorer-background);
   }
 
-  .files-navigation-row {
-    position: relative;
-    z-index: 24;
-    display: flex;
-    min-height: 58px;
-    align-items: center;
-    gap: 8px;
-    border-bottom: 1px solid var(--explorer-border);
-    padding: 0.55rem 0.7rem;
-    background: var(--explorer-surface-raised);
-  }
-
-  .files-address-bar {
-    display: flex;
-    min-width: 180px;
-    width: fit-content;
-    flex: 0 1 auto;
-    align-items: center;
-    min-height: 36px;
-    overflow-x: auto;
-    border: 1px solid var(--explorer-border);
-    border-radius: var(--explorer-radius-small);
-    padding: 0.35rem 2.5rem 0.35rem 0.7rem;
-    background: var(--explorer-surface);
-  }
-
-  .files-address-bar--editable {
-    width: min(620px, 50vw);
-    max-width: none;
-    flex: 1 1 320px;
-    overflow: visible;
-    padding: 0;
-  }
-
-  .files-navigation-spacer {
-    min-width: 0;
-    flex: 1 1 0;
-  }
-
-  .files-search {
-    min-width: 0;
-    width: clamp(220px, 22vw, 360px);
-    flex: none;
-  }
+  .files-search { min-width: 0; width: 100%; }
 
   .files-search-field {
     display: flex;
     min-width: 0;
-    min-height: 36px;
+    box-sizing: border-box;
+    height: var(--files-field-height);
     align-items: center;
     gap: 2px;
     border: 1px solid var(--colorNeutralStroke1);
     border-bottom-color: var(--colorNeutralStrokeAccessible);
     border-radius: var(--borderRadiusMedium);
-    padding: 1px;
+    padding: 0;
     color: var(--colorNeutralForeground1);
-    background: var(--colorNeutralBackground2);
+    background: transparent;
   }
   .files-search-field:hover { border-color: var(--colorNeutralStroke1Hover); }
   [data-search-box]:has([data-focus-ring="delegated"]:focus) {
@@ -4239,6 +4234,7 @@
     align-self: stretch;
     border: 0;
     padding: 5px 10px;
+    text-overflow: ellipsis;
     color: inherit;
     background: transparent;
     font: 400 14px/20px var(--fontFamilyBase);
@@ -4247,29 +4243,36 @@
   :global(.files-search-clear[data-fluent-owner="routes-home-files-page"]),
   :global(.files-search-submit[data-fluent-owner="routes-home-files-page"]) {
     flex: none;
-    inline-size: 32px;
-    block-size: 32px;
+    inline-size: calc(var(--files-field-height) - 2px);
+    block-size: calc(var(--files-field-height) - 2px);
+    min-block-size: 0;
+    min-inline-size: 0;
     padding: 0;
     color: var(--colorNeutralForeground2);
   }
   :global(.files-search-submit[data-fluent-owner="routes-home-files-page"][disabled]) { color: var(--colorNeutralForegroundDisabled); }
-
-  .files-navigation-row :global(.md-icon-button) {
-    border-radius: var(--borderRadiusMedium);
-    color: var(--explorer-text-muted);
-  }
 
   .files-command-row {
     position: relative;
     z-index: 20;
     display: flex;
     min-height: 48px;
+    flex-shrink: 0;
     align-items: center;
     gap: 12px;
     overflow: hidden;
     border-bottom: 1px solid var(--explorer-border);
     padding: 0.35rem 0.7rem;
     background: var(--explorer-surface);
+  }
+
+  :global(html[data-window-backdrop="mica"]) .files-page,
+  :global(html[data-window-backdrop="mica"]) .files-command-row {
+    background: transparent;
+  }
+
+  :global(html[data-window-backdrop="mica"]) .files-page :global(.explorer-status-bar) {
+    background: transparent;
   }
 
   .files-primary-actions {
@@ -4359,9 +4362,6 @@
   }
 
   .search-preview-panel {
-    border-color: var(--explorer-border-strong);
-    background: var(--colorNeutralBackground1);
-    box-shadow: var(--explorer-shadow);
     animation: search-preview-in 180ms var(--motion-easing-emphasized-decelerate) both;
   }
 
@@ -4374,13 +4374,13 @@
   .search-preview-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
 
   @media (pointer: coarse) {
-    .files-search-field { min-height: 48px; }
     .files-search-input { font-size: 16px; }
-    :global(.files-search-clear[data-fluent-owner="routes-home-files-page"]),
-    :global(.files-search-submit[data-fluent-owner="routes-home-files-page"]) { inline-size: 44px; block-size: 44px; }
     .search-preview-sort-option { min-height: 44px; }
   }
   @media (forced-colors: active) {
+    :global(html[data-window-backdrop]) .files-page,
+    :global(html[data-window-backdrop]) .files-command-row,
+    :global(html[data-window-backdrop]) .files-page :global(.explorer-status-bar) { background: Canvas; }
     .files-search-field { color: FieldText; background: Field; border-color: ButtonText; }
     [data-search-box]:has([data-focus-ring="delegated"]:focus) { outline: 2px solid Highlight; outline-offset: -2px; box-shadow: none; }
     .search-preview-sort-option[aria-pressed="true"] { color: HighlightText; background: Highlight; box-shadow: none; outline: 1px solid Highlight; }
@@ -4435,29 +4435,6 @@
   }
 
   @media (max-width: 720px) {
-    .files-search { width: clamp(140px, 34vw, 240px); }
-    .files-navigation-row {
-      min-height: 52px;
-      flex-wrap: nowrap;
-      padding: 0.4rem;
-    }
-
-    .files-address-bar {
-      min-width: 0;
-      width: auto;
-      max-width: none;
-      flex: 1 1 auto;
-      padding-inline: 0.45rem;
-    }
-
-    .files-address-bar--editable {
-      padding-inline: 0;
-    }
-
-    .files-navigation-spacer {
-      display: none;
-    }
-
     .files-command-row {
       min-height: 44px;
       padding-inline: 0.4rem;
@@ -4567,7 +4544,7 @@
 
       {#if searchDialog.results}
         <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-md3-outline">
-          <div class="flex items-center justify-between gap-3 border-b border-md3-outline bg-md3-surface-container-high px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
+          <div class="flex items-center justify-between gap-3 border-b border-md3-outline px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
             <span>
               {searchDialog.results.total_count === 0 && !searchDialog.loading
                 ? $t('files.searchNoResults', { values: { query: searchDialog.resultQuery } })

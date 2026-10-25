@@ -512,6 +512,7 @@ export const zh_CN = {
     serverSearch: '搜索',
     searchTitle: '搜索文件',
     searchPlaceholder: '在服务器上搜索文档和文件夹',
+    directorySearchPlaceholder: '在 {directory} 中搜索',
     searchDocuments: '文档',
     searchDirectories: '文件夹',
     searchPreviewResults: '预览结果',
@@ -821,6 +822,8 @@ export const zh_CN = {
     documentAccessDeniedTitle: '访问被拒绝',
     documentAccessDeniedDescription: '您当前没有权限访问此文档。如有疑问，请联系您的系统管理员。',
     accessDeniedAt: '访问时间',
+    goBack: '后退',
+    goForward: '前进',
     parentDirectory: '返回上一级',
   },
   tasks: {

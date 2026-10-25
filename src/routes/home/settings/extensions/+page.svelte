@@ -156,7 +156,7 @@
       <div class="cards">
         {#each extensionsStore.overview?.installed ?? [] as installation (installation.manifest.id)}
           {@const accountState = extensionsStore.overview?.accountStates[installation.manifest.id]}
-          <article class="extension-card">
+          <article class="extension-card cfms-content-surface">
             <div class="extension-icon"><Icon name="extensions" size="24px" /></div>
             <div class="extension-copy"><h3>{installation.manifest.name}</h3><p>{installation.manifest.description}</p><small>{installation.manifest.publisher} · v{installation.manifest.version} · {formatBytes(installation.disk_bytes)}</small></div>
             <label class="switch"><input type="checkbox" checked={accountState?.enabled ?? false} disabled={!authStore.isLoggedIn || busy !== null} onchange={() => toggle(installation)} /><span></span></label>

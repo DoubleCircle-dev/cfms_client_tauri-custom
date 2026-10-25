@@ -2,6 +2,7 @@
   import '@fluentui/web-components/text-input.js';
   import type { TextInput } from '@fluentui/web-components';
   import { tick, type Snippet } from 'svelte';
+  import { disabledAttribute } from '$lib/fluent/control';
 
   // Only non-sensitive types: this component reflects its value into attributes.
   interface Props {
@@ -79,6 +80,7 @@
 <fluent-text-input
   bind:this={element}
   use:forwardKeydown
+  use:disabledAttribute={disabled}
   {id} {name} {type} {disabled} {autocomplete} {placeholder}
   spellcheck="false"
   aria-label={label}
@@ -99,9 +101,15 @@
 </fluent-text-input>
 
 <style>
-  .cfms-text-input { display: block; inline-size: 100%; }
+  .cfms-text-input { display: block; inline-size: 100%; max-inline-size: none; }
   .cfms-text-input::part(label) { margin-block-end: 8px; padding-block-end: 0; font-weight: 400; }
   .cfms-text-input::part(control) { font-size: var(--fontSizeBase300); }
+  .cfms-text-input::part(root) {
+    background: var(--cfms-field-background);
+    -webkit-backdrop-filter: var(--cfms-material-filter);
+    backdrop-filter: var(--cfms-material-filter);
+  }
+  .cfms-text-input[disabled]::part(root) { background: var(--colorNeutralBackgroundDisabled); }
   .cfms-text-input[aria-invalid="true"] { --colorNeutralStroke1: var(--colorStatusDangerBorder1); --colorCompoundBrandStroke: var(--colorStatusDangerBorder1); }
   .cfms-text-input :global([slot]) { display: inline-flex; align-items: center; color: var(--colorNeutralForeground3); }
   @media (pointer: coarse) {

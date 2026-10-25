@@ -129,7 +129,7 @@
 {#if open}
   <aside
     bind:this={paneElement}
-    class="explorer-details-pane"
+    class="explorer-details-pane cfms-content-surface"
     class:is-resizing={resizeSession !== null}
     aria-label={model?.title ?? emptyTitle}
     data-keyboard-region="details"

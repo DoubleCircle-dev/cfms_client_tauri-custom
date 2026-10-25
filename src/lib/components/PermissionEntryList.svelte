@@ -141,7 +141,7 @@
     </FluentButton>
   </div>
 
-  <div class="search-field">
+  <div class="search-field cfms-field-surface">
     <Icon name="search" size="18px" />
     <input class="cfms-native-field"
       value={query}

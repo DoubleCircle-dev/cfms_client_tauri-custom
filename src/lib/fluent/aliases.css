@@ -6,8 +6,8 @@
   --color-md3-on-primary: var(--colorNeutralForegroundOnBrand);
   --color-md3-on-primary-container: var(--colorBrandForeground2);
   --color-md3-surface: var(--colorNeutralBackground3);
-  --color-md3-surface-container: var(--colorNeutralBackground2);
-  --color-md3-surface-container-high: var(--colorNeutralBackground1);
+  --color-md3-surface-container: var(--cfms-content-background);
+  --color-md3-surface-container-high: var(--cfms-content-background);
   --color-md3-surface-container-highest: var(--colorNeutralBackground1Hover);
   --color-md3-outline: var(--colorNeutralStroke1);
   --color-md3-outline-variant: var(--colorNeutralStroke2);
@@ -30,7 +30,7 @@
   --color-md3-tertiary-container: var(--colorStatusWarningBackground1);
   --color-md3-on-tertiary: var(--colorNeutralBackground1);
   --color-md3-on-tertiary-container: var(--colorStatusWarningForeground1);
-  --color-md3-field: var(--colorNeutralBackground1);
+  --color-md3-field: var(--cfms-field-background);
   --color-md3-bg-gradient-start: var(--colorNeutralBackground3);
   --color-md3-bg-gradient-mid-1: var(--colorNeutralBackground3);
   --color-md3-bg-gradient-mid-2: var(--colorNeutralBackground3);
@@ -52,8 +52,8 @@
   --auth-transition-duration: 600ms;
   --auth-transition-easing: cubic-bezier(0.2, 0, 0, 1);
   --explorer-background: var(--colorNeutralBackground3);
-  --explorer-surface: var(--colorNeutralBackground2);
-  --explorer-surface-raised: var(--colorNeutralBackground1);
+  --explorer-surface: var(--cfms-content-background);
+  --explorer-surface-raised: var(--cfms-content-background);
   --explorer-surface-hover: var(--colorNeutralBackground1Hover);
   --explorer-surface-selected: var(--colorNeutralBackground1Selected);
   --explorer-border: var(--colorNeutralStroke2);
@@ -71,8 +71,29 @@
   --explorer-radius-small: var(--borderRadiusMedium);
   --explorer-radius-medium: var(--borderRadiusXLarge);
   --explorer-radius-large: var(--borderRadius2XLarge);
-  --cfms-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 94%, transparent);
+  --cfms-content-background: var(--colorNeutralBackground1);
+  --cfms-field-background: var(--colorNeutralBackground1);
+  --cfms-acrylic: var(--colorNeutralBackground1);
+  --cfms-material-filter: none;
   --cfms-smoke: rgba(0, 0, 0, 0.4);
+}
+
+@supports ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+  :root {
+    --cfms-content-background: color-mix(in srgb, var(--colorNeutralBackground1) 60%, transparent);
+    --cfms-field-background: color-mix(in srgb, var(--colorNeutralBackground1) 55%, transparent);
+    --cfms-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 72%, transparent);
+    --cfms-material-filter: blur(20px) saturate(1.2);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --cfms-content-background: var(--colorNeutralBackground1);
+    --cfms-field-background: var(--colorNeutralBackground1);
+    --cfms-acrylic: var(--colorNeutralBackground1);
+    --cfms-material-filter: none;
+  }
 }
 
 :where(.explorer-shell, .workspace-palette) {
@@ -91,6 +112,9 @@ html[data-window-backdrop="mica"] :is(.explorer-shell, .workspace-palette) {
   :root:root {
     --colorStrokeFocus2: Highlight;
     --cfms-acrylic: Canvas;
+    --cfms-content-background: Canvas;
+    --cfms-field-background: Field;
+    --cfms-material-filter: none;
     --cfms-smoke: transparent;
   }
 }

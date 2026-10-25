@@ -19,6 +19,7 @@ class AppearanceStore {
   private colorSchemeMediaQuery: MediaQueryList | null = null;
   private reducedMotionMediaQuery: MediaQueryList | null = null;
   private forcedColorsMediaQuery: MediaQueryList | null = null;
+  private reducedTransparencyMediaQuery: MediaQueryList | null = null;
   private appearanceRevision = 0;
   private nativeAppearanceUpdate = Promise.resolve();
   private scopeKey: string | null = null;
@@ -39,14 +40,20 @@ class AppearanceStore {
       this.forcedColorsMediaQuery = window.matchMedia('(forced-colors: active)');
       this.forcedColorsMediaQuery.addEventListener('change', this.handleSystemAppearanceChange);
     }
+    if (!this.reducedTransparencyMediaQuery) {
+      this.reducedTransparencyMediaQuery = window.matchMedia('(prefers-reduced-transparency: reduce)');
+      this.reducedTransparencyMediaQuery.addEventListener('change', this.handleSystemAppearanceChange);
+    }
     this.applyToDocument();
     return () => {
       this.colorSchemeMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
       this.reducedMotionMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
       this.forcedColorsMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
+      this.reducedTransparencyMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
       this.colorSchemeMediaQuery = null;
       this.reducedMotionMediaQuery = null;
       this.forcedColorsMediaQuery = null;
+      this.reducedTransparencyMediaQuery = null;
     };
   }
 
@@ -117,7 +124,7 @@ class AppearanceStore {
     });
     root.dataset.windowBackdrop = 'solid';
     if (!isTauri()) return;
-    const enableMaterial = !this.forcedColorsMediaQuery?.matches;
+    const enableMaterial = !this.forcedColorsMediaQuery?.matches && !this.reducedTransparencyMediaQuery?.matches;
     this.nativeAppearanceUpdate = this.nativeAppearanceUpdate.then(async () => {
       if (revision !== this.appearanceRevision) return;
       await getCurrentWindow().setTheme(scheme);

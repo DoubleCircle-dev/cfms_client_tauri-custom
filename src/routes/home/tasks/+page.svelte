@@ -465,7 +465,7 @@
   </div>
 
   <div class="task-toolbar" role="toolbar" aria-label={$t('tasks.filters')}>
-    <label class="search-field">
+    <label class="search-field cfms-field-surface">
       <Icon name="search" size="18px" />
       <span class="sr-only">{$t('tasks.search')}</span>
       <input class="cfms-native-field" data-focus-ring="delegated" bind:value={searchQuery} placeholder={$t('tasks.searchPlaceholder')} />
@@ -499,7 +499,7 @@
   iconOnly
 ><Icon name="close" size="16px" /></FluentButton></div>
   {/if}
-  <section class="task-list-shell" aria-busy={loading}>
+  <section class="task-list-shell cfms-content-surface" aria-busy={loading}>
     {#if currentRows.length > 0}
       <VirtualList
         items={currentRows} keyOf={rowKey} estimateSize={estimateSize} gap={0} overscan={8}

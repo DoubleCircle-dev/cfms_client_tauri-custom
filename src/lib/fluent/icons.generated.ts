@@ -455,6 +455,10 @@ import svg452 from '@fluentui/svg-icons/icons/person_prohibited_24_regular.svg?r
 import svg453 from '@fluentui/svg-icons/icons/person_prohibited_24_filled.svg?raw';
 import svg454 from '@fluentui/svg-icons/icons/person_prohibited_20_regular.svg?raw';
 import svg455 from '@fluentui/svg-icons/icons/person_prohibited_20_filled.svg?raw';
+import svg456 from '@fluentui/svg-icons/icons/arrow_right_24_regular.svg?raw';
+import svg457 from '@fluentui/svg-icons/icons/arrow_right_24_filled.svg?raw';
+import svg458 from '@fluentui/svg-icons/icons/arrow_right_20_regular.svg?raw';
+import svg459 from '@fluentui/svg-icons/icons/arrow_right_20_filled.svg?raw';
 
 export const ICON_VARIANTS = {
   connect: { regular: svg0, filled: svg1, small: svg2, smallFilled: svg3 },
@@ -591,4 +595,5 @@ export const ICON_VARIANTS = {
   supervisedUserCircleOff: { regular: svg452, filled: svg453, small: svg454, smallFilled: svg455 },
   ifl: { regular: svg164, filled: svg165, small: svg166, smallFilled: svg167 },
   api: { regular: svg0, filled: svg1, small: svg2, smallFilled: svg3 },
+  arrowForward: { regular: svg456, filled: svg457, small: svg458, smallFilled: svg459 },
 } as const;

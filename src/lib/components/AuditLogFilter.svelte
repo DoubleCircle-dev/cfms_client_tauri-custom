@@ -192,7 +192,7 @@
   {#if open}
     <div
       id="audit-action-filter-panel"
-      class="filter-panel"
+      class="filter-panel cfms-acrylic-surface"
       class:filter-panel--above={panelPlacement === 'above'}
       role="dialog"
       aria-modal="false"
@@ -219,7 +219,7 @@
         </FluentButton>
       </header>
 
-      <div class="filter-search">
+      <div class="filter-search cfms-field-surface">
         <Icon name="search" size="18px" />
         <input class="cfms-native-field"
           bind:this={queryInput}
@@ -388,10 +388,10 @@
     border: 1px solid var(--color-md3-outline);
     border-radius: 12px;
     color: var(--color-md3-on-surface);
-    background: color-mix(in srgb, var(--color-md3-surface-container) 94%, transparent);
-    box-shadow: 0 18px 48px rgb(0 0 0 / 0.24);
-    -webkit-backdrop-filter: blur(20px) saturate(0.95);
-    backdrop-filter: none;
+    background: var(--cfms-acrylic);
+    box-shadow: var(--shadow64);
+    -webkit-backdrop-filter: var(--cfms-material-filter);
+    backdrop-filter: var(--cfms-material-filter);
   }
 
   .filter-panel--above {

@@ -792,7 +792,7 @@
   }
 </script>
 
-<div class="file-table-shell" style={`--file-row-height: ${rowHeight}px;`}>
+<div class="file-table-shell cfms-content-surface" style={`--file-row-height: ${rowHeight}px;`}>
   {#if loading}
     <div class="file-table-loading">
       <ProgressRing size={18} strokeWidth={2.5} label={$t('common.loadingEllipsis')} />
@@ -816,7 +816,7 @@
       onpointercancel={(event) => finishTablePointer(event, true)}
     >
       <div class="file-table-content" style={columnGridStyle}>
-        <div bind:this={tableHeader} class="file-table-grid file-table-header" class:is-column-resizing={columnResize !== null}>
+        <div bind:this={tableHeader} class="file-table-grid file-table-header cfms-content-surface" class:is-column-resizing={columnResize !== null}>
           <span aria-hidden="true"></span>
           <div class="file-table-column-header" data-file-column="name">
             <button class="file-table-sort-button" type="button" title={sortTitle('name')} onclick={() => onSort('name')}>
@@ -965,7 +965,7 @@
 
 <style>
   .file-table-loading { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 1rem; color: var(--explorer-text-muted); font-size: 12px; }
-  .file-table-shell { position: relative; min-width: 0; flex: 1; overflow: hidden; background: var(--colorNeutralBackground1); }
+  .file-table-shell { position: relative; min-width: 0; flex: 1; overflow: hidden; background: transparent; }
   .file-table-scroll-viewport { position: relative; width: 100%; height: 100%; min-width: 0; overflow: auto; overscroll-behavior: contain; }
   .file-table-scroll-viewport.is-marquee-selecting { cursor: crosshair; user-select: none; }
   .file-table-content {
@@ -981,7 +981,7 @@
     min-width: var(--file-table-content-width);
     min-height: 100%;
   }
-  .file-table-empty-overlay { position: absolute; z-index: 6; inset: 36px 0 0; display: flex; min-height: 0; align-items: stretch; justify-content: stretch; overflow: hidden; background: var(--explorer-background); }
+  .file-table-empty-overlay { position: absolute; z-index: 6; inset: 36px 0 0; display: flex; min-height: 0; align-items: stretch; justify-content: stretch; overflow: hidden; background: transparent; }
   .file-table-grid { display: grid; grid-template-columns: 28px var(--file-name-width, minmax(240px, 1fr)) var(--file-modified-width, 168px) var(--file-type-width, 112px) var(--file-size-width, 100px); align-items: center; gap: 8px; }
   .file-table-header { position: sticky; top: 0; z-index: 10; min-height: 36px; border-bottom: 1px solid var(--explorer-border-strong); padding: 0 0.7rem; color: var(--explorer-text); background: var(--explorer-surface-raised); font-size: 12px; }
   .file-table-column-header { position: relative; display: flex; min-width: 0; height: 100%; align-items: center; border-right: 1px solid var(--explorer-border); }

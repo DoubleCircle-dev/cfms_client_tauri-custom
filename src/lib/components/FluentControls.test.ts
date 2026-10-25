@@ -11,6 +11,18 @@ afterEach(() => { cleanup(); document.body.innerHTML = ''; });
 const children = createRawSnippet(() => ({ render: () => '<span>Continue</span>' }));
 
 describe('Svelte / Fluent interoperability', () => {
+  it('keeps text fields enabled by default and synchronizes the disabled attribute', async () => {
+    const props = { id: 'search-material', label: 'Search files' };
+    const view = render(FluentTextInput, props);
+    const host = view.container.querySelector<TextInput>('fluent-text-input')!;
+    expect(host.hasAttribute('disabled')).toBe(false);
+    expect(host.disabled).toBe(false);
+    await view.rerender({ ...props, disabled: true });
+    expect(host.hasAttribute('disabled')).toBe(true);
+    await view.rerender({ ...props, disabled: false });
+    expect(host.hasAttribute('disabled')).toBe(false);
+    expect(host.disabled).toBe(false);
+  });
   it('omits icon-only on labelled actions and adds it only for compact actions', async () => {
     const view = render(FluentButton, { children });
     const button = screen.getByRole('button', { name: 'Continue' });

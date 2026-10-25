@@ -45,7 +45,7 @@ afterEach(() => {
 describe('PermissionEntriesDialog', () => {
   it('directly stages an immediate grant and validates the inclusive time window', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    const { container } = render(PermissionEntriesDialog, {
+    const { baseElement: container } = render(PermissionEntriesDialog, {
       props: {
         title: 'Permissions',
         description: 'Manage permissions',

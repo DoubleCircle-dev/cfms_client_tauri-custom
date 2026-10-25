@@ -133,5 +133,6 @@ export const ICON_MAP = {
   "warningAmber": "warning",
   "supervisedUserCircleOff": "person_prohibited",
   "ifl": "wand",
-  "api": "plug_connected"
+  "api": "plug_connected",
+  "arrowForward": "arrow_right"
 } as const;

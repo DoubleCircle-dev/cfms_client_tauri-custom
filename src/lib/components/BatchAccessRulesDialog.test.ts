@@ -166,7 +166,7 @@ describe('BatchAccessRulesDialog property-style editing', () => {
     await waitFor(() => expect(view.onApplied).toHaveBeenCalledOnce());
     expect(view.onClose).not.toHaveBeenCalled();
     expect(screen.getByText('Refreshing the directory…')).toBeTruthy();
-    expect(view.container.querySelector('.batch-rules-editor')).not.toBeNull();
+    expect(view.baseElement.querySelector('.batch-rules-editor')).not.toBeNull();
     refresh.resolve();
     if (action === 'OK') await waitFor(() => expect(view.onClose).toHaveBeenCalledOnce());
     else {

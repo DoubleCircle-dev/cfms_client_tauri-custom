@@ -12,6 +12,7 @@
     isContextMenuDivider,
   } from '$lib/components/context-menu';
   import { focusRovingItem } from '$lib/keyboard';
+  import { portal } from '$lib/actions/portal';
 
   interface Props {
     open: boolean;
@@ -115,6 +116,7 @@
 {#if open && visibleItems.length > 0}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
+    use:portal
     class="fixed inset-0 z-40"
     role="presentation"
     transition:fade={{ duration: 90 }}
@@ -126,8 +128,8 @@
   ></div>
   <div
     bind:this={menuEl}
-    class="context-menu-surface fixed z-50 bg-md3-surface-container
-           rounded-xl border border-md3-outline shadow-lg
+    use:portal
+    class="context-menu-surface cfms-acrylic-surface fixed z-50
            py-1 min-w-[190px] max-w-[min(260px,calc(100vw-16px))]"
     style="left: {menuX}px; top: {menuY}px; transform-origin: {originX} {originY};"
     transition:menuScale={{ duration: 140 }}

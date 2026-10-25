@@ -32,9 +32,10 @@
   let editing = $state(false);
   let value = $state('');
   let input = $state<HTMLInputElement | null>(null);
+  let breadcrumbViewport = $state<HTMLDivElement | null>(null);
 
   export async function beginEdit() {
-    if (!lookupEnabled || editing) return;
+    if (!lookupEnabled || editing || busy) return;
     value = knownPath ?? '';
     editing = true;
     onBeginEdit();
@@ -69,6 +70,15 @@
   $effect(() => {
     if (!lookupEnabled) editing = false;
   });
+
+  $effect(() => {
+    // Re-run after navigation and after leaving the editor. Reveal the current
+    // directory while keeping ancestors available through horizontal scrolling.
+    segments;
+    if (!editing) void tick().then(() => {
+      if (breadcrumbViewport) breadcrumbViewport.scrollLeft = breadcrumbViewport.scrollWidth;
+    });
+  });
 </script>
 
 <div
@@ -78,11 +88,12 @@
   aria-busy={busy}
 >
   {#if editing}
-    <form class="file-address__form" aria-label={$t('files.addressLabel')} onsubmit={(event) => { event.preventDefault(); submit(); }}>
+    <form class="file-address__form cfms-field-surface" aria-label={$t('files.addressLabel')} onsubmit={(event) => { event.preventDefault(); submit(); }}>
       <input
         bind:this={input}
         bind:value
         class="cfms-native-field file-address__input"
+        data-focus-ring="delegated"
         type="text"
         inputmode="url"
         autocomplete="off"
@@ -116,8 +127,8 @@
       {error ?? $t('files.addressHelp')}
     </span>
   {:else}
-    <div class="file-address__view" role="group" aria-label={$t('files.addressLabel')} onpointerup={handleBlankPointer}>
-      <div class="file-address__breadcrumb">
+    <div class="file-address__view cfms-field-surface" role="group" aria-label={$t('files.addressLabel')} onpointerup={handleBlankPointer}>
+      <div bind:this={breadcrumbViewport} class="file-address__breadcrumb">
         <Breadcrumb {segments} {onNavigate} />
       </div>
       {#if lookupEnabled}
@@ -127,6 +138,7 @@
           title={$t('files.editAddress')}
           aria-label={$t('files.editAddress')}
           aria-keyshortcuts="Alt+D F4"
+          disabled={busy}
           onclick={() => beginEdit()}
         >
           <Icon name="edit" size="17px" />
@@ -138,6 +150,8 @@
 
 <style>
   .file-address {
+    --file-address-height: var(--files-field-height, 32px);
+    --breadcrumb-target-height: calc(var(--file-address-height) - 2px);
     min-width: 0;
     width: 100%;
     font-family: var(--font-md3-sans);
@@ -147,8 +161,12 @@
   .file-address__form {
     display: flex;
     min-width: 0;
-    min-height: 34px;
+    box-sizing: border-box;
+    height: var(--file-address-height);
     align-items: center;
+    border: 1px solid var(--explorer-border);
+    border-radius: var(--explorer-radius-small);
+    background: transparent;
   }
 
   .file-address__view {
@@ -159,7 +177,7 @@
     min-width: 0;
     flex: 1;
     overflow-x: auto;
-    padding-inline: 0.7rem 0.25rem;
+    padding-inline: 8px 4px;
     scrollbar-width: none;
   }
 
@@ -168,26 +186,28 @@
   }
 
   .file-address__form {
-    border-radius: inherit;
+    border-color: var(--explorer-accent);
     box-shadow: inset 0 0 0 1px var(--explorer-accent);
   }
 
   .file-address--error .file-address__form {
+    border-color: var(--color-md3-error);
     box-shadow: inset 0 0 0 1px var(--color-md3-error);
   }
 
   .file-address__input {
     min-width: 0;
-    height: 34px;
+    height: 100%;
     flex: 1;
-    border: 0 !important;
+    border: 0;
     border-radius: var(--borderRadiusMedium);
     padding: 0 0.7rem;
     outline: 0;
-    color: var(--explorer-text) !important;
-    background: transparent !important;
+    color: var(--explorer-text);
+    background: transparent;
     font-family: var(--font-md3-mono);
     font-size: 14px;
+    line-height: 20px;
   }
 
   .file-address__input::placeholder {
@@ -197,8 +217,8 @@
 
   .file-address__action {
     display: inline-grid;
-    width: 32px;
-    height: 32px;
+    width: calc(var(--file-address-height) - 2px);
+    height: calc(var(--file-address-height) - 2px);
     flex: none;
     place-items: center;
     border: 0;
@@ -251,16 +271,20 @@
   }
 
   @media (pointer: coarse) {
-    .file-address__action {
-      width: 44px;
-      height: 44px;
+    .file-address {
+      --file-address-height: var(--files-field-height, 44px);
     }
 
-    .file-address__view,
-    .file-address__form,
     .file-address__input {
-      min-height: 44px;
+      font-size: 16px;
     }
+  }
+
+  @media (forced-colors: active) {
+    .file-address__view,
+    .file-address__form { color: FieldText; background: Field; border-color: ButtonText; }
+    .file-address__form:focus-within { outline: 2px solid Highlight; outline-offset: -2px; box-shadow: none; }
+    .file-address__input { color: FieldText; }
   }
 
   @media (prefers-reduced-motion: reduce) {

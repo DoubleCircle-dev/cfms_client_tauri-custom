@@ -5,7 +5,7 @@
 </script>
 <div class="cfms-field" class:cfms-field--error={error}>
   <label class="cfms-field__label" for={inputId}>{label}</label>
-  <div class="cfms-field__content">{@render children()}</div>
+  <div class="cfms-field__content cfms-field-surface">{@render children()}</div>
 </div>
 <style>
   .cfms-field { min-width: 0; }

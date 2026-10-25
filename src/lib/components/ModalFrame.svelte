@@ -8,6 +8,7 @@
   import { isMobilePlatform } from '$lib/platform';
   import Icon from '$lib/components/Icon.svelte';
   import { FOCUSABLE_SELECTOR } from '$lib/keyboard';
+  import { portal } from '$lib/actions/portal';
 
   const DRAG_THRESHOLD = 4;
 
@@ -744,6 +745,7 @@
   }
 </script>
 
+<div class="cfms-modal-root" use:portal>
 {#if open}
   <div
     bind:this={backdropElement}
@@ -753,9 +755,9 @@
     class:modal-resizing={resizeSession !== null}
     class:modal-maximized={maximized}
     role="presentation"
-    transition:fade|global={{ duration: 140 }}
     onclick={handleBackdropClick}
   >
+    <div class="modal-scrim" aria-hidden="true" transition:fade|global={{ duration: isReducedMotionEnabled() ? 0 : 140 }}></div>
     <div
       bind:this={positionerElement}
       class={`modal-positioner relative w-full ${maxWidth}`}
@@ -768,7 +770,7 @@
     >
       <div
         bind:this={panelElement}
-        class="modal-panel relative flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden"
+        class="modal-panel cfms-acrylic-surface relative flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden"
         class:modal-panel--maximized={maximized}
         class:modal-panel--sized={!maximized && explicitHeight !== null}
         role="dialog"
@@ -837,15 +839,12 @@
     </div>
   </div>
 {/if}
+</div>
 
 <style>
+  .cfms-modal-root { display: contents; }
   .modal-panel {
     isolation: isolate;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-large, 12px);
-    color: var(--color-md3-on-surface);
-    background: var(--colorNeutralBackground1);
-    box-shadow: var(--shadow64);
     font-family: var(--font-md3-sans);
     outline: none;
   }
@@ -886,7 +885,7 @@
     min-height: 52px;
     border-bottom: 1px solid var(--color-md3-outline);
     padding: 0.625rem 0.75rem 0.625rem 1.25rem;
-    background: color-mix(in srgb, var(--color-md3-surface-container-high) 46%, transparent);
+    background: transparent;
   }
 
   .modal-drag-enabled .modal-header {
@@ -1037,6 +1036,12 @@
     padding-right: max(1rem, var(--safe-area-right, 0px));
     padding-bottom: max(1rem, var(--safe-area-bottom, 0px));
     padding-left: max(1rem, var(--safe-area-left, 0px));
+  }
+
+  .modal-scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
     background: var(--cfms-smoke);
   }
 </style>

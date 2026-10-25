@@ -89,24 +89,24 @@
             {#if block.title}<strong>{block.title}</strong>{/if}<p>{block.message}</p>
           </section>
         {:else if block.type === 'progress'}
-          <section class="extension-card"><span>{block.label}</span><progress aria-label={block.label} value={block.value} max={block.max ?? 100}></progress></section>
+          <section class="extension-card cfms-content-surface"><span>{block.label}</span><progress aria-label={block.label} value={block.value} max={block.max ?? 100}></progress></section>
         {:else if block.type === 'list'}
-          <section class="extension-card extension-wide">
+          <section class="extension-card cfms-content-surface extension-wide">
             {#if block.title}<h2>{block.title}</h2>{/if}
             {#if block.items.length === 0}<p class="muted">No items</p>{/if}
             <ul>{#each block.items as item}<li><span><strong>{item.title}</strong>{#if item.description}<small>{item.description}</small>{/if}</span>{#if item.value}<b>{item.value}</b>{/if}</li>{/each}</ul>
           </section>
         {:else if block.type === 'table'}
-          <section class="extension-card extension-wide table-wrap">
+          <section class="extension-card cfms-content-surface extension-wide table-wrap">
             {#if block.title}<h2>{block.title}</h2>{/if}
             <table><thead><tr>{#each block.columns as column}<th>{column.label}</th>{/each}</tr></thead>
               <tbody>{#each block.rows as row}<tr>{#each block.columns as column}<td>{cellValue(row, column.key)}</td>{/each}</tr>{/each}</tbody>
             </table>
           </section>
         {:else if block.type === 'empty_state'}
-          <section class="extension-card extension-wide empty"><strong>{block.title}</strong>{#if block.description}<p>{block.description}</p>{/if}</section>
+          <section class="extension-card cfms-content-surface extension-wide empty"><strong>{block.title}</strong>{#if block.description}<p>{block.description}</p>{/if}</section>
         {:else if block.type === 'form'}
-          <section class="extension-card extension-wide form-card">
+          <section class="extension-card cfms-content-surface extension-wide form-card">
             {#each block.fields as field}
               <label><span>{field.label}</span>
                 {#if field.type === 'toggle'}

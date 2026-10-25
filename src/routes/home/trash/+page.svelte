@@ -423,7 +423,7 @@
     </div>
   {/if}
 
-  <section class="trash-list-shell" aria-busy={loading} aria-label={$t('trash.title')}>
+  <section class="trash-list-shell cfms-content-surface" aria-busy={loading} aria-label={$t('trash.title')}>
     <div class="trash-list-header" role="row">
       <span aria-hidden="true"></span>
       <span role="columnheader">{$t('trash.name')}</span>
