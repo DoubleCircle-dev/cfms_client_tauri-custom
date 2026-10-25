@@ -1,7 +1,8 @@
 //! OpenSSH decoding and CFMS signatures. CFMS signs raw challenges, not SSHSIG envelopes.
 use base64ct::{Base64, Encoding};
+use p256::ecdsa::signature::hazmat::PrehashSigner;
 use sha2::{Digest, Sha256};
-use signature::{SignatureEncoding, Signer, hazmat::PrehashSigner};
+use signature::{SignatureEncoding, Signer};
 use ssh_key::{
     PrivateKey,
     private::{EcdsaKeypair, KeypairData},
@@ -150,7 +151,8 @@ pub fn sign(key: &PrivateKey, message: &[u8]) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use signature::{Verifier, hazmat::PrehashVerifier};
+    use p256::ecdsa::signature::hazmat::PrehashVerifier;
+    use signature::Verifier;
 
     fn vectors() -> Vec<serde_json::Value> {
         // Synthetic keys and signatures generated with the server's Python cryptography library.

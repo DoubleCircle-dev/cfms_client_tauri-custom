@@ -10,7 +10,6 @@ cfms-core.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
 rustls.workspace = true
-rustls-pemfile.workspace = true
 webpki-roots.workspace = true
 tokio-socks.workspace = true
 tokio-rustls.workspace = true
@@ -20,3 +19,6 @@ dashmap.workspace = true
 url.workspace = true
 base64ct.workspace = true
 zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
