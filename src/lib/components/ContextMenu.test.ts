@@ -16,6 +16,34 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
 afterEach(cleanup);
 
 describe('ContextMenu keyboard interaction', () => {
+  it('filters permissions and separators, ignores disabled actions, and closes before selection', async () => {
+    const order: string[] = [];
+    const disabledAction = vi.fn();
+    render(ContextMenu, {
+      open: true, x: 10, y: 10,
+      userPermissions: [],
+      onClose: () => { order.push('close'); },
+      items: [
+        { type: 'divider' },
+        { id: 'hidden', label: 'Restricted', icon: 'lock', requiredPermissions: ['admin'], onSelect: vi.fn() },
+        { id: 'disabled', label: 'Disabled', icon: 'folderUpload', disabled: true, onSelect: disabledAction },
+        { type: 'divider' },
+        { id: 'upload', label: 'Upload folder', icon: 'folderUpload', onSelect: () => { order.push('select'); } },
+        { type: 'divider' },
+      ],
+    });
+    expect(screen.queryByRole('menuitem', { name: 'Restricted' })).toBeNull();
+    expect(screen.getAllByRole('separator')).toHaveLength(1);
+    const disabled = screen.getByRole('menuitem', { name: 'Disabled' });
+    const upload = screen.getByRole('menuitem', { name: 'Upload folder' });
+    await waitFor(() => expect(document.activeElement).toBe(upload));
+    await fireEvent.click(disabled);
+    expect(disabledAction).not.toHaveBeenCalled();
+    expect(order).toEqual([]);
+    await fireEvent.click(upload);
+    expect(order).toEqual(['close', 'select']);
+  });
+
   it('focuses actions, navigates with arrows, and restores the trigger on Escape', async () => {
     const trigger = document.createElement('button');
     document.body.append(trigger);

@@ -50,7 +50,7 @@ export const ICON_MAP = {
   "radioChecked": "radio_button",
   "radioUnchecked": "circle",
   "playlistRemove": "dismiss",
-  "resetSettings": "settings",
+  "resetSettings": "arrow_reset",
   "restartAlt": "arrow_counterclockwise",
   "backup": "cloud_arrow_up",
   "checkCircle": "checkmark_circle",

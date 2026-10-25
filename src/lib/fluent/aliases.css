@@ -74,6 +74,9 @@
   --cfms-content-background: var(--colorNeutralBackground1);
   --cfms-field-background: var(--colorNeutralBackground1);
   --cfms-acrylic: var(--colorNeutralBackground1);
+  --cfms-account-acrylic: var(--colorNeutralBackground1);
+  --cfms-menu-acrylic: var(--colorNeutralBackground1);
+  --cfms-menu-noise-opacity: 0;
   --cfms-material-filter: none;
   --cfms-smoke: rgba(0, 0, 0, 0.4);
 }
@@ -83,6 +86,9 @@
     --cfms-content-background: color-mix(in srgb, var(--colorNeutralBackground1) 60%, transparent);
     --cfms-field-background: color-mix(in srgb, var(--colorNeutralBackground1) 55%, transparent);
     --cfms-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 72%, transparent);
+    --cfms-account-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 84%, transparent);
+    --cfms-menu-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 94%, transparent);
+    --cfms-menu-noise-opacity: 0.025;
     --cfms-material-filter: blur(20px) saturate(1.2);
   }
 }
@@ -92,6 +98,9 @@
     --cfms-content-background: var(--colorNeutralBackground1);
     --cfms-field-background: var(--colorNeutralBackground1);
     --cfms-acrylic: var(--colorNeutralBackground1);
+    --cfms-account-acrylic: var(--colorNeutralBackground1);
+    --cfms-menu-acrylic: var(--colorNeutralBackground1);
+    --cfms-menu-noise-opacity: 0;
     --cfms-material-filter: none;
   }
 }
@@ -112,6 +121,9 @@ html[data-window-backdrop="mica"] :is(.explorer-shell, .workspace-palette) {
   :root:root {
     --colorStrokeFocus2: Highlight;
     --cfms-acrylic: Canvas;
+    --cfms-account-acrylic: Canvas;
+    --cfms-menu-acrylic: Canvas;
+    --cfms-menu-noise-opacity: 0;
     --cfms-content-background: Canvas;
     --cfms-field-background: Field;
     --cfms-material-filter: none;

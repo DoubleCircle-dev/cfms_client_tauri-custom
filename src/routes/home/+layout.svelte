@@ -464,7 +464,7 @@
         </button>
 
         {#if accountMenuOpen}
-          <div class="explorer-account-menu cfms-acrylic-surface" role="menu" tabindex="-1" onkeydown={handleAccountMenuKeydown}>
+          <div class="explorer-account-menu cfms-acrylic-surface cfms-account-surface" role="menu" tabindex="-1" onkeydown={handleAccountMenuKeydown}>
             <div class="explorer-account-summary" role="presentation">
               {#if canChangeOwnAvatar}
                 <button

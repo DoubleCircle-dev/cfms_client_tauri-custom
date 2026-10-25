@@ -89,12 +89,27 @@
   backdrop-filter: var(--cfms-material-filter);
   box-shadow: var(--shadow64);
 }
-.context-menu-surface [role="menuitem"] { min-block-size: 32px; margin-inline: 4px; width: calc(100% - 8px); border-radius: var(--borderRadiusMedium); padding-block: 6px; }
-.context-menu-surface [role="menuitem"]:active:not(:disabled) { background: var(--colorNeutralBackground1Pressed); }
+.cfms-account-surface { background: var(--cfms-account-acrylic); }
+.cfms-menu-surface {
+  isolation: isolate;
+  background: var(--cfms-menu-acrylic);
+  border-color: var(--colorNeutralStroke2);
+  border-radius: var(--borderRadiusLarge);
+  box-shadow: var(--shadow16);
+}
+.cfms-menu-surface::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: url('./assets/acrylic-noise.png') repeat;
+  opacity: var(--cfms-menu-noise-opacity);
+}
 
 @media (pointer: coarse) {
   :root .cfms-native-field:not([data-focus-ring="delegated"]) { min-block-size: 44px; font-size: 16px; }
-  .context-menu-surface [role="menuitem"] { min-block-size: 44px; }
   .workspace-page [role="tablist"] > [role="tab"] { min-block-size: 44px; }
 }
 @media (max-width: 520px) {
@@ -112,5 +127,4 @@
   :root .cfms-native-field:disabled { color: GrayText; border-color: GrayText; }
   :is(.cfms-content-surface, .settings-section)::before { background: Canvas; }
   .cfms-field-surface::before { background: Field; }
-  .context-menu-surface [role="menuitem"]:is(:hover, :focus-visible) { color: HighlightText; background: Highlight; }
 }
