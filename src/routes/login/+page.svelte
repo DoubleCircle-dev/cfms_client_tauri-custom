@@ -65,6 +65,7 @@
   import ProgressRing from "$lib/components/ProgressRing.svelte";
   import AvatarPreview from "$lib/components/AvatarPreview.svelte";
   import AuthServerContext from "$lib/components/AuthServerContext.svelte";
+  import AuthScene from "$lib/components/AuthScene.svelte";
   import AccountDisabledNotice from "$lib/components/AccountDisabledNotice.svelte";
   import DialogActionButton from "$lib/components/DialogActionButton.svelte";
   import FluentTextInput from "$lib/components/FluentTextInput.svelte";
@@ -812,7 +813,7 @@
   }
 </script>
 
-<div class="auth-shell workspace-palette" class:auth-shell--connect-intro={playConnectTransition}>
+<AuthScene view="login" animate={playConnectTransition}>
   <div class="auth-route-toolbar">
     <button
       type="button"
@@ -825,7 +826,7 @@
       <Icon name="keyboard" size="18px" />
     </button>
   </div>
-  <section class="auth-panel">
+  <section class="auth-panel auth-scene-panel">
   <div
     class="auth-form-stage"
     class:animate-fade-scale-in={!playConnectTransition}
@@ -1062,14 +1063,7 @@
   </div>
   </section>
 
-  <section class="auth-visual" aria-hidden="true">
-    <img
-      src="/astronomy.jpg"
-      alt=""
-      class="auth-visual-image"
-    />
-  </section>
-</div>
+</AuthScene>
 
 {#if keyInteraction}
   <ModalFrame title={$t('publicKey.keyTitle')} onClose={cancelKeyLogin} maxWidth="max-w-md">
@@ -1177,7 +1171,7 @@
   .login-credential-region { transition: height 180ms var(--motion-easing-standard, ease-out); }
   .login-credential-content { padding: 2px 0; }
   .auth-panel { max-height: calc(100dvh - var(--app-titlebar-height, 0px)); overflow-y: auto; overscroll-behavior-y: contain; }
-  @media (max-height: 800px) { .auth-shell .auth-panel { padding-top: 1.5rem; padding-bottom: 1.5rem; } }
+  @media (max-height: 800px) { .auth-panel.auth-scene-panel { padding-top: 1.5rem; padding-bottom: 1.5rem; } }
   @media (prefers-reduced-motion: reduce) { .login-credential-region { transition: none; } }
   .login-cancel { display: block; margin: 0.5rem auto; padding: 0.5rem 1rem; border: 0; background: transparent; color: var(--explorer-text-muted); cursor: pointer; }
   .login-form-card :global(.sign-in-options) { padding-top: 0.5rem; }
@@ -1240,14 +1234,6 @@
     background: transparent;
   }
 
-  .auth-shell {
-    position: relative;
-    display: flex;
-    min-height: 100%;
-    overflow: hidden;
-    background: var(--explorer-background);
-  }
-
   .auth-panel {
     position: relative;
     z-index: 1;
@@ -1288,110 +1274,10 @@
     align-self: start;
   }
 
-  .auth-visual {
-    display: none;
-    min-height: 100%;
-    min-width: 0;
-    flex: 1 1 auto;
-    overflow: hidden;
-    background: var(--explorer-background);
-  }
-
-  .auth-visual-image {
-    height: 100%;
-    width: 100%;
-    object-fit: cover;
-  }
-
   @media (min-width: 1024px) {
     .auth-panel {
-      flex-basis: var(--auth-panel-basis);
       padding-right: 2rem;
       padding-left: 2rem;
-    }
-
-    .auth-visual {
-      display: block;
-    }
-
-    @supports ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
-      .auth-shell::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background: url('/astronomy.jpg') center / cover;
-      }
-
-      .auth-panel {
-        background: transparent;
-      }
-
-      /* Keep the material outside the scrolling panel so it covers the whole
-       * viewport even when a short window scrolls the form to its last action.
-       * Filtering this paint layer also leaves fixed descendants unaffected. */
-      .auth-shell::after {
-        content: '';
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: var(--auth-panel-basis);
-        pointer-events: none;
-        background: var(--cfms-account-acrylic);
-        -webkit-backdrop-filter: var(--cfms-material-filter);
-        backdrop-filter: var(--cfms-material-filter);
-      }
-
-      .auth-shell--connect-intro::after {
-        animation: auth-material-shrink var(--auth-transition-duration)
-          var(--auth-transition-easing) both;
-      }
-    }
-
-    .auth-shell--connect-intro .auth-panel {
-      animation: auth-panel-shrink var(--auth-transition-duration)
-        var(--auth-transition-easing) both;
-      will-change: flex-basis;
-    }
-
-    .auth-shell--connect-intro .auth-visual {
-      animation: auth-visual-expand var(--auth-transition-duration)
-        var(--auth-transition-easing) both;
-      will-change: flex-basis, opacity;
-    }
-
-    .auth-shell--connect-intro .auth-visual-image {
-      animation: auth-visual-image-push var(--auth-transition-duration)
-        var(--auth-transition-easing) both;
-      will-change: transform;
-    }
-  }
-
-  @media (prefers-reduced-transparency: reduce), (forced-colors: active) {
-    .auth-shell::before {
-      content: none;
-    }
-
-    .auth-panel {
-      background: var(--colorNeutralBackground2);
-    }
-
-    .auth-shell::after {
-      content: none;
-    }
-  }
-
-  @keyframes auth-material-shrink {
-    from {
-      width: 100%;
-    }
-    to {
-      width: var(--auth-panel-basis);
-    }
-  }
-
-  @media (forced-colors: active) {
-    .auth-panel {
-      background: Canvas;
     }
   }
 
@@ -1399,35 +1285,6 @@
     animation: auth-form-crossfade var(--auth-transition-duration)
       var(--auth-transition-easing) both;
     will-change: opacity, transform, filter;
-  }
-
-  @keyframes auth-panel-shrink {
-    from {
-      flex-basis: 100%;
-    }
-    to {
-      flex-basis: var(--auth-panel-basis);
-    }
-  }
-
-  @keyframes auth-visual-expand {
-    from {
-      flex-basis: 0;
-      opacity: 0.96;
-    }
-    to {
-      flex-basis: calc(100% - var(--auth-panel-basis));
-      opacity: 1;
-    }
-  }
-
-  @keyframes auth-visual-image-push {
-    from {
-      transform: translate3d(18%, 0, 0) scale(1.04);
-    }
-    to {
-      transform: translate3d(0, 0, 0) scale(1);
-    }
   }
 
   @keyframes auth-form-crossfade {

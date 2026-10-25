@@ -36,6 +36,7 @@
     serverStateStore,
   } from "$lib/stores.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import AuthScene from "$lib/components/AuthScene.svelte";
   import FluentButton from "$lib/components/FluentButton.svelte";
   import MdOutlinedField from "$lib/components/MdOutlinedField.svelte";
   import MdSwitch from "$lib/components/MdSwitch.svelte";
@@ -250,7 +251,7 @@
   }
 </script>
 
-<div class="connect-auth-shell workspace-palette" class:connect-auth-shell--login-return={playLoginReturnTransition}>
+<AuthScene view="connect" animate={playLoginReturnTransition}>
   <header class="connect-route-header">
     <h1 class="auth-route-title">{$t('connect.title')}</h1>
 
@@ -293,7 +294,7 @@
     </div>
   </header>
 
-  <section class="connect-auth-panel">
+  <section class="connect-auth-panel auth-scene-panel">
   <div
     class="connect-form-stage"
     class:animate-fade-scale-in={!playLoginReturnTransition}
@@ -499,24 +500,9 @@
   </div>
   </section>
 
-  <section class="connect-auth-visual" aria-hidden="true">
-    <img
-      src="/astronomy.jpg"
-      alt=""
-      class="connect-auth-visual-image"
-    />
-  </section>
-</div>
+</AuthScene>
 
 <style>
-  .connect-auth-shell {
-    position: relative;
-    display: flex;
-    min-height: 100%;
-    overflow: hidden;
-    background: var(--explorer-background);
-  }
-
   .connect-route-header {
     --connect-route-toolbar-width: 7.75rem;
 
@@ -1050,21 +1036,6 @@
     font-family: var(--font-md3-mono);
   }
 
-  .connect-auth-visual {
-    display: none;
-    min-height: 100%;
-    min-width: 0;
-    flex: 0 0 0;
-    overflow: hidden;
-    background: var(--explorer-background);
-  }
-
-  .connect-auth-visual-image {
-    height: 100%;
-    width: 100%;
-    object-fit: cover;
-  }
-
   @media (max-width: 599px) {
     .connect-route-header {
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1082,63 +1053,10 @@
     }
   }
 
-  @media (min-width: 1024px) {
-    .connect-auth-visual {
-      display: block;
-    }
-
-    .connect-auth-shell--login-return .connect-auth-panel {
-      animation: connect-panel-expand var(--auth-transition-duration)
-        var(--auth-transition-easing) both;
-      will-change: flex-basis;
-    }
-
-    .connect-auth-shell--login-return .connect-auth-visual {
-      animation: connect-visual-collapse var(--auth-transition-duration)
-        var(--auth-transition-easing) both;
-      will-change: flex-basis, opacity;
-    }
-
-    .connect-auth-shell--login-return .connect-auth-visual-image {
-      animation: connect-visual-image-retreat var(--auth-transition-duration)
-        var(--auth-transition-easing) both;
-      will-change: transform;
-    }
-  }
-
   .connect-form-stage--login-return {
     animation: connect-form-crossfade var(--auth-transition-duration)
       var(--auth-transition-easing) both;
     will-change: opacity, transform, filter;
-  }
-
-  @keyframes connect-panel-expand {
-    from {
-      flex-basis: var(--auth-panel-basis);
-    }
-    to {
-      flex-basis: 100%;
-    }
-  }
-
-  @keyframes connect-visual-collapse {
-    from {
-      flex-basis: calc(100% - var(--auth-panel-basis));
-      opacity: 1;
-    }
-    to {
-      flex-basis: 0;
-      opacity: 0.96;
-    }
-  }
-
-  @keyframes connect-visual-image-retreat {
-    from {
-      transform: translate3d(0, 0, 0) scale(1);
-    }
-    to {
-      transform: translate3d(18%, 0, 0) scale(1.04);
-    }
   }
 
   @keyframes connect-form-crossfade {
