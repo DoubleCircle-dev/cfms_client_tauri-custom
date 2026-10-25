@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import type { JsonValue } from '$lib/api';
@@ -389,59 +390,69 @@
   {@const pointer = jsonPointer(path)}
   {@const fieldIssues = issuesAt(path)}
   {@const summary = constraintSummary(node)}
+  {@const outlined = current !== null && (current !== undefined || required)
+    && node.constValue === undefined && !node.enumValues
+    && (node.kind === 'string' || node.kind === 'integer' || node.kind === 'number')}
+  {#snippet outlinedLabel()}
+    <span>{displayLabel(node, fallbackLabel)}</span>
+    {#if required}<span class="required-mark" aria-label={$t('schedules.payloadRequired')}>*</span>{/if}
+  {/snippet}
   <div class="schema-field" class:field-error={fieldIssues.length > 0}>
-    <div class="field-heading">
-      <div>
-        {#if node.kind === 'object' || node.kind === 'array'}
-          <span class="field-title">
-            <span>{displayLabel(node, fallbackLabel)}</span>
-            {#if required}<span class="required-mark" aria-label={$t('schedules.payloadRequired')}>*</span>{/if}
-          </span>
-        {:else}
-          <label for={`payload-field-${pointer}`}>
-            <span>{displayLabel(node, fallbackLabel)}</span>
-            {#if required}<span class="required-mark" aria-label={$t('schedules.payloadRequired')}>*</span>{/if}
-          </label>
-        {/if}
-        {#if node.title && node.title !== fallbackLabel}<code>{fallbackLabel}</code>{/if}
-      </div>
-      {#if !required && current === undefined}
-        <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
-          type="button"
-          disabled={disabled}
-          onclick={() => setValue(path, starterValue(node))}
-          appearance="subtle"
-          class="field-action"
-        >
-          <Icon name="add" size="15px" />{$t('schedules.payloadAddField')}
-        </FluentButton>
-      {:else}
-        <div class="field-actions">
-          {#if node.nullable}
-            <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
-              type="button"
-              disabled={disabled}
-              onclick={() => setValue(path, current === null ? starterValue(node, true) : null)}
-              appearance="subtle"
-              class="field-action"
-            >
-              {current === null ? $t('schedules.payloadUseValue') : $t('schedules.payloadSetNull')}
-            </FluentButton>
+    {#if !outlined || (node.title && node.title !== fallbackLabel) || !required || node.nullable}
+      <div class="field-heading">
+        <div>
+          {#if node.kind === 'object' || node.kind === 'array'}
+            <span class="field-title">
+              <span>{displayLabel(node, fallbackLabel)}</span>
+              {#if required}<span class="required-mark" aria-label={$t('schedules.payloadRequired')}>*</span>{/if}
+            </span>
+          {:else if !outlined}
+            <label for={`payload-field-${pointer}`}>
+              <span>{displayLabel(node, fallbackLabel)}</span>
+              {#if required}<span class="required-mark" aria-label={$t('schedules.payloadRequired')}>*</span>{/if}
+            </label>
           {/if}
-          {#if !required}
-            <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
-              type="button"
-              disabled={disabled}
-              onclick={() => removeValue(path)}
-              appearance="subtle"
-              class="field-action"
-            >
-              {$t('schedules.payloadRemoveField')}
-            </FluentButton>
-          {/if}
+          {#if node.title && node.title !== fallbackLabel}<code>{fallbackLabel}</code>{/if}
         </div>
-      {/if}
-    </div>
+        {#if !required && current === undefined}
+          <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+            type="button"
+            disabled={disabled}
+            onclick={() => setValue(path, starterValue(node))}
+            appearance="subtle"
+            class="field-action"
+          >
+            <Icon name="add" size="15px" />{$t('schedules.payloadAddField')}
+          </FluentButton>
+        {:else}
+          <div class="field-actions">
+            {#if node.nullable}
+              <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+                type="button"
+                disabled={disabled}
+                onclick={() => setValue(path, current === null ? starterValue(node, true) : null)}
+                appearance="subtle"
+                class="field-action"
+              >
+                {current === null ? $t('schedules.payloadUseValue') : $t('schedules.payloadSetNull')}
+              </FluentButton>
+            {/if}
+            {#if !required}
+              <FluentButton data-fluent-owner="lib-components-schema-payload-editor"
+                type="button"
+                disabled={disabled}
+                onclick={() => removeValue(path)}
+                appearance="subtle"
+                class="field-action"
+              >
+                {$t('schedules.payloadRemoveField')}
+              </FluentButton>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+    {/if}
 
     {#if node.description}<p class="schema-description">{node.description}</p>{/if}
     {#if summary}<p class="constraint-summary">{summary}</p>{/if}
@@ -467,45 +478,51 @@
         </select>
       {:else if node.kind === 'string'}
         {#if (node.maxLength ?? 0) > 240}
-          <textarea class="cfms-native-field"
-            id={`payload-field-${pointer}`}
-            value={current === undefined ? '' : String(current)}
-            maxlength={node.maxLength}
-            minlength={node.minLength}
-            disabled={disabled}
-            aria-invalid={fieldIssues.length > 0}
-            aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined}
-            oninput={(event) => setValue(path, event.currentTarget.value)}
-          ></textarea>
+          <MdOutlinedField inputId={`payload-field-${pointer}`} label={displayLabel(node, fallbackLabel)} labelContent={outlinedLabel} error={fieldIssues.length > 0} {disabled}>
+            <textarea data-focus-ring="delegated" class="cfms-native-field"
+              id={`payload-field-${pointer}`}
+              value={current === undefined ? '' : String(current)}
+              maxlength={node.maxLength}
+              minlength={node.minLength}
+              disabled={disabled}
+              aria-invalid={fieldIssues.length > 0}
+              aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined}
+              oninput={(event) => setValue(path, event.currentTarget.value)}
+            ></textarea>
+          </MdOutlinedField>
         {:else}
-          <input
-            id={`payload-field-${pointer}`}
-            type={node.format === 'email' ? 'email' : node.format === 'uri' ? 'url' : 'text'}
-            value={current === undefined ? '' : String(current)}
-            maxlength={node.maxLength}
-            minlength={node.minLength}
-            disabled={disabled}
-            aria-invalid={fieldIssues.length > 0}
-            aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined}
-            oninput={(event) => setValue(path, event.currentTarget.value)}
-          />
+          <MdOutlinedField inputId={`payload-field-${pointer}`} label={displayLabel(node, fallbackLabel)} labelContent={outlinedLabel} error={fieldIssues.length > 0} {disabled}>
+            <input data-focus-ring="delegated"
+              id={`payload-field-${pointer}`}
+              type={node.format === 'email' ? 'email' : node.format === 'uri' ? 'url' : 'text'}
+              value={current === undefined ? '' : String(current)}
+              maxlength={node.maxLength}
+              minlength={node.minLength}
+              disabled={disabled}
+              aria-invalid={fieldIssues.length > 0}
+              aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined}
+              oninput={(event) => setValue(path, event.currentTarget.value)}
+            />
+          </MdOutlinedField>
         {/if}
       {:else if node.kind === 'integer' || node.kind === 'number'}
-        <input class="cfms-native-field"
-          id={`payload-field-${pointer}`}
-          type="number"
-          value={current === undefined ? '' : String(current)}
-          min={inputMinimum(node)}
-          max={inputMaximum(node)}
-          step={node.kind === 'integer' ? Math.max(1, node.multipleOf ?? 1) : node.multipleOf ?? 'any'}
-          disabled={disabled}
-          aria-invalid={fieldIssues.length > 0}
-          aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined}
-          oninput={(event) => {
-            if (event.currentTarget.value === '') removeValue(path);
-            else if (Number.isFinite(event.currentTarget.valueAsNumber)) setValue(path, event.currentTarget.valueAsNumber);
-          }}
-        />
+        <MdOutlinedField inputId={`payload-field-${pointer}`} label={displayLabel(node, fallbackLabel)} labelContent={outlinedLabel} error={fieldIssues.length > 0} {disabled}>
+          <input data-focus-ring="delegated" class="cfms-native-field"
+            id={`payload-field-${pointer}`}
+            type="number"
+            value={current === undefined ? '' : String(current)}
+            min={inputMinimum(node)}
+            max={inputMaximum(node)}
+            step={node.kind === 'integer' ? Math.max(1, node.multipleOf ?? 1) : node.multipleOf ?? 'any'}
+            disabled={disabled}
+            aria-invalid={fieldIssues.length > 0}
+            aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined}
+            oninput={(event) => {
+              if (event.currentTarget.value === '') removeValue(path);
+              else if (Number.isFinite(event.currentTarget.valueAsNumber)) setValue(path, event.currentTarget.valueAsNumber);
+            }}
+          />
+        </MdOutlinedField>
       {:else if node.kind === 'boolean'}
         <select class="cfms-native-field"
           id={`payload-field-${pointer}`}
@@ -613,21 +630,23 @@
           class="initialize-field"
         >{$t('schedules.payloadInitializeArray')}</FluentButton>
       {:else}
-        <input
-          id={`payload-field-${pointer}`}
-          type={node.kind === 'integer' || node.kind === 'number' ? 'number' : 'text'}
-          value=""
-          min={node.kind === 'integer' || node.kind === 'number' ? inputMinimum(node) : undefined}
-          max={node.kind === 'integer' || node.kind === 'number' ? inputMaximum(node) : undefined}
-          step={node.kind === 'integer' ? Math.max(1, node.multipleOf ?? 1) : node.kind === 'number' ? node.multipleOf ?? 'any' : undefined}
-          disabled={disabled}
-          aria-invalid="true"
-          aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined}
-          oninput={(event) => {
-            if (!event.currentTarget.value) return;
-            setValue(path, node.kind === 'integer' || node.kind === 'number' ? event.currentTarget.valueAsNumber : event.currentTarget.value);
-          }}
-        />
+        <MdOutlinedField inputId={`payload-field-${pointer}`} label={displayLabel(node, fallbackLabel)} labelContent={outlinedLabel} error={fieldIssues.length > 0} {disabled}>
+          <input data-focus-ring="delegated"
+            id={`payload-field-${pointer}`}
+            type={node.kind === 'integer' || node.kind === 'number' ? 'number' : 'text'}
+            value=""
+            min={node.kind === 'integer' || node.kind === 'number' ? inputMinimum(node) : undefined}
+            max={node.kind === 'integer' || node.kind === 'number' ? inputMaximum(node) : undefined}
+            step={node.kind === 'integer' ? Math.max(1, node.multipleOf ?? 1) : node.kind === 'number' ? node.multipleOf ?? 'any' : undefined}
+            disabled={disabled}
+            aria-invalid="true"
+            aria-describedby={fieldIssues.length > 0 ? `payload-errors-${pointer}` : undefined}
+            oninput={(event) => {
+              if (!event.currentTarget.value) return;
+              setValue(path, node.kind === 'integer' || node.kind === 'number' ? event.currentTarget.valueAsNumber : event.currentTarget.value);
+            }}
+          />
+        </MdOutlinedField>
       {/if}
     {/if}
 

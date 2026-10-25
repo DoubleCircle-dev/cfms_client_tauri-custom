@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { goto } from '$app/navigation';
   import { tick } from 'svelte';
@@ -148,37 +149,33 @@
           void saveNickname();
         }}
       >
-        <label
-          for="account-nickname-input"
-          class="nickname-editor__label"
-        >
-          {$t('settings.account.nicknameLabel')}
-        </label>
-
         <div class="nickname-editor__field">
-          <div class="field-with-count">
-            <input
-              id="account-nickname-input"
-              bind:this={nicknameInputElement}
-              bind:value={nicknameInput}
-              class="cfms-native-field text-field text-field--counted"
-              class:text-field--error={nicknameTooLong}
-              type="text"
-              name="nickname"
-              autocomplete="off"
-              aria-describedby="nickname-help nickname-count"
-              aria-invalid={nicknameTooLong}
-              disabled={nicknameBusy}
-              onkeydown={handleNicknameKeydown}
-            />
-            <span
-              id="nickname-count"
-              class="field-count"
-              class:field-count--error={nicknameTooLong}
-            >
-              {nicknameCharacterCount}/{NICKNAME_MAX_LENGTH}
-            </span>
-          </div>
+          <MdOutlinedField inputId="account-nickname-input" label={$t('settings.account.nicknameLabel')} error={nicknameTooLong} disabled={nicknameBusy}>
+            <div data-outlined-content class="field-with-count">
+              <input
+                id="account-nickname-input"
+                data-focus-ring="delegated"
+                bind:this={nicknameInputElement}
+                bind:value={nicknameInput}
+                class="cfms-native-field text-field text-field--counted"
+                class:text-field--error={nicknameTooLong}
+                type="text"
+                name="nickname"
+                autocomplete="off"
+                aria-describedby="nickname-help nickname-count"
+                aria-invalid={nicknameTooLong}
+                disabled={nicknameBusy}
+                onkeydown={handleNicknameKeydown}
+              />
+              <span
+                id="nickname-count"
+                class="field-count"
+                class:field-count--error={nicknameTooLong}
+              >
+                {nicknameCharacterCount}/{NICKNAME_MAX_LENGTH}
+              </span>
+            </div>
+          </MdOutlinedField>
           <span
             id="nickname-help"
             class="field-help"
@@ -314,19 +311,11 @@
 
   .nickname-editor {
     display: grid;
-    grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     gap: 12px;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
     padding: 0.9rem 0 1rem;
-  }
-
-  .nickname-editor__label {
-    min-height: 42px;
-    display: flex;
-    align-items: center;
-    color: var(--color-md3-on-surface);
-    font: 600 12px/16px var(--font-md3-sans);
   }
 
   .nickname-editor__field {

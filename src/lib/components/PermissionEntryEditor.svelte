@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import type { PermissionEntry } from '$lib/api';
@@ -120,20 +121,21 @@
 
         <div class="editor-form" aria-live="polite">
           <div class="field-group" class:field-error={validation?.permission !== null}>
-            <label class="field-label" for="permission-entry-name">{$t('manage.permissionName')}</label>
             <span class="field-description">{$t('manage.permissionNameHelp')}</span>
-            <input class="cfms-native-field"
-              id="permission-entry-name"
-              bind:this={permissionInput}
-              value={row.entry.permission}
-              list="permission-entry-suggestions"
-              maxlength="255"
-              autocomplete="off"
-              aria-invalid={validation?.permission !== null}
-              aria-describedby={validation?.permission ? 'permission-name-error' : undefined}
-              disabled={disabled}
-              oninput={(event) => onPatch({ permission: event.currentTarget.value })}
-            />
+            <MdOutlinedField inputId="permission-entry-name" label={$t('manage.permissionName')} {disabled}>
+              <input class="cfms-native-field" data-focus-ring="delegated"
+                id="permission-entry-name"
+                bind:this={permissionInput}
+                value={row.entry.permission}
+                list="permission-entry-suggestions"
+                maxlength="255"
+                autocomplete="off"
+                aria-invalid={validation?.permission !== null}
+                aria-describedby={validation?.permission ? 'permission-name-error' : undefined}
+                disabled={disabled}
+                oninput={(event) => onPatch({ permission: event.currentTarget.value })}
+              />
+            </MdOutlinedField>
             <datalist id="permission-entry-suggestions">
               {#each suggestions as suggestion (suggestion)}
                 <option value={suggestion}></option>
@@ -245,19 +247,18 @@
             </div>
             {#if row.endMode === 'specified'}
               <div class="end-time-section">
-                <label class="field-label" for="permission-entry-end-time">
-                  {$t('manage.permissionEndsAt')}
-                </label>
-                <input class="cfms-native-field"
-                  id="permission-entry-end-time"
-                  type="datetime-local"
-                  step="1"
-                  value={toLocalDateTimeInput(row.entry.end_time ?? Number.NaN)}
-                  aria-invalid={validation?.endTime !== null}
-                  aria-describedby={validation?.endTime ? 'permission-end-error' : undefined}
-                  disabled={disabled}
-                  oninput={(event) => updateEndTime(event.currentTarget.value)}
-                />
+                <MdOutlinedField inputId="permission-entry-end-time" label={$t('manage.permissionEndsAt')} disabled={disabled}>
+                  <input data-focus-ring="delegated" class="cfms-native-field"
+                    id="permission-entry-end-time"
+                    type="datetime-local"
+                    step="1"
+                    value={toLocalDateTimeInput(row.entry.end_time ?? Number.NaN)}
+                    aria-invalid={validation?.endTime !== null}
+                    aria-describedby={validation?.endTime ? 'permission-end-error' : undefined}
+                    disabled={disabled}
+                    oninput={(event) => updateEndTime(event.currentTarget.value)}
+                  />
+                </MdOutlinedField>
               </div>
             {/if}
             {#if validation?.endTime}

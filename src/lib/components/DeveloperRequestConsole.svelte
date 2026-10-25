@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import { sendDeveloperRequest, type JsonValue, type ServerResponse } from '$lib/api';
@@ -236,6 +237,7 @@
       second: '2-digit',
     });
   }
+  const outlinedId = $props.id();
 </script>
 
 {#if open}
@@ -318,19 +320,20 @@
               <span class="shortcut-hint">Ctrl+Enter</span>
             </div>
 
-            <label class="field-group">
-              <span>{$t('developerConsole.businessName')}</span>
-              <input class="cfms-native-field"
-                type="text"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="get_document"
-                aria-invalid={actionError ? 'true' : undefined}
-                aria-describedby={actionError ? 'developer-business-error' : undefined}
-                bind:value={action}
-                oninput={() => { if (actionError) validateAction(); }}
-              />
-            </label>
+            <div class="field-group">
+              <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('developerConsole.businessName')}>
+                <input id={`${outlinedId}-1`} data-focus-ring="delegated" class="cfms-native-field"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="get_document"
+                  aria-invalid={actionError ? 'true' : undefined}
+                  aria-describedby={actionError ? 'developer-business-error' : undefined}
+                  bind:value={action}
+                  oninput={() => { if (actionError) validateAction(); }}
+                />
+              </MdOutlinedField>
+            </div>
             {#if actionError}
               <p id="developer-business-error" class="field-error">{actionError}</p>
             {/if}
@@ -532,6 +535,12 @@
   }
 
   :global(.icon-action[data-fluent-owner="lib-components-developer-request-console"]),
+  .payload-heading label {
+    color: var(--color-md3-on-surface-variant);
+    font-size: 12px;
+    font-weight: 620;
+  }
+
   :global(.text-action[data-fluent-owner="lib-components-developer-request-console"]),
   :global(.send-action[data-fluent-owner="lib-components-developer-request-console"]) {
     display: inline-flex;
@@ -726,11 +735,6 @@
     margin-top: 0.18rem;
   }
 
-  .payload-heading label {
-    color: var(--color-md3-on-surface-variant);
-    font-size: 12px;
-    font-weight: 620;
-  }
 
   :global(.text-action[data-fluent-owner="lib-components-developer-request-console"]) {
     min-height: 1.85rem;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
@@ -1069,6 +1070,7 @@
   function formatError(err: unknown) {
     return formatUserFacingError(err);
   }
+  const outlinedId = $props.id();
 </script>
 
 <div class="workspace-page space-y-4 p-[clamp(1rem,3.75vw,1.5rem)]">
@@ -1576,15 +1578,14 @@
               {activeDialog.info.status === 'active' ? $t('manage.statusActive') : $t('manage.statusDisabled')}
             </span>
           </div>
-          <label class="grid gap-2 text-sm text-md3-on-surface">
-            <span class="font-medium">
-              {activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonLabel') : $t('manage.disableReasonLabel')}
-            </span>
-            <textarea bind:value={accountDisableReason} maxlength="1024" rows="3" placeholder={$t('manage.disableReasonPlaceholder')} class="cfms-native-field w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition disabled:opacity-50" disabled={busyKey !== null}></textarea>
+          <div class="grid gap-2 text-sm text-md3-on-surface">
+            <MdOutlinedField inputId={`${outlinedId}-1`} label={activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonLabel') : $t('manage.disableReasonLabel')} disabled={busyKey !== null}>
+              <textarea id={`${outlinedId}-1`} data-focus-ring="delegated" bind:value={accountDisableReason} maxlength="1024" rows="3" placeholder={$t('manage.disableReasonPlaceholder')} class="cfms-native-field w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition disabled:opacity-50" disabled={busyKey !== null}></textarea>
+            </MdOutlinedField>
             <span class="text-xs text-md3-on-surface-variant">
               {activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonHelp') : $t('manage.reasonOptional')}
             </span>
-          </label>
+          </div>
           <div class="flex flex-wrap gap-2">
             {#if activeDialog.info.status === 'disabled'}
               <FluentButton data-fluent-owner="routes-home-manage-page"

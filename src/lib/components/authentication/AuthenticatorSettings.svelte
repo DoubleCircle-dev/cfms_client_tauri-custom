@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { setupTwoFactor, validateTwoFactor, cancelTwoFactorSetup, disableTwoFactor, getTwoFactorStatus, getManagedTwoFactorStatus, disableManagedTwoFactor, type TwoFactorSetup, type TwoFactorStatus } from '$lib/api';
@@ -108,6 +109,7 @@
     recovery = [];
     return true;
   }
+  const outlinedId = $props.id();
 </script>
 
 <div class="auth-authenticator">
@@ -123,13 +125,21 @@
         <div class="cfms-heading-copy"><h3>{$t('authManagement.setupTitle')}</h3><p>{$t('authManagement.scanCode')}</p></div>
         {#if qr}<img class="auth-qr" src={qr} alt={$t('settings.twofa.provisioningUri')} width="192" height="192" />{:else}<ProgressRing label={$t('common.loading')} />{/if}
         <details><summary>{$t('authManagement.manualSetup')}</summary><code>{setup.secret}</code></details>
-        <label>{$t('settings.twofa.verificationCode')}<input class="cfms-native-field" bind:value={code} inputmode="numeric" autocomplete="one-time-code" disabled={disabled || busy} /></label>
+        <div>
+          <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('settings.twofa.verificationCode')} disabled={disabled || busy}>
+            <input id={`${outlinedId}-1`} data-focus-ring="delegated" class="cfms-native-field" bind:value={code} inputmode="numeric" autocomplete="one-time-code" disabled={disabled || busy} />
+          </MdOutlinedField>
+        </div>
         <div class="auth-actions"><DialogActionButton disabled={disabled || busy} onclick={cancel}>{$t('common.cancel')}</DialogActionButton><DialogActionButton type="submit" variant="primary" disabled={disabled || busy || !code.trim()}>{$t('settings.twofa.verifyEnable')}</DialogActionButton></div>
       </form>
     {:else if recovery.length}
       <div class="auth-inset auth-form" role="status"><div class="cfms-heading-copy"><h3>{$t('authManagement.saveRecovery')}</h3><p>{$t('authManagement.recoveryHelp')}</p></div><div class="auth-recovery">{#each recovery as value}<code>{value}</code>{/each}</div><div class="auth-actions"><DialogActionButton onclick={() => { recovery = []; }}>{$t('authManagement.recoveryDone')}</DialogActionButton></div></div>
     {:else if disabling}
-      <form class="auth-form auth-inset" onsubmit={(event) => { event.preventDefault(); void disable(); }}><p>{$t('authManagement.disableHelp')}</p><label>{$t('settings.twofa.currentPassword')}<input class="cfms-native-field" type="password" autocomplete="current-password" bind:value={password} disabled={disabled || busy} /></label><div class="auth-actions"><DialogActionButton disabled={busy} onclick={() => { disabling = false; password = ''; }}>{$t('common.cancel')}</DialogActionButton><DialogActionButton type="submit" variant="danger" disabled={disabled || busy || !password}>{$t('authManagement.disableAuthenticator')}</DialogActionButton></div></form>
+      <form class="auth-form auth-inset" onsubmit={(event) => { event.preventDefault(); void disable(); }}><p>{$t('authManagement.disableHelp')}</p><div>
+        <MdOutlinedField inputId={`${outlinedId}-2`} label={$t('settings.twofa.currentPassword')} disabled={disabled || busy}>
+          <input id={`${outlinedId}-2`} data-focus-ring="delegated" class="cfms-native-field" type="password" autocomplete="current-password" bind:value={password} disabled={disabled || busy} />
+        </MdOutlinedField>
+      </div><div class="auth-actions"><DialogActionButton disabled={busy} onclick={() => { disabling = false; password = ''; }}>{$t('common.cancel')}</DialogActionButton><DialogActionButton type="submit" variant="danger" disabled={disabled || busy || !password}>{$t('authManagement.disableAuthenticator')}</DialogActionButton></div></form>
     {:else}<div class="auth-actions">{#if status?.enabled}<DialogActionButton variant="danger" disabled={disabled || busy} onclick={beginDisable}>{$t('authManagement.disableAuthenticator')}</DialogActionButton>{:else if !managed}<DialogActionButton variant="tonal" disabled={disabled || busy} onclick={begin}>{$t('settings.twofa.enable')}</DialogActionButton>{/if}</div>{/if}
   {:else}<p>{$t('authManagement.managedAuthenticator')}</p>{/if}
 </div>

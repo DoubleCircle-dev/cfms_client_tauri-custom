@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -285,6 +286,7 @@
       ? Math.floor(milliseconds / 1000)
       : null;
   }
+  const outlinedId = $props.id();
 </script>
 
 <div class="security-workspace">
@@ -430,19 +432,22 @@
     onClose={closeEditor}
   >
     <form class="editor-form" onsubmit={(event) => { event.preventDefault(); void saveRule(); }}>
-      <label>
-        <span>{$t('manage.security.subnetLabel')}</span>
-        <input class="cfms-native-field" bind:value={subnet} disabled={Boolean(editorRule) || busyKey !== null} placeholder="192.0.2.0/24 · 2001:db8::/32" autocomplete="off" />
+      <div>
+        <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('manage.security.subnetLabel')} disabled={Boolean(editorRule) || busyKey !== null}>
+          <input id={`${outlinedId}-1`} data-focus-ring="delegated" class="cfms-native-field" bind:value={subnet} disabled={Boolean(editorRule) || busyKey !== null} placeholder="192.0.2.0/24 · 2001:db8::/32" autocomplete="off" />
+        </MdOutlinedField>
         <small>{$t('manage.security.subnetHelp')}</small>
-      </label>
-      <label>
-        <span>{$t('manage.security.reasonLabel')}</span>
-        <textarea class="cfms-native-field" bind:value={reason} disabled={busyKey !== null} maxlength="1024" rows="3" placeholder={$t('manage.security.reasonPlaceholder')}></textarea>
-      </label>
-      <label>
-        <span>{$t('manage.security.startsAt')}</span>
-        <input class="cfms-native-field" bind:value={startsAt} disabled={busyKey !== null} type="datetime-local" />
-      </label>
+      </div>
+      <div>
+        <MdOutlinedField inputId={`${outlinedId}-2`} label={$t('manage.security.reasonLabel')} disabled={busyKey !== null}>
+          <textarea id={`${outlinedId}-2`} data-focus-ring="delegated" class="cfms-native-field" bind:value={reason} disabled={busyKey !== null} maxlength="1024" rows="3" placeholder={$t('manage.security.reasonPlaceholder')}></textarea>
+        </MdOutlinedField>
+      </div>
+      <div>
+        <MdOutlinedField inputId={`${outlinedId}-3`} label={$t('manage.security.startsAt')} disabled={busyKey !== null}>
+          <input id={`${outlinedId}-3`} data-focus-ring="delegated" class="cfms-native-field" bind:value={startsAt} disabled={busyKey !== null} type="datetime-local" />
+        </MdOutlinedField>
+      </div>
       <div class="expiry-panel">
         <div class="expiry-toggle">
           <MdSwitch bind:checked={expiryEnabled} disabled={busyKey !== null} ariaLabel={$t('manage.security.setEndTime')} />
@@ -452,10 +457,11 @@
           </div>
         </div>
         {#if expiryEnabled}
-          <label>
-            <span>{$t('manage.security.expiresAt')}</span>
-            <input class="cfms-native-field" bind:value={expiresAt} disabled={busyKey !== null} type="datetime-local" />
-          </label>
+          <div>
+            <MdOutlinedField inputId={`${outlinedId}-4`} label={$t('manage.security.expiresAt')} disabled={busyKey !== null}>
+              <input id={`${outlinedId}-4`} data-focus-ring="delegated" class="cfms-native-field" bind:value={expiresAt} disabled={busyKey !== null} type="datetime-local" />
+            </MdOutlinedField>
+          </div>
         {/if}
       </div>
 
@@ -523,7 +529,6 @@
   .empty-state, .loading-state { padding: 2rem 1rem; text-align: center; color: var(--color-md3-on-surface-variant); font: 400 12px/16px var(--font-md3-sans); }
   .loading-state { display: flex; align-items: center; justify-content: center; gap: 8px; }
   .editor-form { display: grid; gap: 16px; padding: 1.25rem; }
-  .editor-form label { display: grid; gap: 8px; color: var(--color-md3-on-surface); font: 500 12px/16px var(--font-md3-sans); }
   .editor-form input, .editor-form textarea { width: 100%; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); padding: 0.62rem 0.72rem; color: var(--color-md3-on-surface); background: var(--color-md3-field); font: 400 12px/16px var(--font-md3-sans); outline: none; transition: border-color 120ms ease, box-shadow 120ms ease; }
   .editor-form textarea { resize: vertical; }
   .editor-form small { color: var(--color-md3-on-surface-variant); font-size: 12px; font-weight: 400; }

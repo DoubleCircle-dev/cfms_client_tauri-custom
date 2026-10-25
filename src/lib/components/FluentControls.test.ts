@@ -6,11 +6,47 @@ import MdSwitch from './MdSwitch.svelte';
 import MdCheckbox from './MdCheckbox.svelte';
 import FluentButton from './FluentButton.svelte';
 import FluentTextInput from './FluentTextInput.svelte';
+import MdOutlinedField from './MdOutlinedField.svelte';
 
 afterEach(() => { cleanup(); document.body.innerHTML = ''; });
 const children = createRawSnippet(() => ({ render: () => '<span>Continue</span>' }));
 
 describe('Svelte / Fluent interoperability', () => {
+  it('associates the notched label with a native input without naming it twice', () => {
+    const input = createRawSnippet(() => ({ render: () => '<input id="native-password" type="password" data-focus-ring="delegated" />' }));
+    const view = render(MdOutlinedField, { inputId: 'native-password', label: 'Password', children: input });
+    const control = screen.getByLabelText('Password') as HTMLInputElement;
+    expect(control.labels).toHaveLength(1);
+    expect(control.labels?.[0].htmlFor).toBe(control.id);
+    expect(view.container.querySelector('fieldset')?.getAttribute('aria-hidden')).toBe('true');
+    expect(control.closest('fieldset')).toBeNull();
+  });
+
+  it('keeps the visible Fluent label and native shadow label associated after relabelling', async () => {
+    const view = render(FluentTextInput, { id: 'labelled-user', label: 'Username' });
+    const host = screen.getByLabelText('Username') as TextInput;
+    expect(view.container.querySelector('label')?.htmlFor).toBe(host.id);
+    const input = host.shadowRoot!.querySelector('input')!;
+    expect(input.labels).toHaveLength(1);
+    const labelText = () => input.labels?.[0].querySelector('slot')?.assignedNodes({ flatten: true }).map(node => node.textContent).join('').trim();
+    expect(labelText()).toBe('Username');
+    await view.rerender({ id: 'labelled-user', label: '用户名', disabled: true });
+    expect(screen.getByLabelText('用户名')).toBe(host);
+    expect(labelText()).toBe('用户名');
+    await waitFor(() => expect(input.disabled).toBe(true));
+  });
+
+  it('retains rich required labels and native multiline semantics', () => {
+    const labelContent = createRawSnippet(() => ({ render: () => '<span>Reason <span aria-label="required">*</span></span>' }));
+    const textarea = createRawSnippet(() => ({ render: () => '<textarea id="reason-field" data-focus-ring="delegated" rows="3" maxlength="1024"></textarea>' }));
+    const view = render(MdOutlinedField, { inputId: 'reason-field', label: 'Reason', labelContent, children: textarea, error: true });
+    const control = screen.getByRole('textbox', { name: /Reason/ }) as HTMLTextAreaElement;
+    expect(control.labels).toHaveLength(1);
+    expect(control.rows).toBe(3);
+    expect(control.maxLength).toBe(1024);
+    expect(view.container.querySelectorAll('fieldset[aria-hidden="true"]')).toHaveLength(1);
+  });
+
   it('keeps text fields enabled by default and synchronizes the disabled attribute', async () => {
     const props = { id: 'search-material', label: 'Search files' };
     const view = render(FluentTextInput, props);

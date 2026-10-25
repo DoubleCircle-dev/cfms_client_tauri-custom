@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
@@ -182,17 +183,18 @@
 
       {#if showCustomProxy}
         <div class="space-y-2">
-          <label for="connection-custom-proxy">{$t('settings.connection.customProxy')}</label>
           <!-- Proxy URLs can contain credentials; keep the value in a native field. -->
-          <input
-            id="connection-custom-proxy"
-            class="cfms-native-field w-full"
-            type="text"
-            value={config.custom_proxy}
-            oninput={(event) => applyConnection({ ...config, custom_proxy: event.currentTarget.value })}
-            placeholder={$t('settings.connection.customProxyHint')}
-            disabled={loading}
-          />
+          <MdOutlinedField inputId="connection-custom-proxy" label={$t('settings.connection.customProxy')} disabled={loading}>
+            <input data-focus-ring="delegated"
+              id="connection-custom-proxy"
+              class="cfms-native-field w-full"
+              type="text"
+              value={config.custom_proxy}
+              oninput={(event) => applyConnection({ ...config, custom_proxy: event.currentTarget.value })}
+              placeholder={$t('settings.connection.customProxyHint')}
+              disabled={loading}
+            />
+          </MdOutlinedField>
         </div>
       {/if}
 

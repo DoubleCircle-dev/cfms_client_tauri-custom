@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import { tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
@@ -44,6 +45,7 @@
       busy = false;
     }
   }
+  const outlinedId = $props.id();
 </script>
 
 <ModalFrame
@@ -68,37 +70,39 @@
       <p class="text-sm text-md3-on-surface-variant">{$t('manage.createGroupDescription')}</p>
     </div>
 
-    <label class="block">
-      <span class="mb-1.5 block text-sm font-medium text-md3-on-surface">{$t('manage.groupNamePrompt')}</span>
-      <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-          <Icon name="groups" size="18px" />
-        </span>
-        <input
-          bind:this={groupNameInput}
-          bind:value={groupName}
-          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
-          autocomplete="off"
-          disabled={busy}
-        />
-      </div>
-    </label>
+    <div class="block">
+      <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('manage.groupNamePrompt')} disabled={busy}>
+        <div data-outlined-content class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+            <Icon name="groups" size="18px" />
+          </span>
+          <input id={`${outlinedId}-1`} data-focus-ring="delegated"
+            bind:this={groupNameInput}
+            bind:value={groupName}
+            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            autocomplete="off"
+            disabled={busy}
+          />
+        </div>
+      </MdOutlinedField>
+    </div>
 
-    <label class="block">
-      <span class="mb-1.5 block text-sm font-medium text-md3-on-surface">{$t('manage.displayNamePrompt')}</span>
-      <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-          <Icon name="edit" size="18px" />
-        </span>
-        <input
-          bind:value={displayName}
-          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
-          autocomplete="off"
-          disabled={busy}
-          placeholder={groupName || $t('manage.displayNamePrompt')}
-        />
-      </div>
-    </label>
+    <div class="block">
+      <MdOutlinedField inputId={`${outlinedId}-2`} label={$t('manage.displayNamePrompt')} disabled={busy}>
+        <div data-outlined-content class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+            <Icon name="edit" size="18px" />
+          </span>
+          <input id={`${outlinedId}-2`} data-focus-ring="delegated"
+            bind:value={displayName}
+            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            autocomplete="off"
+            disabled={busy}
+            placeholder={groupName || $t('manage.displayNamePrompt')}
+          />
+        </div>
+      </MdOutlinedField>
+    </div>
 
     {#if error}
       <div class="flex items-start gap-2 rounded-lg border border-md3-error/35 bg-md3-error-container/25 p-3 text-sm text-md3-on-error-container">

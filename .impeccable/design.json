@@ -139,11 +139,11 @@
       "css": ".ds-primary { min-height:32px; padding:0 12px; border:1px solid transparent; border-radius:4px; background:#0067c0; color:#fff; font:600 14px/20px \"Noto Sans\", \"Noto Sans SC\", sans-serif; } .ds-primary:hover { background:#005a9e; } .ds-primary:focus-visible { outline:2px solid #0067c0; outline-offset:2px; }"
     },
     {
-      "name": "Native Sensitive Field",
+      "name": "Notched Text Field",
       "kind": "input",
-      "description": "Native password/passphrase; Fluent external label and delegated single focus indicator.",
-      "html": "<label class=\"ds-field\">Password<input type=\"password\" placeholder=\"Password\" /></label>",
-      "css": ".ds-field { display:grid; gap:8px; font:14px/20px \"Noto Sans\", \"Noto Sans SC\", sans-serif; } .ds-field input { min-height:32px; border:1px solid #d1d1d1; border-bottom-color:#616161; border-radius:4px; padding:0 12px; background:#fff; color:#242424; }"
+      "description": "Permanent 12/16px label in a real top-border notch, shared by FluentTextInput and native password/passphrase, multiline, number and date/time inputs. One delegated focus indicator; translucent Fluent material and 4px corners.",
+      "html": "<div class=\"ds-field\"><label for=\"ds-password\">Password</label><div class=\"ds-field-content\"><input id=\"ds-password\" type=\"password\" placeholder=\"Password\" /></div><fieldset aria-hidden=\"true\"><legend><span>Password</span></legend></fieldset></div>",
+      "css": ".ds-field { position:relative; padding-top:8px; border-radius:4px; font:14px/20px \"Noto Sans\", \"Noto Sans SC\", sans-serif; } .ds-field label { position:absolute; top:0; left:12px; font:12px/16px \"Noto Sans\", \"Noto Sans SC\", sans-serif; } .ds-field-content { border-radius:inherit; background:var(--cfms-field-background, #fff); } .ds-field input { box-sizing:border-box; width:100%; min-height:32px; border:0; padding:5px 12px; background:transparent; color:var(--colorNeutralForeground1, #242424); } .ds-field fieldset { position:absolute; inset:0; margin:0; padding:0; border:1px solid var(--colorNeutralStroke1, #d1d1d1); border-radius:inherit; pointer-events:none; } .ds-field legend { margin-left:8px; padding:0 4px; font:12px/16px \"Noto Sans\", \"Noto Sans SC\", sans-serif; } .ds-field legend span { visibility:hidden; } .ds-field:focus-within fieldset { border-color:var(--colorStrokeFocus2, #0067c0); border-bottom-width:2px; }"
     }
   ],
   "narrative": {

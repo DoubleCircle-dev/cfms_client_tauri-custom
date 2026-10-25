@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import type {
@@ -207,27 +208,32 @@
         </select>
       </div>
       <div>
-        <label class="field-label" for="schedule-timezone">{$t('schedules.timezone')}</label>
-        <input class="cfms-native-field" id="schedule-timezone" bind:value={timezone} disabled={busy} autocomplete="off" />
+        <MdOutlinedField inputId="schedule-timezone" label={$t('schedules.timezone')} disabled={busy}>
+          <input data-focus-ring="delegated" class="cfms-native-field" id="schedule-timezone" bind:value={timezone} disabled={busy} autocomplete="off" />
+        </MdOutlinedField>
       </div>
     </div>
 
     {#if triggerType === 'cron'}
-      <label class="field-label" for="schedule-cron">{$t('schedules.cronExpression')}</label>
-      <input class="cfms-native-field" id="schedule-cron" bind:value={cronExpression} disabled={busy} placeholder="0 8 * * 1" />
+      <MdOutlinedField inputId="schedule-cron" label={$t('schedules.cronExpression')} disabled={busy}>
+        <input data-focus-ring="delegated" class="cfms-native-field" id="schedule-cron" bind:value={cronExpression} disabled={busy} placeholder="0 8 * * 1" />
+      </MdOutlinedField>
       <p class="field-help">{$t('schedules.cronHelp')}</p>
     {:else if triggerType === 'date'}
-      <label class="field-label" for="schedule-run-at">{$t('schedules.runAt')}</label>
-      <input class="cfms-native-field" id="schedule-run-at" type="datetime-local" bind:value={runAt} disabled={busy} />
+      <MdOutlinedField inputId="schedule-run-at" label={$t('schedules.runAt')} disabled={busy}>
+        <input data-focus-ring="delegated" class="cfms-native-field" id="schedule-run-at" type="datetime-local" bind:value={runAt} disabled={busy} />
+      </MdOutlinedField>
     {:else}
       <div class="trigger-grid">
         <div>
-          <label class="field-label" for="schedule-interval">{$t('schedules.intervalSeconds')}</label>
-          <input class="cfms-native-field" id="schedule-interval" type="number" min="1" step="1" bind:value={intervalSeconds} disabled={busy} />
+          <MdOutlinedField inputId="schedule-interval" label={$t('schedules.intervalSeconds')} disabled={busy}>
+            <input data-focus-ring="delegated" class="cfms-native-field" id="schedule-interval" type="number" min="1" step="1" bind:value={intervalSeconds} disabled={busy} />
+          </MdOutlinedField>
         </div>
         <div>
-          <label class="field-label" for="schedule-start-at">{$t('schedules.startAt')}</label>
-          <input class="cfms-native-field" id="schedule-start-at" type="datetime-local" bind:value={intervalStartAt} disabled={busy} />
+          <MdOutlinedField inputId="schedule-start-at" label={$t('schedules.startAt')} disabled={busy}>
+            <input data-focus-ring="delegated" class="cfms-native-field" id="schedule-start-at" type="datetime-local" bind:value={intervalStartAt} disabled={busy} />
+          </MdOutlinedField>
         </div>
       </div>
     {/if}

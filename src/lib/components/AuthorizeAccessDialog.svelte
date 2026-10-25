@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -198,6 +199,7 @@
     if (accessType === 'move') return 'driveFileMove';
     return 'manageAccounts';
   }
+  const outlinedId = $props.id();
 </script>
 
 <div class="flex h-full min-h-0 max-h-[78vh] flex-col overflow-hidden">
@@ -360,34 +362,38 @@
         </p>
       </div>
       <div class="grid gap-3 md:grid-cols-2">
-        <label class="field-label">
-          {$t('files.authorizationStartDate')}
-          <span class="date-field">
-            <Icon name="calendarToday" size="17px" />
-            <input class="cfms-native-field" type="date" data-focus-ring="delegated" bind:value={startDate} disabled={saving} />
-          </span>
-        </label>
-        <label class="field-label">
-          {$t('files.authorizationStartTime')}
-          <span class="date-field">
-            <Icon name="accessTime" size="17px" />
-            <input class="cfms-native-field" type="time" data-focus-ring="delegated" bind:value={startTime} disabled={saving} />
-          </span>
-        </label>
-        <label class="field-label">
-          {$t('files.authorizationEndDate')}
-          <span class="date-field">
-            <Icon name="calendarToday" size="17px" />
-            <input class="cfms-native-field" type="date" data-focus-ring="delegated" bind:value={endDate} disabled={saving} />
-          </span>
-        </label>
-        <label class="field-label">
-          {$t('files.authorizationEndTime')}
-          <span class="date-field">
-            <Icon name="accessTime" size="17px" />
-            <input class="cfms-native-field" type="time" data-focus-ring="delegated" bind:value={endTime} disabled={saving} />
-          </span>
-        </label>
+        <div class="field-label">
+          <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('files.authorizationStartDate')} disabled={saving}>
+            <span data-outlined-content class="date-field">
+              <Icon name="calendarToday" size="17px" />
+              <input id={`${outlinedId}-1`} class="cfms-native-field" type="date" data-focus-ring="delegated" bind:value={startDate} disabled={saving} />
+            </span>
+          </MdOutlinedField>
+        </div>
+        <div class="field-label">
+          <MdOutlinedField inputId={`${outlinedId}-2`} label={$t('files.authorizationStartTime')} disabled={saving}>
+            <span data-outlined-content class="date-field">
+              <Icon name="accessTime" size="17px" />
+              <input id={`${outlinedId}-2`} class="cfms-native-field" type="time" data-focus-ring="delegated" bind:value={startTime} disabled={saving} />
+            </span>
+          </MdOutlinedField>
+        </div>
+        <div class="field-label">
+          <MdOutlinedField inputId={`${outlinedId}-3`} label={$t('files.authorizationEndDate')} disabled={saving}>
+            <span data-outlined-content class="date-field">
+              <Icon name="calendarToday" size="17px" />
+              <input id={`${outlinedId}-3`} class="cfms-native-field" type="date" data-focus-ring="delegated" bind:value={endDate} disabled={saving} />
+            </span>
+          </MdOutlinedField>
+        </div>
+        <div class="field-label">
+          <MdOutlinedField inputId={`${outlinedId}-4`} label={$t('files.authorizationEndTime')} disabled={saving}>
+            <span data-outlined-content class="date-field">
+              <Icon name="accessTime" size="17px" />
+              <input id={`${outlinedId}-4`} class="cfms-native-field" type="time" data-focus-ring="delegated" bind:value={endTime} disabled={saving} />
+            </span>
+          </MdOutlinedField>
+        </div>
       </div>
     </section>
 
@@ -479,10 +485,6 @@
       box-shadow 150ms ease;
   }
 
-  .date-field:focus-within {
-    border-color: var(--color-md3-primary);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-md3-primary) 25%, transparent);
-  }
 
   .field-label {
     display: grid;

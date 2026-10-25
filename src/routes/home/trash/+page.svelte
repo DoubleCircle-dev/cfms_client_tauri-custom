@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
@@ -313,6 +314,7 @@
       total,
     );
   }
+  const outlinedId = $props.id();
 </script>
 
 <div class="workspace-page trash-page">
@@ -335,15 +337,16 @@
       loadItems(folderId);
     }}
   >
-    <label class="scope-field">
-      <span>{$t('trash.folderId')}</span>
-      <input class="cfms-native-field"
-        data-focus-ring="delegated"
-        bind:value={folderId}
-        disabled={loading}
-        placeholder="/"
-      />
-    </label>
+    <div class="scope-field">
+      <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('trash.folderId')} disabled={loading}>
+        <input id={`${outlinedId}-1`} class="cfms-native-field"
+          data-focus-ring="delegated"
+          bind:value={folderId}
+          disabled={loading}
+          placeholder="/"
+        />
+      </MdOutlinedField>
+    </div>
 
     <FluentButton data-fluent-owner="routes-home-trash-page"
       type="submit"

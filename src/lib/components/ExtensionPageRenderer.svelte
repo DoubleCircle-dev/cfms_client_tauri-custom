@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { readExtensionPage, type DeclarativeBlock, type DeclarativePage } from '$lib/api/extensions';
@@ -7,6 +8,7 @@
   import ProgressRing from '$lib/components/ProgressRing.svelte';
 
   let { extensionId, pageId }: { extensionId: string; pageId: string } = $props();
+  const formId = $props.id();
   let page = $state<DeclarativePage | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -108,17 +110,21 @@
         {:else if block.type === 'form'}
           <section class="extension-card cfms-content-surface extension-wide form-card">
             {#each block.fields as field}
-              <label><span>{field.label}</span>
-                {#if field.type === 'toggle'}
+              {#if field.type === 'toggle'}
+                <label><span>{field.label}</span>
                   <input type="checkbox" checked={Boolean(formValues[block.id]?.[field.id])} onchange={(event) => updateField(block.id, field.id, event.currentTarget.checked)} />
-                {:else if field.type === 'select'}
+                </label>
+              {:else if field.type === 'select'}
+                <label><span>{field.label}</span>
                   <select class="cfms-native-field" value={String(formValues[block.id]?.[field.id] ?? '')} onchange={(event) => updateField(block.id, field.id, event.currentTarget.value)}>
                     {#each field.options ?? [] as option}<option value={option}>{option}</option>{/each}
                   </select>
-                {:else}
-                  <input type={field.type} value={String(formValues[block.id]?.[field.id] ?? '')} oninput={(event) => updateField(block.id, field.id, field.type === 'number' ? event.currentTarget.valueAsNumber : event.currentTarget.value)} />
-                {/if}
-              </label>
+                </label>
+              {:else}
+                <MdOutlinedField inputId={`${formId}-${block.id}-${field.id}`} label={field.label}>
+                  <input id={`${formId}-${block.id}-${field.id}`} data-focus-ring="delegated" type={field.type} value={String(formValues[block.id]?.[field.id] ?? '')} oninput={(event) => updateField(block.id, field.id, field.type === 'number' ? event.currentTarget.valueAsNumber : event.currentTarget.value)} />
+                </MdOutlinedField>
+              {/if}
             {/each}
           </section>
         {:else if block.type === 'actions'}

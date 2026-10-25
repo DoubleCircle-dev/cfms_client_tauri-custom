@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { openUrl } from '@tauri-apps/plugin-opener';
@@ -117,17 +118,18 @@
       </div>
 
       <form class="credential-form" onsubmit={(event) => { event.preventDefault(); void saveToken(); }}>
-        <label for="github-api-token">{$t('settings.githubApi.tokenLabel')}</label>
-        <input class="cfms-native-field"
-          id="github-api-token"
-          type="password"
-          autocomplete="new-password"
-          autocapitalize="none"
-          spellcheck="false"
-          placeholder={$t('settings.githubApi.tokenPlaceholder')}
-          bind:value={token}
-          disabled={loading || busy || mode === 'unavailable'}
-        />
+        <MdOutlinedField inputId="github-api-token" label={$t('settings.githubApi.tokenLabel')} disabled={loading || busy || mode === 'unavailable'}>
+          <input data-focus-ring="delegated" class="cfms-native-field"
+            id="github-api-token"
+            type="password"
+            autocomplete="new-password"
+            autocapitalize="none"
+            spellcheck="false"
+            placeholder={$t('settings.githubApi.tokenPlaceholder')}
+            bind:value={token}
+            disabled={loading || busy || mode === 'unavailable'}
+          />
+        </MdOutlinedField>
         <div class="credential-actions">
           <FluentButton data-fluent-owner="routes-home-settings-github-api-page"
             type="submit"
@@ -218,11 +220,8 @@
     gap: 12px;
   }
 
-  .credential-form label {
-    color: var(--color-md3-on-surface);
-    font: 600 12px/16px var(--font-md3-sans);
-  }
 
+  .credential-form > :global(.cfms-field) { width: min(100%, 30rem); }
   .credential-form input {
     width: min(100%, 30rem);
     min-height: 2.75rem;

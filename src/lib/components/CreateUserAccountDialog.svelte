@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { onDestroy } from 'svelte';
   import { tick } from 'svelte';
@@ -87,6 +88,7 @@
       busy = false;
     }
   }
+  const outlinedId = $props.id();
 </script>
 
 <ModalFrame
@@ -111,78 +113,81 @@
       <p class="text-sm text-md3-on-surface-variant">{$t('manage.createAccountDescription')}</p>
     </div>
 
-    <label class="block">
-      <span class="mb-1.5 block text-sm font-medium text-md3-on-surface">{$t('manage.username')}</span>
-      <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-          <Icon name="accountCircle" size="18px" />
-        </span>
-        <input
-          bind:this={usernameInput}
-          bind:value={username}
-          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
-          autocomplete="username"
-          disabled={busy}
-        />
-      </div>
-    </label>
-
-    <label class="block">
-      <span class="mb-1.5 block text-sm font-medium text-md3-on-surface">{$t('manage.nickname')}</span>
-      <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-          <Icon name="edit" size="18px" />
-        </span>
-        <input
-          bind:value={nickname}
-          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
-          autocomplete="off"
-          disabled={busy}
-          placeholder={username || $t('manage.nickname')}
-        />
-      </div>
-    </label>
-
-    <label class="block">
-      <span class="mb-1.5 block text-sm font-medium text-md3-on-surface">{$t('dialog.changePassword.newPassword')}</span>
-      <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-          <Icon name="password" size="18px" />
-        </span>
-        <input
-          bind:value={password}
-          type={passwordVisible ? 'text' : 'password'}
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-20 text-sm text-md3-on-surface outline-none transition"
-          autocomplete="new-password"
-          disabled={busy}
-        />
-        <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-          <FluentButton data-fluent-owner="lib-components-create-user-account-dialog"
-            type="button"
-            title={$t('dialog.changePassword.generateStrongPassword')}
+    <div class="block">
+      <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('manage.username')} disabled={busy}>
+        <div data-outlined-content class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+            <Icon name="accountCircle" size="18px" />
+          </span>
+          <input id={`${outlinedId}-1`} data-focus-ring="delegated"
+            bind:this={usernameInput}
+            bind:value={username}
+            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            autocomplete="username"
             disabled={busy}
-            onclick={generate}
-            appearance="subtle"
-            class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-primary-emphasis disabled:opacity-45"
-            iconOnly
-            aria-label={$t('dialog.changePassword.generateStrongPassword')}
-          >
-            <Icon name="ifl" size="18px" />
-          </FluentButton>
-          <FluentButton data-fluent-owner="lib-components-create-user-account-dialog"
-            type="button"
-            aria-label={passwordVisible ? $t('login.hidePassword') : $t('login.showPassword')}
-            disabled={busy}
-            onclick={() => (passwordVisible = !passwordVisible)}
-            appearance="subtle"
-            class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface disabled:opacity-45"
-            iconOnly
-          >
-            <Icon name="visibility" size="18px" />
-          </FluentButton>
+          />
         </div>
-      </div>
-    </label>
+      </MdOutlinedField>
+    </div>
+
+    <div class="block">
+      <MdOutlinedField inputId={`${outlinedId}-2`} label={$t('manage.nickname')} disabled={busy}>
+        <div data-outlined-content class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+            <Icon name="edit" size="18px" />
+          </span>
+          <input id={`${outlinedId}-2`} data-focus-ring="delegated"
+            bind:value={nickname}
+            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            autocomplete="off"
+            disabled={busy}
+            placeholder={username || $t('manage.nickname')}
+          />
+        </div>
+      </MdOutlinedField>
+    </div>
+
+    <div class="block">
+      <MdOutlinedField inputId={`${outlinedId}-3`} label={$t('dialog.changePassword.newPassword')} disabled={busy}>
+        <div data-outlined-content class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+            <Icon name="password" size="18px" />
+          </span>
+          <input id={`${outlinedId}-3`} data-focus-ring="delegated"
+            bind:value={password}
+            type={passwordVisible ? 'text' : 'password'}
+            class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-20 text-sm text-md3-on-surface outline-none transition"
+            autocomplete="new-password"
+            disabled={busy}
+          />
+          <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+            <FluentButton data-fluent-owner="lib-components-create-user-account-dialog"
+              type="button"
+              title={$t('dialog.changePassword.generateStrongPassword')}
+              disabled={busy}
+              onclick={generate}
+              appearance="subtle"
+              class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-primary-emphasis disabled:opacity-45"
+              iconOnly
+              aria-label={$t('dialog.changePassword.generateStrongPassword')}
+            >
+              <Icon name="ifl" size="18px" />
+            </FluentButton>
+            <FluentButton data-fluent-owner="lib-components-create-user-account-dialog"
+              type="button"
+              aria-label={passwordVisible ? $t('login.hidePassword') : $t('login.showPassword')}
+              disabled={busy}
+              onclick={() => (passwordVisible = !passwordVisible)}
+              appearance="subtle"
+              class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface disabled:opacity-45"
+              iconOnly
+            >
+              <Icon name="visibility" size="18px" />
+            </FluentButton>
+          </div>
+        </div>
+      </MdOutlinedField>
+    </div>
 
     {#if error}
       <div class="flex items-start gap-2 rounded-lg border border-md3-error/35 bg-md3-error-container/25 p-3 text-sm text-md3-on-error-container">

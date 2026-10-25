@@ -3,6 +3,7 @@
   import type { TextInput } from '@fluentui/web-components';
   import { tick, type Snippet } from 'svelte';
   import { disabledAttribute } from '$lib/fluent/control';
+  import MdOutlinedField from './MdOutlinedField.svelte';
 
   // Only non-sensitive types: this component reflects its value into attributes.
   interface Props {
@@ -77,43 +78,49 @@
   }
 </script>
 
-<fluent-text-input
-  bind:this={element}
-  use:forwardKeydown
-  use:disabledAttribute={disabled}
-  {id} {name} {type} {disabled} {autocomplete} {placeholder}
-  spellcheck="false"
-  aria-label={label}
-  aria-invalid={invalid}
-  aria-describedby={describedBy}
-  class="cfms-text-input"
-  appearance="outline"
-  control-size={controlSize}
-  oninput={() => {
-    if (!element || disabled) return;
-    value = element.value;
-    oninput?.(value);
-  }}
->
-  {label}
-  {#if start}<span slot="start">{@render start()}</span>{/if}
-  {#if end}<span slot="end">{@render end()}</span>{/if}
-</fluent-text-input>
+<MdOutlinedField inputId={id} {label} error={invalid} {disabled}>
+  <fluent-text-input
+    bind:this={element}
+    use:forwardKeydown
+    use:disabledAttribute={disabled}
+    {id} {name} {type} {disabled} {autocomplete} {placeholder}
+    spellcheck="false"
+    aria-label={label}
+    aria-invalid={invalid}
+    aria-describedby={describedBy}
+    class="cfms-text-input"
+    appearance="outline"
+    control-size={controlSize}
+    oninput={() => {
+      if (!element || disabled) return;
+      value = element.value;
+      oninput?.(value);
+    }}
+  >
+    {label}
+    {#if start}<span slot="start">{@render start()}</span>{/if}
+    {#if end}<span slot="end">{@render end()}</span>{/if}
+  </fluent-text-input>
+</MdOutlinedField>
 
 <style>
   .cfms-text-input { display: block; inline-size: 100%; max-inline-size: none; }
-  .cfms-text-input::part(label) { margin-block-end: 8px; padding-block-end: 0; font-weight: 400; }
+  .cfms-text-input::part(label) { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; }
   .cfms-text-input::part(control) { font-size: var(--fontSizeBase300); }
   .cfms-text-input::part(root) {
-    background: var(--cfms-field-background);
-    -webkit-backdrop-filter: var(--cfms-material-filter);
-    backdrop-filter: var(--cfms-material-filter);
+    height: 30px;
+    background: transparent;
+    border: 0;
+    outline: none;
+    box-shadow: none;
   }
-  .cfms-text-input[disabled]::part(root) { background: var(--colorNeutralBackgroundDisabled); }
+  .cfms-text-input[control-size="small"]::part(root) { height: 22px; }
+  .cfms-text-input[control-size="large"]::part(root) { height: 38px; }
+  .cfms-text-input::part(root)::after { display: none; }
   .cfms-text-input[aria-invalid="true"] { --colorNeutralStroke1: var(--colorStatusDangerBorder1); --colorCompoundBrandStroke: var(--colorStatusDangerBorder1); }
   .cfms-text-input :global([slot]) { display: inline-flex; align-items: center; color: var(--colorNeutralForeground3); }
   @media (pointer: coarse) {
-    .cfms-text-input::part(root) { min-block-size: 44px; }
+    .cfms-text-input::part(root) { min-block-size: 42px; }
     .cfms-text-input::part(control) { font-size: 16px; }
   }
 </style>

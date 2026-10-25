@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import { _ as t } from 'svelte-i18n';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -37,6 +38,7 @@
     if (!normalizedDocumentId || busy) return;
     void onSubmit(normalizedDocumentId);
   }
+  const outlinedId = $props.id();
 </script>
 
 {#if open}
@@ -58,24 +60,23 @@
         </p>
       </div>
 
-      <label class="block">
-        <span class="mb-1.5 block text-sm font-semibold text-md3-on-surface">
-          {$t('files.documentId')}
-        </span>
-        <input
-          required
-          type="text"
-          autocomplete="off"
-          autocapitalize="none"
-          spellcheck={false}
-          placeholder={$t('tasks.downloadByIdPlaceholder')}
-          aria-describedby="document-id-download-description{error ? ' document-id-download-error' : ''}"
-          aria-invalid={error ? 'true' : undefined}
-          class="cfms-native-field document-id-input w-full rounded-xl border border-md3-outline bg-md3-field px-3 py-2.5 font-mono text-sm text-md3-on-surface outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
-          bind:value={documentId}
-          disabled={busy}
-        />
-      </label>
+      <div class="block">
+        <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('files.documentId')} disabled={busy}>
+          <input id={`${outlinedId}-1`} data-focus-ring="delegated"
+            required
+            type="text"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck={false}
+            placeholder={$t('tasks.downloadByIdPlaceholder')}
+            aria-describedby="document-id-download-description{error ? ' document-id-download-error' : ''}"
+            aria-invalid={error ? 'true' : undefined}
+            class="cfms-native-field document-id-input w-full rounded-xl border border-md3-outline bg-md3-field px-3 py-2.5 font-mono text-sm text-md3-on-surface outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
+            bind:value={documentId}
+            disabled={busy}
+          />
+        </MdOutlinedField>
+      </div>
 
       {#if error}
         <div
