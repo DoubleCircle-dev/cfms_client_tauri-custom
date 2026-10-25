@@ -79,7 +79,7 @@
           <input id={`${outlinedId}-1`} data-focus-ring="delegated"
             bind:this={groupNameInput}
             bind:value={groupName}
-            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            class="cfms-native-field w-full py-2.5 pl-10 pr-3 text-sm text-md3-on-surface transition"
             autocomplete="off"
             disabled={busy}
           />
@@ -95,7 +95,7 @@
           </span>
           <input id={`${outlinedId}-2`} data-focus-ring="delegated"
             bind:value={displayName}
-            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            class="cfms-native-field w-full py-2.5 pl-10 pr-3 text-sm text-md3-on-surface transition"
             autocomplete="off"
             disabled={busy}
             placeholder={groupName || $t('manage.displayNamePrompt')}

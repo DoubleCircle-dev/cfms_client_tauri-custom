@@ -309,7 +309,8 @@
   :global(.icon-button[data-fluent-owner="lib-components-schedule-editor"]:hover) { background: var(--color-md3-surface-container-highest); color: var(--color-md3-on-surface); }
   form { display: grid; gap: 12px; padding: 1rem 1.1rem 1.25rem; }
   .field-label { color: var(--color-md3-on-surface); font-family: var(--font-md3-sans); font-size: 12px; font-weight: 600; }
-  input, select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.84rem/1.4 var(--font-md3-sans); }
+  input, select { width: 100%; box-sizing: border-box; color: var(--color-md3-on-surface); font: 0.84rem/1.4 var(--font-md3-sans); }
+  select { border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); }
   input, select { min-height: 42px; padding: 0 0.7rem; }
   input:is(:disabled, [disabled]), select:is(:disabled, [disabled]) { cursor: not-allowed; opacity: 0.55; }
   .trigger-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 12px; }

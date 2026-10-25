@@ -56,7 +56,7 @@
     <form class="flex flex-col gap-5 p-5" onsubmit={submit}>
       <p class="text-sm text-md3-on-surface-variant">{$t('publicKey.migrationBody')}</p>
       <MdOutlinedField inputId="preference-migration-password" label={$t('publicKey.previousPassword')}>
-        <input bind:this={input} id="preference-migration-password" data-focus-ring="delegated" type="password" bind:value={password} disabled={busy} autocomplete="off" class="cfms-native-field w-full bg-transparent px-4 py-3 text-md3-on-surface outline-none" />
+        <input bind:this={input} id="preference-migration-password" data-focus-ring="delegated" type="password" bind:value={password} disabled={busy} autocomplete="off" class="cfms-native-field w-full px-4 py-3 text-md3-on-surface" />
       </MdOutlinedField>
       {#if error}<p role="alert" class="text-sm text-md3-error">{error}</p>{/if}
       <FluentButton data-fluent-owner="lib-components-preference-unlock-dialog"

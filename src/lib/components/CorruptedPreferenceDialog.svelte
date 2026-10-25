@@ -95,7 +95,7 @@
                 </span>
                 <input data-focus-ring="delegated"
                   id="preference-recovery-password"
-                  class="w-full rounded-xl border border-md3-outline bg-md3-field py-2.5 pl-10 pr-10 text-sm text-md3-on-surface transition-colors placeholder:text-md3-on-surface-variant"
+                  class="w-full py-2.5 pl-10 pr-10 text-sm text-md3-on-surface transition-colors placeholder:text-md3-on-surface-variant"
                   type={recoveryVisible ? 'text' : 'password'}
                   bind:value={recoveryPassword}
                   autocomplete="current-password"

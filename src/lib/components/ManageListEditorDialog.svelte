@@ -238,31 +238,35 @@
           {emptyMessage || $t('manage.noItems')}
         </p>
       {:else}
-        <div class="overflow-hidden rounded-lg border border-md3-outline">
+        <div class="cfms-list-rows overflow-hidden rounded-lg border border-md3-outline">
           {#each visibleItems as item (item.id)}
             <FluentButton data-fluent-owner="lib-components-manage-list-editor-dialog"
               type="button"
               disabled={saving}
+              aria-pressed={selectedSet.has(item.id)}
               onclick={() => setSelected(item.id, !selectedSet.has(item.id))}
-              appearance="outline"
-              class="grid w-full cursor-pointer grid-cols-[auto_1fr] items-start gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-primary-container/15 disabled:cursor-not-allowed disabled:opacity-60 last:border-b-0"
+              appearance="subtle"
+              shape="square"
+              class="cfms-list-row disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span
-                class="mt-[-1px] inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors
-                       {selectedSet.has(item.id) ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}"
-                aria-hidden="true"
-              >
-                <Icon name={selectedSet.has(item.id) ? 'checkBox' : 'checkBoxBlank'} size="22px" />
-              </span>
-              <span class="min-w-0">
-                <span class="block truncate text-sm font-medium text-md3-on-surface">
-                  {displayLabel(item)}
+              <span class="grid w-full grid-cols-[auto_1fr] items-start gap-3 px-4 py-3">
+                <span
+                  class="mt-[-1px] inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors
+                         {selectedSet.has(item.id) ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}"
+                  aria-hidden="true"
+                >
+                  <Icon name={selectedSet.has(item.id) ? 'checkBox' : 'checkBoxBlank'} size="22px" />
                 </span>
-                {#if item.meta || item.id !== displayLabel(item)}
-                  <span class="mt-0.5 block truncate text-xs text-md3-on-surface-variant">
-                    {item.meta || item.id}
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-medium text-md3-on-surface">
+                    {displayLabel(item)}
                   </span>
-                {/if}
+                  {#if item.meta || item.id !== displayLabel(item)}
+                    <span class="mt-0.5 block truncate text-xs text-md3-on-surface-variant">
+                      {item.meta || item.id}
+                    </span>
+                  {/if}
+                </span>
               </span>
             </FluentButton>
           {/each}

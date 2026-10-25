@@ -1580,7 +1580,7 @@
           </div>
           <div class="grid gap-2 text-sm text-md3-on-surface">
             <MdOutlinedField inputId={`${outlinedId}-1`} label={activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonLabel') : $t('manage.disableReasonLabel')} disabled={busyKey !== null}>
-              <textarea id={`${outlinedId}-1`} data-focus-ring="delegated" bind:value={accountDisableReason} maxlength="1024" rows="3" placeholder={$t('manage.disableReasonPlaceholder')} class="cfms-native-field w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition disabled:opacity-50" disabled={busyKey !== null}></textarea>
+              <textarea id={`${outlinedId}-1`} data-focus-ring="delegated" bind:value={accountDisableReason} maxlength="1024" rows="3" placeholder={$t('manage.disableReasonPlaceholder')} class="cfms-native-field w-full resize-y px-3 py-2.5 text-sm text-md3-on-surface transition disabled:opacity-50" disabled={busyKey !== null}></textarea>
             </MdOutlinedField>
             <span class="text-xs text-md3-on-surface-variant">
               {activeDialog.info.status === 'disabled' ? $t('manage.replaceDisableReasonHelp') : $t('manage.reasonOptional')}

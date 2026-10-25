@@ -122,7 +122,7 @@
           <input id={`${outlinedId}-1`} data-focus-ring="delegated"
             bind:this={usernameInput}
             bind:value={username}
-            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            class="cfms-native-field w-full py-2.5 pl-10 pr-3 text-sm text-md3-on-surface transition"
             autocomplete="username"
             disabled={busy}
           />
@@ -138,7 +138,7 @@
           </span>
           <input id={`${outlinedId}-2`} data-focus-ring="delegated"
             bind:value={nickname}
-            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            class="cfms-native-field w-full py-2.5 pl-10 pr-3 text-sm text-md3-on-surface transition"
             autocomplete="off"
             disabled={busy}
             placeholder={username || $t('manage.nickname')}
@@ -156,7 +156,7 @@
           <input id={`${outlinedId}-3`} data-focus-ring="delegated"
             bind:value={password}
             type={passwordVisible ? 'text' : 'password'}
-            class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-20 text-sm text-md3-on-surface outline-none transition"
+            class="w-full py-2.5 pl-10 pr-20 text-sm text-md3-on-surface transition"
             autocomplete="new-password"
             disabled={busy}
           />

@@ -328,7 +328,7 @@
               aria-describedby={serverAddressError ? "server-address-error" : undefined}
               type="text"
               data-focus-ring="delegated"
-              class="server-address-input min-w-0 flex-1 bg-transparent
+              class="server-address-input min-w-0 flex-1
                      text-md3-on-surface text-sm
                      placeholder:text-md3-on-surface-variant
                      transition-colors"

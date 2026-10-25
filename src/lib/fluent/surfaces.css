@@ -59,9 +59,9 @@
 }
 :root textarea.cfms-native-field { min-block-size: 96px; resize: vertical; }
 :root .cfms-native-field::placeholder { color: var(--colorNeutralForeground4); opacity: 1; }
-:root .cfms-native-field:hover:not(:disabled) { border-color: var(--colorNeutralStroke1Hover); }
-:root .cfms-native-field:disabled { color: var(--colorNeutralForegroundDisabled); background: var(--colorNeutralBackgroundDisabled); border-color: var(--colorNeutralStrokeDisabled); }
-:root .cfms-native-field[aria-invalid="true"] { border-color: var(--colorStatusDangerBorder1); }
+:root .cfms-native-field:not([data-focus-ring="delegated"]):hover:not(:disabled) { border-color: var(--colorNeutralStroke1Hover); }
+:root .cfms-native-field:not([data-focus-ring="delegated"]):disabled { color: var(--colorNeutralForegroundDisabled); background: var(--colorNeutralBackgroundDisabled); border-color: var(--colorNeutralStrokeDisabled); }
+:root .cfms-native-field:not([data-focus-ring="delegated"])[aria-invalid="true"] { border-color: var(--colorStatusDangerBorder1); }
 
 /* Notched composites delegate all paint and focus to MdOutlinedField. Keep
  * geometry at the call site (icons, counters and native date controls). */
@@ -85,6 +85,9 @@
   background: transparent;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+:root .cfms-field__content :is(input, textarea)[data-focus-ring="delegated"]:disabled {
+  color: var(--colorNeutralForegroundDisabled);
 }
 .cfms-field__content > :is(div, span[data-outlined-content]) { flex: 1; min-inline-size: 0; }
 .cfms-field:has(input:disabled, textarea:disabled, fluent-text-input[disabled]) > .cfms-field__content::before,
@@ -156,7 +159,7 @@
 @media (forced-colors: active) {
   .settings-section, .cfms-acrylic-surface { color: CanvasText; border-color: CanvasText; background: Canvas; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
   :root .cfms-native-field:not([data-focus-ring="delegated"]) { color: FieldText; background: Field; border-color: ButtonText; }
-  :root .cfms-native-field:disabled { color: GrayText; border-color: GrayText; }
+  :root .cfms-native-field:not([data-focus-ring="delegated"]):disabled { color: GrayText; border-color: GrayText; }
   :is(.cfms-content-surface, .settings-section)::before { background: Canvas; }
   .cfms-field-surface::before { background: Field; }
 }

@@ -188,8 +188,8 @@
             <input data-focus-ring="delegated"
               id="cp-old"
               type={oldVisible ? 'text' : 'password'}
-              class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-md3-outline
-                     bg-md3-field text-md3-on-surface text-sm
+              class="w-full pl-10 pr-10 py-2.5
+                     text-md3-on-surface text-sm
                      placeholder:text-md3-on-surface-variant
                      transition-colors"
               placeholder={$t('dialog.changePassword.currentPasswordPlaceholder')}
@@ -222,8 +222,8 @@
             <input data-focus-ring="delegated"
               id="cp-new"
               type={newVisible ? 'text' : 'password'}
-              class="w-full pl-10 pr-20 py-2.5 rounded-xl border border-md3-outline
-                     bg-md3-field text-md3-on-surface text-sm
+              class="w-full pl-10 pr-20 py-2.5
+                     text-md3-on-surface text-sm
                      placeholder:text-md3-on-surface-variant
                      transition-colors"
               placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}

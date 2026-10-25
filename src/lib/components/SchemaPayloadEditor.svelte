@@ -685,10 +685,11 @@
   :global(.field-action[data-fluent-owner="lib-components-schema-payload-editor"]) { display: inline-flex; min-height: 28px; align-items: center; gap: 4px; padding: 0.2rem 0.35rem; }
   :global(.field-action[data-fluent-owner="lib-components-schema-payload-editor"]:hover:not(:is(:disabled, [disabled]))), .source-toolbar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"]):hover:not(:is(:disabled, [disabled]))), :global(.add-item[data-fluent-owner="lib-components-schema-payload-editor"]):hover:not(:is(:disabled, [disabled])), .array-item-bar :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"]):hover:not(:is(:disabled, [disabled]))) { background: var(--color-md3-surface-container-highest); }
   :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"]):is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.48; }
-  input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); color: var(--color-md3-on-surface); font: 0.82rem/1.4 var(--font-md3-sans); }
+  input, select, textarea { width: 100%; box-sizing: border-box; color: var(--color-md3-on-surface); font: 0.82rem/1.4 var(--font-md3-sans); }
+  select { border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); }
   input, select { min-height: 40px; padding: 0 0.65rem; }
   textarea { min-height: 6.5rem; resize: vertical; padding: 0.65rem; }
-  input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--color-md3-error); }
+  select[aria-invalid="true"] { border-color: var(--color-md3-error); }
   .schema-description, .constraint-summary, .additional-properties-note { margin: 0; color: var(--color-md3-on-surface-variant); font: 0.7rem/1.45 var(--font-md3-sans); }
   .constraint-summary { font-family: var(--font-md3-mono); }
   .nested-object { display: grid; gap: 12px; min-width: 0; margin: 0; border: 1px solid var(--color-md3-outline); border-radius: 8px; padding: 0.75rem; }

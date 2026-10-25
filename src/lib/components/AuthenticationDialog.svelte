@@ -70,7 +70,7 @@
       <form class="flex flex-col gap-5 p-5" onsubmit={verifyPassword}>
         <p class="text-sm text-md3-on-surface-variant">{$t('authentication.passwordPrompt')}</p>
         <MdOutlinedField inputId="authentication-password" label={$t('login.password')}>
-          <input bind:this={passwordInput} id="authentication-password" data-focus-ring="delegated" type="password" bind:value={password} autocomplete="current-password" disabled={busy} class="cfms-native-field w-full bg-transparent px-4 py-3 text-md3-on-surface outline-none" />
+          <input bind:this={passwordInput} id="authentication-password" data-focus-ring="delegated" type="password" bind:value={password} autocomplete="current-password" disabled={busy} class="cfms-native-field w-full px-4 py-3 text-md3-on-surface" />
         </MdOutlinedField>
         {#if error}<p role="alert" class="text-sm text-md3-error">{error}</p>{/if}
         <div class="flex justify-end gap-2">

@@ -538,28 +538,7 @@
   }
 
   .scope-field {
-    display: flex;
     min-width: 0;
-    min-height: 40px;
-    align-items: center;
-    gap: 12px;
-    border: 1px solid var(--explorer-border);
-    border-radius: var(--borderRadiusMedium);
-    padding: 0 0.7rem;
-    color: var(--explorer-text-muted);
-    background: var(--explorer-surface-raised);
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-    transition:
-      border-color 140ms var(--motion-easing-standard),
-      box-shadow 140ms var(--motion-easing-standard),
-      background-color 140ms var(--motion-easing-standard);
-  }
-
-  .scope-field:focus-within {
-    border-color: var(--explorer-accent);
-    box-shadow: inset 0 0 0 1px var(--explorer-accent);
   }
 
   .scope-field input {
@@ -567,13 +546,7 @@
     width: 100%;
     flex: 1;
     appearance: none;
-    border: 0 !important;
-    outline: 0;
-    padding: 0;
-    color: var(--explorer-text);
-    background: transparent;
-    box-shadow: none !important;
-    font: 400 12px/16px var(--font-md3-mono, var(--font-md3-sans));
+    font: 400 12px/16px var(--fontFamilyMonospace);
   }
 
   .scope-field input:is(:disabled, [disabled]) { opacity: 0.55; }
@@ -803,13 +776,13 @@
   }
 
   @media (pointer: coarse) {
+    .scope-field input { font-size: 16px; }
     :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
     :global(.select-button[data-fluent-owner="routes-home-trash-page"]) { min-height: 44px; }
     .trash-row { min-height: 66px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .scope-field,
     :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
     :global(.select-button[data-fluent-owner="routes-home-trash-page"]),
     .trash-row { transition: none; }

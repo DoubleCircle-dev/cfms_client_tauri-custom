@@ -158,7 +158,6 @@
                 bind:this={nicknameInputElement}
                 bind:value={nicknameInput}
                 class="cfms-native-field text-field text-field--counted"
-                class:text-field--error={nicknameTooLong}
                 type="text"
                 name="nickname"
                 autocomplete="off"
@@ -329,24 +328,13 @@
   .text-field {
     width: 100%;
     min-height: 42px;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--borderRadiusMedium);
     padding: 0.58rem 0.75rem;
     color: var(--color-md3-on-surface);
-    background: var(--color-md3-surface-container-high);
     font: 400 14px/20px var(--font-md3-sans);
-    transition:
-      border-color var(--motion-duration-short3) var(--motion-easing-standard),
-      background-color var(--motion-duration-short3) var(--motion-easing-standard),
-      box-shadow var(--motion-duration-short3) var(--motion-easing-standard);
   }
 
   .text-field--counted {
     padding-inline-end: 4.5rem;
-  }
-
-  .text-field--error {
-    border-color: var(--color-md3-error);
   }
 
   .text-field:is(:disabled, [disabled]) {

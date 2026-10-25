@@ -409,19 +409,9 @@
     width: 100%;
     min-height: 2.625rem;
     min-width: 0;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--borderRadiusMedium);
-    outline: 0;
     padding: 0 0.75rem;
     color: var(--color-md3-on-surface);
-    background: var(--color-md3-field);
     font: 400 14px/20px var(--font-md3-sans);
-    transition: border-color 120ms ease, box-shadow 120ms ease;
-  }
-
-  .field-error input {
-    border-color: var(--color-md3-error);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-md3-error) 35%, transparent);
   }
 
   .segmented-control {

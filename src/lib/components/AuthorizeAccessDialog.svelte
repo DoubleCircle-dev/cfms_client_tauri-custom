@@ -299,25 +299,28 @@
               {$t('files.searchNoMatches')}
             </p>
           {:else}
-            <div class="max-h-44 overflow-auto">
+            <div class="cfms-list-rows max-h-44 overflow-auto">
               {#each entityResults as option (option.id)}
                 <FluentButton data-fluent-owner="lib-components-authorize-access-dialog"
                   type="button"
                   onclick={() => selectEntity(option)}
                   disabled={saving}
-                  appearance="outline"
-                  class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-md3-primary-container/20"
+                  appearance="subtle"
+                  shape="square"
+                  class="cfms-list-row"
                 >
-                  <Icon name={entityType === 'user' ? 'accountCircle' : 'groups'} size="18px" />
-                  <span class="min-w-0">
-                    <span class="block truncate text-sm font-medium text-md3-on-surface">{option.label}</span>
-                    {#if option.description}
-                      <span class="block truncate text-xs text-md3-on-surface-variant">{option.description}</span>
+                  <span class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2">
+                    <Icon name={entityType === 'user' ? 'accountCircle' : 'groups'} size="18px" />
+                    <span class="min-w-0">
+                      <span class="block truncate text-sm font-medium text-md3-on-surface">{option.label}</span>
+                      {#if option.description}
+                        <span class="block truncate text-xs text-md3-on-surface-variant">{option.description}</span>
+                      {/if}
+                    </span>
+                    {#if selectedEntity?.id === option.id}
+                      <Icon name="checkCircle" size="18px" />
                     {/if}
                   </span>
-                  {#if selectedEntity?.id === option.id}
-                    <Icon name="checkCircle" size="18px" />
-                  {/if}
                 </FluentButton>
               {/each}
             </div>
@@ -485,7 +488,6 @@
       box-shadow 150ms ease;
   }
 
-
   .field-label {
     display: grid;
     gap: 8px;
@@ -499,9 +501,6 @@
     grid-template-columns: auto 1fr;
     align-items: center;
     gap: 8px;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--borderRadiusMedium);
-    background: var(--color-md3-field);
     color: var(--color-md3-on-surface-variant);
     padding: 0 0.75rem;
     color-scheme: inherit;

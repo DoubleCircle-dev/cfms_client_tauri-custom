@@ -718,11 +718,14 @@
   .field-group input,
   .payload-editor {
     width: 100%;
+    color: var(--color-md3-on-surface);
+    font-family: var(--font-md3-mono);
+  }
+
+  .payload-editor {
     border: 1px solid var(--color-md3-outline);
     border-radius: var(--borderRadiusMedium);
-    color: var(--color-md3-on-surface);
     background: var(--color-md3-field);
-    font-family: var(--font-md3-mono);
   }
 
   .field-group input {
@@ -734,7 +737,6 @@
   .payload-heading {
     margin-top: 0.18rem;
   }
-
 
   :global(.text-action[data-fluent-owner="lib-components-developer-request-console"]) {
     min-height: 1.85rem;
