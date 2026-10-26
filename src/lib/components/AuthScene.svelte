@@ -15,7 +15,7 @@
   class:auth-scene--return={view === 'connect' && animate}
 >
   <!-- These siblings must stay outside the scrolling form. Only the opaque
-       cover moves; clipping/fading a backdrop ancestor changes its sampling. -->
+       cover moves or fades; clipping/fading a backdrop ancestor changes its sampling. -->
   <div class="auth-scene-background" aria-hidden="true"></div>
   <div class="auth-scene-material" aria-hidden="true"></div>
   <div class="auth-scene-cover" aria-hidden="true"></div>
@@ -46,6 +46,16 @@
     --auth-scene-progress: 1;
   }
 
+  .auth-scene--animated {
+    animation: auth-scene-progress var(--auth-transition-duration)
+      var(--auth-transition-easing) both;
+  }
+
+  .auth-scene--return {
+    /* Reverse the endpoints, not the easing, so both directions start promptly. */
+    animation-name: auth-scene-progress-return;
+  }
+
   .auth-scene-background,
   .auth-scene-material,
   .auth-scene-cover,
@@ -59,17 +69,39 @@
     min-width: 0;
   }
 
+  @supports ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+    .auth-scene-background,
+    .auth-scene-material,
+    .auth-scene-cover {
+      position: absolute;
+      display: block;
+      inset: 0;
+    }
+
+    .auth-scene-background {
+      z-index: 0;
+      background: url('/astronomy.jpg') center / cover;
+    }
+
+    .auth-scene-material {
+      z-index: 1;
+      background: var(--cfms-account-acrylic);
+      -webkit-backdrop-filter: var(--cfms-material-filter);
+      backdrop-filter: var(--cfms-material-filter);
+    }
+
+    .auth-scene-cover {
+      z-index: 2;
+      background: var(--explorer-background);
+      opacity: calc(1 - var(--auth-scene-progress));
+    }
+
+    .auth-scene :global(.auth-scene-panel) {
+      background: transparent;
+    }
+  }
+
   @media (min-width: 1024px) {
-    .auth-scene--animated {
-      animation: auth-scene-progress var(--auth-transition-duration)
-        var(--auth-transition-easing) both;
-    }
-
-    .auth-scene--return {
-      /* Reverse the endpoints, not the easing, so both directions start promptly. */
-      animation-name: auth-scene-progress-return;
-    }
-
     .auth-scene :global(.auth-scene-panel) {
       flex-basis: var(--auth-scene-panel-width);
     }
@@ -98,37 +130,15 @@
     }
 
     @supports ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
-      .auth-scene-background,
-      .auth-scene-material,
-      .auth-scene-cover {
-        position: absolute;
-        display: block;
-        inset: 0;
-      }
-
-      .auth-scene-background {
-        z-index: 0;
-        background: url('/astronomy.jpg') center / cover;
-      }
-
       .auth-scene-material {
-        z-index: 1;
         right: auto;
         width: var(--auth-scene-panel-width);
-        background: var(--cfms-account-acrylic);
-        -webkit-backdrop-filter: var(--cfms-material-filter);
-        backdrop-filter: var(--cfms-material-filter);
       }
 
       .auth-scene-cover {
-        z-index: 2;
-        background: var(--explorer-background);
+        opacity: 1;
         transform-origin: left center;
         transform: scaleX(calc(1 - var(--auth-scene-progress)));
-      }
-
-      .auth-scene :global(.auth-scene-panel) {
-        background: transparent;
       }
     }
   }

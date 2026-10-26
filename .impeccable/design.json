@@ -113,7 +113,7 @@
       {
         "name": "authentication",
         "value": "600ms cubic-bezier(0.2, 0, 0, 1)",
-        "purpose": "Image push/retreat and panel choreography share the same decelerating easing in both directions; only the progress endpoints reverse."
+        "purpose": "Desktop image push/retreat, panel choreography and narrow-screen frosted background fades share the same decelerating easing in both directions; only the progress endpoints reverse."
       }
     ],
     "breakpoints": [
