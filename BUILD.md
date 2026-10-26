@@ -83,34 +83,44 @@ No additional secrets are required beyond the Tauri updater keys.
 
 ### DoubleCircle custom releases
 
-Custom releases follow the upstream numeric version and append the
-`-custom-alpha` prerelease suffix. For example, when the upstream base version
-is `0.55.2`, publish the custom build as `0.55.2-custom-alpha`, not as an
-independent custom version. This suffix is classified as the `alpha` update
-channel, so users need **Custom** as the update source and **Alpha** as the
-channel to receive it.
-
-The first custom release must also be newer than the version already installed.
-For example, `0.55.1-custom-alpha` is older than the upstream stable
-`0.55.1`; use `0.55.2-custom-alpha` to update an installation at `0.55.1`.
-The version helper derives Android's `versionCode` from the numeric part of
-the version, so using the next upstream patch also gives the Android package a
-higher build number.
+Custom releases retain the upstream numeric base version and add a two-digit
+iteration suffix: `<base>-custom-NN`, for example `0.55.1-custom-01` and
+`0.55.1-custom-02`. Before generating a version, fetch the Custom repository's
+tags so the helper can continue after the latest published iteration:
 
 From `android-custom`, after syncing the code changes to publish:
 
 ```powershell
-pnpm app:version set 0.55.2-custom-alpha
+git fetch origin --tags
+pnpm app:version custom 0.55.1 --dry-run
+pnpm app:version custom 0.55.1
 pnpm app:version:check
+pnpm test:client-version
 pnpm test
 pnpm exec svelte-check --tsconfig ./tsconfig.json
 pnpm check:fluent
 git add -A
-git commit -m "Release v0.55.2-custom-alpha"
+git commit -m "Release v0.55.1-custom-01"
 git push origin android-custom
-git tag -a v0.55.2-custom-alpha -m "Release v0.55.2-custom-alpha"
-git push origin v0.55.2-custom-alpha
+git tag -a v0.55.1-custom-01 -m "Release v0.55.1-custom-01"
+git push origin v0.55.1-custom-01
 ```
+
+The helper chooses the next number from matching local tags, starting at `01`,
+and applies the same number to the default iOS build number and Android
+`versionCode`. Therefore fetch tags before generating a release version. The
+Custom updater treats a same-base `-custom-NN` release as newer than its
+upstream stable version; subsequent Custom iterations follow normal SemVer
+ordering. Android keeps the existing application ID, so its `versionCode` is
+strictly higher than the upstream build at the same base. Because Android
+requires increasing version codes, switching an installed Custom build back
+to the upstream source may not install until the upstream release has a higher
+version code.
+
+Custom prerelease tags are classified into the existing **Alpha** update
+channel by the release workflow, even though `alpha` is not part of the version
+string. Users need **Custom** as the update source and **Alpha** as the channel
+to receive these releases.
 
 Pushing the tag triggers `.github/workflows/release.yml`, which publishes the
 release and its desktop updater manifest and Android APKs to the Custom
