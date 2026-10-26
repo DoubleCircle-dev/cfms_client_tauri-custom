@@ -9,6 +9,7 @@
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod background;
 mod commands;
+mod desktop_shell;
 mod github_credentials;
 mod local_data_reset;
 mod localization;
@@ -590,6 +591,16 @@ pub fn run() {
             let main_window = main_window.transparent(true);
             main_window.build()?;
 
+            // Desktop shell: keep the app reachable from the tray. Labels are
+            // replaced by the Webview's localized strings once it boots.
+            #[cfg(desktop)]
+            if let Err(error) = desktop_shell::init_tray(
+                app.handle(),
+                desktop_shell::TrayLabels::default(),
+            ) {
+                tracing::warn!("Unable to create the system tray icon: {error}");
+            }
+
             // Dev mode: auto-open the vulnerability testing tool in a separate window.
             #[cfg(debug_assertions)]
             {
@@ -625,6 +636,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             window_backdrop::set_window_backdrop,
+            commands::get_close_behavior,
+            commands::set_close_behavior,
+            commands::resolve_close_request,
+            commands::sync_desktop_shell_labels,
             commands::greet,
             commands::ping,
             commands::protocol_version,
@@ -835,6 +850,13 @@ pub fn run() {
             commands::fetch_server_page,
             commands::open_dev_tools_window,
         ])
+        .on_window_event(|window, event| {
+            // Close-button policy: quit, hide to the tray, or ask the Webview.
+            #[cfg(desktop)]
+            desktop_shell::handle_window_event(window, event);
+            #[cfg(not(desktop))]
+            let _ = (window, event);
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

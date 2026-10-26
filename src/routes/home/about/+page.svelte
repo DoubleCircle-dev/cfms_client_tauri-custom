@@ -288,11 +288,7 @@
       box-shadow 120ms ease;
   }
 
-  .protocol-compatibility__field select:focus-visible {
-    outline: none;
-    border-color: var(--color-md3-primary);
-    box-shadow: inset 0 0 0 1px var(--color-md3-primary);
-  }
+  /* Field focus is painted by the global native-field indicator. */
 
   .protocol-compatibility__field select:disabled {
     cursor: progress;
