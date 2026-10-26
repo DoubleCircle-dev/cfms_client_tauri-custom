@@ -119,11 +119,22 @@ function versionBuildNumber(version) {
   }
   const baseBuildNumber =
     parsed.major * 1_000_000 + parsed.minor * 1_000 + parsed.patch;
+  return baseBuildNumber + customIterationIndex(parsed);
+}
+
+function customIterationIndex(parsed) {
   const customIteration = parseCustomIteration(parsed.pre);
   if (parsed.pre.startsWith("custom-") && !customIteration) {
     throw new Error("Custom iteration must use the <major>.<minor> format, e.g. custom-0.1");
   }
-  return baseBuildNumber + (customIteration ? customIteration.index : 0);
+  return customIteration?.index ?? 0;
+}
+
+function wixMsiVersion(version) {
+  const parsed = parseVersion(version);
+  const base = baseVersion(version);
+  const iteration = customIterationIndex(parsed);
+  return iteration ? `${base}.${iteration}` : base;
 }
 
 function parseCustomIteration(pre) {
@@ -233,16 +244,13 @@ function readTauriVersion() {
 }
 
 function updateTauriConfig(version, dryRun) {
-  const text = readText(files.tauriConfig);
-  const versionPattern = /^(\s*"version"\s*:\s*")[^"]+(")/m;
-  if (!versionPattern.test(text)) {
-    throw new Error(`${files.tauriConfig} is missing top-level version`);
-  }
-  const updated = text.replace(
-    versionPattern,
-    (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
-  );
-  writeText(files.tauriConfig, updated, dryRun);
+  const config = readJson(files.tauriConfig);
+  config.version = version;
+  if (!config.bundle) config.bundle = {};
+  if (!config.bundle.windows) config.bundle.windows = {};
+  if (!config.bundle.windows.wix) config.bundle.windows.wix = {};
+  config.bundle.windows.wix.version = wixMsiVersion(version);
+  writeJson(files.tauriConfig, config, dryRun);
 }
 
 function readWorkspaceVersion() {
@@ -455,6 +463,7 @@ function escapeRegex(value) {
 }
 
 function collectVersions() {
+  const tauriConfig = readJson(files.tauriConfig);
   const versions = [
     { target: files.packageJson, field: "version", value: readPackageVersion() },
     {
@@ -462,7 +471,13 @@ function collectVersions() {
       field: "[workspace.package].version",
       value: readWorkspaceVersion(),
     },
-    { target: files.tauriConfig, field: "version", value: readTauriVersion() },
+    { target: files.tauriConfig, field: "version", value: tauriConfig.version },
+    {
+      target: files.tauriConfig,
+      field: "bundle.windows.wix.version",
+      value: tauriConfig.bundle?.windows?.wix?.version ?? "",
+      expectsWixVersion: true,
+    },
   ];
 
   for (const entry of readCargoLockVersions()) {
@@ -524,8 +539,12 @@ function commandCheck() {
   const canonical = normalizeVersion(readTauriVersion());
   const expectedBase = baseVersion(canonical);
   const expectedBuildNumber = String(versionBuildNumber(canonical));
+  const expectedWixVersion = wixMsiVersion(canonical);
   const versions = collectVersions();
   const mismatches = versions.filter((entry) => {
+    if (entry.expectsWixVersion) {
+      return entry.value !== expectedWixVersion;
+    }
     if (entry.buildNumber) {
       return entry.value !== expectedBuildNumber;
     }
@@ -544,6 +563,7 @@ function commandCheck() {
   process.stderr.write(`Expected version: ${canonical}\n`);
   process.stderr.write(`Expected base version: ${expectedBase}\n`);
   process.stderr.write(`Expected build number: ${expectedBuildNumber}\n\n`);
+  process.stderr.write(`Expected MSI version: ${expectedWixVersion}\n\n`);
   printVersions(mismatches);
   process.exit(1);
 }
@@ -695,7 +715,7 @@ function main() {
   }
 }
 
-export { nextCustomIteration, versionBuildNumber };
+export { nextCustomIteration, versionBuildNumber, wixMsiVersion };
 
 if (
   process.argv[1] &&
