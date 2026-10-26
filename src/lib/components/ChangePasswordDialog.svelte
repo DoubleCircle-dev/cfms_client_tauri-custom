@@ -1,4 +1,6 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
+  import FluentButton from '$lib/components/FluentButton.svelte';
   // ChangePasswordDialog — MD3 modal for the self-change password flow.
   //
   // Shown when the server rejects a login with code 4001/4002 ("password must
@@ -166,7 +168,7 @@
         handleSubmit();
       }}
     >
-      <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high/40 p-3">
+      <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high p-3">
         <span class="rounded-lg bg-md3-primary-container/70 p-2 text-md3-primary-emphasis">
           <Icon name="lockPerson" size="20px" />
         </span>
@@ -178,90 +180,83 @@
       <!-- Old password -->
       {#if requireOldPassword}
       <div>
-        <label
-          for="cp-old"
-          class="block text-sm font-medium mb-1.5 text-md3-on-surface"
-          style="font-family: var(--font-md3-sans);"
-        >
-          {$t('dialog.changePassword.currentPassword')}
-        </label>
-        <div class="relative">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-            <Icon name="password" size="18px" />
-          </span>
-          <input
-            id="cp-old"
-            type={oldVisible ? 'text' : 'password'}
-            class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-md3-outline
-                   bg-md3-field text-md3-on-surface text-sm
-                   placeholder:text-md3-on-surface-variant
-                   transition-colors"
-            placeholder={$t('dialog.changePassword.currentPasswordPlaceholder')}
-            bind:value={oldPassword}
-            disabled={busy}
-            autocomplete="current-password"
-          />
-          <button
-            type="button"
-            class="absolute right-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant
-                   hover:text-md3-on-surface transition-colors"
-            onclick={() => (oldVisible = !oldVisible)}
-            aria-label={oldVisible ? $t('login.hidePassword') : $t('login.showPassword')}
-          >
-            <Icon name="visibility" size="18px" />
-          </button>
-        </div>
+        <MdOutlinedField inputId="cp-old" label={$t('dialog.changePassword.currentPassword')} disabled={busy}>
+          <div data-outlined-content class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+              <Icon name="password" size="18px" />
+            </span>
+            <input data-focus-ring="delegated"
+              id="cp-old"
+              type={oldVisible ? 'text' : 'password'}
+              class="w-full pl-10 pr-10 py-2.5
+                     text-md3-on-surface text-sm
+                     placeholder:text-md3-on-surface-variant
+                     transition-colors"
+              placeholder={$t('dialog.changePassword.currentPasswordPlaceholder')}
+              bind:value={oldPassword}
+              disabled={busy}
+              autocomplete="current-password"
+            />
+            <FluentButton data-fluent-owner="lib-components-change-password-dialog"
+              type="button"
+              onclick={() => (oldVisible = !oldVisible)}
+              aria-label={oldVisible ? $t('login.hidePassword') : $t('login.showPassword')}
+              appearance="subtle"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant\r\n                   hover:text-md3-on-surface transition-colors"
+              iconOnly
+            >
+              <Icon name="visibility" size="18px" />
+            </FluentButton>
+          </div>
+        </MdOutlinedField>
       </div>
 
       <!-- New password -->
       {/if}
       <div>
-        <label
-          for="cp-new"
-          class="block text-sm font-medium mb-1.5 text-md3-on-surface"
-          style="font-family: var(--font-md3-sans);"
-        >
-          {$t('dialog.changePassword.newPassword')}
-        </label>
-        <div class="relative">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-            <Icon name="password" size="18px" />
-          </span>
-          <input
-            id="cp-new"
-            type={newVisible ? 'text' : 'password'}
-            class="w-full pl-10 pr-20 py-2.5 rounded-xl border border-md3-outline
-                   bg-md3-field text-md3-on-surface text-sm
-                   placeholder:text-md3-on-surface-variant
-                   transition-colors"
-            placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}
-            bind:value={newPassword}
-            disabled={busy}
-            autocomplete="new-password"
-          />
-          <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <button
-              type="button"
-              class="text-md3-on-surface-variant hover:text-md3-primary-emphasis
-                     transition-colors rounded-full p-1"
-              onclick={handleDice}
+        <MdOutlinedField inputId="cp-new" label={$t('dialog.changePassword.newPassword')} disabled={busy}>
+          <div data-outlined-content class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+              <Icon name="password" size="18px" />
+            </span>
+            <input data-focus-ring="delegated"
+              id="cp-new"
+              type={newVisible ? 'text' : 'password'}
+              class="w-full pl-10 pr-20 py-2.5
+                     text-md3-on-surface text-sm
+                     placeholder:text-md3-on-surface-variant
+                     transition-colors"
+              placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}
+              bind:value={newPassword}
               disabled={busy}
-              title={$t('dialog.changePassword.generateStrongPassword')}
-              aria-label={$t('dialog.changePassword.generateStrongPassword')}
-            >
-              <Icon name="ifl" size="18px" />
-            </button>
-            <button
-              type="button"
-              class="text-md3-on-surface-variant hover:text-md3-on-surface
-                     transition-colors rounded-full p-1"
-              onclick={() => (newVisible = !newVisible)}
-              aria-label={newVisible ? $t('login.hidePassword') : $t('login.showPassword')}
-            >
-              <Icon name="visibility" size="18px" />
-            </button>
+              autocomplete="new-password"
+            />
+            <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <FluentButton data-fluent-owner="lib-components-change-password-dialog"
+                type="button"
+                onclick={handleDice}
+                disabled={busy}
+                title={$t('dialog.changePassword.generateStrongPassword')}
+                aria-label={$t('dialog.changePassword.generateStrongPassword')}
+                appearance="subtle"
+                class="text-md3-on-surface-variant hover:text-md3-primary-emphasis\r\n                     transition-colors rounded p-1"
+                iconOnly
+              >
+                <Icon name="ifl" size="18px" />
+              </FluentButton>
+              <FluentButton data-fluent-owner="lib-components-change-password-dialog"
+                type="button"
+                onclick={() => (newVisible = !newVisible)}
+                aria-label={newVisible ? $t('login.hidePassword') : $t('login.showPassword')}
+                appearance="subtle"
+                class="text-md3-on-surface-variant hover:text-md3-on-surface\r\n                     transition-colors rounded p-1"
+                iconOnly
+              >
+                <Icon name="visibility" size="18px" />
+              </FluentButton>
+            </div>
           </div>
-        </div>
+        </MdOutlinedField>
 
         <!-- Strength meter -->
         {#if newPassword}

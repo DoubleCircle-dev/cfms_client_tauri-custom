@@ -54,7 +54,7 @@ describe('JsonCodeEditor', () => {
     await waitFor(() => expect(editor?.className).not.toBe(darkThemeClasses));
   });
 
-  it('uses Material icons for foldable JSON lines', async () => {
+  it('uses local Fluent SVG icons for foldable JSON lines', async () => {
     const { container } = render(JsonCodeEditor, {
       props: {
         value: '{\n  "duration_seconds": 30,\n  "reason": "test"\n}',
@@ -69,7 +69,8 @@ describe('JsonCodeEditor', () => {
     await screen.findByLabelText('Foldable payload JSON');
     await waitFor(() => {
       const marker = container.querySelector('.cm-foldGutter span[title="Fold line"]');
-      expect(marker?.textContent).toBe(ICONS.expandMore);
+      expect(marker?.querySelector('svg')).not.toBeNull();
+      expect(marker?.innerHTML).toContain('viewBox="0 0 24 24"');
       expect(marker?.getAttribute('title')).toBe('Fold line');
     });
   });

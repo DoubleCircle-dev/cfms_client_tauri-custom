@@ -41,6 +41,24 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); authStore.clear(); });
 
 describe('authentication management', () => {
+  it('keeps unsaved policy edits until refresh is confirmed', async () => {
+    const confirm = vi.spyOn(dialogStore, 'confirm').mockResolvedValue(false);
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.purposes.mfa' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.addAlternative' }));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'common.refresh' }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(mocks.inventory).toHaveBeenCalledOnce();
+    expect((screen.getByRole('button', { name: 'authManagement.savePolicies' }) as HTMLButtonElement).disabled).toBe(false);
+
+    confirm.mockResolvedValue(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'common.refresh' }));
+    await waitFor(() => expect(mocks.inventory).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'authManagement.savePolicies' })).toBeNull());
+  });
+
   it('reads another account by UUID and keeps writes disabled without elevation', async () => {
     authStore.escalationExp = null;
     const otherId = 'other-account-uuid';

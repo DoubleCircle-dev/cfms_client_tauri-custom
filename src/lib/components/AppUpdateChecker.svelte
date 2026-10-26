@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
@@ -293,28 +294,40 @@
 
   <div class="actions">
     {#if appUpdateState.update && !appUpdateState.installed}
-      <button class="success-action" onclick={installUpdate} disabled={appUpdateState.installing || appUpdateState.checking}>
+      <FluentButton data-fluent-owner="lib-components-app-update-checker"
+        onclick={installUpdate}
+        disabled={appUpdateState.installing || appUpdateState.checking}
+        type="button"
+        appearance="subtle"
+        class="success-action"
+      >
         {#if appUpdateState.installing}
           <ProgressRing size={18} strokeWidth={2.4} label={$t('settings.updates.installing')} />
         {:else}
           <Icon name="download" size="18px" />
         {/if}
         {installButtonLabel}
-      </button>
+      </FluentButton>
     {/if}
 
     {#if appUpdateState.installed && appUpdateState.update?.installMode !== 'android-apk'}
-      <button class="success-action" onclick={restartNow}>
+      <FluentButton data-fluent-owner="lib-components-app-update-checker"
+        onclick={restartNow}
+        type="button"
+        appearance="subtle"
+        class="success-action"
+      >
         <Icon name="refresh" size="18px" />
         {$t('settings.updates.restartNow')}
-      </button>
+      </FluentButton>
     {/if}
 
-    <button
-      class:primary-action={!appUpdateState.update && !appUpdateState.installed}
-      class:secondary-action={Boolean(appUpdateState.update || appUpdateState.installed)}
+    <FluentButton data-fluent-owner="lib-components-app-update-checker"
       onclick={checkForUpdates}
       disabled={loading || appUpdateState.checking || appUpdateState.installing}
+      type="button"
+      appearance="subtle"
+      class={((!appUpdateState.update && !appUpdateState.installed) ? " primary-action" : '') + ((Boolean(appUpdateState.update || appUpdateState.installed)) ? " secondary-action" : '')}
     >
       {#if appUpdateState.checking}
         <ProgressRing size={18} strokeWidth={2.4} label={$t('about.checkingUpdates')} />
@@ -322,22 +335,30 @@
         <Icon name="update" size="18px" />
       {/if}
       {$t('settings.updates.check')}
-    </button>
+    </FluentButton>
 
-    <button class="text-action" onclick={() => goto('/home/settings/updates')} disabled={appUpdateState.checking || appUpdateState.installing}>
+    <FluentButton data-fluent-owner="lib-components-app-update-checker"
+      onclick={() => goto('/home/settings/updates')}
+      disabled={appUpdateState.checking || appUpdateState.installing}
+      type="button"
+      appearance="subtle"
+      class="text-action"
+    >
       <Icon name="settings" size="18px" />
       {$t('settings.updates.configureUpdates')}
-    </button>
+    </FluentButton>
 
     {#if onOpenFeatureTour}
-      <button
-        class="text-action feature-tour-action"
+      <FluentButton data-fluent-owner="lib-components-app-update-checker"
         onclick={onOpenFeatureTour}
         disabled={appUpdateState.checking || appUpdateState.installing}
+        type="button"
+        appearance="subtle"
+        class="text-action feature-tour-action"
       >
         <Icon name="wandStars" size="18px" />
         {$t('releaseHighlights.featureTour')}
-      </button>
+      </FluentButton>
     {/if}
   </div>
 </section>
@@ -345,14 +366,14 @@
 <style>
   .update-checker {
     display: grid;
-    gap: 1.05rem;
+    gap: 16px;
     padding-top: 1.5rem;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
   }
 
   .update-header {
     display: grid;
-    gap: 0.85rem;
+    gap: 12px;
   }
 
   h2,
@@ -365,11 +386,11 @@
   }
 
   h2 {
-    font-size: 0.9375rem;
+    font-size: 14px;
   }
 
   h3 {
-    font-size: 0.9375rem;
+    font-size: 14px;
   }
 
   .runtime-summary {
@@ -382,14 +403,14 @@
 
   .runtime-summary > div {
     display: grid;
-    gap: 0.2rem;
+    gap: 4px;
     min-width: 5.5rem;
   }
 
   .runtime-summary dt {
     color: var(--color-md3-on-surface-variant);
     font-family: var(--font-md3-sans);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.04em;
   }
@@ -399,13 +420,13 @@
     margin: 0;
     color: var(--color-md3-on-surface);
     font-family: var(--font-md3-sans);
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.5;
   }
 
   .runtime-summary .technical-value {
     font-family: var(--font-md3-mono);
-    font-size: 0.8rem;
+    font-size: 12px;
   }
 
   .runtime-status {
@@ -415,9 +436,9 @@
   .inline-status {
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 8px;
     min-height: 1.5rem;
-    font-size: 0.8125rem;
+    font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
   }
@@ -467,19 +488,19 @@
 
   .release-block {
     display: grid;
-    gap: 0.7rem;
+    gap: 12px;
     padding-block: 0.25rem;
   }
 
   .release-title {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
   }
 
   .release-title span {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     white-space: nowrap;
   }
 
@@ -494,20 +515,20 @@
   a {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 4px;
     width: fit-content;
     color: var(--color-md3-primary-emphasis);
-    font-size: 0.875rem;
+    font-size: 14px;
     transition: filter var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
   a:hover {
-    filter: brightness(1.18);
+    filter: none;
   }
 
   .progress-block {
     display: grid;
-    gap: 0.55rem;
+    gap: 8px;
   }
 
   .progress-track {
@@ -544,28 +565,28 @@
   .progress-label {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
   }
 
   .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.6rem;
+    gap: 8px;
     padding-top: 0.25rem;
   }
 
-  button {
+  :global(.cfms-button[data-fluent-owner="lib-components-app-update-checker"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
+    gap: 8px;
     min-height: 2.35rem;
-    border-radius: 5px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.85rem;
     font-family: var(--font-md3-sans);
-    font-size: 0.875rem;
+    font-size: 14px;
     font-weight: 700;
     transition:
       background-color var(--motion-duration-short4) var(--motion-easing-standard),
@@ -575,53 +596,53 @@
       transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate);
   }
 
-  button:disabled {
+  :global(.cfms-button[data-fluent-owner="lib-components-app-update-checker"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.55;
   }
 
-  button:active:not(:disabled) {
-    transform: scale(0.97);
+  :global(.cfms-button[data-fluent-owner="lib-components-app-update-checker"]:active:not(:is(:disabled, [disabled]))) {
+    transform: none;
   }
 
-  .primary-action {
+  :global(.primary-action[data-fluent-owner="lib-components-app-update-checker"]) {
     border: 1px solid transparent;
     color: var(--explorer-background);
     background: var(--color-md3-primary-emphasis);
   }
 
-  .success-action {
+  :global(.success-action[data-fluent-owner="lib-components-app-update-checker"]) {
     border: 1px solid transparent;
     color: var(--explorer-background);
     background: var(--color-md3-success);
   }
 
-  .primary-action:hover:not(:disabled),
-  .success-action:hover:not(:disabled) {
-    filter: brightness(1.08);
+  :global(.primary-action[data-fluent-owner="lib-components-app-update-checker"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.success-action[data-fluent-owner="lib-components-app-update-checker"]:hover:not(:is(:disabled, [disabled]))) {
+    filter: none;
   }
 
-  .secondary-action {
+  :global(.secondary-action[data-fluent-owner="lib-components-app-update-checker"]) {
     border: 1px solid var(--color-md3-outline);
     color: var(--color-md3-on-surface);
     background: transparent;
   }
 
-  .secondary-action:hover:not(:disabled) {
+  :global(.secondary-action[data-fluent-owner="lib-components-app-update-checker"]:hover:not(:is(:disabled, [disabled]))) {
     border-color: var(--color-md3-outline-variant);
     background: color-mix(in srgb, var(--color-md3-on-surface) 7%, transparent);
   }
 
-  .text-action {
+  :global(.text-action[data-fluent-owner="lib-components-app-update-checker"]) {
     background: transparent;
     color: var(--color-md3-primary-emphasis);
   }
 
-  .text-action:hover:not(:disabled) {
+  :global(.text-action[data-fluent-owner="lib-components-app-update-checker"]:hover:not(:is(:disabled, [disabled]))) {
     background: color-mix(in srgb, var(--color-md3-primary-emphasis) 10%, transparent);
   }
 
-  .feature-tour-action {
+  :global(.feature-tour-action[data-fluent-owner="lib-components-app-update-checker"]) {
     margin-inline-start: auto;
   }
 
@@ -643,24 +664,28 @@
     }
 
     .runtime-summary {
-      gap: 0.75rem;
+      gap: 12px;
+    }
+
+    .runtime-status {
+      flex: none;
     }
 
     .runtime-summary > div {
       display: grid;
       grid-template-columns: minmax(6.5rem, auto) minmax(0, 1fr);
       align-items: baseline;
-      gap: 0.75rem;
+      gap: 12px;
       width: 100%;
     }
 
-    .feature-tour-action {
+    :global(.feature-tour-action[data-fluent-owner="lib-components-app-update-checker"]) {
       margin-inline-start: 0;
     }
   }
 
   @media (pointer: coarse) {
-    button {
+    :global(.cfms-button[data-fluent-owner="lib-components-app-update-checker"]) {
       min-height: 44px;
     }
   }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseLocalDateTimeInput } from '$lib/permission-entries';
 import PermissionEntriesDialog from './PermissionEntriesDialog.svelte';
@@ -45,7 +45,7 @@ afterEach(() => {
 describe('PermissionEntriesDialog', () => {
   it('directly stages an immediate grant and validates the inclusive time window', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    const { container } = render(PermissionEntriesDialog, {
+    const { baseElement: container } = render(PermissionEntriesDialog, {
       props: {
         title: 'Permissions',
         description: 'Manage permissions',
@@ -110,7 +110,7 @@ describe('PermissionEntriesDialog', () => {
     expect(screen.getByRole('button', { name: 'manage.undoPermissionEntryChanges' })).toBeTruthy();
     expect(document.querySelector('[data-icon="undo"]')).toBeTruthy();
     const modifiedRow = screen.getByText('search_archive', { selector: 'strong' }).closest('li')!;
-    expect(Array.from(modifiedRow.querySelectorAll<HTMLButtonElement>('.entry-actions button'))
+    expect(within(modifiedRow.querySelector('.entry-actions')!).getAllByRole('button')
       .map((button) => button.getAttribute('aria-label')))
       .toEqual(['manage.undoPermissionEntryChanges', 'manage.deletePermissionEntry']);
     await fireEvent.click(screen.getByRole('button', { name: 'manage.undoPermissionEntryChanges' }));

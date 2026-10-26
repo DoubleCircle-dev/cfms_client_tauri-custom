@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -192,24 +193,30 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <Breadcrumb segments={breadcrumb.map((segment) => ({ label: segment.label, path: segment.id }))} onNavigate={navigateByBreadcrumb} />
         <div class="flex items-center gap-2">
-          <button
+          <FluentButton data-fluent-owner="lib-components-move-target-dialog"
             type="button"
-            class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
             title={$t('files.goToRoot')}
             disabled={loading || moving || currentFolderId === null}
             onclick={navigateToRoot}
+            appearance="subtle"
+            class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
+            iconOnly
+            aria-label={$t('files.goToRoot')}
           >
             <Icon name="home" size="18px" />
-          </button>
-          <button
+          </FluentButton>
+          <FluentButton data-fluent-owner="lib-components-move-target-dialog"
             type="button"
-            class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
             title={$t('common.refresh')}
             disabled={loading || moving}
             onclick={() => loadDirectory(currentFolderId)}
+            appearance="subtle"
+            class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
+            iconOnly
+            aria-label={$t('common.refresh')}
           >
             <Icon name="refresh" size="18px" />
-          </button>
+          </FluentButton>
         </div>
       </div>
     </div>
@@ -227,20 +234,23 @@
             <p class="min-w-0 break-words">{loadError}</p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <button
+            <FluentButton data-fluent-owner="lib-components-move-target-dialog"
               type="button"
-              class="rounded-full bg-md3-error-container px-3 py-1.5 text-xs font-medium text-md3-on-error-container transition-all hover:brightness-110"
               onclick={() => loadDirectory(currentFolderId)}
+              appearance="subtle"
+              tone="danger"
+              class="rounded bg-md3-error-container px-3 py-1.5 text-xs font-medium text-md3-on-error-container transition-all "
             >
               {$t('common.refresh')}
-            </button>
-            <button
+            </FluentButton>
+            <FluentButton data-fluent-owner="lib-components-move-target-dialog"
               type="button"
-              class="rounded-full bg-md3-surface-container-high px-3 py-1.5 text-xs font-medium text-md3-on-surface-variant transition-all hover:brightness-110"
               onclick={navigateToRoot}
+              appearance="subtle"
+              class="rounded bg-md3-surface-container-high px-3 py-1.5 text-xs font-medium text-md3-on-surface-variant transition-all "
             >
               {$t('files.goToRoot')}
-            </button>
+            </FluentButton>
           </div>
         </div>
       {:else}
@@ -256,12 +266,12 @@
           >
             {#snippet children(row, index)}
               {#if row.kind === 'parent'}
-                <button
+                <button data-fluent-owner="lib-components-move-target-dialog"
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr] items-center gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-primary-container/20 disabled:cursor-not-allowed disabled:opacity-50"
-                  class:border-b-0={index === targetRows.length - 1}
                   disabled={moving}
                   onclick={navigateToParent}
+
+                  class={"grid w-full grid-cols-[auto_1fr] items-center gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-primary-container/20 disabled:cursor-not-allowed disabled:opacity-50" + ((index === targetRows.length - 1) ? " border-b-0" : '')}
                 >
                   <span class="text-md3-primary-emphasis">
                     <Icon name="arrowUpward" size="20px" />
@@ -271,12 +281,12 @@
                   </span>
                 </button>
               {:else}
-                <button
+                <button data-fluent-owner="lib-components-move-target-dialog"
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr] items-center gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-primary-container/20 disabled:cursor-not-allowed disabled:opacity-50"
-                  class:border-b-0={index === targetRows.length - 1}
                   disabled={moving}
                   onclick={() => navigateToFolder(row.folder)}
+
+                  class={"grid w-full grid-cols-[auto_1fr] items-center gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-primary-container/20 disabled:cursor-not-allowed disabled:opacity-50" + ((index === targetRows.length - 1) ? " border-b-0" : '')}
                 >
                   <span class="text-md3-primary-emphasis">
                     <Icon name="folder" size="20px" />

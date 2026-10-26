@@ -15,6 +15,7 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
 const mocks = vi.hoisted(() => ({
   getSetting: vi.fn(),
   setSetting: vi.fn(),
+  goto: vi.fn(),
   navigateUp: vi.fn(),
   choose: vi.fn(),
   confirm: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('$lib/dialogs.svelte', () => ({
 vi.mock('$lib/stores.svelte', () => ({
   notificationStore: { error: mocks.notificationError },
 }));
+vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$app/state', () => ({
   page: { url: new URL('https://example.test/home/settings/updates') },
 }));
@@ -76,8 +78,9 @@ describe('update settings pause controls', () => {
   it('keeps manual update checks in About', async () => {
     render(UpdatesSettingsPage);
 
-    const aboutLink = await screen.findByRole('link', { name: 'Check in About' });
-    expect(aboutLink.getAttribute('href')).toBe('/home/about');
+    await fireEvent.click(await screen.findByRole('button', { name: 'Check in About' }));
+
+    expect(mocks.goto).toHaveBeenCalledExactlyOnceWith('/home/about');
     expect(screen.queryByRole('button', { name: 'Check for Updates' })).toBeNull();
     expect(screen.queryByText('0.50.0')).toBeNull();
   });

@@ -23,4 +23,4 @@
   {/if}
 {/if}
 
-<style>.invalid { display: grid; min-height: 260px; place-items: center; align-content: center; gap: .5rem; padding: 2rem; text-align: center; color: var(--explorer-text); }.invalid p { color: var(--explorer-text-muted); }</style>
+<style>.invalid { display: grid; min-height: 260px; place-items: center; align-content: center; gap: 8px; padding: 2rem; text-align: center; color: var(--explorer-text); }.invalid p { color: var(--explorer-text-muted); }</style>

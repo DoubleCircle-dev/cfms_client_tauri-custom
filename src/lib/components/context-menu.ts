@@ -4,6 +4,7 @@ export interface ContextMenuActionItem {
   id: string;
   label: string;
   icon: IconName;
+  iconFilled?: boolean;
   onSelect: () => void | Promise<void>;
   disabled?: boolean;
   danger?: boolean;

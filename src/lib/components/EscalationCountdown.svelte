@@ -22,6 +22,6 @@
 {/if}
 
 <style>
-  .escalation-countdown { grid-column: 2; display: flex; align-items: center; justify-content: center; gap: 0.35rem; color: var(--explorer-accent); font-size: 0.75rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .escalation-countdown { grid-column: 2; display: flex; align-items: center; justify-content: center; gap: 4px; color: var(--explorer-accent); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
   @media (max-width: 800px) { .escalation-countdown { grid-column: 1 / -1; grid-row: 2; padding-bottom: 0.2rem; } }
 </style>

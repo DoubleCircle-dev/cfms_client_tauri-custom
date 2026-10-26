@@ -69,7 +69,7 @@ export function jsonCodeEditorTheme(dark: boolean): Extension {
         padding: '0',
         borderRadius: '4px',
         color: 'var(--color-md3-on-surface-variant)',
-        fontFamily: "'CFMS Material Symbols Outlined', 'Material Symbols Outlined'",
+        fill: 'currentColor',
         fontSize: '1rem',
         fontStyle: 'normal',
         fontWeight: '400',
@@ -80,12 +80,12 @@ export function jsonCodeEditorTheme(dark: boolean): Extension {
         whiteSpace: 'nowrap',
         cursor: 'pointer',
         transition: 'background-color 120ms ease, color 120ms ease',
-        fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20",
       },
       '.cm-foldGutter span:hover': {
         backgroundColor: 'var(--color-md3-surface-container-highest)',
         color: 'var(--color-md3-on-surface)',
       },
+      '.cm-foldGutter svg': { width: '16px', height: '16px' },
       '.cm-activeLine, .cm-activeLineGutter': {
         backgroundColor: 'var(--color-md3-surface-container-highest)',
       },

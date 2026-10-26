@@ -119,6 +119,8 @@ describe('ReleaseHighlightsWizard', () => {
     next.focus();
     await fireEvent.keyDown(dialog, { key: 'Tab' });
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Skip introduction' }));
+    await fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(next);
 
     await fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(onDismiss).not.toHaveBeenCalled();

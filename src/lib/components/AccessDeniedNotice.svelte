@@ -1,5 +1,6 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import type { Capability, PermissionExplanation } from '$lib/permission-explainer';
 
@@ -191,16 +192,17 @@
   {/if}
 
   {#if actionLabel && onAction}
-    <button
+    <FluentButton data-fluent-owner="lib-components-access-denied-notice"
       type="button"
-      class="access-denied-action"
       onclick={onAction}
+      appearance="subtle"
+      class="access-denied-action"
     >
       {#if presentation === 'page'}
         <Icon name="arrowBack" size="18px" />
       {/if}
       <span>{actionLabel}</span>
-    </button>
+    </FluentButton>
   {/if}
 </section>
 
@@ -215,7 +217,7 @@
     justify-content: center;
     justify-content: safe center;
     flex-direction: column;
-    gap: 1.05rem;
+    gap: 16px;
     padding: 3rem 1.5rem;
     color: var(--explorer-text, var(--color-md3-on-surface));
     text-align: center;
@@ -224,7 +226,7 @@
 
   .access-denied-notice--dialog {
     min-height: 0;
-    gap: 0.9rem;
+    gap: 16px;
     padding: 2rem 2rem 1.5rem;
     color: var(--color-md3-on-surface);
   }
@@ -270,22 +272,22 @@
   .access-denied-copy {
     display: grid;
     max-width: 34rem;
-    gap: 0.55rem;
+    gap: 8px;
   }
 
   h2, p { margin: 0; }
   h2 { font-size: clamp(1.25rem, 2vw, 1.6rem); font-weight: 680; letter-spacing: -0.02em; }
-  p { color: var(--explorer-text-muted, var(--color-md3-on-surface-variant)); font-size: 0.95rem; line-height: 1.65; }
+  p { color: var(--explorer-text-muted, var(--color-md3-on-surface-variant)); font-size: 16px; line-height: 1.65; }
 
   .access-denied-subject {
     display: flex;
     min-width: 0;
     max-width: min(100%, 28rem);
     align-items: center;
-    gap: 0.6rem;
+    gap: 8px;
     padding: 0.2rem 0.1rem;
     color: var(--color-md3-on-surface);
-    font-size: 0.9rem;
+    font-size: 14px;
     font-weight: 600;
   }
 
@@ -294,7 +296,7 @@
   .access-denied-details {
     display: grid;
     width: min(100%, 28rem);
-    gap: 0.55rem;
+    gap: 8px;
     margin: -0.15rem 0 0;
     border-top: 1px solid var(--color-md3-outline);
     padding: 0.9rem 0.1rem 0;
@@ -305,8 +307,8 @@
     min-width: 0;
     grid-template-columns: 5.5rem minmax(0, 1fr);
     align-items: baseline;
-    gap: 0.85rem;
-    font-size: 0.78rem;
+    gap: 12px;
+    font-size: 12px;
     line-height: 1.45;
     text-align: left;
   }
@@ -322,46 +324,46 @@
     overflow-wrap: anywhere;
   }
 
-  .access-denied-action {
+  :global(.access-denied-action[data-fluent-owner="lib-components-access-denied-notice"]) {
     display: inline-flex;
     min-height: 40px;
     align-items: center;
     justify-content: center;
-    gap: 0.55rem;
+    gap: 8px;
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.55rem 1.15rem;
     color: var(--color-md3-primary-emphasis, var(--color-md3-primary));
     background: transparent;
-    font-size: 0.88rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     transition:
       background-color var(--motion-duration-short3) var(--motion-easing-standard),
       border-color var(--motion-duration-short3) var(--motion-easing-standard),
       transform var(--motion-duration-short3) var(--motion-easing-standard);
   }
 
-  .access-denied-action:hover {
+  :global(.access-denied-action[data-fluent-owner="lib-components-access-denied-notice"]:hover) {
     background: color-mix(in srgb, var(--color-md3-primary) 10%, transparent);
   }
 
-  .access-denied-action:active {
+  :global(.access-denied-action[data-fluent-owner="lib-components-access-denied-notice"]:active) {
     background: color-mix(in srgb, var(--color-md3-primary) 16%, transparent);
-    transform: scale(0.97);
+    transform: none;
   }
 
-  .access-denied-notice--dialog .access-denied-action {
+  .access-denied-notice--dialog :global(.access-denied-action[data-fluent-owner="lib-components-access-denied-notice"]) {
     min-width: 8rem;
     margin-top: 0.25rem;
     color: var(--color-md3-on-primary);
     background: var(--color-md3-primary);
   }
 
-  .access-denied-notice--dialog .access-denied-action:hover {
+  .access-denied-notice--dialog :global(.access-denied-action[data-fluent-owner="lib-components-access-denied-notice"]:hover) {
     background: color-mix(in srgb, var(--color-md3-primary) 88%, white);
   }
 
-  .access-denied-notice--dialog .access-denied-action:active {
+  .access-denied-notice--dialog :global(.access-denied-action[data-fluent-owner="lib-components-access-denied-notice"]:active) {
     background: color-mix(in srgb, var(--color-md3-primary) 82%, black);
   }
 

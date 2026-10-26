@@ -2,8 +2,9 @@
   import { onDestroy } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { notificationStore } from '$lib/stores.svelte';
+  import { copyText } from '$lib/clipboard';
 
-  let { value, kind = 'audit' }: { value: string | null | undefined; kind?: 'audit' | 'user' } = $props();
+  let { value }: { value: string | null | undefined } = $props();
   let expanded = $state(false);
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let suppressClick = false;
@@ -19,25 +20,10 @@
   async function copy() {
     if (!value) return;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = value;
-        textarea.setAttribute('readonly', '');
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        try {
-          textarea.select();
-          if (!document.execCommand('copy')) throw new Error('Copy failed');
-        } finally {
-          textarea.remove();
-        }
-      }
-      notificationStore.success($t(kind === 'audit' ? 'manage.auditIdCopied' : 'manage.userIdCopied'), 1600);
+      await copyText(value);
+      notificationStore.success($t('manage.auditIdCopied'), 1600);
     } catch {
-      notificationStore.error($t(kind === 'audit' ? 'manage.auditIdCopyFailed' : 'manage.userIdCopyFailed'));
+      notificationStore.error($t('manage.auditIdCopyFailed'));
     }
   }
 </script>
@@ -47,9 +33,7 @@
     type="button"
     class="audit-identifier rounded-md px-1 py-0.5 text-left leading-relaxed transition-colors hover:bg-md3-primary-container/30 hover:text-md3-primary-emphasis"
     title={value}
-    aria-label={kind === 'audit'
-      ? $t(expanded ? 'manage.collapseAuditId' : 'manage.expandAuditId')
-      : $t(expanded ? 'manage.collapseUserId' : 'manage.expandUserId')}
+    aria-label={$t(expanded ? 'manage.collapseAuditId' : 'manage.expandAuditId')}
     aria-expanded={expanded}
     onclick={(event) => {
       if (suppressClick) {

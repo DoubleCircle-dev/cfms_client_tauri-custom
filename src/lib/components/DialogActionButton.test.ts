@@ -1,21 +1,21 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import DialogActionButton from './DialogActionButton.svelte';
 
 afterEach(cleanup);
 
-const children = createRawSnippet(() => ({ render: () => 'Cancel' }));
+const children = createRawSnippet(() => ({ render: () => '<span>Cancel</span>' }));
 
 describe('DialogActionButton', () => {
-  it('uses the transparent secondary treatment by default', () => {
+  it('uses the transparent secondary treatment by default', async () => {
     render(DialogActionButton, { props: { children } });
 
     const button = screen.getByRole('button', { name: 'Cancel' });
     expect(button.classList.contains('dialog-action-button--secondary')).toBe(true);
-    expect(button.getAttribute('type')).toBe('button');
+    await waitFor(() => expect(button.getAttribute('type')).toBe('button'));
   });
 
   it('forwards native button behavior and primary emphasis', async () => {
@@ -27,7 +27,7 @@ describe('DialogActionButton', () => {
     const button = screen.getByRole('button', { name: 'Cancel' });
     await fireEvent.click(button);
     expect(button.classList.contains('dialog-action-button--primary')).toBe(true);
-    expect(button.getAttribute('type')).toBe('submit');
+    await waitFor(() => expect(button.getAttribute('type')).toBe('submit'));
     expect(onclick).toHaveBeenCalledOnce();
   });
 });

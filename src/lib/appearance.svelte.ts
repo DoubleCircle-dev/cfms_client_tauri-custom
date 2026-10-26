@@ -2,6 +2,7 @@ import { loadAppearancePreference, saveAppearancePreference } from '$lib/api';
 import type { AppearancePreference } from '$lib/api';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauriRuntime } from '$lib/tauri-runtime';
+import { setWindowBackdrop } from '$lib/api/core';
 import {
   DEFAULT_APPEARANCE,
   normalizeAppearance,
@@ -17,6 +18,10 @@ class AppearanceStore {
 
   private colorSchemeMediaQuery: MediaQueryList | null = null;
   private reducedMotionMediaQuery: MediaQueryList | null = null;
+  private forcedColorsMediaQuery: MediaQueryList | null = null;
+  private reducedTransparencyMediaQuery: MediaQueryList | null = null;
+  private appearanceRevision = 0;
+  private nativeAppearanceUpdate = Promise.resolve();
   private scopeKey: string | null = null;
   private globalPreference: AppearancePreference | null = null;
   private requestId = 0;
@@ -31,12 +36,24 @@ class AppearanceStore {
       this.reducedMotionMediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
       this.reducedMotionMediaQuery.addEventListener('change', this.handleSystemAppearanceChange);
     }
+    if (!this.forcedColorsMediaQuery) {
+      this.forcedColorsMediaQuery = window.matchMedia('(forced-colors: active)');
+      this.forcedColorsMediaQuery.addEventListener('change', this.handleSystemAppearanceChange);
+    }
+    if (!this.reducedTransparencyMediaQuery) {
+      this.reducedTransparencyMediaQuery = window.matchMedia('(prefers-reduced-transparency: reduce)');
+      this.reducedTransparencyMediaQuery.addEventListener('change', this.handleSystemAppearanceChange);
+    }
     this.applyToDocument();
     return () => {
       this.colorSchemeMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
       this.reducedMotionMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
+      this.forcedColorsMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
+      this.reducedTransparencyMediaQuery?.removeEventListener('change', this.handleSystemAppearanceChange);
       this.colorSchemeMediaQuery = null;
       this.reducedMotionMediaQuery = null;
+      this.forcedColorsMediaQuery = null;
+      this.reducedTransparencyMediaQuery = null;
     };
   }
 
@@ -100,11 +117,24 @@ class AppearanceStore {
     root.dataset.colorSchemePreference = this.preference.color_scheme;
     root.dataset.reduceMotion = String(reduceMotion);
     root.style.colorScheme = this.resolvedColorScheme;
+    const scheme = this.resolvedColorScheme;
+    const revision = ++this.appearanceRevision;
+    void import('./fluent/runtime').then(({ applyFluentTheme }) => {
+      if (revision === this.appearanceRevision) applyFluentTheme(scheme, reduceMotion);
+    });
+    root.dataset.windowBackdrop = 'solid';
     // Browser previews have no native window; `getCurrentWindow()` throws
     // synchronously there, so it cannot be handled with `.catch()` alone.
     if (!isTauriRuntime()) return;
-    void getCurrentWindow().setTheme(this.resolvedColorScheme).catch(() => {
-      /* The native window may be gone while the webview is tearing down. */
+    const enableMaterial = !this.forcedColorsMediaQuery?.matches && !this.reducedTransparencyMediaQuery?.matches;
+    this.nativeAppearanceUpdate = this.nativeAppearanceUpdate.then(async () => {
+      if (revision !== this.appearanceRevision) return;
+      await getCurrentWindow().setTheme(scheme);
+      const mode = await setWindowBackdrop(scheme, enableMaterial);
+      if (revision === this.appearanceRevision) root.dataset.windowBackdrop = mode;
+    }).catch(() => {
+      // The native window may be gone while the webview is tearing down.
+      // The opaque CSS canvas is already active if native material is unavailable.
     });
   }
 }

@@ -1,118 +1,15 @@
 @import "tailwindcss";
 
-/* ---------------------------------------------------------------------------
- * CFMS Client — Material Design 3 theme tokens
- *
- * Mirrors the colour palette, typography, and shape system from the
- * reference Flet implementation (reference/src/include/ui/constants.py
- * and reference/src/main.py).
- * --------------------------------------------------------------------------- */
+@import "./lib/fluent/theme.css";
+@import "./lib/fluent/aliases.css";
+@import "./lib/fluent/hosts.css";
+@import "./lib/fluent/surfaces.css";
 
-@theme {
-  /* ── MD3 Colour Palette ─────────────────────────────────────────────── */
-
-  /* Primary — deep indigo, same as reference PRIMARY_COLOR #4f46e5 */
-  --color-md3-primary: #4f46e5;
-  --color-md3-primary-emphasis: #8fb4ff;
-  --color-md3-primary-container: #312e81;
-  --color-md3-on-primary: #ffffff;
-  --color-md3-on-primary-container: #c7d2fe;
-
-  /* Surface / Background hierarchy */
-  --color-md3-surface: #111827;
-  --color-md3-surface-container: #1f2937;
-  --color-md3-surface-container-high: #374151;
-  --color-md3-surface-container-highest: #4b5563;
-
-  /* Outline (borders) — reference BORDER_COLOR #374151 */
-  --color-md3-outline: #374151;
-  --color-md3-outline-variant: #4b5563;
-
-  /* On-surface (text) — reference TEXT_COLOR #f3f4f6 */
-  --color-md3-on-surface: #f3f4f6;
-  --color-md3-on-surface-variant: #9ca3af;
-
-  /* Error — reference ERROR_COLOR #f87171 */
-  --color-md3-error: #f87171;
-  --color-md3-error-action: #c42b1c;
-  --color-md3-error-container: #7f1d1d;
-  --color-md3-on-error: #ffffff;
-  --color-md3-on-error-action: #ffffff;
-  --color-md3-on-error-container: #fecaca;
-
-  /* Success — reference SUCCESS_COLOR #34d399 */
-  --color-md3-success: #34d399;
-  --color-md3-success-container: #064e3b;
-  --color-md3-on-success: #ffffff;
-  --color-md3-on-success-container: #a7f3d0;
-
-  /* Warning (amber, complementary) */
-  --color-md3-warning: #fbbf24;
-  --color-md3-warning-container: #78350f;
-  --color-md3-on-warning-container: #fde68a;
-
-  /* Background gradient stops (from reference page.decoration) */
-  --color-md3-bg-gradient-start: #10162c;
-  --color-md3-bg-gradient-mid-1: #0c2749;
-  --color-md3-bg-gradient-mid-2: #0f0f23;
-  --color-md3-bg-gradient-end: #1a1a2e;
-
-  /* Input field background — reference FIELD_BG #1f2937 */
-  --color-md3-field: #1f2937;
-
-  /* ── MD3 Shape ──────────────────────────────────────────────────────── */
-
-  /* reference FORM_BORDER_RADIUS = 12 */
-  --radius-md3-form: 0.75rem;
-  /* reference BUTTON_RADIUS = 20 */
-  --radius-md3-button: 1.25rem;
-  /* reference dialog border radius = 10 */
-  --radius-md3-dialog: 0.625rem;
-
-  /* ── MD3 Typography ─────────────────────────────────────────────────── */
-
-  --font-md3-sans: "CFMS Inter Subset", "CFMS Noto Sans SC Subset", "Noto Sans SC", system-ui, sans-serif;
-  --font-md3-serif: "CFMS Noto Serif SC Subset", "Noto Serif SC", "Source Han Serif SC", serif;
-  --font-md3-mono: "CFMS JetBrains Mono Subset", "JetBrains Mono", "CFMS Noto Sans SC Subset", "Noto Sans SC", system-ui, ui-monospace, monospace;
-}
-
-html[data-theme="dark"] {
-  color-scheme: dark;
-}
-
-html[data-theme="light"] {
-  color-scheme: light;
-  --color-md3-primary: #0067c0;
-  --color-md3-primary-emphasis: #005a9e;
-  --color-md3-primary-container: #d8eaff;
-  --color-md3-on-primary: #ffffff;
-  --color-md3-on-primary-container: #12304a;
-  --color-md3-surface: #f3f3f3;
-  --color-md3-surface-container: #fafafa;
-  --color-md3-surface-container-high: #ffffff;
-  --color-md3-surface-container-highest: #ececec;
-  --color-md3-outline: #c8c8c8;
-  --color-md3-outline-variant: #d8d8d8;
-  --color-md3-on-surface: #1a1a1a;
-  --color-md3-on-surface-variant: #5d5d5d;
-  --color-md3-error: #c42b1c;
-  --color-md3-error-container: #fde7e5;
-  --color-md3-on-error-container: #7a1710;
-  --color-md3-success: #0f7b3e;
-  --color-md3-success-container: #dff6e7;
-  --color-md3-on-success-container: #0b522c;
-  --color-md3-warning: #8a5d00;
-  --color-md3-warning-container: #fff1c7;
-  --color-md3-on-warning-container: #5f4100;
-  --color-md3-bg-gradient-start: #f8fafc;
-  --color-md3-bg-gradient-mid-1: #e2e8f0;
-  --color-md3-bg-gradient-mid-2: #f1f5f9;
-  --color-md3-bg-gradient-end: #e8ecf1;
-  --color-md3-field: #ffffff;
-}
+html[data-theme="dark"] { color-scheme: dark; }
+html[data-theme="light"] { color-scheme: light; }
 
 /* ---------------------------------------------------------------------------
- * Base layer — MD3 background gradient (from reference page.decoration)
+ * Base layer — Fluent window canvas
  * --------------------------------------------------------------------------- */
 
 @layer base {
@@ -122,22 +19,17 @@ html[data-theme="light"] {
     overflow: hidden;
     margin: 0;
     padding: 0;
-    font-family: var(--font-md3-serif);
-    background: linear-gradient(
-      135deg,
-      var(--color-md3-bg-gradient-start) 0%,
-      var(--color-md3-bg-gradient-mid-1) 25%,
-      var(--color-md3-bg-gradient-mid-2) 50%,
-      var(--color-md3-bg-gradient-end) 100%
-    );
-    background-attachment: fixed;
+    font-family: var(--fontFamilyBase);
+    background: var(--colorNeutralBackground3);
     color: var(--color-md3-on-surface);
   }
 
+  html { font-size: 16px; }
+  body { font-size: 14px; line-height: 20px; }
 }
 
 /* ---------------------------------------------------------------------------
- * MD3 Scrollbar — hidden (reference: scrollbar_theme thickness=0)
+ * Workspace scrollbar — hidden (reference: scrollbar_theme thickness=0)
  * Keep a minimal visible track on hover for usability.
  * --------------------------------------------------------------------------- */
 
@@ -206,7 +98,7 @@ html[data-theme="light"] {
 }
 
 /* ---------------------------------------------------------------------------
- * Motion layer — MD3 expressive movement tokens and utilities
+ * Motion layer — Fluent motion aliases and utilities
  * --------------------------------------------------------------------------- */
 
 :root {
@@ -214,10 +106,10 @@ html[data-theme="light"] {
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
-  --motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
-  --motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
-  --motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
-  --motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --motion-easing-standard: var(--curveEasyEase);
+  --motion-easing-emphasized: var(--curveEasyEase);
+  --motion-easing-emphasized-decelerate: var(--curveDecelerateMid);
+  --motion-easing-emphasized-accelerate: var(--curveAccelerateMid);
 
   --motion-duration-short1: 50ms;
   --motion-duration-short2: 100ms;
@@ -242,16 +134,6 @@ html[data-theme="light"] {
   }
 }
 
-@keyframes ripple {
-  0% {
-    opacity: 0.28;
-    transform: translate(-50%, -50%) scale(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
 
 @keyframes float {
   0%,
@@ -316,24 +198,6 @@ html[data-theme="light"] {
   will-change: background-position;
 }
 
-.motion-ripple {
-  position: absolute;
-  border-radius: 9999px;
-  background: currentColor;
-  pointer-events: none;
-  transform: translate(-50%, -50%) scale(0);
-  animation: ripple var(--motion-duration-medium3)
-    var(--motion-easing-emphasized-decelerate) forwards;
-  will-change: opacity, transform;
-}
-
-.motion-ripple-root {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  border-radius: inherit;
-  pointer-events: none;
-}
 
 .motion-reveal {
   opacity: 0;
@@ -390,9 +254,9 @@ html[data-theme="light"] {
   justify-content: center;
   margin: 0;
   color: var(--color-md3-on-surface);
-  font-family: var(--font-md3-serif);
+  font-family: var(--fontFamilyBase);
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
   text-align: center;
   transform: translateX(-50%);
@@ -436,88 +300,7 @@ html[data-reduce-motion="true"] .context-menu-surface {
   will-change: auto;
 }
 
-/* ---------------------------------------------------------------------------
- * Workspace palette — shared by the explorer and authentication flows
- *
- * The authenticated workspace intentionally has a denser, Windows 11 file
- * manager visual language. Connection and authentication keep their Material
- * structure while sharing these colours, surfaces, and semantic states.
- * --------------------------------------------------------------------------- */
-
-:where(.explorer-shell, .workspace-palette) {
-  /* Smaller segment of the golden ratio, shared by both auth-route transitions. */
-  --auth-panel-basis: 38.196601125%;
-  --explorer-background: #0f1115;
-  --explorer-surface: #17191d;
-  --explorer-surface-raised: #20232a;
-  --explorer-surface-hover: #292d35;
-  --explorer-surface-selected: #343840;
-  --explorer-border: rgba(255, 255, 255, 0.11);
-  --explorer-border-strong: rgba(255, 255, 255, 0.18);
-  --explorer-text: #f5f5f5;
-  --explorer-text-muted: #b4b8c1;
-  --explorer-accent: #60cdff;
-  --explorer-accent-soft: rgba(96, 205, 255, 0.16);
-  --explorer-info: #a5f3fc;
-  --explorer-folder: #ffca4b;
-  --explorer-danger: #ff99a4;
-  --explorer-success: #6ccb8e;
-  --explorer-warning: #f5d47a;
-  --explorer-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
-  --explorer-radius-small: 5px;
-  --explorer-radius-medium: 8px;
-  --explorer-radius-large: 12px;
-  color: var(--explorer-text);
-  background: var(--explorer-background);
-  font-family: var(--font-md3-sans);
-  color-scheme: dark;
-
-  /* Existing feature components remain functional while inheriting the new
-     workspace palette. This lets dialogs and complex management controls be
-     migrated without duplicating their behavior. */
-  --color-md3-primary: var(--explorer-accent);
-  --color-md3-primary-emphasis: var(--explorer-accent);
-  --color-md3-primary-container: var(--explorer-accent-soft);
-  --color-md3-on-primary: var(--explorer-background);
-  --color-md3-on-primary-container: var(--explorer-text);
-  --color-md3-surface: var(--explorer-background);
-  --color-md3-surface-container: var(--explorer-surface);
-  --color-md3-surface-container-high: var(--explorer-surface-raised);
-  --color-md3-surface-container-highest: var(--explorer-surface-hover);
-  --color-md3-outline: var(--explorer-border);
-  --color-md3-outline-variant: var(--explorer-border-strong);
-  --color-md3-on-surface: var(--explorer-text);
-  --color-md3-on-surface-variant: var(--explorer-text-muted);
-  --color-md3-error: var(--explorer-danger);
-  --color-md3-error-container: color-mix(in srgb, var(--explorer-danger) 14%, transparent);
-  --color-md3-on-error-container: var(--explorer-danger);
-  --color-md3-success: var(--explorer-success);
-  --color-md3-warning: var(--explorer-warning);
-  --color-md3-field: var(--explorer-surface-raised);
-}
-
-html[data-theme="light"] :where(.explorer-shell, .workspace-palette) {
-    --explorer-background: #f3f3f3;
-    --explorer-surface: #fafafa;
-    --explorer-surface-raised: #ffffff;
-    --explorer-surface-hover: #ececec;
-    --explorer-surface-selected: #e3e3e3;
-    --explorer-border: rgba(0, 0, 0, 0.10);
-    --explorer-border-strong: rgba(0, 0, 0, 0.16);
-    --explorer-text: #1a1a1a;
-    --explorer-text-muted: #5d5d5d;
-    --explorer-accent: #0067c0;
-    --explorer-accent-soft: rgba(0, 103, 192, 0.12);
-    --explorer-info: #0067c0;
-    --explorer-folder: #8a5d00;
-    --explorer-danger: #c42b1c;
-    --explorer-success: #0f7b3e;
-    --explorer-warning: #8a5d00;
-    --explorer-shadow: 0 18px 48px rgba(0, 0, 0, 0.16);
-    color-scheme: light;
-}
-
-:where(button, a[href], [role="button"], [role="option"], [role="menuitem"], [role="radio"], [role="tab"], [tabindex]):focus-visible {
+:where(button, a[href], [role="button"], [role="option"], [role="menuitem"], [role="radio"], [role="tab"], [tabindex]):not([data-focus-ring="fluent"]):focus-visible {
   outline: 2px solid var(--color-md3-primary-emphasis, var(--color-md3-primary));
   outline-offset: -2px;
 }
@@ -544,6 +327,14 @@ html[data-theme="light"] :where(.explorer-shell, .workspace-palette) {
   outline: none !important;
 }
 
+@media (forced-colors: active) {
+  :root :where(input, textarea, select):not([data-focus-ring="delegated"]):focus {
+    outline: 2px solid Highlight !important;
+    outline-offset: -2px;
+    box-shadow: none !important;
+  }
+}
+
 [data-programmatic-focus="true"]:focus,
 #app-main-content:focus {
   outline: none !important;
@@ -557,18 +348,17 @@ html[data-theme="light"] :where(.explorer-shell, .workspace-palette) {
 .explorer-surface {
   border: 1px solid var(--explorer-border);
   border-radius: var(--explorer-radius-medium);
-  background: color-mix(in srgb, var(--explorer-surface-raised) 94%, transparent);
+  background: var(--explorer-surface-raised);
 }
 
 .explorer-shell .workspace-page {
   color: var(--explorer-text);
-  background: var(--explorer-background);
+  background: transparent;
 }
 
 .explorer-shell .workspace-page h1,
 .explorer-shell .workspace-page h2,
 .explorer-shell .workspace-page h3 {
-  font-family: var(--font-md3-sans);
   letter-spacing: -0.01em;
 }
 
@@ -578,17 +368,17 @@ html[data-theme="light"] :where(.explorer-shell, .workspace-palette) {
 
 .explorer-command-button {
   display: inline-flex;
-  min-height: 34px;
+  min-height: 32px;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 8px;
   border: 1px solid transparent;
   border-radius: var(--explorer-radius-small);
-  padding: 0.35rem 0.65rem;
+  padding: 5px 12px;
   color: var(--explorer-text);
   background: transparent;
-  font-size: 0.8125rem;
-  line-height: 1;
+  font-size: 14px;
+  line-height: 20px;
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
@@ -601,13 +391,13 @@ html[data-theme="light"] :where(.explorer-shell, .workspace-palette) {
   background: var(--explorer-surface-hover);
 }
 
-.explorer-command-button:active:not(:disabled) {
-  transform: scale(0.97);
+.explorer-command-button:active:not(:disabled):not([disabled]) {
+  background: var(--colorNeutralBackground1Pressed);
 }
 
-.explorer-command-button:disabled {
+.explorer-command-button:is(:disabled, [disabled]) {
   cursor: not-allowed;
-  opacity: 0.42;
+  color: var(--colorNeutralForegroundDisabled);
 }
 
 .explorer-command-button[data-active="true"] {
@@ -619,83 +409,12 @@ html[data-theme="light"] :where(.explorer-shell, .workspace-palette) {
   color: var(--explorer-danger);
 }
 
-/* ---------------------------------------------------------------------------
- * Settings workspace — compact, linear and tonal
- * --------------------------------------------------------------------------- */
-
-.settings-page-shell {
-  display: grid;
-  width: min(100%, 45rem);
-  gap: 1rem;
-  margin-inline: auto;
-  padding: 1.25rem;
-}
-
-.settings-section-list {
-  display: grid;
-  border-top: 1px solid var(--color-md3-outline);
-}
-
-.settings-section {
-  min-width: 0;
-  padding-block: 1rem;
-}
-
-.settings-section + .settings-section {
-  border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
-}
-
-.settings-section-heading {
-  display: grid;
-  min-width: 0;
-  gap: 0.24rem;
-}
-
-.settings-section-heading h2,
-.settings-section-heading p {
-  margin: 0;
-}
-
-.settings-section-heading h2 {
-  color: var(--color-md3-on-surface);
-  font: 650 0.88rem/1.35 var(--font-md3-sans);
-}
-
-.settings-section-heading p {
-  max-width: 70ch;
-  color: var(--color-md3-on-surface-variant);
-  font-size: 0.74rem;
-  line-height: 1.5;
-}
-
-.settings-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.settings-row__copy {
-  min-width: 0;
-}
-
-.settings-row__icon {
-  display: grid;
-  width: 24px;
+.explorer-command-button--compact {
+  inline-size: 32px;
   flex: none;
-  place-items: center;
-  color: var(--color-md3-primary-emphasis);
+  padding-inline: 0;
 }
 
-@media (min-width: 640px) {
-  .settings-page-shell {
-    padding: 1.5rem;
-  }
-}
-
-@media (max-width: 420px) {
-  .settings-page-shell {
-    padding: 1rem;
-  }
+@media (pointer: coarse) {
+  .explorer-command-button--compact { inline-size: 44px; }
 }

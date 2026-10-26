@@ -1,4 +1,6 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { open } from '@tauri-apps/plugin-dialog';
@@ -128,8 +130,14 @@
 {#if USER_EXTENSIONS_ENABLED}
 <div class="extensions-page">
   <header>
-    <div><h1>{$t('settings.extensions.title')}</h1><p>{$t('settings.extensions.description')}</p></div>
-    {#if !mobile}<button type="button" class="secondary" disabled={busy !== null} onclick={importPackage}><Icon name="uploadFile" size="18px" />{$t('settings.extensions.import')}</button>{/if}
+    <div class="cfms-heading-copy"><h1>{$t('settings.extensions.title')}</h1><p>{$t('settings.extensions.description')}</p></div>
+    {#if !mobile}<FluentButton data-fluent-owner="routes-home-settings-extensions-page"
+  type="button"
+  disabled={busy !== null}
+  onclick={importPackage}
+  appearance="subtle"
+  class="secondary"
+><Icon name="uploadFile" size="18px" />{$t('settings.extensions.import')}</FluentButton>{/if}
   </header>
 
   {#if !extensionsStore.overview?.trustedKeysConfigured}
@@ -140,7 +148,7 @@
   {/if}
 
   <section class="section">
-    <div class="section-title"><div><h2>{$t('settings.extensions.installedTitle')}</h2><p>{$t('settings.extensions.installedHint')}</p></div></div>
+    <div class="section-title"><div class="cfms-heading-copy"><h2>{$t('settings.extensions.installedTitle')}</h2><p>{$t('settings.extensions.installedHint')}</p></div></div>
     {#if extensionsStore.loading && !extensionsStore.overview}
       <div class="loading"><ProgressRing size={26} label={$t('common.loading')} /></div>
     {:else if (extensionsStore.overview?.installed.length ?? 0) === 0}
@@ -149,7 +157,7 @@
       <div class="cards">
         {#each extensionsStore.overview?.installed ?? [] as installation (installation.manifest.id)}
           {@const accountState = extensionsStore.overview?.accountStates[installation.manifest.id]}
-          <article class="extension-card">
+          <article class="extension-card cfms-content-surface">
             <div class="extension-icon"><Icon name="extensions" size="24px" /></div>
             <div class="extension-copy"><h3>{installation.manifest.name}</h3><p>{installation.manifest.description}</p><small>{installation.manifest.publisher} · v{installation.manifest.version} · {formatBytes(installation.disk_bytes)}</small></div>
             <label class="switch"><input type="checkbox" checked={accountState?.enabled ?? false} disabled={!authStore.isLoggedIn || busy !== null} onchange={() => toggle(installation)} /><span></span></label>
@@ -158,11 +166,27 @@
             {/if}
             <div class="card-actions">
               {#if accountState?.enabled && installation.manifest.entrypoints.navigation[0]}
-                <button type="button" onclick={() => goto(`/home/extensions/view?extension=${encodeURIComponent(installation.manifest.id)}&page=${encodeURIComponent(installation.manifest.entrypoints.navigation[0].page)}`)}>{$t('settings.extensions.open')}</button>
+                <FluentButton data-fluent-owner="routes-home-settings-extensions-page"
+                  type="button"
+                  onclick={() => goto(`/home/extensions/view?extension=${encodeURIComponent(installation.manifest.id)}&page=${encodeURIComponent(installation.manifest.entrypoints.navigation[0].page)}`)}
+                  appearance="subtle"
+                >{$t('settings.extensions.open')}</FluentButton>
               {/if}
               {#if installation.state !== 'bundled'}
-                {#if installation.previous_version}<button type="button" disabled={busy !== null} onclick={() => rollback(installation)}>{$t('settings.extensions.rollback')}</button>{/if}
-                <button type="button" class="danger" disabled={busy !== null} onclick={() => uninstall(installation)}>{$t('settings.extensions.uninstall')}</button>
+                {#if installation.previous_version}<FluentButton data-fluent-owner="routes-home-settings-extensions-page"
+  type="button"
+  disabled={busy !== null}
+  onclick={() => rollback(installation)}
+  appearance="subtle"
+>{$t('settings.extensions.rollback')}</FluentButton>{/if}
+                <FluentButton data-fluent-owner="routes-home-settings-extensions-page"
+                  type="button"
+                  disabled={busy !== null}
+                  onclick={() => uninstall(installation)}
+                  appearance="subtle"
+                  tone="danger"
+                  class="danger"
+                >{$t('settings.extensions.uninstall')}</FluentButton>
               {/if}
             </div>
           </article>
@@ -173,14 +197,25 @@
 
   {#if !mobile}
     <section class="section">
-      <div class="section-title"><div><h2>{$t('settings.extensions.catalogTitle')}</h2><p>{$t('settings.extensions.catalogHint')}</p></div><button type="button" class="icon-button" disabled={catalogBusy || !extensionsStore.overview?.trustedKeysConfigured} onclick={refreshCatalog}><Icon name="refresh" size="19px" />{catalogBusy ? $t('common.loading') : $t('common.refresh')}</button></div>
+      <div class="section-title cfms-heading-copy">
+        <div class="cfms-heading-row">
+          <h2>{$t('settings.extensions.catalogTitle')}</h2>
+          <IconButton icon="refresh" label={$t('common.refresh')} disabled={catalogBusy || !extensionsStore.overview?.trustedKeysConfigured} onclick={refreshCatalog} />
+        </div>
+        <p>{$t('settings.extensions.catalogHint')}</p>
+      </div>
       <div class="cards">
         {#each extensionsStore.overview?.catalog?.extensions ?? [] as entry (entry.manifest.id)}
           {@const isInstalled = extensionsStore.overview?.installed.some((item) => item.manifest.id === entry.manifest.id && item.manifest.version === entry.manifest.version)}
           <article class="extension-card catalog-card" class:revoked={entry.revoked}>
             <div class="extension-icon"><Icon name={entry.revoked ? 'block' : 'extensions'} size="24px" /></div>
             <div class="extension-copy"><h3>{entry.manifest.name}</h3><p>{entry.manifest.description}</p><small>{entry.manifest.publisher} · v{entry.manifest.version}</small>{#if entry.revoked}<b>{entry.revocation_reason ?? $t('settings.extensions.revoked')}</b>{/if}</div>
-            <button type="button" disabled={entry.revoked || isInstalled || busy !== null} onclick={() => installFromCatalog(entry.manifest.id)}>{isInstalled ? $t('settings.extensions.installedLabel') : $t('settings.extensions.install')}</button>
+            <FluentButton data-fluent-owner="routes-home-settings-extensions-page"
+              type="button"
+              disabled={entry.revoked || isInstalled || busy !== null}
+              onclick={() => installFromCatalog(entry.manifest.id)}
+              appearance="subtle"
+            >{isInstalled ? $t('settings.extensions.installedLabel') : $t('settings.extensions.install')}</FluentButton>
           </article>
         {/each}
       </div>
@@ -191,15 +226,16 @@
 
 <style>
   .extensions-page { max-width: 980px; margin: 0 auto; padding: 1.5rem; color: var(--explorer-text); }
-  header, .section-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; } header { margin-bottom: 1rem; } h1 { font-size: 1.35rem; font-weight: 700; } h2 { font-size: 1rem; font-weight: 650; } header p, .section-title p, .extension-copy p, .empty p, .notice p { color: var(--explorer-text-muted); font-size: .78rem; }
-  button { display: inline-flex; align-items: center; gap: .4rem; min-height: 36px; border: 1px solid var(--explorer-border); border-radius: 999px; padding: .4rem .8rem; background: var(--explorer-surface-raised); font-size: .76rem; } button:hover:not(:disabled) { background: var(--explorer-surface-hover); } button:disabled { opacity: .5; } button.danger { color: var(--explorer-danger); }
-  .notice { display: flex; gap: .7rem; align-items: flex-start; margin-bottom: 1rem; border: 1px solid var(--explorer-border); border-left: 4px solid var(--explorer-accent); border-radius: 10px; padding: .8rem; background: var(--explorer-surface-raised); } .notice.warning { border-left-color: var(--explorer-warning, #c77d00); }
-  .section { margin-top: 1.25rem; } .section-title { margin-bottom: .65rem; } .cards { display: grid; gap: .65rem; }
-  .extension-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: .8rem; border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-medium); padding: .85rem; background: var(--explorer-surface-raised); }
-  .extension-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: var(--explorer-accent); background: var(--explorer-accent-soft); } .extension-copy { min-width: 0; } .extension-copy h3 { font-size: .88rem; font-weight: 650; } .extension-copy p { margin: .1rem 0 .25rem; } .extension-copy small { color: var(--explorer-text-muted); font-size: .68rem; } .extension-copy b { display: block; margin-top: .3rem; color: var(--explorer-danger); font-size: .7rem; }
-  details, .card-actions { grid-column: 2 / -1; } details { font-size: .72rem; color: var(--explorer-text-muted); } details ul { padding: .4rem 1rem; list-style: disc; } .card-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+  header, .section-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; } header { margin-bottom: 1rem; } h1 { font-size: 28px; font-weight: 700; } h2 { font-size: 16px; font-weight: 600; } header p, .section-title p, .extension-copy p, .empty p, .notice p { color: var(--explorer-text-muted); font-size: 12px; }
+  :global(.cfms-button[data-fluent-owner="routes-home-settings-extensions-page"]) { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); padding: .4rem .8rem; background: var(--explorer-surface-raised); font-size: 12px; } :global(.cfms-button[data-fluent-owner="routes-home-settings-extensions-page"]:hover:not(:is(:disabled, [disabled]))) { background: var(--explorer-surface-hover); } :global(.cfms-button[data-fluent-owner="routes-home-settings-extensions-page"]:is(:disabled, [disabled])) { opacity: .5; } :global(.cfms-button[data-fluent-owner="routes-home-settings-extensions-page"].danger[data-fluent-owner="routes-home-settings-extensions-page"]) { color: var(--explorer-danger); }
+  .notice { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 1rem; border: 1px solid var(--explorer-border); border-left: 1px solid var(--explorer-accent); border-radius: 10px; padding: .8rem; background: var(--explorer-surface-raised); } .notice.warning { border-left-color: var(--explorer-warning, #c77d00); }
+  .section { margin-top: 1.25rem; } .section-title { margin-bottom: .65rem; } .cards { display: grid; gap: 12px; }
+  .section-title.cfms-heading-copy { display: grid; align-items: stretch; gap: 4px; }
+  .extension-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; border: 1px solid var(--explorer-border); border-radius: var(--explorer-radius-medium); padding: .85rem; background: var(--explorer-surface-raised); }
+  .extension-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: var(--explorer-accent); background: var(--explorer-accent-soft); } .extension-copy { min-width: 0; } .extension-copy h3 { font-size: 14px; font-weight: 600; } .extension-copy p { margin: .1rem 0 .25rem; } .extension-copy small { color: var(--explorer-text-muted); font-size: 12px; } .extension-copy b { display: block; margin-top: .3rem; color: var(--explorer-danger); font-size: 12px; }
+  details, .card-actions { grid-column: 2 / -1; } details { font-size: 12px; color: var(--explorer-text-muted); } details ul { padding: .4rem 1rem; list-style: disc; } .card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .switch input { position: absolute; opacity: 0; } .switch span { display: block; width: 38px; height: 22px; border-radius: 999px; background: var(--explorer-border-strong); padding: 3px; transition: background 140ms ease; } .switch span::after { display: block; width: 16px; height: 16px; border-radius: 50%; background: white; content: ''; transition: transform 140ms ease; } .switch input:checked + span { background: var(--explorer-accent); } .switch input:checked + span::after { transform: translateX(16px); }
-  .empty, .loading { display: grid; min-height: 150px; place-items: center; align-content: center; gap: .35rem; border: 1px dashed var(--explorer-border); border-radius: var(--explorer-radius-medium); text-align: center; } .empty :global(.material-symbols-rounded) { color: var(--explorer-text-muted); }
+  .empty, .loading { display: grid; min-height: 150px; place-items: center; align-content: center; gap: 4px; border: 1px dashed var(--explorer-border); border-radius: var(--explorer-radius-medium); text-align: center; } .empty :global(.cfms-icon) { color: var(--explorer-text-muted); }
   .catalog-card.revoked { opacity: .72; }
   @media (max-width: 650px) { .extensions-page { padding: 1rem; } header { align-items: flex-start; } .extension-card { grid-template-columns: 40px minmax(0, 1fr) auto; } details, .card-actions { grid-column: 1 / -1; } }
 </style>

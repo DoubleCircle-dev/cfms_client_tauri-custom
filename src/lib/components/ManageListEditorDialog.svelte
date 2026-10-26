@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
@@ -161,15 +162,18 @@
           </p>
         </div>
         {#if onRefresh}
-          <button
+          <FluentButton data-fluent-owner="lib-components-manage-list-editor-dialog"
             type="button"
-            class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
             title={$t('common.refresh')}
             disabled={loading || saving}
             onclick={refresh}
+            appearance="subtle"
+            class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
+            iconOnly
+            aria-label={$t('common.refresh')}
           >
             <Icon name="refresh" size="18px" />
-          </button>
+          </FluentButton>
         {/if}
       </div>
 
@@ -179,7 +183,7 @@
             <Icon name="search" size="18px" />
           </span>
           <input
-            class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
             placeholder={$t('manage.searchItems')}
             bind:value={query}
             disabled={loading || saving}
@@ -195,19 +199,22 @@
             }}
           >
             <input
-              class="min-w-0 rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
+              class="cfms-native-field min-w-0 rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
               placeholder={addPlaceholder}
               bind:value={customValue}
               disabled={loading || saving}
             />
-            <button
+            <FluentButton data-fluent-owner="lib-components-manage-list-editor-dialog"
               type="submit"
-              class="rounded-full bg-md3-primary-container p-2.5 text-md3-on-primary-container transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
               disabled={loading || saving || !customValue.trim()}
               title={$t('common.add')}
+              appearance="subtle"
+              class="rounded bg-md3-primary-container p-2.5 text-md3-on-primary-container transition-all  disabled:cursor-not-allowed disabled:opacity-45"
+              iconOnly
+              aria-label={$t('common.add')}
             >
               <Icon name="add" size="18px" />
-            </button>
+            </FluentButton>
           </form>
         {/if}
       </div>
@@ -231,32 +238,37 @@
           {emptyMessage || $t('manage.noItems')}
         </p>
       {:else}
-        <div class="overflow-hidden rounded-lg border border-md3-outline">
+        <div class="cfms-list-rows overflow-hidden rounded-lg border border-md3-outline">
           {#each visibleItems as item (item.id)}
-            <button
+            <FluentButton data-fluent-owner="lib-components-manage-list-editor-dialog"
               type="button"
-              class="grid w-full cursor-pointer grid-cols-[auto_1fr] items-start gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-primary-container/15 disabled:cursor-not-allowed disabled:opacity-60 last:border-b-0"
               disabled={saving}
+              aria-pressed={selectedSet.has(item.id)}
               onclick={() => setSelected(item.id, !selectedSet.has(item.id))}
+              appearance="subtle"
+              shape="square"
+              class="cfms-list-row disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span
-                class="mt-[-1px] inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors
-                       {selectedSet.has(item.id) ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}"
-                aria-hidden="true"
-              >
-                <Icon name={selectedSet.has(item.id) ? 'checkBox' : 'checkBoxBlank'} size="22px" />
-              </span>
-              <span class="min-w-0">
-                <span class="block truncate text-sm font-medium text-md3-on-surface">
-                  {displayLabel(item)}
+              <span class="grid w-full grid-cols-[auto_1fr] items-start gap-3 px-4 py-3">
+                <span
+                  class="mt-[-1px] inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors
+                         {selectedSet.has(item.id) ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}"
+                  aria-hidden="true"
+                >
+                  <Icon name={selectedSet.has(item.id) ? 'checkBox' : 'checkBoxBlank'} size="22px" />
                 </span>
-                {#if item.meta || item.id !== displayLabel(item)}
-                  <span class="mt-0.5 block truncate text-xs text-md3-on-surface-variant">
-                    {item.meta || item.id}
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-medium text-md3-on-surface">
+                    {displayLabel(item)}
                   </span>
-                {/if}
+                  {#if item.meta || item.id !== displayLabel(item)}
+                    <span class="mt-0.5 block truncate text-xs text-md3-on-surface-variant">
+                      {item.meta || item.id}
+                    </span>
+                  {/if}
+                </span>
               </span>
-            </button>
+            </FluentButton>
           {/each}
         </div>
       {/if}

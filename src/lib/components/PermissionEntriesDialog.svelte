@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { InvalidAdminResponseError, type PermissionEntry } from '$lib/api';
@@ -387,16 +388,18 @@
         </div>
       </div>
       {#if onRefresh}
-        <button
+        <FluentButton data-fluent-owner="lib-components-permission-entries-dialog"
           type="button"
-          class="refresh-button"
           aria-label={$t('common.refresh')}
           title={$t('common.refresh')}
           disabled={loading || saving}
           onclick={() => { void refresh(); }}
+          appearance="subtle"
+          class="refresh-button"
+          iconOnly
         >
           <Icon name="refresh" size="18px" />
-        </button>
+        </FluentButton>
       {/if}
     </header>
 
@@ -504,7 +507,7 @@
     flex: none;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
-    gap: 0.75rem;
+    gap: 12px;
     padding: 0.85rem 1.15rem 0.7rem;
   }
 
@@ -522,45 +525,45 @@
     max-width: 72ch;
     margin: 0;
     color: var(--color-md3-on-surface-variant);
-    font: 400 0.78rem/1.5 var(--font-md3-sans);
+    font: 400 12px/16px var(--font-md3-sans);
   }
 
   .replacement-notice {
     display: flex;
     align-items: flex-start;
-    gap: 0.35rem;
+    gap: 4px;
     margin-top: 0.2rem;
     color: var(--color-md3-on-surface-variant);
-    font: 400 0.69rem/1.45 var(--font-md3-sans);
+    font: 400 12px/16px var(--font-md3-sans);
   }
 
-  .replacement-notice :global(.material-symbols-rounded) { margin-top: 0.08rem; }
+  .replacement-notice :global(.cfms-icon) { margin-top: 0.08rem; }
 
-  .refresh-button {
+  :global(.refresh-button[data-fluent-owner="lib-components-permission-entries-dialog"]) {
     display: grid;
     width: 2rem;
     height: 2rem;
     place-items: center;
-    border-radius: var(--explorer-radius-small, 6px);
+    border-radius: var(--borderRadiusMedium);
     color: var(--color-md3-on-surface-variant);
     transition: color 100ms ease, background-color 100ms ease, transform 120ms cubic-bezier(0.2, 0, 0, 1);
   }
 
-  .refresh-button:hover:not(:disabled) { color: var(--color-md3-on-surface); background: var(--color-md3-surface-container-high); }
-  .refresh-button:active:not(:disabled) { transform: rotate(20deg) scale(0.94); }
+  :global(.refresh-button[data-fluent-owner="lib-components-permission-entries-dialog"]:hover:not(:is(:disabled, [disabled]))) { color: var(--color-md3-on-surface); background: var(--color-md3-surface-container-high); }
+  :global(.refresh-button[data-fluent-owner="lib-components-permission-entries-dialog"]:active:not(:is(:disabled, [disabled]))) { transform: none; }
 
   .workspace-error {
     display: flex;
     flex: none;
     align-items: flex-start;
-    gap: 0.45rem;
+    gap: 8px;
     border-bottom: 1px solid color-mix(in srgb, var(--color-md3-error) 30%, transparent);
     padding: 0.6rem 1.15rem;
     color: var(--color-md3-on-error-container);
     background: var(--color-md3-error-container);
   }
 
-  .workspace-error p { min-width: 0; margin: 0; overflow-wrap: anywhere; font: 400 0.75rem/1.45 var(--font-md3-sans); }
+  .workspace-error p { min-width: 0; margin: 0; overflow-wrap: anywhere; font: 400 12px/16px var(--font-md3-sans); }
 
   .permission-main {
     position: relative;
@@ -580,12 +583,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
+    gap: 8px;
     color: var(--color-md3-on-surface-variant);
     background: color-mix(in srgb, var(--color-md3-surface-container) 72%, transparent);
     -webkit-backdrop-filter: blur(2px);
     backdrop-filter: blur(2px);
-    font: 500 0.76rem/1.4 var(--font-md3-sans);
+    font: 500 12px/16px var(--font-md3-sans);
   }
 
   .permission-footer {
@@ -594,7 +597,7 @@
     flex: none;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
     border-top: 1px solid var(--color-md3-outline);
     padding: 0.65rem 1rem;
     background: color-mix(in srgb, var(--color-md3-surface-container-high) 45%, transparent);
@@ -605,18 +608,18 @@
     min-width: 0;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem;
+    gap: 4px;
     color: var(--color-md3-on-surface-variant);
-    font: 400 0.69rem/1.4 var(--font-md3-sans);
+    font: 400 12px/16px var(--font-md3-sans);
   }
 
   .change-summary strong { color: var(--color-md3-on-surface); font-weight: 600; }
   .dirty-indicator { width: 0.5rem; height: 0.5rem; flex: none; border-radius: 9999px; background: var(--color-md3-primary); box-shadow: 0 1px 4px color-mix(in srgb, var(--color-md3-primary) 42%, transparent); }
 
-  .footer-validation { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--color-md3-error); font-weight: 500; }
-  .footer-actions { display: flex; flex: none; align-items: center; gap: 0.5rem; }
+  .footer-validation { display: inline-flex; align-items: center; gap: 4px; color: var(--color-md3-error); font-weight: 500; }
+  .footer-actions { display: flex; flex: none; align-items: center; gap: 8px; }
 
-  button:disabled { cursor: not-allowed; opacity: 0.45; }
+  :global(.cfms-button[data-fluent-owner="lib-components-permission-entries-dialog"]:is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.45; }
 
   @media (max-width: 719px) {
     .permission-workspace { height: min(88vh, 54rem); min-height: 0; }
@@ -625,7 +628,7 @@
     .permission-overview-icon { display: none; }
     .permission-overview { grid-template-columns: minmax(0, 1fr) auto; }
     .permission-footer { align-items: flex-end; }
-    .change-summary { display: grid; gap: 0.15rem; }
+    .change-summary { display: grid; gap: 4px; }
   }
 
   @media (max-width: 480px) {
@@ -634,10 +637,10 @@
   }
 
   @media (pointer: coarse) {
-    .refresh-button { width: 2.75rem; height: 2.75rem; }
+    :global(.refresh-button[data-fluent-owner="lib-components-permission-entries-dialog"]) { width: 2.75rem; height: 2.75rem; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .refresh-button { transition: none; }
+    :global(.refresh-button[data-fluent-owner="lib-components-permission-entries-dialog"]) { transition: none; }
   }
 </style>

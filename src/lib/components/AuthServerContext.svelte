@@ -7,7 +7,7 @@
 
 <header class="auth-server-context" aria-label={label} use:smoothPosition>
   <div class="auth-server-context__label">
-    <Icon name="login" size="19px" />
+    <Icon name="laptopBriefcase" size="19px" />
     <span>{label}</span>
   </div>
   <div class="auth-server-context__divider"></div>
@@ -17,7 +17,7 @@
   .auth-server-context {
     display: grid;
     width: calc(100% + 2.5rem);
-    gap: 0.8rem;
+    gap: 12px;
     margin-inline: -1.25rem;
   }
 
@@ -25,10 +25,10 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 0.55rem;
+    gap: 8px;
     padding-left: 0.75rem;
     color: var(--explorer-text-muted);
-    font-size: 0.82rem;
+    font-size: 14px;
     font-weight: 560;
     text-align: left;
   }

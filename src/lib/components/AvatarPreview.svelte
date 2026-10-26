@@ -18,6 +18,14 @@
   }
 
   let { username, size = 60, avatarPath = null }: Props = $props();
+  let loaded = $state(false);
+  let failed = $state(false);
+  $effect(() => {
+    username;
+    avatarPath;
+    loaded = false;
+    failed = false;
+  });
 
   const initial = $derived(username.trim().charAt(0).toUpperCase() || '?');
   const hue = $derived.by(() => {
@@ -36,21 +44,25 @@
 </script>
 
 <div
-  class="rounded-full flex items-center justify-center
+  class="relative rounded-full flex items-center justify-center
          text-white font-bold select-none shrink-0 overflow-hidden"
   style="width: {size}px; height: {size}px;
-         background: {avatarSrc ? 'transparent' : `hsl(${hue}, 55%, 45%)`};
+         background: {loaded ? 'transparent' : `hsl(${hue}, 55%, 45%)`};
          font-size: {Math.round(size * 0.4)}px;
          font-family: var(--font-md3-sans);"
   aria-label={$t('common.avatarFor', { values: { username: username || $t('common.unknownUser') } })}
 >
-  {#if avatarSrc}
+  {#if !loaded}<span aria-hidden="true">{initial}</span>{/if}
+  {#key `${username}:${avatarSrc}`}
+  {#if avatarSrc && !failed}
     <img
       src={avatarSrc}
       alt={$t('common.avatarFor', { values: { username } })}
-      class="w-full h-full object-cover"
+      class="absolute inset-0 w-full h-full object-cover"
+      style:opacity={loaded ? 1 : 0}
+      onload={() => (loaded = true)}
+      onerror={() => { failed = true; loaded = false; }}
     />
-  {:else}
-    {initial}
   {/if}
+  {/key}
 </div>

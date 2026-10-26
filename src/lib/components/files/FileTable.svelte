@@ -12,7 +12,20 @@
   import Icon from '$lib/components/Icon.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
 
-  const ROW_HEIGHT = 40;
+  let rowHeight = $state(40);
+  onMount(() => {
+    const pointer = window.matchMedia('(pointer: coarse)');
+    const syncDensity = () => {
+      const nextHeight = pointer.matches ? 48 : 40;
+      if (rowHeight === nextHeight) return;
+      rowHeight = nextHeight;
+      void tick().then(() => $rowVirtualizer.measure());
+    };
+    syncDensity();
+    pointer.addEventListener('change', syncDensity);
+    return () => pointer.removeEventListener('change', syncDensity);
+  });
+
   const OVERSCAN_ROWS = 6;
   const DEFAULT_VIEWPORT_HEIGHT = 520;
   const VIRTUALIZATION_THRESHOLD = 160;
@@ -176,7 +189,7 @@
   const rowVirtualizer = createVirtualizer<HTMLDivElement, HTMLButtonElement>({
     count: 0,
     getScrollElement: () => scrollViewport,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: OVERSCAN_ROWS,
     enabled: false,
     initialRect: { width: 0, height: DEFAULT_VIEWPORT_HEIGHT },
@@ -191,14 +204,14 @@
     // measurement is pending (and in non-layout test environments).
     const fallbackCount = Math.min(
       rowCount,
-      Math.ceil(DEFAULT_VIEWPORT_HEIGHT / ROW_HEIGHT) + OVERSCAN_ROWS * 2,
+      Math.ceil(DEFAULT_VIEWPORT_HEIGHT / rowHeight) + OVERSCAN_ROWS * 2,
     );
     return Array.from({ length: fallbackCount }, (_, index) => ({
       key: index,
       index,
-      start: index * ROW_HEIGHT,
-      end: (index + 1) * ROW_HEIGHT,
-      size: ROW_HEIGHT,
+      start: index * rowHeight,
+      end: (index + 1) * rowHeight,
+      size: rowHeight,
       lane: 0,
     }));
   });
@@ -223,11 +236,12 @@
     const enabled = virtualized;
     const element = scrollViewport;
     const stickyHeaderHeight = tableHeader?.offsetHeight ?? 0;
+    const density = rowHeight;
     untrack(() => {
       $rowVirtualizer.setOptions({
         count,
         getScrollElement: () => element,
-        estimateSize: () => ROW_HEIGHT,
+        estimateSize: () => density,
         overscan: OVERSCAN_ROWS,
         enabled,
         initialRect: { width: 0, height: DEFAULT_VIEWPORT_HEIGHT },
@@ -591,7 +605,7 @@
     marqueeStyle = `left:${clientRect.left - bounds.left}px;top:${clientRect.top - bounds.top}px;width:${clientRect.width}px;height:${clientRect.height}px;`;
 
     const keys = new Set<string>();
-    const range = marqueeRowRange(contentRect, listSpace.offsetTop, ROW_HEIGHT, rowCount);
+    const range = marqueeRowRange(contentRect, listSpace.offsetTop, rowHeight, rowCount);
     if (range) {
       for (let index = range.start; index <= range.end; index += 1) {
         keys.add(rowSelectionKey(getRowAt(index)));
@@ -662,8 +676,8 @@
 
     const listTop = listSpace?.offsetTop ?? 0;
     const stickyHeaderHeight = tableHeader?.offsetHeight ?? 0;
-    const rowTop = listTop + index * ROW_HEIGHT;
-    const rowBottom = rowTop + ROW_HEIGHT;
+    const rowTop = listTop + index * rowHeight;
+    const rowBottom = rowTop + rowHeight;
     const visibleTop = scrollViewport.scrollTop + stickyHeaderHeight;
     const visibleBottom = scrollViewport.scrollTop + scrollViewport.clientHeight;
 
@@ -714,7 +728,7 @@
 
     if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'].includes(event.key) && scrollViewport) {
       event.preventDefault();
-      const pageSize = Math.max(1, Math.floor(scrollViewport.clientHeight / ROW_HEIGHT) - 1);
+      const pageSize = Math.max(1, Math.floor(scrollViewport.clientHeight / rowHeight) - 1);
       let targetIndex = currentIndex;
       if (event.key === 'ArrowDown') targetIndex += 1;
       else if (event.key === 'ArrowUp') targetIndex -= 1;
@@ -735,10 +749,10 @@
     const listTop = listSpace?.offsetTop ?? 0;
     const stickyHeaderHeight = tableHeader?.offsetHeight ?? 0;
     const visibleListTop = Math.max(listTop, scrollViewport.scrollTop + stickyHeaderHeight);
-    const index = Math.max(0, Math.min(rowCount - 1, Math.floor((visibleListTop - listTop) / ROW_HEIGHT)));
+    const index = Math.max(0, Math.min(rowCount - 1, Math.floor((visibleListTop - listTop) / rowHeight)));
     return {
       key: rowKey(getRowAt(index)),
-      offset: visibleListTop - (listTop + index * ROW_HEIGHT),
+      offset: visibleListTop - (listTop + index * rowHeight),
     };
   }
 
@@ -749,7 +763,7 @@
     const stickyHeaderHeight = tableHeader?.offsetHeight ?? 0;
     scrollViewport.scrollTop = Math.max(
       0,
-      listTop + boundedIndex * ROW_HEIGHT + offset - stickyHeaderHeight,
+      listTop + boundedIndex * rowHeight + offset - stickyHeaderHeight,
     );
     await tick();
   }
@@ -762,7 +776,7 @@
     activeRowKey = selectionKey;
     ensureRowVisible(index);
     if (virtualized && scrollViewport) {
-      scrollViewport.scrollTop = Math.max(0, index * ROW_HEIGHT);
+      scrollViewport.scrollTop = Math.max(0, index * rowHeight);
       scrollViewport.dispatchEvent(new Event('scroll'));
     }
     await tick();
@@ -852,7 +866,7 @@
   }
 </script>
 
-<div class="file-table-shell">
+<div class="file-table-shell" style={`--file-row-height: ${rowHeight}px;`}>
   {#if loading}
     <div class="file-table-loading">
       <ProgressRing size={18} strokeWidth={2.5} label={$t('common.loadingEllipsis')} />
@@ -1056,8 +1070,8 @@
 </div>
 
 <style>
-  .file-table-loading { display: flex; min-width: 0; align-items: center; gap: 0.5rem; padding: 1rem; color: var(--explorer-text-muted); font-size: 0.8rem; }
-  .file-table-shell { position: relative; min-width: 0; flex: 1; overflow: hidden; background: var(--explorer-background); }
+  .file-table-loading { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 1rem; color: var(--explorer-text-muted); font-size: 12px; }
+  .file-table-shell { position: relative; min-width: 0; flex: 1; overflow: hidden; background: transparent; }
   .file-table-scroll-viewport { position: relative; width: 100%; height: 100%; min-width: 0; overflow: auto; overscroll-behavior: contain; }
   .file-table-scroll-viewport.is-marquee-selecting { cursor: crosshair; user-select: none; }
   .file-table-content {
@@ -1098,15 +1112,19 @@
   }
   .file-table-grid { display: grid; grid-template-columns: 28px var(--file-name-width, minmax(240px, 1fr)) var(--file-modified-width, 168px) var(--file-type-width, 112px) var(--file-size-width, 100px); align-items: center; gap: 0.55rem; }
   .file-table-header { position: sticky; top: 0; z-index: 10; min-height: 36px; border-bottom: 1px solid var(--explorer-border-strong); padding: 0 0.7rem; color: var(--explorer-text); background: var(--explorer-surface-raised); font-size: 0.75rem; }
+  :global(html[data-window-backdrop="mica"]) .file-table-header { background: transparent; -webkit-backdrop-filter: var(--cfms-material-filter); backdrop-filter: var(--cfms-material-filter); }
+  @media (forced-colors: active) {
+    :global(html[data-window-backdrop]) .file-table-header { background: Canvas; }
+  }
   .file-table-column-header { position: relative; display: flex; min-width: 0; height: 100%; align-items: center; border-right: 1px solid var(--explorer-border); }
   .file-table-column-header:last-child { justify-content: flex-end; border-right: 0; text-align: right; }
-  .file-table-sort-button { display: flex; min-width: 0; width: 100%; height: 100%; align-items: center; gap: 0.2rem; color: inherit; text-align: left; }
+  .file-table-sort-button { display: flex; min-width: 0; width: 100%; height: 100%; align-items: center; gap: 4px; color: inherit; text-align: left; }
   .file-table-column-header:last-child .file-table-sort-button { justify-content: flex-end; text-align: right; }
   .file-table-resize-handle { position: absolute; top: 0; right: -0.36rem; z-index: 2; width: 0.7rem; height: 100%; padding: 0; cursor: col-resize; touch-action: none; }
-  .file-table-resize-handle::after { position: absolute; top: 20%; bottom: 20%; left: 50%; width: 2px; border-radius: 999px; background: transparent; content: ''; transform: translateX(-50%); transition: background-color 120ms ease, top 120ms ease, bottom 120ms ease; }
+  .file-table-resize-handle::after { position: absolute; top: 20%; bottom: 20%; left: 50%; width: 2px; border-radius: var(--borderRadiusMedium); background: transparent; content: ''; transform: translateX(-50%); transition: background-color 120ms ease, top 120ms ease, bottom 120ms ease; }
   .file-table-resize-handle:hover::after, .file-table-resize-handle:focus-visible::after, .is-column-resizing .file-table-resize-handle::after { top: 10%; bottom: 10%; background: var(--explorer-accent); }
   .file-table-row-space.is-virtualized { position: relative; }
-  .file-table-row { width: 100%; min-height: 40px; border-bottom: 1px solid color-mix(in srgb, var(--explorer-border) 66%, transparent); padding: 0 0.7rem; color: var(--explorer-text); text-align: left; transition: background-color 90ms ease, color 90ms ease; }
+  .file-table-row { width: 100%; min-height: var(--file-row-height, 40px); border-bottom: 1px solid color-mix(in srgb, var(--explorer-border) 66%, transparent); padding: 0 0.7rem; color: var(--explorer-text); text-align: left; transition: background-color 90ms ease, color 90ms ease; }
   .file-table-row:hover { background: var(--explorer-surface-hover); }
   .file-table-row--selected { background: var(--explorer-surface-selected); box-shadow: inset 2px 0 0 var(--explorer-accent); }
   .file-table-row--selected:hover { background: color-mix(in srgb, var(--explorer-surface-selected) 80%, var(--explorer-surface-hover)); }
@@ -1145,12 +1163,16 @@
   .file-table-icon--hidden::after { position: absolute; top: -2px; right: -4px; content: '👻'; font-size: 9px; line-height: 1; }
   .file-table-name { max-width: 100%; justify-self: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.81rem; }
   .file-table-drag-handle { cursor: default; user-select: none; }
-  .file-table-modified, .file-table-type, .file-table-size { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text-muted); font-size: 0.74rem; }
+  .file-table-modified, .file-table-type, .file-table-size { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text-muted); font-size: 12px; }
   .file-table-size { text-align: right; }
-  .file-table-empty { padding: 3.5rem 1rem; text-align: center; color: var(--explorer-text-muted); font-size: 0.8rem; }
-  .file-table-marquee { position: absolute; z-index: 8; border: 1px solid var(--explorer-accent); border-radius: 2px; background: color-mix(in srgb, var(--explorer-accent) 16%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--explorer-accent) 12%, transparent) inset; pointer-events: none; }
+  .file-table-empty { padding: 3.5rem 1rem; text-align: center; color: var(--explorer-text-muted); font-size: 12px; }
+  .file-table-marquee { position: absolute; z-index: 8; border: 1px solid var(--explorer-accent); border-radius: var(--borderRadiusMedium); background: color-mix(in srgb, var(--explorer-accent) 16%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--explorer-accent) 12%, transparent) inset; pointer-events: none; }
 
   @media (max-width: 820px), (pointer: coarse) {
     .file-table-resize-handle { display: none; }
+  }
+  @media (pointer: coarse) {
+    .file-table-header { min-height: 44px; }
+    .file-table-empty-overlay { inset-block-start: 44px; }
   }
 </style>

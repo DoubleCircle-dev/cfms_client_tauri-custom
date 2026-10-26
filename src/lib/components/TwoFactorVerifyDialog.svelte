@@ -198,7 +198,7 @@
     }}
   >
     <div class="relative px-5 pb-5 pt-6 sm:px-8 sm:pb-7">
-      <div class="twofa-icon mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-md3-primary-container text-md3-primary-emphasis">
+      <div class="twofa-icon mx-auto mb-4 grid h-16 w-16 place-items-center rounded-xl bg-md3-primary-container text-md3-primary-emphasis">
         <Icon name="approvalDelegation" size="42px" />
       </div>
 
@@ -220,7 +220,7 @@
               data-focus-ring="delegated"
               type="text"
               inputmode="text"
-              class="w-full rounded-2xl border bg-md3-field/90 py-3.5 pl-12 pr-4 text-sm text-md3-on-surface outline-none transition-all placeholder:text-md3-on-surface-variant
+              class="cfms-native-field w-full rounded-xl border bg-md3-field py-3.5 pl-12 pr-4 text-sm text-md3-on-surface outline-none transition-all placeholder:text-md3-on-surface-variant
                      {error ? 'border-md3-error shadow-[0_0_0_4px_rgba(248,113,113,0.12)]' : 'border-md3-outline focus:border-md3-primary focus:shadow-[0_0_0_4px_rgba(79,70,229,0.18)]'}"
               class:twofa-field-shake={errorShake}
               placeholder={inputPlaceholder}
@@ -245,7 +245,7 @@
             <input
               bind:this={codeInput}
               data-focus-ring="delegated"
-              class="code-input"
+              class="cfms-native-field code-input"
               type="text"
               inputmode="numeric"
               maxlength={inputMaxLength}

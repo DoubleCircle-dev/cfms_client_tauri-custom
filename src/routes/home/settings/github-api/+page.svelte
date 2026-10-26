@@ -1,4 +1,6 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { _ as t } from 'svelte-i18n';
@@ -88,6 +90,8 @@
     title={$t('settings.githubApi.title')}
     description={$t('settings.githubApi.description')}
     icon="api"
+    onRefresh={refreshStatus}
+    refreshDisabled={loading || busy}
   />
 
   <div class="settings-section-list">
@@ -105,12 +109,6 @@
         </div>
       </div>
 
-      {#if mode === 'unavailable' && !loading}
-        <button type="button" class="secondary-action" onclick={refreshStatus} disabled={busy}>
-          <Icon name="refresh" size="18px" />
-          {$t('settings.githubApi.retryStatus')}
-        </button>
-      {/if}
     </section>
 
     <section class="settings-section github-api-section" aria-labelledby="github-api-token-title">
@@ -120,27 +118,39 @@
       </div>
 
       <form class="credential-form" onsubmit={(event) => { event.preventDefault(); void saveToken(); }}>
-        <label for="github-api-token">{$t('settings.githubApi.tokenLabel')}</label>
-        <input
-          id="github-api-token"
-          type="password"
-          autocomplete="new-password"
-          autocapitalize="none"
-          spellcheck="false"
-          placeholder={$t('settings.githubApi.tokenPlaceholder')}
-          bind:value={token}
-          disabled={loading || busy || mode === 'unavailable'}
-        />
+        <MdOutlinedField inputId="github-api-token" label={$t('settings.githubApi.tokenLabel')} disabled={loading || busy || mode === 'unavailable'}>
+          <input data-focus-ring="delegated" class="cfms-native-field"
+            id="github-api-token"
+            type="password"
+            autocomplete="new-password"
+            autocapitalize="none"
+            spellcheck="false"
+            placeholder={$t('settings.githubApi.tokenPlaceholder')}
+            bind:value={token}
+            disabled={loading || busy || mode === 'unavailable'}
+          />
+        </MdOutlinedField>
         <div class="credential-actions">
-          <button type="submit" class="primary-action" disabled={!canSave}>
+          <FluentButton data-fluent-owner="routes-home-settings-github-api-page"
+            type="submit"
+            disabled={!canSave}
+            appearance="subtle"
+            class="primary-action"
+          >
             <Icon name="check" size="18px" />
             {$t(mode === 'none' ? 'settings.githubApi.save' : 'settings.githubApi.replace')}
-          </button>
+          </FluentButton>
           {#if mode === 'configured' || mode === 'needs_attention'}
-            <button type="button" class="remove-action" onclick={removeToken} disabled={!canRemove}>
+            <FluentButton data-fluent-owner="routes-home-settings-github-api-page"
+              type="button"
+              onclick={removeToken}
+              disabled={!canRemove}
+              appearance="subtle"
+              class="remove-action"
+            >
               <Icon name="delete" size="18px" />
               {$t('settings.githubApi.remove')}
-            </button>
+            </FluentButton>
           {/if}
         </div>
       </form>
@@ -166,13 +176,13 @@
 <style>
   .github-api-section {
     display: grid;
-    gap: 1rem;
+    gap: 16px;
   }
 
   .credential-status {
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: 12px;
     min-height: 3rem;
   }
 
@@ -190,106 +200,103 @@
 
   .credential-status__copy {
     display: grid;
-    gap: 0.2rem;
+    gap: 4px;
   }
 
   .credential-status__copy strong {
     color: var(--color-md3-on-surface);
-    font: 650 0.875rem/1.4 var(--font-md3-sans);
+    font: 600 14px/20px var(--font-md3-sans);
   }
 
   .credential-status__copy span {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.5;
   }
 
   .credential-form {
     display: grid;
     justify-items: start;
-    gap: 0.65rem;
+    gap: 12px;
   }
 
-  .credential-form label {
-    color: var(--color-md3-on-surface);
-    font: 650 0.8125rem/1.35 var(--font-md3-sans);
-  }
 
+  .credential-form > :global(.cfms-field) { width: min(100%, 30rem); }
   .credential-form input {
     width: min(100%, 30rem);
     min-height: 2.75rem;
     border: 1px solid var(--color-md3-outline);
-    border-radius: 8px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.65rem 0.85rem;
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-high);
     font: 0.875rem/1.4 var(--font-md3-sans);
   }
 
-  .credential-form input:disabled { opacity: 0.55; }
+  .credential-form input:is(:disabled, [disabled]) { opacity: 0.55; }
   .credential-actions,
   .documentation-links {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.6rem;
+    gap: 8px;
   }
 
-  .primary-action,
-  .secondary-action,
-  .remove-action {
+  :global(.primary-action[data-fluent-owner="routes-home-settings-github-api-page"]),
+  :global(.secondary-action[data-fluent-owner="routes-home-settings-github-api-page"]),
+  :global(.remove-action[data-fluent-owner="routes-home-settings-github-api-page"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
+    gap: 8px;
     min-height: 2.5rem;
-    border-radius: 6px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.45rem 0.85rem;
-    font: 650 0.8125rem/1.25 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
     transition: background-color var(--motion-duration-short4) var(--motion-easing-standard), transform var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  .primary-action {
+  :global(.primary-action[data-fluent-owner="routes-home-settings-github-api-page"]) {
     color: var(--color-md3-on-primary);
     background: var(--color-md3-primary);
   }
 
-  .secondary-action {
+  :global(.secondary-action[data-fluent-owner="routes-home-settings-github-api-page"]) {
     justify-self: start;
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
   }
 
-  .remove-action {
+  :global(.remove-action[data-fluent-owner="routes-home-settings-github-api-page"]) {
     color: var(--color-md3-error);
     background: transparent;
   }
 
-  .primary-action:hover:not(:disabled),
-  .secondary-action:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.06); }
-  .remove-action:hover:not(:disabled) { background: color-mix(in srgb, var(--color-md3-error) 9%, transparent); }
-  .credential-actions button:disabled { cursor: not-allowed; opacity: 0.55; }
+  :global(.primary-action[data-fluent-owner="routes-home-settings-github-api-page"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.secondary-action[data-fluent-owner="routes-home-settings-github-api-page"]:hover:not(:is(:disabled, [disabled]))) { transform: translateY(-1px); filter: none; }
+  :global(.remove-action[data-fluent-owner="routes-home-settings-github-api-page"]:hover:not(:is(:disabled, [disabled]))) { background: color-mix(in srgb, var(--color-md3-error) 9%, transparent); }
+  .credential-actions :global(.cfms-button[data-fluent-owner="routes-home-settings-github-api-page"]:is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.55; }
 
   .github-api-guidance {
     display: grid;
-    gap: 0.24rem;
+    gap: 4px;
   }
 
   .github-api-guidance p {
     max-width: 70ch;
     margin: 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.74rem;
+    font-size: 12px;
     line-height: 1.5;
   }
 
-  .documentation-links { gap: 1.25rem; }
+  .documentation-links { gap: 20px; }
 
   .documentation-links a {
     display: inline-flex;
     align-items: center;
     min-height: 2.5rem;
     color: var(--color-md3-primary-emphasis);
-    font: 500 0.8rem/1.4 var(--font-md3-sans);
+    font: 500 12px/16px var(--font-md3-sans);
     text-decoration: underline;
     text-underline-offset: 0.2rem;
   }
@@ -299,6 +306,6 @@
 
   @media (max-width: 420px) {
     .credential-actions { width: 100%; }
-    .credential-actions button { width: 100%; }
+    .credential-actions :global(.cfms-button[data-fluent-owner="routes-home-settings-github-api-page"]) { width: 100%; }
   }
 </style>

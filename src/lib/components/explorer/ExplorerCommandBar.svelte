@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import type { CommandAction } from '$lib/explorer/types';
   import { focusRovingItem } from '$lib/keyboard';
 
@@ -42,7 +43,10 @@
       observer.observe(commandBarElement);
       observer.observe(measurementElement);
     }
+    document.fonts?.addEventListener('loadingdone', scheduleMeasurement);
+    void document.fonts?.ready.then(scheduleMeasurement);
     return () => {
+      document.fonts?.removeEventListener('loadingdone', scheduleMeasurement);
       observer?.disconnect();
       if (scheduledFrame !== null) window.cancelAnimationFrame(scheduledFrame);
     };
@@ -99,11 +103,12 @@
     {#if action.dividerBefore}
       <span class="explorer-command-divider" aria-hidden="true"></span>
     {/if}
-    <button
+    <FluentButton data-fluent-owner="lib-components-explorer-explorer-command-bar"
+      appearance="subtle"
+      iconOnly={Boolean(action.compact || labelsCollapsed)}
       data-command-item
       type="button"
-      class="explorer-command-button"
-      class:explorer-command-button--compact={action.compact || labelsCollapsed}
+      class="explorer-command-button {action.compact || labelsCollapsed ? 'explorer-command-button--compact' : ''}"
       data-active={action.active ? 'true' : undefined}
       data-tone={action.tone ?? 'default'}
       disabled={action.disabled}
@@ -115,7 +120,7 @@
     >
       <Icon name={action.icon} size="18px" />
       <span class:sr-only={action.compact || labelsCollapsed}>{action.label}</span>
-    </button>
+    </FluentButton>
   {/each}
 </div>
 
@@ -140,14 +145,14 @@
     width: 100%;
     min-width: 0;
     align-items: center;
-    gap: 0.15rem;
+    gap: 4px;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-inline: contain;
     scrollbar-width: none;
   }
 
-  :global(.explorer-command-bar .explorer-command-button) {
+  :global(.explorer-command-bar .explorer-command-button[data-fluent-owner="lib-components-explorer-explorer-command-bar"]) {
     flex: none;
     white-space: nowrap;
   }
@@ -180,8 +185,8 @@
     background: var(--explorer-border);
   }
 
-  .explorer-command-button--compact {
-    width: 34px;
+  :global(.explorer-command-button--compact[data-fluent-owner="lib-components-explorer-explorer-command-bar"]) {
+    width: 32px;
     padding-inline: 0;
   }
 
@@ -192,14 +197,22 @@
     display: flex;
     width: max-content;
     align-items: center;
-    gap: 0.15rem;
+    gap: 4px;
     visibility: hidden;
     pointer-events: none;
   }
 
   .explorer-command-measure-button {
     flex: none;
+    min-inline-size: 96px;
     white-space: nowrap;
+    font-weight: 400;
+  }
+  :global(.explorer-command-button[data-fluent-owner="lib-components-explorer-explorer-command-bar"]) { font-weight: 400; }
+  .explorer-command-measure-button.explorer-command-button--compact { min-inline-size: 32px; }
+
+  @media (pointer: coarse) {
+    :global(.explorer-command-button--compact[data-fluent-owner="lib-components-explorer-explorer-command-bar"]) { width: 44px; }
   }
 
 </style>

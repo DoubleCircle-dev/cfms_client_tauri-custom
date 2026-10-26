@@ -95,7 +95,7 @@ describe('GitHub API settings', () => {
 
     expect(await screen.findByText('Secure storage unavailable')).toBeTruthy();
     expect((screen.getByLabelText('GitHub token') as HTMLInputElement).disabled).toBe(true);
-    await fireEvent.click(screen.getByRole('button', { name: 'Retry status check' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('No token configured')).toBeTruthy();
   });

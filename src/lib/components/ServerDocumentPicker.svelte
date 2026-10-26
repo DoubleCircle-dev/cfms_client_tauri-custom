@@ -1,5 +1,7 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { _ as t } from 'svelte-i18n';
   import {
     listDirectory,
@@ -20,7 +22,6 @@
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   type PickerRow =
-    | { kind: 'parent' }
     | { kind: 'folder'; folder: ServerDirectoryEntry }
     | { kind: 'document'; document: ServerDocumentEntry };
 
@@ -47,9 +48,10 @@
   let loadError = $state<string | null>(null);
 
   const visibleDocuments = $derived(documents.filter(documentFilter));
+  const coarsePointer = new MediaQuery('(pointer: coarse)', false);
+  const rowHeight = $derived(coarsePointer.current ? 48 : 40);
   const currentPath = $derived(formatDirectoryPath(breadcrumb));
   const pickerRows = $derived.by<PickerRow[]>(() => [
-    ...(parentId !== null ? [{ kind: 'parent' } as const] : []),
     ...folders.map((folder) => ({ kind: 'folder' as const, folder })),
     ...visibleDocuments.map((document) => ({ kind: 'document' as const, document })),
   ]);
@@ -127,8 +129,8 @@
   closeLabel={$t('common.close')}
   onClose={onCancel}
 >
-  <div class="flex h-full min-h-0 max-h-[78vh] flex-col">
-    <div class="space-y-3 border-b border-md3-outline/60 p-5">
+  <div class="flex h-full min-h-0 max-h-[78vh] flex-col" style:--picker-row-height={`${rowHeight}px`}>
+    <div class="shrink-0 space-y-3 border-b border-md3-outline/60 p-5">
       {#if description}
         <p class="max-w-[70ch] text-xs leading-5 text-md3-on-surface-variant">
           {description}
@@ -142,29 +144,35 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <Breadcrumb segments={breadcrumb.map((segment) => ({ label: segment.label, path: segment.id }))} onNavigate={navigateByBreadcrumb} />
         <div class="flex items-center gap-2">
-          <button
+          <FluentButton data-fluent-owner="lib-components-server-document-picker"
             type="button"
-            class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
             title={$t('files.goToRoot')}
             disabled={loading || currentFolderId === null}
             onclick={navigateToRoot}
+            appearance="subtle"
+            class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
+            iconOnly
+            aria-label={$t('files.goToRoot')}
           >
             <Icon name="home" size="18px" />
-          </button>
-          <button
+          </FluentButton>
+          <FluentButton data-fluent-owner="lib-components-server-document-picker"
             type="button"
-            class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
             title={$t('common.refresh')}
             disabled={loading}
             onclick={() => loadDirectory(currentFolderId)}
+            appearance="subtle"
+            class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
+            iconOnly
+            aria-label={$t('common.refresh')}
           >
             <Icon name="refresh" size="18px" />
-          </button>
+          </FluentButton>
         </div>
       </div>
     </div>
 
-    <div class="modal-flex-region min-h-[20rem] flex-1 overflow-hidden p-5">
+    <div class="modal-flex-region flex min-h-[20rem] flex-1 flex-col overflow-auto p-5">
       {#if loading}
         <div class="flex items-center gap-2 py-10 text-sm text-md3-on-surface-variant">
           <ProgressRing size={18} strokeWidth={2.5} label={$t('common.loadingEllipsis')} />
@@ -176,56 +184,64 @@
             <Icon name="warningAmber" size="18px" />
             <p class="min-w-0 break-words">{loadError}</p>
           </div>
-          <button
+          <FluentButton data-fluent-owner="lib-components-server-document-picker"
             type="button"
-            class="rounded-full bg-md3-error-container px-3 py-1.5 text-xs font-medium transition-all hover:brightness-110"
             onclick={() => loadDirectory(currentFolderId)}
+            appearance="subtle"
+            tone="danger"
+            class="rounded bg-md3-error-container px-3 py-1.5 text-xs font-medium transition-all "
           >
             {$t('common.refresh')}
-          </button>
+          </FluentButton>
         </div>
       {:else}
-        <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-md3-outline">
+        <div class="server-picker-content flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-md3-outline">
+          {#if parentId !== null}
+            <button
+              type="button"
+              class="server-picker-row server-picker-parent"
+              onclick={navigateToParent}
+            >
+              <span class="text-md3-primary-emphasis"><Icon name="arrowUpward" size="20px" /></span>
+              <span class="min-w-0 truncate">{$t('files.parentDirectory')}</span>
+            </button>
+          {/if}
+          {#if pickerRows.length === 0}
+            <div class="server-picker-empty" role="status">
+              <p>{$t('files.empty')}</p>
+            </div>
+          {:else}
           <VirtualList
             items={pickerRows}
-            keyOf={(row) => row.kind === 'parent'
-              ? 'parent'
-              : row.kind === 'folder'
+            keyOf={(row) => row.kind === 'folder'
                 ? `folder:${row.folder.id}`
                 : `document:${row.document.id}`}
-            estimateSize={45}
+            estimateSize={rowHeight}
             overscan={8}
             threshold={80}
             resetKey={currentFolderId ?? 'root'}
             viewportClass="server-picker-list-viewport"
+            keyboardNavigation
           >
             {#snippet children(row, index)}
-              {#if row.kind === 'parent'}
-                <button
+              {#if row.kind === 'folder'}
+                <button data-fluent-owner="lib-components-server-document-picker"
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr] items-center gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-primary-container/20"
-                  class:border-b-0={index === pickerRows.length - 1}
-                  onclick={navigateToParent}
-                >
-                  <span class="text-md3-primary-emphasis"><Icon name="arrowUpward" size="20px" /></span>
-                  <span class="min-w-0 truncate text-sm font-medium text-md3-primary-emphasis">{$t('files.parentDirectory')}</span>
-                </button>
-              {:else if row.kind === 'folder'}
-                <button
-                  type="button"
-                  class="grid w-full grid-cols-[auto_1fr] items-center gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-primary-container/20"
-                  class:border-b-0={index === pickerRows.length - 1}
                   onclick={() => navigateToFolder(row.folder)}
+
+                  class="server-picker-row"
+                  class:server-picker-row--last={index === pickerRows.length - 1}
                 >
                   <span class="text-md3-primary-emphasis"><Icon name="folder" size="20px" /></span>
                   <span class="min-w-0 truncate text-sm font-medium text-md3-primary-emphasis">{row.folder.name}</span>
                 </button>
               {:else}
-                <button
+                <button data-fluent-owner="lib-components-server-document-picker"
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-4 py-3 text-left transition-colors hover:bg-md3-surface-container-high/45"
-                  class:border-b-0={index === pickerRows.length - 1}
                   onclick={() => onSelect(row.document)}
+
+                  class="server-picker-row server-picker-document"
+                  class:server-picker-row--last={index === pickerRows.length - 1}
                 >
                   <span class="text-md3-on-surface-variant"><Icon name="filePresent" size="20px" /></span>
                   <span class="min-w-0 truncate text-sm text-md3-on-surface">{row.document.title}</span>
@@ -234,11 +250,6 @@
               {/if}
             {/snippet}
           </VirtualList>
-
-          {#if folders.length === 0 && visibleDocuments.length === 0}
-            <p class="px-4 py-10 text-center text-sm text-md3-on-surface-variant">
-              {$t('files.empty')}
-            </p>
           {/if}
         </div>
       {/if}
@@ -247,6 +258,40 @@
 </ModalFrame>
 
 <style>
+  .server-picker-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: var(--picker-row-height);
+    border: 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    border-radius: 0;
+    padding: 8px 16px;
+    text-align: left;
+    color: var(--colorNeutralForeground1);
+    background: transparent;
+    font: 400 14px/20px var(--fontFamilyBase);
+    transition: background-color var(--durationFaster) var(--curveEasyEase);
+  }
+  .server-picker-row:hover { background: var(--colorNeutralBackground1Hover); }
+  .server-picker-row:active { background: var(--colorNeutralBackground1Pressed); }
+  .server-picker-row:focus-visible { outline-offset: -2px; }
+  .server-picker-row--last { border-bottom: 0; }
+  .server-picker-parent { flex: none; color: var(--colorBrandForeground1); }
+  .server-picker-document { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .server-picker-empty {
+    display: grid;
+    flex: 1 1 auto;
+    min-height: 0;
+    place-items: center;
+    padding: 40px 16px;
+    color: var(--colorNeutralForeground2);
+    text-align: center;
+    font: 400 14px/20px var(--fontFamilyBase);
+  }
+
   :global(.server-picker-list-viewport) {
     min-height: 0;
     flex: 1 1 auto;

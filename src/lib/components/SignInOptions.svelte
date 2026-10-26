@@ -25,10 +25,10 @@
 
 <style>
   .sign-in-options { min-width: 0; }
-  .options-toggle { display: block; min-height: 32px; margin: 0 auto; padding: 0.25rem 0; border: 0; background: transparent; color: var(--explorer-accent); font-size: 0.75rem; cursor: pointer; }
+  .options-toggle { display: block; min-height: 32px; margin: 0 auto; padding: 0.25rem 0; border: 0; background: transparent; color: var(--explorer-accent); font-size: 12px; cursor: pointer; }
   .options-toggle:hover:not(:disabled) { color: var(--explorer-text); }
   .options-toggle:disabled { opacity: 0.5; cursor: default; }
-  .options-row { display: flex; justify-content: center; gap: 0.5rem; padding-top: 0.5rem; }
+  .options-row { display: flex; justify-content: center; gap: 8px; padding-top: 0.5rem; }
   .options-row[hidden] { display: none; }
   @media (pointer: coarse) {
     .options-toggle { min-height: 44px; }

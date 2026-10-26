@@ -212,6 +212,7 @@
           </span>
           <Icon
             name={colorScheme === option.value ? 'radioChecked' : 'radioUnchecked'}
+            filled={colorScheme === option.value}
             size="21px"
           />
         </button>
@@ -253,6 +254,7 @@
           </span>
           <Icon
             name={reduceMotion === option.value ? 'radioChecked' : 'radioUnchecked'}
+            filled={reduceMotion === option.value}
             size="21px"
           />
         </button>
@@ -265,29 +267,29 @@
   .scope-note {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     margin: 0 0 0.7rem;
     border-top: 1px solid var(--color-md3-outline);
     padding: 0.85rem 0 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.78rem;
+    font-size: 12px;
   }
 
   .appearance-section {
     display: grid;
-    gap: 1rem;
+    gap: 16px;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
   }
 
-  h2 { margin: 0; color: var(--color-md3-on-surface); font: 650 0.9rem/1.35 var(--font-md3-sans); }
-  p { margin: 0.3rem 0 0; color: var(--color-md3-on-surface-variant); font-size: 0.76rem; line-height: 1.55; }
-  .preference-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; }
+  h2 { margin: 0; color: var(--color-md3-on-surface); font: 600 14px/20px var(--font-md3-sans); }
+  p { margin: 0.3rem 0 0; color: var(--color-md3-on-surface-variant); font-size: 12px; line-height: 1.55; }
+  .preference-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 
   .preference-card {
     display: grid;
     min-width: 0;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.7rem;
+    gap: 12px;
     align-items: start;
     border: 1px solid var(--color-md3-outline);
     border-radius: var(--explorer-radius-medium, 0.65rem);
@@ -405,8 +407,8 @@
   .system-preview__lines > span { height: 4px; border-radius: 999px; background: currentColor; }
   .system-preview__lines > span:last-child { width: 72%; }
   .preference-card__copy { min-width: 0; }
-  .preference-card__title { display: flex; align-items: center; gap: 0.35rem; color: var(--color-md3-on-surface); font: 650 0.8rem/1.3 var(--font-md3-sans); }
-  .preference-card__hint { display: block; margin-top: 0.25rem; color: var(--color-md3-on-surface-variant); font-size: 0.68rem; line-height: 1.45; }
+  .preference-card__title { display: flex; align-items: center; gap: 4px; color: var(--color-md3-on-surface); font: 600 12px/16px var(--font-md3-sans); }
+  .preference-card__hint { display: block; margin-top: 0.25rem; color: var(--color-md3-on-surface-variant); font-size: 12px; line-height: 1.45; }
 
   @media (max-width: 620px) {
     .preference-grid { grid-template-columns: 1fr; }

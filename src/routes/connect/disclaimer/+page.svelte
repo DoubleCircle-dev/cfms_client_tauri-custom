@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   // Disclaimer page
   //
   // Shown on first launch before connecting to a server.  The user must
@@ -56,26 +57,30 @@
       <p>{$t('disclaimer.responsibility')}</p>
 
       <div class="actions">
-        <button
-          class="accept-button"
+        <FluentButton data-fluent-owner="routes-connect-disclaimer-page"
           onclick={async () => {
             busy = true;
             await disclaimerStore.accept();
             goto('/connect');
           }}
           disabled={busy}
+          type="button"
+          appearance="subtle"
+          class="accept-button"
         >
           {$t('disclaimer.accept')}
-        </button>
+        </FluentButton>
 
         {#if !isMobile}
-          <button
-            class="reject-button"
+          <FluentButton data-fluent-owner="routes-connect-disclaimer-page"
             onclick={() => void quitApplication()}
             disabled={busy}
+            type="button"
+            appearance="subtle"
+            class="reject-button"
           >
             {$t('disclaimer.rejectAndQuit')}
-          </button>
+          </FluentButton>
         {/if}
       </div>
     </footer>
@@ -219,18 +224,18 @@
   .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.85rem;
+    gap: 12px;
     justify-content: center;
     margin-top: var(--flet-gap);
   }
 
-  .accept-button,
-  .reject-button {
+  :global(.accept-button[data-fluent-owner="routes-connect-disclaimer-page"]),
+  :global(.reject-button[data-fluent-owner="routes-connect-disclaimer-page"]) {
     position: relative;
     min-width: 0;
     min-height: var(--flet-button-height);
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0 calc(var(--flet-pad) * 1.2);
     font-family: var(--font-md3-serif);
     font-size: var(--flet-body);
@@ -242,7 +247,7 @@
       background-color var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  .accept-button {
+  :global(.accept-button[data-fluent-owner="routes-connect-disclaimer-page"]) {
     flex: 0 0 min(100%, var(--flet-button-width));
     width: min(100%, var(--flet-button-width));
     background: var(--disclaimer-button);
@@ -252,7 +257,7 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.02);
   }
 
-  .reject-button {
+  :global(.reject-button[data-fluent-owner="routes-connect-disclaimer-page"]) {
     flex: 0 0 min(100%, var(--flet-button-width));
     width: min(100%, var(--flet-button-width));
     background: transparent;
@@ -260,32 +265,32 @@
     box-shadow: inset 0 0 0 1px var(--disclaimer-outline);
   }
 
-  .accept-button:hover,
-  .reject-button:hover {
-    filter: brightness(1.08);
+  :global(.accept-button[data-fluent-owner="routes-connect-disclaimer-page"]:hover),
+  :global(.reject-button[data-fluent-owner="routes-connect-disclaimer-page"]:hover) {
+    filter: none;
   }
 
-  .accept-button:active,
-  .reject-button:active {
-    transform: scale(0.985);
+  :global(.accept-button[data-fluent-owner="routes-connect-disclaimer-page"]:active),
+  :global(.reject-button[data-fluent-owner="routes-connect-disclaimer-page"]:active) {
+    transform: none;
   }
 
-  .accept-button:disabled,
-  .reject-button:disabled {
+  :global(.accept-button[data-fluent-owner="routes-connect-disclaimer-page"]:is(:disabled, [disabled])),
+  :global(.reject-button[data-fluent-owner="routes-connect-disclaimer-page"]:is(:disabled, [disabled])) {
     cursor: default;
     opacity: 0.55;
     transform: none;
   }
 
   @media (max-width: 639px) {
-    .accept-button,
-    .reject-button {
+    :global(.accept-button[data-fluent-owner="routes-connect-disclaimer-page"]),
+    :global(.reject-button[data-fluent-owner="routes-connect-disclaimer-page"]) {
       flex-basis: 100%;
       width: 100%;
     }
   }
 
-  .warning-symbol :global(.material-symbols-outlined) {
+  .warning-symbol :global(.cfms-icon) {
     width: var(--flet-icon) !important;
     height: var(--flet-icon) !important;
     font-size: var(--flet-icon) !important;

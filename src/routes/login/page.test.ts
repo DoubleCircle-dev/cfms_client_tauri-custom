@@ -36,8 +36,13 @@ beforeEach(() => {
   mocks.keyLogin.mockResolvedValue(status); mocks.preferences.mockResolvedValue({}); mocks.tasks.mockResolvedValue(0); mocks.loadAppearance.mockResolvedValue(undefined);
 });
 afterEach(() => { cleanup(); authStore.clear(); serverStateStore.clear(); vi.clearAllMocks(); });
+function usernameControl(): HTMLInputElement {
+  const control = screen.getByLabelText('Username').shadowRoot?.querySelector('input');
+  if (!control) throw new Error('Fluent username input is not registered');
+  return control;
+}
 async function publicKeyForm() {
-  await fireEvent.input(screen.getByLabelText('Username'), { target: { value: 'alice' } });
+  await fireEvent.input(usernameControl(), { target: { value: 'alice' } });
   await fireEvent.click(screen.getByRole('button', { name: 'Sign-in options' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Public key' }));
   await fireEvent.click(screen.getByRole('button', { name: /Choose private key/ }));
@@ -83,7 +88,7 @@ describe('dual-method sign-in', () => {
 
   it('preserves username and clears the password when changing methods', async () => {
     render(LoginPage);
-    await fireEvent.input(screen.getByLabelText('Username'), { target: { value: 'alice' } });
+    await fireEvent.input(usernameControl(), { target: { value: 'alice' } });
     await fireEvent.input(screen.getByLabelText('Password', { selector: 'input' }), { target: { value: 'secret' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Sign-in options' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Public key' }));

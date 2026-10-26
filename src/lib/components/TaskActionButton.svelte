@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { IconName } from '$lib/icons';
   import Icon from './Icon.svelte';
+  import FluentButton from './FluentButton.svelte';
 
   interface Props {
     icon: IconName;
@@ -21,7 +22,10 @@
   }: Props = $props();
 </script>
 
-<button
+<FluentButton data-fluent-owner="lib-components-task-action-button"
+  appearance="subtle"
+  iconOnly={presentation === 'icon'}
+  {tone}
   type="button"
   class="task-action task-action-{presentation} task-action-{tone}"
   title={presentation === 'icon' ? label : undefined}
@@ -31,16 +35,16 @@
 >
   <Icon name={icon} size={presentation === 'icon' ? '18px' : '16px'} />
   {#if presentation === 'labelled'}<span>{label}</span>{/if}
-</button>
+</FluentButton>
 
 <style>
-  .task-action {
+  :global(.task-action[data-fluent-owner="lib-components-task-action-button"]) {
     display: inline-flex;
     flex: none;
     align-items: center;
     justify-content: center;
     color: var(--explorer-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     transition:
       color 120ms var(--motion-easing-standard),
@@ -49,58 +53,51 @@
       opacity 120ms var(--motion-easing-standard);
   }
 
-  .task-action-icon {
+  :global(.task-action-icon[data-fluent-owner="lib-components-task-action-button"]) {
     width: 36px;
     height: 36px;
-    border-radius: 999px;
+    border-radius: var(--borderRadiusMedium);
   }
 
-  .task-action-labelled {
+  :global(.task-action-labelled[data-fluent-owner="lib-components-task-action-button"]) {
     min-height: 32px;
-    gap: 0.3rem;
-    border-radius: var(--explorer-radius-small);
+    gap: 4px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.25rem 0.6rem;
   }
 
-  .task-action-primary { color: var(--explorer-accent); }
-  .task-action-warning { color: var(--explorer-warning); }
-  .task-action-danger { color: var(--explorer-danger); }
+  :global(.task-action-primary[data-fluent-owner="lib-components-task-action-button"]) { color: var(--explorer-accent); }
+  :global(.task-action-warning[data-fluent-owner="lib-components-task-action-button"]) { color: var(--explorer-warning); }
+  :global(.task-action-danger[data-fluent-owner="lib-components-task-action-button"]) { color: var(--explorer-danger); }
 
-  .task-action:hover:not(:disabled) {
+  :global(.task-action[data-fluent-owner="lib-components-task-action-button"]:hover:not([disabled])) {
     color: var(--explorer-text);
     background: var(--explorer-surface-selected);
   }
 
-  .task-action-primary:hover:not(:disabled) {
+  :global(.task-action-primary[data-fluent-owner="lib-components-task-action-button"]:hover:not([disabled])) {
     color: var(--explorer-accent);
     background: var(--explorer-accent-soft);
   }
 
-  .task-action-warning:hover:not(:disabled) {
+  :global(.task-action-warning[data-fluent-owner="lib-components-task-action-button"]:hover:not([disabled])) {
     color: var(--explorer-warning);
     background: color-mix(in srgb, var(--explorer-warning) 12%, transparent);
   }
 
-  .task-action-danger:hover:not(:disabled) {
+  :global(.task-action-danger[data-fluent-owner="lib-components-task-action-button"]:hover:not([disabled])) {
     color: var(--explorer-danger);
     background: color-mix(in srgb, var(--explorer-danger) 12%, transparent);
   }
 
-  .task-action:focus-visible {
-    outline: 2px solid var(--explorer-accent);
-    outline-offset: -2px;
-  }
-
-  .task-action:active:not(:disabled) { transform: scale(0.94); }
-  .task-action:disabled { opacity: 0.5; }
+  :global(.task-action[data-fluent-owner="lib-components-task-action-button"][disabled]) { color: var(--colorNeutralForegroundDisabled); }
 
   @media (pointer: coarse) {
-    .task-action-icon { width: 44px; height: 44px; }
-    .task-action-labelled { min-height: 44px; }
+    :global(.task-action-icon[data-fluent-owner="lib-components-task-action-button"]) { width: 44px; height: 44px; }
+    :global(.task-action-labelled[data-fluent-owner="lib-components-task-action-button"]) { min-height: 44px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .task-action { transition: none; }
-    .task-action:active:not(:disabled) { transform: none; }
+    :global(.task-action[data-fluent-owner="lib-components-task-action-button"]) { transition: none; }
   }
 </style>

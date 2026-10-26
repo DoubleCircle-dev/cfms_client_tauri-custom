@@ -32,7 +32,7 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 0.35rem;
+    gap: 4px;
   }
 
   kbd {
@@ -43,7 +43,7 @@
     color: var(--color-md3-on-surface-variant);
     background: var(--color-md3-surface-container-high);
     box-shadow: 0 1px 0 color-mix(in srgb, var(--color-md3-on-surface) 18%, transparent);
-    font: 600 0.72rem/1.4 var(--font-md3-mono, monospace);
+    font: 600 12px/16px var(--font-md3-mono, monospace);
     text-align: center;
   }
 
@@ -56,7 +56,7 @@
     box-shadow:
       0 1px 0 color-mix(in srgb, var(--explorer-text, var(--color-md3-on-surface)) 14%, transparent),
       inset 0 1px 0 color-mix(in srgb, white 5%, transparent);
-    font-size: 0.625rem;
+    font-size: 12px;
     line-height: 1.35;
     letter-spacing: -0.015em;
   }

@@ -55,4 +55,32 @@ describe('SettingsPageHeader', () => {
 
     expect((screen.getByRole('button', { name: 'common.reset' }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('groups the title and description beside the icon and keeps refresh and reset independent', async () => {
+    const onRefresh = vi.fn();
+    const onReset = vi.fn();
+    render(SettingsPageHeader, { title: 'Authentication', description: 'Manage methods', icon: 'passkey', onRefresh, onReset });
+
+    const refresh = screen.getByRole('button', { name: 'common.refresh' });
+    const row = screen.getByRole('heading', { name: 'Authentication' }).closest('.settings-heading-row')!;
+    expect(row.contains(refresh)).toBe(true);
+    const copy = screen.getByRole('heading', { name: 'Authentication' }).parentElement!;
+    expect(copy.contains(screen.getByText('Manage methods'))).toBe(true);
+    expect(copy.parentElement?.querySelector('.settings-heading-icon')).toBeTruthy();
+    expect(copy.contains(refresh)).toBe(false);
+    expect(refresh.hasAttribute('icon-only')).toBe(true);
+    expect(refresh.querySelector('[data-icon="refresh"]')).toBeTruthy();
+    await fireEvent.click(refresh);
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(onReset).not.toHaveBeenCalled();
+  });
+
+  it('disables refresh while its status is loading', async () => {
+    const onRefresh = vi.fn();
+    render(SettingsPageHeader, { title: 'Authentication', onRefresh, refreshDisabled: true });
+    const refresh = screen.getByRole('button', { name: 'common.refresh' });
+    expect((refresh as HTMLButtonElement).disabled).toBe(true);
+    await fireEvent.click(refresh);
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
 });

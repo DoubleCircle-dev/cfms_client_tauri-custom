@@ -37,7 +37,7 @@
 
 <div class="flex items-center justify-center min-h-full p-6">
   <div class="w-full" style="max-width: 400px;">
-    <div class="bg-md3-surface-container/70 backdrop-blur-sm rounded-xl
+    <div class="bg-md3-surface-container  rounded-xl
                 border border-md3-outline p-8 text-center space-y-5">
       <div class="flex justify-center">
         <span class="text-md3-primary-emphasis">

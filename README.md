@@ -18,7 +18,7 @@ This version is customized by DoubleCircle.
 - **Reliable transfers** — upload-conflict handling, chunked transfers, a persistent download queue, pause/resume, retries, and batch controls.
 - **Access and administration** — document access grants and rules, user and group management, audit entry points, and service status, subject to server-side permissions.
 - **Privacy and security controls** — encrypted local preferences, app lock (PIN, biometrics, or passkeys when supported by the platform), screen protection, emergency lockdown state, and in-app update checks.
-- **Accessible, responsive UI** — English and Simplified Chinese, Material Design 3 styling, keyboard shortcuts, virtualized lists, and progressive loading for large directories.
+- **Accessible, responsive UI** — English and Simplified Chinese, Fluent 2 styling with locally bundled Noto Sans and Noto Serif, keyboard shortcuts, virtualized lists, and progressive loading for large directories.
 
 ## Getting started
 

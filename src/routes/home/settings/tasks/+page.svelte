@@ -129,7 +129,7 @@
       <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
         {$t('settings.tasks.maxDownloads')}
         <select
-          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
+          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
                  px-3 py-2 text-md3-on-surface disabled:opacity-60"
           bind:value={maxDownloads}
           disabled={loading || !preferences}
@@ -150,7 +150,7 @@
       <label class="block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
         {$t('settings.tasks.maxUploads')}
         <select
-          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
+          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
                  px-3 py-2 text-md3-on-surface disabled:opacity-60"
           bind:value={maxUploads}
           disabled={loading || !preferences}
@@ -185,7 +185,7 @@
         </label>
         <select
           id="download-chunk-size"
-          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
+          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
                  px-3 py-2 text-md3-on-surface disabled:opacity-60"
           bind:value={maxDownloadChunkSize}
           disabled={loading || !preferences}
