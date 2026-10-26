@@ -319,6 +319,34 @@ impl UpdateChannel {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpdateSource {
+    Official,
+    Custom,
+}
+
+impl UpdateSource {
+    fn parse(value: Option<&str>) -> Self {
+        match value
+            .unwrap_or("custom")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "official" => Self::Official,
+            "custom" => Self::Custom,
+            _ => Self::Custom,
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Official => "official",
+            Self::Custom => "custom",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct GithubReleaseDto {
     tag_name: String,

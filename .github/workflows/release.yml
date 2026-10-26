@@ -92,7 +92,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: tauri-cli
+          tool: tauri-cli,sccache
 
       - name: Build release installer
         run: cargo tauri build --ci
@@ -275,9 +275,24 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: tauri-cli
+          tool: tauri-cli,sccache
 
-      - name: Build release packages
+      - name: Build Custom prerelease packages
+        if: contains(needs.version.outputs.version, '-')
+        run: cargo tauri build --ci --bundles appimage,deb
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Build other prerelease packages
+        if: ${{ contains(needs.version.outputs.version, '-') && !contains(needs.version.outputs.version, '-custom-') }}
+        run: cargo tauri build --ci
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Build stable release packages
+        if: ${{ !contains(needs.version.outputs.version, '-') }}
         run: cargo tauri build --ci
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -337,6 +352,10 @@ jobs:
           targets: >-
             aarch64-linux-android,
             x86_64-linux-android
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: sccache
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4

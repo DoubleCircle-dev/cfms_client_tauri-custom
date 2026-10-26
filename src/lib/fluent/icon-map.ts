@@ -139,9 +139,8 @@ export const ICON_MAP = {
   "personPasskey": "person_passkey",
   "laptopBriefcase": "laptop_briefcase",
   "passwordReset": "password_reset",
-  // Custom fork surfaces (chat, tools, attachments) reuse neutral Fluent glyphs.
+  "tools": "toolbox",
   "chat": "chat",
   "attachment": "attach",
   "gridOn": "grid",
-  "tools": "wrench",
 } as const;

@@ -29,9 +29,13 @@ Usage:
   pnpm app:version check
   pnpm app:version set <version> [--build-number <number>] [--dry-run]
   pnpm app:version bump <major|minor|patch|prerelease> [--preid beta] [--dry-run]
+  pnpm app:version custom <base-version> [--dry-run]
 
 Notes:
   - <version> may be prefixed with "v"; files are written without the prefix.
+  - custom creates the next <base-version>-custom-X.Y version from local Git tags.
+  - Fetch origin tags before custom so its iteration follows published releases.
+  - Custom iteration numbers are added to the base build number for Android/iOS.
   - --build-number sets both iOS CFBundleVersion and Android versionCode.
   - Version set/bump also prepares a changelog entry unless --skip-changelog is passed.
   - Local generated Android metadata is synced when src-tauri/gen/android/app/tauri.properties exists.
@@ -113,7 +117,83 @@ function versionBuildNumber(version) {
       `Version ${version} is too large for the default build number formula`,
     );
   }
-  return parsed.major * 1_000_000 + parsed.minor * 1_000 + parsed.patch;
+  const baseBuildNumber =
+    parsed.major * 1_000_000 + parsed.minor * 1_000 + parsed.patch;
+  return baseBuildNumber + customIterationIndex(parsed);
+}
+
+function customIterationIndex(parsed) {
+  const customIteration = parseCustomIteration(parsed.pre);
+  if (parsed.pre.startsWith("custom-") && !customIteration) {
+    throw new Error("Custom iteration must use the <major>.<minor> format, e.g. custom-0.1");
+  }
+  return customIteration?.index ?? 0;
+}
+
+function wixMsiVersion(version) {
+  const parsed = parseVersion(version);
+  const base = baseVersion(version);
+  const iteration = customIterationIndex(parsed);
+  return iteration ? `${base}.${iteration}` : base;
+}
+
+function parseCustomIteration(pre) {
+  const match = pre.match(/^custom-(\d+)\.(\d+)$/);
+  if (!match) {
+    return null;
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  if (major > 9 || minor > 99 || (major === 0 && minor === 0)) {
+    throw new Error("Custom iteration must be between 0.1 and 9.99");
+  }
+  return { major, minor, index: major * 100 + minor };
+}
+
+function nextCustomIteration(base, tags) {
+  const parsed = parseVersion(base);
+  if (parsed.pre || parsed.build) {
+    throw new Error("Custom base version must be a plain major.minor.patch version");
+  }
+
+  const basePattern = baseVersion(base).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tagPattern = new RegExp(`^v?${basePattern}-custom-(\\d+)\\.(\\d+)$`);
+  let highestIteration = { major: 0, minor: 0 };
+
+  for (const tag of tags) {
+    const match = tag.match(tagPattern);
+    if (match) {
+      const iteration = parseCustomIteration(`custom-${match[1]}.${match[2]}`);
+      if (
+        iteration.major > highestIteration.major ||
+        (iteration.major === highestIteration.major &&
+          iteration.minor > highestIteration.minor)
+      ) {
+        highestIteration = iteration;
+      }
+    }
+  }
+
+  if (highestIteration.major === 9 && highestIteration.minor === 99) {
+    throw new Error(
+      `Custom iteration limit reached for ${baseVersion(base)}; choose a newer base version`,
+    );
+  }
+  const major =
+    highestIteration.minor === 99
+      ? highestIteration.major + 1
+      : highestIteration.major;
+  const minor = highestIteration.minor === 99 ? 0 : highestIteration.minor + 1;
+  return `${major}.${minor}`;
+}
+
+function readLocalTags(pattern) {
+  return execFileSync("git", ["tag", "--list", pattern], {
+    cwd: root,
+    encoding: "utf8",
+  })
+    .split(/\r?\n/)
+    .filter(Boolean);
 }
 
 function parseArgs(argv) {
@@ -164,16 +244,13 @@ function readTauriVersion() {
 }
 
 function updateTauriConfig(version, dryRun) {
-  const text = readText(files.tauriConfig);
-  const versionPattern = /^(\s*"version"\s*:\s*")[^"]+(")/m;
-  if (!versionPattern.test(text)) {
-    throw new Error(`${files.tauriConfig} is missing top-level version`);
-  }
-  const updated = text.replace(
-    versionPattern,
-    (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
-  );
-  writeText(files.tauriConfig, updated, dryRun);
+  const config = readJson(files.tauriConfig);
+  config.version = version;
+  if (!config.bundle) config.bundle = {};
+  if (!config.bundle.windows) config.bundle.windows = {};
+  if (!config.bundle.windows.wix) config.bundle.windows.wix = {};
+  config.bundle.windows.wix.version = wixMsiVersion(version);
+  writeJson(files.tauriConfig, config, dryRun);
 }
 
 function readWorkspaceVersion() {
@@ -386,6 +463,7 @@ function escapeRegex(value) {
 }
 
 function collectVersions() {
+  const tauriConfig = readJson(files.tauriConfig);
   const versions = [
     { target: files.packageJson, field: "version", value: readPackageVersion() },
     {
@@ -393,7 +471,13 @@ function collectVersions() {
       field: "[workspace.package].version",
       value: readWorkspaceVersion(),
     },
-    { target: files.tauriConfig, field: "version", value: readTauriVersion() },
+    { target: files.tauriConfig, field: "version", value: tauriConfig.version },
+    {
+      target: files.tauriConfig,
+      field: "bundle.windows.wix.version",
+      value: tauriConfig.bundle?.windows?.wix?.version ?? "",
+      expectsWixVersion: true,
+    },
   ];
 
   for (const entry of readCargoLockVersions()) {
@@ -455,8 +539,12 @@ function commandCheck() {
   const canonical = normalizeVersion(readTauriVersion());
   const expectedBase = baseVersion(canonical);
   const expectedBuildNumber = String(versionBuildNumber(canonical));
+  const expectedWixVersion = wixMsiVersion(canonical);
   const versions = collectVersions();
   const mismatches = versions.filter((entry) => {
+    if (entry.expectsWixVersion) {
+      return entry.value !== expectedWixVersion;
+    }
     if (entry.buildNumber) {
       return entry.value !== expectedBuildNumber;
     }
@@ -475,6 +563,7 @@ function commandCheck() {
   process.stderr.write(`Expected version: ${canonical}\n`);
   process.stderr.write(`Expected base version: ${expectedBase}\n`);
   process.stderr.write(`Expected build number: ${expectedBuildNumber}\n\n`);
+  process.stderr.write(`Expected MSI version: ${expectedWixVersion}\n\n`);
   printVersions(mismatches);
   process.exit(1);
 }
@@ -580,6 +669,22 @@ function commandBump(positionals, flags) {
   setVersion(next, flags);
 }
 
+function commandCustom(positionals, flags) {
+  const rawBase = positionals[1];
+  if (!rawBase) {
+    usage(1);
+  }
+
+  const base = normalizeVersion(rawBase);
+  const iteration = nextCustomIteration(
+    base,
+    readLocalTags(`v${baseVersion(base)}-custom-*`),
+  );
+  const version = `${baseVersion(base)}-custom-${iteration}`;
+  process.stdout.write(`Using the next local Custom version: ${version}\n`);
+  setVersion(version, flags);
+}
+
 function main() {
   const { positionals, flags } = parseArgs(process.argv.slice(2));
   const command = positionals[0] ?? "help";
@@ -597,6 +702,9 @@ function main() {
     case "bump":
       commandBump(positionals, flags);
       break;
+    case "custom":
+      commandCustom(positionals, flags);
+      break;
     case "help":
     case "--help":
     case "-h":
@@ -607,9 +715,16 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  process.stderr.write(`${error.message}\n`);
-  process.exit(1);
+export { nextCustomIteration, versionBuildNumber, wixMsiVersion };
+
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    main();
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exit(1);
+  }
 }

@@ -44,6 +44,7 @@ function mockStoredPause(value: string | null) {
   mocks.getSetting.mockImplementation(async (key: string) => {
     if (key === UPDATE_CHECK_PAUSE_SETTING_KEY) return value;
     if (key === 'update_channel') return 'stable';
+    if (key === 'update_source') return 'custom';
     return null;
   });
 }
@@ -70,7 +71,27 @@ describe('automatic update check scheduling', () => {
     await state.initializeAutomaticChecks();
 
     expect(mocks.checkAppUpdate).toHaveBeenCalledOnce();
+    expect(mocks.checkAppUpdate).toHaveBeenCalledWith('stable', 'custom');
     expect(state.automaticCheckSettled).toBe(true);
+    state.disposeAutomaticChecks();
+  });
+
+  it('uses and persists the selected update source for checks', async () => {
+    mockStoredPause(serializeUpdateCheckPause(ACTIVE_UPDATE_CHECK_PAUSE));
+    mocks.getSetting.mockImplementation(async (key: string) => {
+      if (key === UPDATE_CHECK_PAUSE_SETTING_KEY) {
+        return serializeUpdateCheckPause(ACTIVE_UPDATE_CHECK_PAUSE);
+      }
+      if (key === 'update_channel') return 'stable';
+      if (key === 'update_source') return 'official';
+      return null;
+    });
+    const state = new AppUpdateState();
+
+    await state.initializeAutomaticChecks();
+
+    expect(state.source).toBe('official');
+    expect(mocks.checkAppUpdate).toHaveBeenCalledWith('stable', 'official');
     state.disposeAutomaticChecks();
   });
 
@@ -130,6 +151,23 @@ describe('automatic update check scheduling', () => {
     expect(mocks.checkAppUpdate).toHaveBeenCalledOnce();
     expect(state.automaticCheckPause).toEqual({ mode: 'indefinite' });
     expect(mocks.setSetting).not.toHaveBeenCalled();
+    state.disposeAutomaticChecks();
+  });
+
+  it('defaults to the custom update source when no source is saved', async () => {
+    mocks.getSetting.mockImplementation(async (key: string) => {
+      if (key === UPDATE_CHECK_PAUSE_SETTING_KEY) {
+        return serializeUpdateCheckPause(ACTIVE_UPDATE_CHECK_PAUSE);
+      }
+      if (key === 'update_channel') return 'stable';
+      return null;
+    });
+    const state = new AppUpdateState();
+
+    await state.initializeAutomaticChecks();
+
+    expect(state.source).toBe('custom');
+    expect(mocks.checkAppUpdate).toHaveBeenCalledWith('stable', 'custom');
     state.disposeAutomaticChecks();
   });
 

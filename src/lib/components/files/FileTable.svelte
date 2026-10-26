@@ -1110,8 +1110,8 @@
   .file-table-empty-overlay::-webkit-scrollbar-thumb:hover {
     background-color: color-mix(in srgb, var(--explorer-text-muted) 78%, transparent);
   }
-  .file-table-grid { display: grid; grid-template-columns: 28px var(--file-name-width, minmax(240px, 1fr)) var(--file-modified-width, 168px) var(--file-type-width, 112px) var(--file-size-width, 100px); align-items: center; gap: 8px; }
-  .file-table-header { position: sticky; top: 0; z-index: 10; min-height: 36px; border-bottom: 1px solid var(--explorer-border-strong); padding: 0 0.7rem; color: var(--explorer-text); background: var(--colorNeutralBackground1); font-size: 12px; }
+  .file-table-grid { display: grid; grid-template-columns: 28px var(--file-name-width, minmax(240px, 1fr)) var(--file-modified-width, 168px) var(--file-type-width, 112px) var(--file-size-width, 100px); align-items: center; gap: 0.55rem; }
+  .file-table-header { position: sticky; top: 0; z-index: 10; min-height: 36px; border-bottom: 1px solid var(--explorer-border-strong); padding: 0 0.7rem; color: var(--explorer-text); background: var(--explorer-surface-raised); font-size: 0.75rem; }
   :global(html[data-window-backdrop="mica"]) .file-table-header { background: transparent; -webkit-backdrop-filter: var(--cfms-material-filter); backdrop-filter: var(--cfms-material-filter); }
   @media (forced-colors: active) {
     :global(html[data-window-backdrop]) .file-table-header { background: Canvas; }
@@ -1161,7 +1161,7 @@
   .file-table-icon--selected { color: var(--explorer-accent) !important; }
   .file-table-icon--hidden { opacity: 0.5; position: relative; }
   .file-table-icon--hidden::after { position: absolute; top: -2px; right: -4px; content: '👻'; font-size: 9px; line-height: 1; }
-  .file-table-name { max-width: 100%; justify-self: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .file-table-name { max-width: 100%; justify-self: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.81rem; }
   .file-table-drag-handle { cursor: default; user-select: none; }
   .file-table-modified, .file-table-type, .file-table-size { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text-muted); font-size: 12px; }
   .file-table-size { text-align: right; }

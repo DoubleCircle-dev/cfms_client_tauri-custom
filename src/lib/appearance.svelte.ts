@@ -1,8 +1,7 @@
 import { loadAppearancePreference, saveAppearancePreference } from '$lib/api';
 import type { AppearancePreference } from '$lib/api';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { isTauri } from '@tauri-apps/api/core';
-import { isBrowserPreview } from '$lib/tauri-runtime';
+import { isTauriRuntime } from '$lib/tauri-runtime';
 import { setWindowBackdrop } from '$lib/api/core';
 import {
   DEFAULT_APPEARANCE,
@@ -126,7 +125,7 @@ class AppearanceStore {
     root.dataset.windowBackdrop = 'solid';
     // Browser previews have no native window; `getCurrentWindow()` throws
     // synchronously there, so it cannot be handled with `.catch()` alone.
-    if (!isTauri() || isBrowserPreview()) return;
+    if (!isTauriRuntime()) return;
     const enableMaterial = !this.forcedColorsMediaQuery?.matches && !this.reducedTransparencyMediaQuery?.matches;
     this.nativeAppearanceUpdate = this.nativeAppearanceUpdate.then(async () => {
       if (revision !== this.appearanceRevision) return;
@@ -134,6 +133,7 @@ class AppearanceStore {
       const mode = await setWindowBackdrop(scheme, enableMaterial);
       if (revision === this.appearanceRevision) root.dataset.windowBackdrop = mode;
     }).catch(() => {
+      // The native window may be gone while the webview is tearing down.
       // The opaque CSS canvas is already active if native material is unavailable.
     });
   }

@@ -216,9 +216,8 @@
           </div>
           <div class="snackbar-actions">
             {#if entry.action}
-              <FluentButton data-fluent-owner="lib-components-snack-bar-host" appearance="subtle" class="snackbar-action"
-                onclick={(event) => {
-                  event.stopPropagation();
+              <FluentButton data-fluent-owner="lib-components-snack-bar-host" appearance="subtle"
+                onclick={() => {
                   entry.action?.run();
                   remove(entry.id);
                 }}>

@@ -477,22 +477,22 @@ import svg474 from '@fluentui/svg-icons/icons/laptop_briefcase_20_regular.svg?ra
 import svg475 from '@fluentui/svg-icons/icons/laptop_briefcase_20_filled.svg?raw';
 import svg476 from '@fluentui/svg-icons/icons/password_reset_48_regular.svg?raw';
 import svg477 from '@fluentui/svg-icons/icons/password_reset_48_filled.svg?raw';
-import svg478 from '@fluentui/svg-icons/icons/chat_24_regular.svg?raw';
-import svg479 from '@fluentui/svg-icons/icons/chat_24_filled.svg?raw';
-import svg480 from '@fluentui/svg-icons/icons/chat_20_regular.svg?raw';
-import svg481 from '@fluentui/svg-icons/icons/chat_20_filled.svg?raw';
-import svg482 from '@fluentui/svg-icons/icons/attach_24_regular.svg?raw';
-import svg483 from '@fluentui/svg-icons/icons/attach_24_filled.svg?raw';
-import svg484 from '@fluentui/svg-icons/icons/attach_20_regular.svg?raw';
-import svg485 from '@fluentui/svg-icons/icons/attach_20_filled.svg?raw';
-import svg486 from '@fluentui/svg-icons/icons/grid_24_regular.svg?raw';
-import svg487 from '@fluentui/svg-icons/icons/grid_24_filled.svg?raw';
-import svg488 from '@fluentui/svg-icons/icons/grid_20_regular.svg?raw';
-import svg489 from '@fluentui/svg-icons/icons/grid_20_filled.svg?raw';
-import svg490 from '@fluentui/svg-icons/icons/wrench_24_regular.svg?raw';
-import svg491 from '@fluentui/svg-icons/icons/wrench_24_filled.svg?raw';
-import svg492 from '@fluentui/svg-icons/icons/wrench_20_regular.svg?raw';
-import svg493 from '@fluentui/svg-icons/icons/wrench_20_filled.svg?raw';
+import svg478 from '@fluentui/svg-icons/icons/toolbox_24_regular.svg?raw';
+import svg479 from '@fluentui/svg-icons/icons/toolbox_24_filled.svg?raw';
+import svg480 from '@fluentui/svg-icons/icons/toolbox_20_regular.svg?raw';
+import svg481 from '@fluentui/svg-icons/icons/toolbox_20_filled.svg?raw';
+import svg482 from '@fluentui/svg-icons/icons/chat_24_regular.svg?raw';
+import svg483 from '@fluentui/svg-icons/icons/chat_24_filled.svg?raw';
+import svg484 from '@fluentui/svg-icons/icons/chat_20_regular.svg?raw';
+import svg485 from '@fluentui/svg-icons/icons/chat_20_filled.svg?raw';
+import svg486 from '@fluentui/svg-icons/icons/attach_24_regular.svg?raw';
+import svg487 from '@fluentui/svg-icons/icons/attach_24_filled.svg?raw';
+import svg488 from '@fluentui/svg-icons/icons/attach_20_regular.svg?raw';
+import svg489 from '@fluentui/svg-icons/icons/attach_20_filled.svg?raw';
+import svg490 from '@fluentui/svg-icons/icons/grid_24_regular.svg?raw';
+import svg491 from '@fluentui/svg-icons/icons/grid_24_filled.svg?raw';
+import svg492 from '@fluentui/svg-icons/icons/grid_20_regular.svg?raw';
+import svg493 from '@fluentui/svg-icons/icons/grid_20_filled.svg?raw';
 import duotone0 from './assets/duotone/person_circle_24.svg?raw';
 import duotone1 from './assets/duotone/person_circle_20.svg?raw';
 import duotone2 from './assets/duotone/folder_add_24.svg?raw';
@@ -648,8 +648,8 @@ export const ICON_VARIANTS = {
   personPasskey: { regular: svg468, filled: svg469, small: svg470, smallFilled: svg471 },
   laptopBriefcase: { regular: svg472, filled: svg473, small: svg474, smallFilled: svg475 },
   passwordReset: { regular: svg476, filled: svg477, small: svg476, smallFilled: svg477, duotone: duotone12, smallDuotone: duotone13 },
-  chat: { regular: svg478, filled: svg479, small: svg480, smallFilled: svg481 },
-  attachment: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
-  gridOn: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
-  tools: { regular: svg490, filled: svg491, small: svg492, smallFilled: svg493 },
+  tools: { regular: svg478, filled: svg479, small: svg480, smallFilled: svg481 },
+  chat: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
+  attachment: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
+  gridOn: { regular: svg490, filled: svg491, small: svg492, smallFilled: svg493 },
 } as const;

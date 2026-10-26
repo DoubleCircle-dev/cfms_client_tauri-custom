@@ -1124,6 +1124,7 @@
             validationMessage={fieldErrors.username}
             describedBy={fieldErrors.username ? 'login-username-error' : undefined}
             placeholder={$t('login.usernamePlaceholder')}
+            autocomplete="off"
             bind:value={username}
             bind:this={usernameInput}
             disabled={busy}

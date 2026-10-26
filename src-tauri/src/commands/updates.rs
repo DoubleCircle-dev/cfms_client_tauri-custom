@@ -7,9 +7,11 @@ pub async fn check_app_update(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppHandleState>,
     channel: Option<String>,
+    source: Option<String>,
 ) -> Result<Option<AppUpdateMetadata>, String> {
     let channel = UpdateChannel::parse(channel.as_deref());
-    check_android_app_update(&app, state, channel).await
+    let source = UpdateSource::parse(source.as_deref());
+    check_android_app_update(&app, state, channel, source).await
 }
 
 #[cfg(not(target_os = "android"))]
@@ -18,11 +20,14 @@ pub async fn check_app_update(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppHandleState>,
     channel: Option<String>,
+    source: Option<String>,
 ) -> Result<Option<AppUpdateMetadata>, String> {
     let channel = UpdateChannel::parse(channel.as_deref());
+    let source = UpdateSource::parse(source.as_deref());
     let proxy_url = updater_proxy_url(&state)?;
     tracing::info!(
-        "Checking for app updates (proxy={})",
+        "Checking for app updates (source={}, proxy={})",
+        source.as_str(),
         describe_update_proxy(proxy_url.as_ref())
     );
     let client = update_api_http_client(proxy_url.as_ref())?;
@@ -30,6 +35,7 @@ pub async fn check_app_update(
         &client,
         &app.state::<crate::github_credentials::GithubCredentialState>(),
         channel,
+        source,
         UpdateAssetKind::DesktopManifest,
     )
     .await?
@@ -60,6 +66,12 @@ pub async fn check_app_update(
         .updater_builder()
         .endpoints(vec![endpoint])
         .map_err(|e| format!("Failed to configure updater endpoint: {e}"))?;
+    if let Some(pubkey) = official_updater_pubkey(source) {
+        updater_builder = updater_builder.pubkey(pubkey);
+    }
+    updater_builder = updater_builder.version_comparator(move |current, update| {
+        is_release_newer_for_source(&update.version.to_string(), &current.to_string(), source)
+    });
     if let Some(proxy_url) = proxy_url {
         updater_builder = updater_builder.proxy(proxy_url);
     }
@@ -230,11 +242,13 @@ async fn check_android_app_update(
     app: &tauri::AppHandle,
     state: tauri::State<'_, AppHandleState>,
     channel: UpdateChannel,
+    source: UpdateSource,
 ) -> Result<Option<AppUpdateMetadata>, String> {
     let architecture = AndroidApkArchitecture::from_rust_arch(std::env::consts::ARCH)?;
     let proxy_url = updater_proxy_url(&state)?;
     tracing::info!(
-        "Checking for Android app updates (architecture={}, proxy={})",
+        "Checking for Android app updates (source={}, architecture={}, proxy={})",
+        source.as_str(),
         architecture.as_str(),
         describe_update_proxy(proxy_url.as_ref())
     );
@@ -243,6 +257,7 @@ async fn check_android_app_update(
         &client,
         &app.state::<crate::github_credentials::GithubCredentialState>(),
         channel,
+        source,
         UpdateAssetKind::AndroidApk { architecture },
     )
     .await?;
@@ -252,7 +267,7 @@ async fn check_android_app_update(
     };
 
     let current_version = app.package_info().version.to_string();
-    if !is_release_newer(&release.tag_name, &current_version) {
+    if !is_release_newer_for_source(&release.tag_name, &current_version, source) {
         clear_mobile_pending_update(&state)?;
         return Ok(None);
     }
@@ -619,13 +634,18 @@ async fn find_update_release(
     client: &reqwest::Client,
     credentials: &crate::github_credentials::GithubCredentialState,
     channel: UpdateChannel,
+    source: UpdateSource,
     asset_kind: UpdateAssetKind,
 ) -> Result<Option<GithubReleaseDto>, String> {
-    let releases = github_api_get(client, GithubApiEndpoint::UpdateReleases, credentials)
-        .await?
-        .json::<Vec<GithubReleaseDto>>()
-        .await
-        .map_err(|e| format!("Failed to parse release list: {e}"))?;
+    let releases = github_api_get(
+        client,
+        GithubApiEndpoint::UpdateReleases(source),
+        credentials,
+    )
+    .await?
+    .json::<Vec<GithubReleaseDto>>()
+    .await
+    .map_err(|e| format!("Failed to parse release list: {e}"))?;
 
     let mut candidates = releases
         .into_iter()
@@ -858,19 +878,52 @@ fn parse_release_version(tag: &str) -> Option<semver::Version> {
     semver::Version::parse(tag.trim_start_matches('v')).ok()
 }
 
-#[cfg(target_os = "android")]
-fn is_release_newer(release_tag: &str, current_version: &str) -> bool {
+fn is_release_newer_for_source(
+    release_tag: &str,
+    current_version: &str,
+    source: UpdateSource,
+) -> bool {
     let Some(release_version) = parse_release_version(release_tag) else {
         return false;
     };
     let Some(current_version) = parse_release_version(current_version) else {
         return true;
     };
-    release_version > current_version
+    if release_version > current_version {
+        return true;
+    }
+
+    source == UpdateSource::Custom
+        && is_custom_iteration(&release_version)
+        && current_version.pre.is_empty()
+        && release_version.major == current_version.major
+        && release_version.minor == current_version.minor
+        && release_version.patch == current_version.patch
+}
+
+fn is_custom_iteration(version: &semver::Version) -> bool {
+    let Some(iteration) = version.pre.as_str().strip_prefix("custom-") else {
+        return false;
+    };
+    let Some((major, minor)) = iteration.split_once('.') else {
+        return false;
+    };
+    let (Ok(major), Ok(minor)) = (major.parse::<u64>(), minor.parse::<u64>()) else {
+        return false;
+    };
+    major <= 9 && minor <= 99 && (major > 0 || minor > 0)
+}
+
+#[cfg(not(target_os = "android"))]
+fn official_updater_pubkey(source: UpdateSource) -> Option<&'static str> {
+    match source {
+        UpdateSource::Official => Some(OFFICIAL_UPDATER_PUBLIC_KEY),
+        UpdateSource::Custom => None,
+    }
 }
 
 #[cfg(test)]
-mod android_apk_selection_tests {
+mod app_update_tests {
     use super::*;
 
     fn asset(name: &str) -> GithubAssetDto {
@@ -893,6 +946,59 @@ mod android_apk_selection_tests {
             published_at: None,
             assets: asset_names.iter().map(|name| asset(name)).collect(),
         }
+    }
+
+    #[test]
+    fn custom_iteration_is_newer_than_same_base_stable_only_for_custom_source() {
+        assert!(is_release_newer_for_source(
+            "v0.55.1-custom-0.1",
+            "0.55.1",
+            UpdateSource::Custom
+        ));
+        assert!(!is_release_newer_for_source(
+            "v0.55.1-custom-0.1",
+            "0.55.1",
+            UpdateSource::Official
+        ));
+        assert!(is_release_newer_for_source(
+            "v0.55.1-custom-0.2",
+            "0.55.1-custom-0.1",
+            UpdateSource::Custom
+        ));
+    }
+
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn updater_public_key_follows_the_selected_release_source() {
+        assert_eq!(
+            official_updater_pubkey(UpdateSource::Official),
+            Some(OFFICIAL_UPDATER_PUBLIC_KEY)
+        );
+        assert_eq!(official_updater_pubkey(UpdateSource::Custom), None);
+    }
+
+    #[test]
+    fn custom_comparison_keeps_normal_semver_ordering_for_other_versions() {
+        assert!(is_release_newer_for_source(
+            "v0.55.2-custom-0.1",
+            "0.55.1",
+            UpdateSource::Custom
+        ));
+        assert!(is_release_newer_for_source(
+            "v0.55.2",
+            "0.55.1-custom-0.1",
+            UpdateSource::Official
+        ));
+        assert!(!is_release_newer_for_source(
+            "v0.55.1-custom-10.0",
+            "0.55.1",
+            UpdateSource::Custom
+        ));
+        assert!(!is_release_newer_for_source(
+            "v0.55.1-custom-0.0",
+            "0.55.1",
+            UpdateSource::Custom
+        ));
     }
 
     #[test]

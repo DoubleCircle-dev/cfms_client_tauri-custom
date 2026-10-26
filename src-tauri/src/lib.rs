@@ -577,7 +577,6 @@ pub fn run() {
                 .find(|config| config.label == "main")
                 .cloned()
                 .ok_or_else(|| std::io::Error::other("Main window configuration is missing"))?;
-
             // Dev builds: make the window obviously non-production by suffixing
             // the title with "-dev".
             #[cfg(debug_assertions)]

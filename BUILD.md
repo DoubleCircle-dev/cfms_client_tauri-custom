@@ -24,6 +24,10 @@ Configure these in **Settings → Secrets and variables → Actions**:
 | `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater private key (generated with `cargo tauri signer generate`) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for the Tauri updater private key |
 
+The configured updater public key is reserved for Custom releases. Official-source
+desktop updates continue to use the upstream updater public key selected by the
+update source at runtime. Keep the Custom private key separate from upstream keys.
+
 ### Extension signing key ring
 
 Official `.cfmsext` packages use a separate Ed25519 trust domain from full client updates. Set the
@@ -81,6 +85,59 @@ No additional secrets are required beyond the Tauri updater keys.
 
 ## Release Process
 
+### DoubleCircle custom releases
+
+Custom releases retain the upstream numeric base version and add an
+`<major>.<minor>` iteration suffix: `<base>-custom-X.Y`, for example
+`0.55.1-custom-0.1` and `0.55.1-custom-0.2`. Before generating a version, fetch
+the Custom repository's tags so the helper can continue after the latest
+published iteration:
+
+From `android-custom`, after syncing the code changes to publish:
+
+```powershell
+git fetch origin --tags
+pnpm app:version custom 0.55.1 --dry-run
+pnpm app:version custom 0.55.1
+pnpm app:version:check
+pnpm test:client-version
+pnpm test
+pnpm exec svelte-check --tsconfig ./tsconfig.json
+pnpm check:fluent
+git add -A
+git commit -m "Release v0.55.1-custom-0.1"
+git push origin android-custom
+git tag -a v0.55.1-custom-0.1 -m "Release v0.55.1-custom-0.1"
+git push origin v0.55.1-custom-0.1
+```
+
+The helper chooses the next number from matching local tags, starting at `0.1`,
+and applies the same number to the default iOS build number and Android
+`versionCode`. Therefore fetch tags before generating a release version. The
+Custom updater treats a same-base `-custom-X.Y` release as newer than its
+upstream stable version; subsequent Custom iterations follow normal SemVer
+ordering. Android keeps the existing application ID, so its `versionCode` is
+strictly higher than the upstream build at the same base. Because Android
+requires increasing version codes, switching an installed Custom build back
+to the upstream source may not install until the upstream release has a higher
+version code.
+Windows MSI packages use a numeric four-part installer version derived from
+the base version and Custom iteration; the app and updater continue to use the
+full `-custom-X.Y` version.
+
+Custom prerelease tags are classified into the existing **Alpha** update
+channel by the release workflow, even though `alpha` is not part of the version
+string. Users need **Custom** as the update source and **Alpha** as the channel
+to receive these releases. Linux prereleases publish AppImage and Debian
+packages; RPM does not support the hyphenated Custom version string and is
+omitted for prereleases. Stable releases continue to include RPM packages.
+
+Pushing the tag triggers `.github/workflows/release.yml`, which publishes the
+release and its desktop updater manifest and Android APKs to the Custom
+repository. Review CI and confirm the GitHub Release assets after the workflow
+completes. Do not push the tag until the version, changelog, tests, and signing
+secrets are ready.
+
 ### 1. Prepare the version
 
 Use the version helper to update all client build metadata together:
@@ -119,6 +176,15 @@ git push origin v0.16.0
 
 The `release.yml` workflow builds, signs (Windows EV + macOS notarization),
 and publishes all artifacts as a GitHub Release.
+In **Settings → Updates**, users can choose whether to get releases from the
+upstream `cfms-dev/cfms_client_tauri` repository or the
+`DoubleCircle-dev/cfms_client_tauri-custom` repository. Desktop builds use the
+selected repository's updater manifest, while Android builds select the APK
+matching the device architecture. Custom builds default to their Custom
+repository. Switching to the upstream source requires confirmation because
+updates from that source will not automatically switch the installation back
+to the Custom version. The release channel (`stable`, `beta`, or `alpha`) is
+selected independently.
 
 ### 4. Manual release
 
