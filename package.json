@@ -1,6 +1,6 @@
 {
   "name": "cfms-client-tauri",
-  "version": "0.55.1",
+  "version": "0.55.1-custom-0.1",
   "description": "",
   "type": "module",
   "scripts": {

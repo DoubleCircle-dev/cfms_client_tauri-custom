@@ -4,6 +4,162 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.55.1-custom-0.1
+**Released on:** 2026-10-26
+
+**Title:** Preserve held folders during sync
+
+### Changed
+- Use focused checks in custom release guide
+- Document custom alpha release process
+- Add selectable update source
+- Fix file snapshot comparison on navigation
+- Append -dev suffix to main window title in debug builds
+- 优化移动文件（避免重复下载）
+- 修复git同步时机，检查下载完成
+- 自动同步
+- Git记录同步日志
+- 同步文件功能优化
+- 同步检查本地文件
+- 一键同步文件功能
+- Http请求测试
+- 工具更新
+- 使不同服务器保存不同密码
+- 漏洞测试工具
+- 多账户登录
+- 自动检查优化
+- 递归式检查更新
+- 搜索.开头文件及文件夹
+- 递归检查文件，监听文件更新
+- 监听文件更新
+- 文件下载优化，保持目录
+- Ip查询
+- 冲突残余修复
+- 下载根目录设置
+- 记住我功能
+
+### Fixed
+- Wait for sync downloads before git snapshot
+- Update AppUpdateChecker styles and improve AuditUserIdentity component behavior for touch interactions
+- Enhance BatchAccessRulesDialog for multi-selection handling and improve test coverage for language support
+- Add iconFilled property to ContextMenuActionItem and update context menu items for favorite actions
+- Update animation purpose and improve AuthScene component styles for better clarity and consistency
+- Remove duplicate base64ct dependency from Cargo.toml
+- Update sha2 dependency to version 0.11.1
+- Keep the dev-tools window off mobile
+- Combine folder state and document update git commits
+- Show structured details for unreadable chat files
+- Enhance watch ignored paths to improve performance
+- Regenerate the icon font subset after merging upstream
+- Use an existing icon for the restore-default-name button
+- Guard the optional snackbar action
+- Stop the open-progress effect from spinning and freezing the page
+- Keep a tall denial readable
+- Resolve the download subdirectory through the user's storage preference
+- Restore download management commands after 0.47.0 merge
+- Await the preview bridge from a hook, not the module body
+- Let the interface language write the check summary
+- Pre-bundle the dependencies the merge brought in
+- Keep the startup file check preference
+- Decide downloads in one place instead of five
+- Pin Git version tracking first and keep the strategy for auto
+- Keep queued updates when the overwrite prompt is cancelled
+- Keep the update check history per account
+- Detect updates against the local download root, not an in-session snapshot
+- Survive a non-Tauri host and fix the first-navigation guard
+- 优化dev buffer
+- 优化dev加载，防运行时优化导致的重连
+- Include user578 in decoded usernames to reach 11 total
+- Prefer decoded real usernames and default 程序 to cz0822
+- Create download root before git init to avoid os error 267
+- Never touch the .git metadata directory during sync
+- Delete local files of server-removed folders while always preserving the directory structure
+- Clear pending queue after every completed sync, not only when files changed
+- Atomic busy lock and visible auto-download feedback
+- Poll schedule anchored - only manual checks and interval changes reset the countdown
+- Open local attachments via Rust-side opener to bypass ACL path scope
+- Use folder names as room ids, robust room selection, allow opening local attachments
+- Use a page-level description instead of the matrix hint on the tools page header
+- Polyfill Buffer for iconv-lite in webview and regenerate font subsets
+- Make dev routes prerenderable for adapter-static
+
+### Maintenance
+- Update CHANGELOG
+- Cover background check reports in the tracker
+- Open the WebView2 debug port for debug runs
+- 更新命令模板以匹配服务端 Pydantic 模型
+
+### Added
+- Preserve held folders during sync
+- Expand check-history rows in place
+- Mirror the background file check from backend events
+- Wake the background file check when preferences change
+- Run automatic file-update checks in a Rust service
+- Add a foreground-service keep-alive for background work
+- Merge identical unauthorized file check records as unchanged
+- Manage file check and access history
+- Record folder state changes in Git history
+- Show download progress on the file row
+- Make the verify-then-open path observable and cancellable
+- Verify the local copy for the open action too
+- Verify the local copy before a double click opens it
+- Explain a refused operation instead of only denying it
+- Add a toolbar action that opens the local copy of a file
+- Expose tools, settings and about from the login screen
+- Open downloaded files locally instead of previewing in-app
+- Ask per file how to resolve a conflict
+- Never offer a document the server refuses
+- Keep pre-update snapshots as .bak and out of the git history
+- Decouple the update strategy from Git tracking and promote it
+- Browser preview bridge for the Vite dev URL
+- Add adjustable server protocol compatibility override
+- Keep files >= 100MB out of the download-root git repo via same-named placeholder (desc + SHA-256)
+- Expose tools page before login via connect toolbar button
+- Support dual chatbox sources, unblock public room, refresh name defaults
+- Startup detection runs one automatic check, shared with the poll
+- Add "detect once at program start" as sub-option
+- Startup detection labels and master-switch hints (zh-CN, en)
+- Add file_auto_detect_on_startup preference with API
+- Mirror permission-denied server items as empty placeholder files
+- Git-tracked syncs delete server-removed files directly without a confirmation prompt
+- Strategy sub-setting labels, git-disabled notice, manual prompt strings (zh-CN, en)
+- Overwrite strategy collapses under immediate download as indented sub-setting, greyed out when git tracking enabled
+- Manual updates always prompt for overwrite strategy; stored strategy applies to automatic downloads only
+- Overwrite strategy and git init failure strings (zh-CN, en)
+- Overwrite strategy radios; git toggle auto-initializes repo and reverts with warning on failure
+- Configurable overwrite strategy; git init lazily per sync; commit snapshots on every download update when tracking enabled
+- Add sync_overwrite_strategy preference (force_overwrite/backup_rename/skip) with API
+- Add fileSync page strings and git tracking hints (zh-CN, en)
+- Add all-platform File Sync settings page (auto check, interval, immediate download, git tracking)
+- Use explicit git-tracking setting instead of .git probing; allow override via options
+- Add sync_git_tracking_enabled preference with getter/setter API
+- Add auto-download setting copy (zh-CN, en)
+- Add download-immediately toggle for automatic file checks
+- Honor autoDownload setting - auto-check downloads immediately when enabled
+- Manual sync-all now checks for changes first (resetting auto-check countdown) then updates immediately
+- Git-aware update strategy - force overwrite + commit with local git, timestamped backup rename without
+- Add download_git_present command to detect local git repo in download root
+- Add file_auto_update_auto_download preference and settings API
+- Add file update check/confirm labels and auto file check settings copy (zh-CN, en)
+- Add automatic file check toggle and interval controls to behavior settings
+- Add confirm-queued-updates command action, queue diffs from checks, reset polling countdown on manual check
+- Auto-check queues diffs instead of auto-sync, add confirm-updates button, rename check button to file-update semantics, reset countdown on manual check
+- Persist check history (localStorage, cap 20), add pending update queue, resetPollingCountdown, directory diff callback
+- Add file auto-update preferences (enabled, interval) to user preference model and settings API
+- Add local mode with folder import and default names, sort rooms by time
+- Add chat records viewer reading server files directly
+- Add built-in small tools page with all pytk 1.10.0 utilities
+
+### Improved
+- Describe how the automatic file check runs
+- Share server listing and download queueing with background work
+- Unify the file sync paths behind one entry point
+- Confirm updates from the cached check instead of re-scanning the tree
+- Use sccache via build.rustc-wrapper and tune [profile.dev] for faster tauri dev builds
+- Remove file auto-update controls from mobile-only behavior page
+
+---
+
 ## v0.55.1
 **Released on:** 2026-10-26
 
