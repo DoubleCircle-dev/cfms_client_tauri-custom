@@ -83,10 +83,11 @@ No additional secrets are required beyond the Tauri updater keys.
 
 ### DoubleCircle custom releases
 
-Custom releases retain the upstream numeric base version and add a two-digit
-iteration suffix: `<base>-custom-NN`, for example `0.55.1-custom-01` and
-`0.55.1-custom-02`. Before generating a version, fetch the Custom repository's
-tags so the helper can continue after the latest published iteration:
+Custom releases retain the upstream numeric base version and add an
+`<major>.<minor>` iteration suffix: `<base>-custom-X.Y`, for example
+`0.55.1-custom-0.1` and `0.55.1-custom-0.2`. Before generating a version, fetch
+the Custom repository's tags so the helper can continue after the latest
+published iteration:
 
 From `android-custom`, after syncing the code changes to publish:
 
@@ -100,16 +101,16 @@ pnpm test
 pnpm exec svelte-check --tsconfig ./tsconfig.json
 pnpm check:fluent
 git add -A
-git commit -m "Release v0.55.1-custom-01"
+git commit -m "Release v0.55.1-custom-0.1"
 git push origin android-custom
-git tag -a v0.55.1-custom-01 -m "Release v0.55.1-custom-01"
-git push origin v0.55.1-custom-01
+git tag -a v0.55.1-custom-0.1 -m "Release v0.55.1-custom-0.1"
+git push origin v0.55.1-custom-0.1
 ```
 
-The helper chooses the next number from matching local tags, starting at `01`,
+The helper chooses the next number from matching local tags, starting at `0.1`,
 and applies the same number to the default iOS build number and Android
 `versionCode`. Therefore fetch tags before generating a release version. The
-Custom updater treats a same-base `-custom-NN` release as newer than its
+Custom updater treats a same-base `-custom-X.Y` release as newer than its
 upstream stable version; subsequent Custom iterations follow normal SemVer
 ordering. Android keeps the existing application ID, so its `versionCode` is
 strictly higher than the upstream build at the same base. Because Android

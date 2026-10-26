@@ -902,9 +902,13 @@ fn is_custom_iteration(version: &semver::Version) -> bool {
     let Some(iteration) = version.pre.as_str().strip_prefix("custom-") else {
         return false;
     };
-    iteration.len() == 2
-        && iteration != "00"
-        && iteration.bytes().all(|byte| byte.is_ascii_digit())
+    let Some((major, minor)) = iteration.split_once('.') else {
+        return false;
+    };
+    let (Ok(major), Ok(minor)) = (major.parse::<u64>(), minor.parse::<u64>()) else {
+        return false;
+    };
+    major <= 9 && minor <= 99 && (major > 0 || minor > 0)
 }
 
 #[cfg(test)]
@@ -936,18 +940,18 @@ mod app_update_tests {
     #[test]
     fn custom_iteration_is_newer_than_same_base_stable_only_for_custom_source() {
         assert!(is_release_newer_for_source(
-            "v0.55.1-custom-01",
+            "v0.55.1-custom-0.1",
             "0.55.1",
             UpdateSource::Custom
         ));
         assert!(!is_release_newer_for_source(
-            "v0.55.1-custom-01",
+            "v0.55.1-custom-0.1",
             "0.55.1",
             UpdateSource::Official
         ));
         assert!(is_release_newer_for_source(
-            "v0.55.1-custom-02",
-            "0.55.1-custom-01",
+            "v0.55.1-custom-0.2",
+            "0.55.1-custom-0.1",
             UpdateSource::Custom
         ));
     }
@@ -955,22 +959,22 @@ mod app_update_tests {
     #[test]
     fn custom_comparison_keeps_normal_semver_ordering_for_other_versions() {
         assert!(is_release_newer_for_source(
-            "v0.55.2-custom-01",
+            "v0.55.2-custom-0.1",
             "0.55.1",
             UpdateSource::Custom
         ));
         assert!(is_release_newer_for_source(
             "v0.55.2",
-            "0.55.1-custom-01",
+            "0.55.1-custom-0.1",
             UpdateSource::Official
         ));
         assert!(!is_release_newer_for_source(
-            "v0.55.1-custom-100",
+            "v0.55.1-custom-10.0",
             "0.55.1",
             UpdateSource::Custom
         ));
         assert!(!is_release_newer_for_source(
-            "v0.55.1-custom-00",
+            "v0.55.1-custom-0.0",
             "0.55.1",
             UpdateSource::Custom
         ));

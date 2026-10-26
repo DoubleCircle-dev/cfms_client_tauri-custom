@@ -33,7 +33,7 @@ Usage:
 
 Notes:
   - <version> may be prefixed with "v"; files are written without the prefix.
-  - custom creates the next <base-version>-custom-NN version from local Git tags.
+  - custom creates the next <base-version>-custom-X.Y version from local Git tags.
   - Fetch origin tags before custom so its iteration follows published releases.
   - Custom iteration numbers are added to the base build number for Android/iOS.
   - --build-number sets both iOS CFBundleVersion and Android versionCode.
@@ -119,11 +119,24 @@ function versionBuildNumber(version) {
   }
   const baseBuildNumber =
     parsed.major * 1_000_000 + parsed.minor * 1_000 + parsed.patch;
-  const customIteration = parsed.pre.match(/^custom-(\d{2})$/);
-  if (customIteration && Number(customIteration[1]) === 0) {
-    throw new Error("Custom iteration numbers must be between 01 and 99");
+  const customIteration = parseCustomIteration(parsed.pre);
+  if (parsed.pre.startsWith("custom-") && !customIteration) {
+    throw new Error("Custom iteration must use the <major>.<minor> format, e.g. custom-0.1");
   }
-  return baseBuildNumber + (customIteration ? Number(customIteration[1]) : 0);
+  return baseBuildNumber + (customIteration ? customIteration.index : 0);
+}
+
+function parseCustomIteration(pre) {
+  const match = pre.match(/^custom-(\d+)\.(\d+)$/);
+  if (!match) {
+    return null;
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  if (major > 9 || minor > 99 || (major === 0 && minor === 0)) {
+    throw new Error("Custom iteration must be between 0.1 and 9.99");
+  }
+  return { major, minor, index: major * 100 + minor };
 }
 
 function nextCustomIteration(base, tags) {
@@ -133,22 +146,34 @@ function nextCustomIteration(base, tags) {
   }
 
   const basePattern = baseVersion(base).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const tagPattern = new RegExp(`^v?${basePattern}-custom-(\\d{2})$`);
-  let highestIteration = 0;
+  const tagPattern = new RegExp(`^v?${basePattern}-custom-(\\d+)\\.(\\d+)$`);
+  let highestIteration = { major: 0, minor: 0 };
 
   for (const tag of tags) {
     const match = tag.match(tagPattern);
     if (match) {
-      highestIteration = Math.max(highestIteration, Number(match[1]));
+      const iteration = parseCustomIteration(`custom-${match[1]}.${match[2]}`);
+      if (
+        iteration.major > highestIteration.major ||
+        (iteration.major === highestIteration.major &&
+          iteration.minor > highestIteration.minor)
+      ) {
+        highestIteration = iteration;
+      }
     }
   }
 
-  if (highestIteration >= 99) {
+  if (highestIteration.major === 9 && highestIteration.minor === 99) {
     throw new Error(
       `Custom iteration limit reached for ${baseVersion(base)}; choose a newer base version`,
     );
   }
-  return highestIteration + 1;
+  const major =
+    highestIteration.minor === 99
+      ? highestIteration.major + 1
+      : highestIteration.major;
+  const minor = highestIteration.minor === 99 ? 0 : highestIteration.minor + 1;
+  return `${major}.${minor}`;
 }
 
 function readLocalTags(pattern) {
@@ -635,7 +660,7 @@ function commandCustom(positionals, flags) {
     base,
     readLocalTags(`v${baseVersion(base)}-custom-*`),
   );
-  const version = `${baseVersion(base)}-custom-${String(iteration).padStart(2, "0")}`;
+  const version = `${baseVersion(base)}-custom-${iteration}`;
   process.stdout.write(`Using the next local Custom version: ${version}\n`);
   setVersion(version, flags);
 }
