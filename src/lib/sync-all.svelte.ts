@@ -25,6 +25,7 @@ import {
   listDirectory,
   listDownloadFiles,
   moveDownloadFile,
+  type QueuedDocumentDownload,
 } from '$lib/api/files';
 import { isDocumentAccessDenied } from '$lib/api/server-errors';
 import { getSyncGitTrackingEnabled, type SyncOverwriteStrategy } from '$lib/api/settings';
@@ -256,7 +257,7 @@ interface DownloadRunner {
   /** Rate limit: pause every `DOWNLOAD_BATCH_SIZE` requests. */
   throttle(): Promise<void>;
   /** Fetch one document, retrying once when the server rate limits us. */
-  download(docId: string, path: string): Promise<unknown>;
+  download(docId: string, path: string): Promise<QueuedDocumentDownload | null>;
 }
 
 /**
@@ -276,7 +277,7 @@ function createDownloadRunner(): DownloadRunner {
     }
   }
 
-  async function download(docId: string, path: string) {
+  async function download(docId: string, path: string): Promise<QueuedDocumentDownload | null> {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         await throttle();
@@ -826,8 +827,9 @@ export interface SyncAllResult {
   /** Documents the server refused to hand over; nothing was written. */
   denied: number;
   changed: boolean;
-  /** The run stopped at the overwrite prompt — nothing was written. */
+  /** The run did not finish, either because it was cancelled or failed. */
   cancelled: boolean;
+  failed: boolean;
 }
 
 /**
@@ -867,6 +869,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
   let moved = 0;
   let skipped = 0;
   let denied = 0;
+  const downloadTaskIds = new Set<string>();
 
   try {
     const hasGit = await resolveGitTracking(options.gitTracking);
@@ -994,7 +997,8 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
             }
           } catch { /* rename failed — fall through and overwrite */ }
         }
-        await runner.download(d.docId, d.path);
+        const queuedDownload = await runner.download(d.docId, d.path);
+        if (queuedDownload?.task_id) downloadTaskIds.add(queuedDownload.task_id);
         // The bytes are on their way, so whatever stood in for them before is
         // gone: forget the denial or the next check would keep ignoring it.
         deniedDocuments.clear(d.docId);
@@ -1057,7 +1061,7 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     // `getDocument` resolves before the bytes land on disk, so the download
     // indicators must wait for the queue to drain — otherwise every freshly
     // fetched file is briefly reported as "not downloaded locally".
-    if (changed) await waitForActiveDownloads();
+    if (changed) await waitForActiveDownloads(downloadTaskIds);
     await onRefresh?.();
 
     // --- Git version tracking (only when the user keeps a repo in the download root) ---
@@ -1075,19 +1079,29 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
       }
     }
 
-    return { queued, updated, deleted, moved, skipped, denied, changed, cancelled: false };
+    return { queued, updated, deleted, moved, skipped, denied, changed, cancelled: false, failed: false };
   } catch (err) {
     const message = String(err);
     onError?.(message);
     notificationStore.error(message, 5000);
-    return emptyResult();
+    return { ...emptyResult(), failed: true };
   } finally {
     syncAllCoordinator.release();
   }
 }
 
 function emptyResult(): SyncAllResult {
-  return { queued: 0, updated: 0, deleted: 0, moved: 0, skipped: 0, denied: 0, changed: false, cancelled: false };
+  return {
+    queued: 0,
+    updated: 0,
+    deleted: 0,
+    moved: 0,
+    skipped: 0,
+    denied: 0,
+    changed: false,
+    cancelled: false,
+    failed: false,
+  };
 }
 
 /** Format the current local time as `YYYY-MM-DD HH:mm:ss` (local timezone). */
@@ -1115,22 +1129,44 @@ function backupSuffixFor(): string {
   return `+${backupTimestamp()}.bak`;
 }
 
-/** Wait until no active (pending/downloading/verifying) download tasks remain. */
-function waitForActiveDownloads(maxWaitMs = 300_000): Promise<void> {
+/** Wait until every newly queued task and all active downloads have settled. */
+function waitForActiveDownloads(
+  taskIds: ReadonlySet<string> = new Set(),
+  maxWaitMs = 300_000,
+): Promise<void> {
   const deadline = Date.now() + maxWaitMs;
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     const check = () => {
-      const active = downloadStore.activeTasks.length;
-      if (active === 0) {
-        resolve();
-        return;
+      try {
+        const active = downloadStore.activeTasks.length;
+        const pendingTaskIds: string[] = [];
+        for (const taskId of taskIds) {
+          const task = downloadStore.tasks.get(taskId);
+          if (!task || task.status === 'pending' || task.status === 'scheduled'
+            || task.status === 'downloading' || task.status === 'decrypting'
+            || task.status === 'verifying') {
+            pendingTaskIds.push(taskId);
+            continue;
+          }
+          if (task.status !== 'completed') {
+            throw new Error(
+              `Download task ${taskId} ended with status "${task.status}"${task.error ? `: ${task.error}` : ''}`,
+            );
+          }
+        }
+        if (active === 0 && pendingTaskIds.length === 0) {
+          resolve();
+          return;
+        }
+        if (Date.now() >= deadline) {
+          throw new Error(
+            `Timed out waiting for ${pendingTaskIds.length} queued download task(s) and ${active} active download(s) to finish`,
+          );
+        }
+        setTimeout(check, 250);
+      } catch (err) {
+        reject(err);
       }
-      if (Date.now() >= deadline) {
-        console.warn('%c[cfms:sync] Timed out waiting for %d active download(s) to finish', 'color:#ffb74d', active);
-        resolve();
-        return;
-      }
-      setTimeout(check, 2000);
     };
     check();
   });

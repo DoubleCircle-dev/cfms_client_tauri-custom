@@ -110,7 +110,7 @@ function renderModal(overrides: ModalOverrides = {}) {
   const result = render(ModalFrame, {
     props,
   });
-  return { ...result, onClose, props };
+  return { ...result, container: Array.from(document.querySelectorAll<HTMLElement>('.cfms-modal-root')).at(-1)!, onClose, props };
 }
 
 function renderKeyboardModal(markup = '', title = 'Keyboard dialog') {
@@ -124,7 +124,7 @@ function renderKeyboardModal(markup = '', title = 'Keyboard dialog') {
       })),
     },
   });
-  const dialog = result.container.querySelector<HTMLElement>('[role="dialog"]')!;
+  const dialog = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).at(-1)!;
   const defaultButton = dialog.querySelector<HTMLButtonElement>('button[data-dialog-default]')!;
   defaultButton.addEventListener('click', onDefault);
   return { ...result, dialog, defaultButton, onDefault };
@@ -282,6 +282,21 @@ async function resizeFrom(
 }
 
 describe('ModalFrame', () => {
+  it('mounts its stable overlay root outside material and clipping ancestors and removes it on teardown', () => {
+    const surface = document.createElement('div');
+    surface.style.backdropFilter = 'blur(20px)';
+    surface.style.overflow = 'hidden';
+    document.body.append(surface);
+    const view = render(ModalFrame, { target: surface, props: { title: 'Portaled dialog', onClose: vi.fn(), children } });
+    const dialog = screen.getByRole('dialog', { name: 'Portaled dialog' });
+    const overlay = dialog.closest('.cfms-modal-root')!;
+    expect(overlay.parentElement).toBe(document.body);
+    expect(surface.querySelector('[role="dialog"]')).toBeNull();
+    expect(dialog.closest('.modal-backdrop')?.querySelector('.modal-scrim')).toBeTruthy();
+    view.unmount();
+    expect(document.body.contains(overlay)).toBe(false);
+    surface.remove();
+  });
   it('moves focus into the dialog and restores it after unmount', async () => {
     const trigger = document.createElement('button');
     document.body.append(trigger);

@@ -36,6 +36,8 @@
     serverStateStore,
   } from "$lib/stores.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import AuthScene from "$lib/components/AuthScene.svelte";
+  import FluentButton from "$lib/components/FluentButton.svelte";
   import MdOutlinedField from "$lib/components/MdOutlinedField.svelte";
   import MdSwitch from "$lib/components/MdSwitch.svelte";
   import ProgressRing from "$lib/components/ProgressRing.svelte";
@@ -249,12 +251,12 @@
   }
 </script>
 
-<div class="connect-auth-shell workspace-palette" class:connect-auth-shell--login-return={playLoginReturnTransition}>
+<AuthScene view="connect" animate={playLoginReturnTransition}>
   <header class="connect-route-header">
     <h1 class="auth-route-title">{$t('connect.title')}</h1>
 
     <div class="auth-route-toolbar">
-      <button
+      <FluentButton appearance="subtle" iconOnly
         type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
         title={$t('keyboard.openHelp')}
@@ -263,8 +265,8 @@
         onclick={openKeyboardShortcutHelp}
       >
         <Icon name="keyboard" size="18px" />
-      </button>
-      <button
+      </FluentButton>
+      <FluentButton appearance="subtle" iconOnly
         type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
         title={$t('settings.title')}
@@ -272,8 +274,8 @@
         onclick={() => openUtilityFromToolbar('/home/settings')}
       >
         <Icon name="settings" size="18px" />
-      </button>
-      <button
+      </FluentButton>
+      <FluentButton appearance="subtle" iconOnly
         type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
         title={$t('tools.title')}
@@ -281,7 +283,7 @@
         onclick={() => openUtilityFromToolbar('/home/tools')}
       >
         <Icon name="tools" size="18px" />
-      </button>
+      </FluentButton>
       <button
         type="button"
         class="relative inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
@@ -301,13 +303,13 @@
     </div>
   </header>
 
-  <section class="connect-auth-panel">
+  <section class="connect-auth-panel auth-scene-panel">
   <div
     class="connect-form-stage"
     class:animate-fade-scale-in={!playLoginReturnTransition}
     class:connect-form-stage--login-return={playLoginReturnTransition}
   >
-      <!-- Connect form — MD3 card -->
+      <!-- Fluent form; the circular primary action is the brand exception. -->
       <form
         class="connect-form-card backdrop-blur-sm rounded-xl
              border border-md3-outline p-6 space-y-4"
@@ -316,7 +318,7 @@
           handleConnect();
         }}
       >
-      <!-- Server URL — MD3 outlined text field -->
+      <!-- Native server-address combobox with shared Fluent field. -->
       <div>
         <div class="relative" bind:this={serverAddressField}>
           <MdOutlinedField
@@ -331,9 +333,11 @@
             </span>
             <input
               id="serverUrl"
+              aria-invalid={Boolean(serverAddressError)}
+              aria-describedby={serverAddressError ? "server-address-error" : undefined}
               type="text"
               data-focus-ring="delegated"
-              class="server-address-input min-w-0 flex-1 bg-transparent
+              class="server-address-input min-w-0 flex-1
                      text-md3-on-surface text-sm
                      placeholder:text-md3-on-surface-variant
                      transition-colors"
@@ -405,7 +409,7 @@
           {/if}
         </div>
         {#if serverAddressError}
-          <p class="mt-1 ml-1 text-xs text-md3-error">{serverAddressError}</p>
+          <p id="server-address-error" role="alert" class="mt-1 ml-1 text-xs text-md3-error">{serverAddressError}</p>
         {/if}
       </div>
 
@@ -519,24 +523,9 @@
   </div>
   </section>
 
-  <section class="connect-auth-visual" aria-hidden="true">
-    <img
-      src="/astronomy.jpg"
-      alt=""
-      class="connect-auth-visual-image"
-    />
-  </section>
-</div>
+</AuthScene>
 
 <style>
-  .connect-auth-shell {
-    position: relative;
-    display: flex;
-    min-height: 100%;
-    overflow: hidden;
-    background: var(--explorer-background);
-  }
-
   .connect-route-header {
     --connect-route-toolbar-width: 7.75rem;
 
@@ -582,13 +571,7 @@
     align-items: center;
     justify-content: center;
     padding: 1.5rem;
-    background:
-      radial-gradient(
-        circle at 12% 10%,
-        color-mix(in srgb, var(--explorer-accent) 8%, transparent),
-        transparent 38%
-      ),
-      var(--explorer-background);
+    background: transparent;
   }
 
   .connect-form-stage {
@@ -601,7 +584,8 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    background: var(--explorer-surface);
+    background: var(--colorNeutralBackground1);
+    border-radius: var(--borderRadiusXLarge);
   }
 
   .connect-submit-row {
@@ -1075,21 +1059,6 @@
     font-family: var(--font-md3-mono);
   }
 
-  .connect-auth-visual {
-    display: none;
-    min-height: 100%;
-    min-width: 0;
-    flex: 0 0 0;
-    overflow: hidden;
-    background: var(--explorer-background);
-  }
-
-  .connect-auth-visual-image {
-    height: 100%;
-    width: 100%;
-    object-fit: cover;
-  }
-
   @media (max-width: 599px) {
     .connect-route-header {
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1107,63 +1076,10 @@
     }
   }
 
-  @media (min-width: 1024px) {
-    .connect-auth-visual {
-      display: block;
-    }
-
-    .connect-auth-shell--login-return .connect-auth-panel {
-      animation: connect-panel-expand var(--motion-duration-long4)
-        var(--motion-easing-emphasized) both;
-      will-change: flex-basis;
-    }
-
-    .connect-auth-shell--login-return .connect-auth-visual {
-      animation: connect-visual-collapse var(--motion-duration-long4)
-        var(--motion-easing-emphasized) both;
-      will-change: flex-basis, opacity;
-    }
-
-    .connect-auth-shell--login-return .connect-auth-visual-image {
-      animation: connect-visual-image-retreat var(--motion-duration-long4)
-        var(--motion-easing-emphasized) both;
-      will-change: transform;
-    }
-  }
-
   .connect-form-stage--login-return {
-    animation: connect-form-crossfade var(--motion-duration-long4)
-      var(--motion-easing-emphasized) both;
+    animation: connect-form-crossfade var(--auth-transition-duration)
+      var(--auth-transition-easing) both;
     will-change: opacity, transform, filter;
-  }
-
-  @keyframes connect-panel-expand {
-    from {
-      flex-basis: var(--auth-panel-basis);
-    }
-    to {
-      flex-basis: 100%;
-    }
-  }
-
-  @keyframes connect-visual-collapse {
-    from {
-      flex-basis: calc(100% - var(--auth-panel-basis));
-      opacity: 1;
-    }
-    to {
-      flex-basis: 0;
-      opacity: 0.96;
-    }
-  }
-
-  @keyframes connect-visual-image-retreat {
-    from {
-      transform: translate3d(0, 0, 0) scale(1);
-    }
-    to {
-      transform: translate3d(18%, 0, 0) scale(1.04);
-    }
   }
 
   @keyframes connect-form-crossfade {

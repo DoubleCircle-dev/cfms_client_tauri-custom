@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ServerDocumentEntry } from '$lib/api';
+import type { DownloadTaskDto, ServerDocumentEntry } from '$lib/api';
+import { downloadStore } from '$lib/stores.svelte';
 import { deniedDocuments } from './denied-documents.svelte';
 import {
   DENIED_FOLDER_MARKER_FILENAME,
@@ -62,8 +63,35 @@ function doc(
   return { id, title, size, last_modified: null, sha256 };
 }
 
+function downloadTask(status: DownloadTaskDto['status']): DownloadTaskDto {
+  return {
+    task_id: 'task-1',
+    file_id: 'd1',
+    filename: 'a.txt',
+    file_path: 'a.txt',
+    status,
+    progress: 0,
+    current_bytes: 0,
+    total_bytes: 0,
+    message: null,
+    error: null,
+    created_at: Date.now(),
+    started_at: null,
+    completed_at: null,
+    priority: 0,
+    retry_count: 0,
+    max_retries: 3,
+    scheduled_time: null,
+    stage: 0,
+    bandwidth_limit: null,
+    pause_position: null,
+    supports_resume: true,
+  };
+}
+
 beforeEach(() => {
   for (const mock of Object.values(files)) mock.mockReset();
+  downloadStore.setAll([]);
   settings.getSyncGitTrackingEnabled.mockReset();
   settings.getSyncGitTrackingEnabled.mockResolvedValue(false);
 
@@ -377,6 +405,60 @@ describe('syncFiles (cached queue)', () => {
     files.computeLocalSha256.mockResolvedValue({ 'b.txt': 'S' });
     await syncFiles({ queue: [{ docId: 'd2', path: 'b.txt', sha256: 'S' }] });
     expect(files.downloadGitCommit).not.toHaveBeenCalled();
+  });
+
+  it('waits for each queued download task to complete before committing', async () => {
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'OLD' });
+    files.getDocument.mockImplementation(async () => {
+      setTimeout(() => {
+        downloadStore.upsert(downloadTask('pending'));
+        setTimeout(() => downloadStore.markCompleted('task-1'), 25);
+      }, 25);
+      return {
+        task_id: 'task-1',
+        file_id: 'd1',
+        filename: 'a.txt',
+        file_path: 'a.txt',
+      };
+    });
+    files.downloadGitCommit.mockImplementation(async () => {
+      expect(downloadStore.tasks.get('task-1')?.status).toBe('completed');
+      return 'snapshot';
+    });
+
+    const result = await syncFiles({
+      queue: [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
+      overwriteStrategy: 'force_overwrite',
+    });
+
+    expect(result.updated).toBe(1);
+    expect(files.downloadGitCommit).toHaveBeenCalledOnce();
+  });
+
+  it('does not commit when a queued download task fails', async () => {
+    settings.getSyncGitTrackingEnabled.mockResolvedValue(true);
+    files.computeLocalSha256.mockResolvedValue({ 'a.txt': 'OLD' });
+    files.getDocument.mockImplementation(async () => {
+      downloadStore.upsert(downloadTask('failed'));
+      return {
+        task_id: 'task-1',
+        file_id: 'd1',
+        filename: 'a.txt',
+        file_path: 'a.txt',
+      };
+    });
+    const onError = vi.fn();
+
+    const result = await syncFiles({
+      queue: [{ docId: 'd1', path: 'a.txt', sha256: 'NEW' }],
+      overwriteStrategy: 'force_overwrite',
+      onError,
+    });
+
+    expect(result.failed).toBe(true);
+    expect(files.downloadGitCommit).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('status "failed"'));
   });
 
   it('commits pending folder changes with confirmed file updates in one snapshot', async () => {

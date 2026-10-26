@@ -1,4 +1,6 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
+  import { FOCUSABLE_SELECTOR } from '$lib/keyboard';
   import { onDestroy, onMount, tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { isReducedMotionEnabled, type ResolvedColorScheme } from '$lib/appearance';
@@ -112,9 +114,9 @@
     }
     if (event.key !== 'Tab' || !dialog) return;
 
-    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
-    )).filter((element) => !element.hasAttribute('hidden'));
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('*'))
+      .filter((element) => element.matches(FOCUSABLE_SELECTOR)
+        && !element.hasAttribute('hidden') && !element.hasAttribute('disabled'));
     if (focusable.length === 0) {
       event.preventDefault();
       dialog.focus();
@@ -167,9 +169,14 @@
         <span class="signal-rule" aria-hidden="true"></span>
         <span>{$t(presentation.tour.labelKey)}</span>
       </div>
-      <button type="button" class="skip-action" onclick={requestDismiss}>
+      <FluentButton data-fluent-owner="lib-components-release-highlights-wizard"
+        type="button"
+        onclick={requestDismiss}
+        appearance="subtle"
+        class="skip-action"
+      >
         {$t('releaseHighlights.skip')}
-      </button>
+      </FluentButton>
     </header>
 
     <div
@@ -209,25 +216,37 @@
     <footer class="tour-footer">
       <div class="progress-rail" aria-label={$t('releaseHighlights.chooseFeature')}>
         {#each highlights as highlight, index (highlight.id)}
-          <button
+          <button data-fluent-owner="lib-components-release-highlights-wizard"
             type="button"
-            class:active={index === currentIndex}
             aria-label={$t('releaseHighlights.goToFeature', { values: { number: index + 1 } })}
             aria-current={index === currentIndex ? 'step' : undefined}
             onclick={() => goTo(index)}
+
+            class={((index === currentIndex) ? " active" : '')}
           ><span></span></button>
         {/each}
       </div>
 
       <div class="navigation-actions">
-        <button type="button" class="back-action" onclick={previous} disabled={isFirst}>
+        <FluentButton data-fluent-owner="lib-components-release-highlights-wizard"
+          type="button"
+          onclick={previous}
+          disabled={isFirst}
+          appearance="subtle"
+          class="back-action"
+        >
           <Icon name="arrowBack" size="18px" />
           <span class="back-label">{$t('common.back')}</span>
-        </button>
-        <button type="button" class="next-action" onclick={next}>
+        </FluentButton>
+        <FluentButton data-fluent-owner="lib-components-release-highlights-wizard"
+          type="button"
+          onclick={next}
+          appearance="subtle"
+          class="next-action"
+        >
           <span>{isLast ? $t('releaseHighlights.startUsing') : $t('common.next')}</span>
           <Icon name={isLast ? 'done' : 'navigateNext'} size="19px" />
-        </button>
+        </FluentButton>
       </div>
     </footer>
   </div>
@@ -279,7 +298,7 @@
     min-height: 3.75rem;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
     padding-inline-start: max(clamp(1rem, 2.5vw, 2rem), var(--safe-area-left, 0px));
     padding-inline-end: max(clamp(1rem, 2.5vw, 2rem), var(--safe-area-right, 0px));
   }
@@ -299,10 +318,10 @@
     display: flex;
     flex: 1 1 0;
     align-items: center;
-    gap: 0.75rem;
+    gap: 12px;
     overflow: hidden;
     color: var(--explorer-text-muted);
-    font: 700 0.875rem/1.25 var(--font-md3-serif);
+    font: 700 14px/20px var(--font-md3-serif);
     letter-spacing: 0.015em;
   }
 
@@ -320,17 +339,17 @@
     background: var(--explorer-accent);
   }
 
-  .skip-action,
-  .back-action,
-  .next-action {
+  :global(.skip-action[data-fluent-owner="lib-components-release-highlights-wizard"]),
+  :global(.back-action[data-fluent-owner="lib-components-release-highlights-wizard"]),
+  :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]) {
     display: inline-flex;
     min-height: 2.25rem;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
-    border-radius: var(--explorer-radius-small);
+    gap: 8px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.8rem;
-    font: 650 0.8rem/1 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
     white-space: nowrap;
     transition:
       transform var(--motion-duration-short4) var(--motion-easing-standard),
@@ -339,39 +358,39 @@
       opacity var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  .skip-action {
+  :global(.skip-action[data-fluent-owner="lib-components-release-highlights-wizard"]) {
     flex: 0 0 auto;
   }
 
-  .skip-action,
-  .back-action {
+  :global(.skip-action[data-fluent-owner="lib-components-release-highlights-wizard"]),
+  :global(.back-action[data-fluent-owner="lib-components-release-highlights-wizard"]) {
     color: var(--explorer-text-muted);
     background: transparent;
   }
 
-  .skip-action:hover,
-  .back-action:hover:not(:disabled) {
+  :global(.skip-action[data-fluent-owner="lib-components-release-highlights-wizard"]:hover),
+  :global(.back-action[data-fluent-owner="lib-components-release-highlights-wizard"]:hover:not(:is(:disabled, [disabled]))) {
     color: var(--explorer-text);
     background: var(--explorer-surface-hover);
   }
 
-  .skip-action:active,
-  .back-action:active:not(:disabled),
-  .next-action:active {
-    transform: scale(0.97);
+  :global(.skip-action[data-fluent-owner="lib-components-release-highlights-wizard"]:active),
+  :global(.back-action[data-fluent-owner="lib-components-release-highlights-wizard"]:active:not(:is(:disabled, [disabled]))),
+  :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]:active) {
+    transform: none;
   }
 
-  .next-action {
+  :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]) {
     min-width: 8.25rem;
     color: var(--explorer-background);
     background: var(--explorer-accent);
   }
 
-  .next-action:hover {
+  :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]:hover) {
     background: color-mix(in srgb, var(--explorer-accent) 88%, var(--explorer-text));
   }
 
-  .back-action:disabled {
+  :global(.back-action[data-fluent-owner="lib-components-release-highlights-wizard"]:is(:disabled, [disabled])) {
     opacity: 0.34;
   }
 
@@ -411,7 +430,7 @@
     max-width: 28rem;
     display: grid;
     align-content: center;
-    gap: 0.85rem;
+    gap: 12px;
     animation: copy-enter 200ms var(--motion-easing-emphasized-decelerate) both;
   }
 
@@ -423,7 +442,7 @@
 
   .progress-label {
     color: var(--explorer-accent);
-    font: 650 0.75rem/1.25 var(--font-md3-mono);
+    font: 600 12px/16px var(--font-md3-mono);
     letter-spacing: 0.02em;
   }
 
@@ -445,10 +464,10 @@
     min-width: 10rem;
     display: flex;
     align-items: center;
-    gap: 0.15rem;
+    gap: 4px;
   }
 
-  .progress-rail button {
+  .progress-rail :global(:is(button[data-fluent-owner="lib-components-release-highlights-wizard"], .cfms-button[data-fluent-owner="lib-components-release-highlights-wizard"])) {
     width: 2.75rem;
     height: 2.5rem;
     display: grid;
@@ -465,11 +484,11 @@
       background-color var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  .progress-rail button:hover span {
+  .progress-rail :global(:is(button[data-fluent-owner="lib-components-release-highlights-wizard"], .cfms-button[data-fluent-owner="lib-components-release-highlights-wizard"]):hover span) {
     background: var(--explorer-text-muted);
   }
 
-  .progress-rail button.active span {
+  .progress-rail :global(:is(button[data-fluent-owner="lib-components-release-highlights-wizard"], .cfms-button[data-fluent-owner="lib-components-release-highlights-wizard"]).active[data-fluent-owner="lib-components-release-highlights-wizard"] span) {
     height: 3px;
     background: var(--explorer-accent);
   }
@@ -477,7 +496,7 @@
   .navigation-actions {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
   }
 
   @keyframes scene-enter {
@@ -517,7 +536,7 @@
       grid-template-columns: 1fr;
       grid-template-rows: minmax(15rem, 44dvh) auto;
       align-content: start;
-      gap: 1.5rem;
+      gap: 24px;
       padding: 1.25rem max(1.25rem, var(--safe-area-right, 0px)) 1.5rem max(1.25rem, var(--safe-area-left, 0px));
     }
 
@@ -547,7 +566,7 @@
 
     .tour-body {
       grid-template-rows: minmax(12rem, 38dvh) auto;
-      gap: 1.15rem;
+      gap: 20px;
       padding-top: 1rem;
     }
 
@@ -559,11 +578,11 @@
       min-width: 0;
     }
 
-    .progress-rail button {
+    .progress-rail :global(:is(button[data-fluent-owner="lib-components-release-highlights-wizard"], .cfms-button[data-fluent-owner="lib-components-release-highlights-wizard"])) {
       width: clamp(1.6rem, 8vw, 2.25rem);
     }
 
-    .back-action {
+    :global(.back-action[data-fluent-owner="lib-components-release-highlights-wizard"]) {
       width: 2.5rem;
       padding-inline: 0;
     }
@@ -577,7 +596,7 @@
       white-space: nowrap;
     }
 
-    .next-action {
+    :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]) {
       min-width: 7.5rem;
     }
   }
@@ -587,7 +606,7 @@
       grid-template-columns: minmax(0, 1.25fr) minmax(16rem, 0.75fr);
       grid-template-rows: 1fr;
       align-content: center;
-      gap: 1.25rem;
+      gap: 20px;
       padding: 0.75rem 1rem;
     }
 
@@ -596,20 +615,20 @@
     }
 
     .highlight-copy {
-      gap: 0.55rem;
+      gap: 8px;
     }
 
     .highlight-body {
-      font-size: 0.875rem;
+      font-size: 14px;
       line-height: 1.5;
     }
   }
 
   @media (pointer: coarse) {
-    .skip-action,
-    .back-action,
-    .next-action,
-    .progress-rail button {
+    :global(.skip-action[data-fluent-owner="lib-components-release-highlights-wizard"]),
+    :global(.back-action[data-fluent-owner="lib-components-release-highlights-wizard"]),
+    :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]),
+    .progress-rail :global(:is(button[data-fluent-owner="lib-components-release-highlights-wizard"], .cfms-button[data-fluent-owner="lib-components-release-highlights-wizard"])) {
       min-width: 2.75rem;
       min-height: 2.75rem;
     }
@@ -623,7 +642,7 @@
   @media (max-width: 360px) {
     .tour-toolbar,
     .tour-footer {
-      gap: 0.25rem;
+      gap: 4px;
       padding-inline: max(0.5rem, var(--safe-area-left, 0px));
     }
 
@@ -636,10 +655,10 @@
     }
 
     .navigation-actions {
-      gap: 0.25rem;
+      gap: 4px;
     }
 
-    .next-action {
+    :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]) {
       min-width: 6.5rem;
     }
   }
@@ -650,7 +669,7 @@
     animation: none;
   }
 
-  :global(html[data-reduce-motion='true']) :where(.skip-action, .back-action, .next-action, .progress-rail span) {
+  :global(html[data-reduce-motion='true']) :global(:where(.skip-action[data-fluent-owner="lib-components-release-highlights-wizard"], .back-action[data-fluent-owner="lib-components-release-highlights-wizard"], .next-action[data-fluent-owner="lib-components-release-highlights-wizard"], .progress-rail span)) {
     transition: none;
   }
 </style>

@@ -1,8 +1,11 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { page } from '$app/state';
   import { _ as t } from 'svelte-i18n';
   import { navigateUp } from '$lib/navigation';
   import Icon from '$lib/components/Icon.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
+  import PageHeading from '$lib/components/PageHeading.svelte';
   import type { IconName } from '$lib/icons';
 
   interface Props {
@@ -12,6 +15,8 @@
     resetDisabled?: boolean;
     resetLabel?: string;
     onReset?: () => void | Promise<void>;
+    onRefresh?: () => void | Promise<void>;
+    refreshDisabled?: boolean;
   }
 
   let {
@@ -21,98 +26,99 @@
     resetDisabled = false,
     resetLabel,
     onReset,
+    onRefresh,
+    refreshDisabled = false,
   }: Props = $props();
 </script>
 
 <div class="settings-page-header">
-  <button
-    class="settings-back-button"
+  <FluentButton data-fluent-owner="lib-components-settings-page-header"
     type="button"
     onclick={() => navigateUp(page.url.pathname)}
+    appearance="transparent"
+    class="settings-back-button"
   >
     <Icon name="arrowBack" size="18px" />
     {$t('common.back')}
-  </button>
+  </FluentButton>
 
-  <div class="settings-heading-row">
-    <div class="settings-heading">
-      {#if icon}
-        <span class="settings-heading-icon" aria-hidden="true">
-          <Icon name={icon} size="28px" />
-        </span>
-      {/if}
-      <div class="settings-heading-copy">
-        <h1>{title}</h1>
-        {#if description}
-          <p>{description}</p>
+  <div class="settings-heading-group">
+    <div class="settings-heading-row">
+      <div class="settings-heading">
+        {#if icon}
+          <span class="settings-heading-icon" aria-hidden="true">
+            <Icon name={icon} size="28px" />
+          </span>
         {/if}
+        <PageHeading {title} {description} />
       </div>
-    </div>
 
-    {#if onReset}
-      <button
-        class="settings-reset-button"
-        type="button"
-        onclick={onReset}
-        disabled={resetDisabled}
-        title={resetLabel ?? $t('common.reset')}
-        aria-label={resetLabel ?? $t('common.reset')}
-      >
-        <Icon name="resetSettings" size="20px" />
-      </button>
-    {/if}
+      {#if onRefresh || onReset}
+        <div class="settings-heading-actions">
+          {#if onRefresh}
+            <IconButton icon="refresh" label={$t('common.refresh')} disabled={refreshDisabled} onclick={onRefresh} />
+          {/if}
+          {#if onReset}
+            <FluentButton data-fluent-owner="lib-components-settings-page-header"
+              type="button"
+              onclick={onReset}
+              disabled={resetDisabled}
+              title={resetLabel ?? $t('common.reset')}
+              aria-label={resetLabel ?? $t('common.reset')}
+              appearance="subtle"
+              class="settings-reset-button"
+              iconOnly
+            >
+              <Icon name="resetSettings" size="20px" />
+            </FluentButton>
+          {/if}
+        </div>
+      {/if}
+    </div>
   </div>
 </div>
 
 <style>
   .settings-page-header {
     display: grid;
-    gap: 0.7rem;
+    gap: 12px;
   }
 
-  .settings-back-button {
+  .settings-heading-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+  .settings-heading-group { display: grid; min-width: 0; gap: 4px; }
+
+  :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]) {
     display: inline-flex;
-    min-height: 34px;
+    min-height: 32px;
+    min-inline-size: 0;
     width: fit-content;
+    justify-self: start;
     align-items: center;
-    gap: 0.42rem;
-    border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 5px);
-    padding: 0.35rem 0.55rem 0.35rem 0.45rem;
-    color: var(--color-md3-on-surface-variant);
-    background: transparent;
-    font: 600 0.78rem/1 var(--font-md3-sans);
-    transition:
-      border-color var(--motion-duration-short3) var(--motion-easing-standard),
-      color var(--motion-duration-short3) var(--motion-easing-standard),
-      background-color var(--motion-duration-short3) var(--motion-easing-standard),
-      transform var(--motion-duration-short3) var(--motion-easing-standard);
+    justify-content: flex-start;
+    text-align: start;
+    gap: 8px;
+    padding: 5px 8px;
   }
 
-  .settings-back-button:hover {
-    color: var(--color-md3-on-surface);
-    background: color-mix(in srgb, var(--color-md3-on-surface) 7%, transparent);
-  }
-
-  .settings-back-button:active {
-    transform: scale(0.97);
+  :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]::part(content)) {
+    justify-content: flex-start;
   }
 
   .settings-heading-row,
   .settings-heading {
     display: flex;
     min-width: 0;
-    align-items: flex-start;
+    align-items: center;
   }
 
   .settings-heading-row {
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
   }
 
   .settings-heading {
     align-items: center;
-    gap: 0.68rem;
+    gap: 12px;
   }
 
   .settings-heading-icon {
@@ -124,27 +130,7 @@
     color: var(--color-md3-primary-emphasis);
   }
 
-  .settings-heading-copy {
-    min-width: 0;
-  }
-
-  .settings-heading-copy h1 {
-    margin: 0;
-    color: var(--color-md3-on-surface);
-    font: 700 1.3rem/1.2 var(--font-md3-sans);
-    letter-spacing: -0.018em;
-    text-wrap: balance;
-  }
-
-  .settings-heading-copy p {
-    max-width: 68ch;
-    margin: 0.28rem 0 0;
-    color: var(--color-md3-on-surface-variant);
-    font-size: 0.78rem;
-    line-height: 1.5;
-  }
-
-  .settings-reset-button {
+  :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]) {
     display: inline-flex;
     inline-size: 40px;
     block-size: 40px;
@@ -152,7 +138,7 @@
     align-items: center;
     justify-content: center;
     border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 5px);
+    border-radius: var(--borderRadiusMedium);
     background: transparent;
     color: var(--color-md3-on-surface-variant);
     padding: 0;
@@ -163,24 +149,24 @@
       transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate);
   }
 
-  .settings-reset-button:hover:not(:disabled) {
+  :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]:hover:not(:is(:disabled, [disabled]))) {
     background: color-mix(in srgb, var(--color-md3-on-surface) 7%, transparent);
     color: var(--color-md3-on-surface);
     transform: translateY(-1px);
   }
 
-  .settings-reset-button:disabled {
+  :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.45;
   }
 
   @media (pointer: coarse) {
-    .settings-back-button,
-    .settings-reset-button {
+    :global(.settings-back-button[data-fluent-owner="lib-components-settings-page-header"]),
+    :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]) {
       min-height: 44px;
     }
 
-    .settings-reset-button {
+    :global(.settings-reset-button[data-fluent-owner="lib-components-settings-page-header"]) {
       width: 44px;
       height: 44px;
     }

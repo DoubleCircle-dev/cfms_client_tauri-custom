@@ -1,4 +1,6 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onDestroy } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
@@ -59,7 +61,7 @@
   <div class="space-y-5 p-5">
     <div class="flex flex-col items-center gap-3 text-center">
       <div
-        class="grid h-16 w-16 place-items-center rounded-2xl bg-md3-warning-container text-md3-warning"
+        class="grid h-16 w-16 place-items-center rounded-xl bg-md3-warning-container text-md3-warning"
         aria-hidden="true"
       >
         <Icon name="warningAmber" size="40px" />
@@ -74,7 +76,7 @@
     </div>
 
     {#if recoveryAvailable}
-      <div class="space-y-3 rounded-lg border border-md3-outline/70 bg-md3-surface-container/70 p-4">
+      <div class="space-y-3 rounded-lg border border-md3-outline/70 bg-md3-surface-container p-4">
         <p class="text-sm leading-6 text-md3-on-surface-variant">
           {$t('dialog.corruptedPreference.recoveryHint')}
         </p>
@@ -86,35 +88,33 @@
               submitRecovery();
             }}
           >
-            <label
-              class="block text-sm font-medium text-md3-on-surface"
-              for="preference-recovery-password"
-            >
-              {$t('dialog.corruptedPreference.recoveryPassword')}
-            </label>
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-                <Icon name="password" size="18px" />
-              </span>
-              <input
-                id="preference-recovery-password"
-                class="w-full rounded-xl border border-md3-outline bg-md3-field py-2.5 pl-10 pr-10 text-sm text-md3-on-surface transition-colors placeholder:text-md3-on-surface-variant"
-                type={recoveryVisible ? 'text' : 'password'}
-                bind:value={recoveryPassword}
-                autocomplete="current-password"
-                placeholder={$t('dialog.corruptedPreference.recoveryPlaceholder')}
-                disabled={recoveryBusy}
-              />
-              <button
-                type="button"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface"
-                onclick={() => (recoveryVisible = !recoveryVisible)}
-                aria-label={recoveryVisible ? $t('login.hidePassword') : $t('login.showPassword')}
-                disabled={recoveryBusy}
-              >
-                <Icon name="visibility" size="18px" />
-              </button>
-            </div>
+            <MdOutlinedField inputId="preference-recovery-password" label={$t('dialog.corruptedPreference.recoveryPassword')} disabled={recoveryBusy}>
+              <div data-outlined-content class="relative">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+                  <Icon name="password" size="18px" />
+                </span>
+                <input data-focus-ring="delegated"
+                  id="preference-recovery-password"
+                  class="w-full py-2.5 pl-10 pr-10 text-sm text-md3-on-surface transition-colors placeholder:text-md3-on-surface-variant"
+                  type={recoveryVisible ? 'text' : 'password'}
+                  bind:value={recoveryPassword}
+                  autocomplete="current-password"
+                  placeholder={$t('dialog.corruptedPreference.recoveryPlaceholder')}
+                  disabled={recoveryBusy}
+                />
+                <FluentButton data-fluent-owner="lib-components-corrupted-preference-dialog"
+                  type="button"
+                  onclick={() => (recoveryVisible = !recoveryVisible)}
+                  aria-label={recoveryVisible ? $t('login.hidePassword') : $t('login.showPassword')}
+                  disabled={recoveryBusy}
+                  appearance="subtle"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface"
+                  iconOnly
+                >
+                  <Icon name="visibility" size="18px" />
+                </FluentButton>
+              </div>
+            </MdOutlinedField>
             {#if recoveryError}
               <p class="text-xs leading-5 text-md3-error">{recoveryError}</p>
             {/if}
@@ -142,17 +142,18 @@
             </div>
           </form>
         {:else}
-          <button
+          <FluentButton data-fluent-owner="lib-components-corrupted-preference-dialog"
             type="button"
-            class="flex w-full items-center justify-between gap-3 text-left text-sm font-medium text-md3-on-surface transition-colors hover:text-md3-primary-emphasis"
             onclick={() => (showRecovery = true)}
+            appearance="subtle"
+            class="flex w-full items-center justify-between gap-3 text-left text-sm font-medium text-md3-on-surface transition-colors hover:text-md3-primary-emphasis"
           >
             <span class="flex min-w-0 items-center gap-2">
               <Icon name="lockOpen" size="18px" />
               <span>{$t('dialog.corruptedPreference.recover')}</span>
             </span>
             <Icon name="breadcrumbSep" size="18px" />
-          </button>
+          </FluentButton>
         {/if}
       </div>
     {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onDestroy, onMount, tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { publicKeyError } from '$lib/public-key-errors';
@@ -19,7 +20,7 @@
   async function setDiscardConfirmation(value: boolean) {
     confirmingDiscard = value; password = ''; error = '';
     await tick();
-    if (value) confirmationActions?.querySelector('button')?.focus();
+    if (value) confirmationActions?.querySelector<HTMLElement>('button, fluent-button')?.focus();
     else input?.focus();
   }
   async function submit(event: SubmitEvent) {
@@ -55,10 +56,16 @@
     <form class="flex flex-col gap-5 p-5" onsubmit={submit}>
       <p class="text-sm text-md3-on-surface-variant">{$t('publicKey.migrationBody')}</p>
       <MdOutlinedField inputId="preference-migration-password" label={$t('publicKey.previousPassword')}>
-        <input bind:this={input} id="preference-migration-password" data-focus-ring="delegated" type="password" bind:value={password} disabled={busy} autocomplete="off" class="w-full bg-transparent px-4 py-3 text-md3-on-surface outline-none" />
+        <input bind:this={input} id="preference-migration-password" data-focus-ring="delegated" type="password" bind:value={password} disabled={busy} autocomplete="off" class="cfms-native-field w-full px-4 py-3 text-md3-on-surface" />
       </MdOutlinedField>
       {#if error}<p role="alert" class="text-sm text-md3-error">{error}</p>{/if}
-      <button type="button" class="self-start border-0 bg-transparent py-2 text-left text-sm text-md3-primary-emphasis underline underline-offset-4 disabled:opacity-50" disabled={busy} onclick={() => setDiscardConfirmation(true)}>{$t('publicKey.discardLink')}</button>
+      <FluentButton data-fluent-owner="lib-components-preference-unlock-dialog"
+        type="button"
+        disabled={busy}
+        onclick={() => setDiscardConfirmation(true)}
+        appearance="outline"
+        class="self-start border-0 bg-transparent py-2 text-left text-sm text-md3-primary-emphasis underline underline-offset-4 disabled:opacity-50"
+      >{$t('publicKey.discardLink')}</FluentButton>
       <div class="flex flex-wrap justify-end gap-2">
         <DialogActionButton onclick={onCancel} disabled={busy}>{$t('common.cancel')}</DialogActionButton>
         <DialogActionButton type="submit" variant="primary" disabled={busy || !password}>

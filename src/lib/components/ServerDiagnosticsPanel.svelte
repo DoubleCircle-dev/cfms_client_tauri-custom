@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { getServerDiagnostics, type ServerDiagnostics } from '$lib/api';
@@ -42,14 +43,19 @@
 
 <section class="diagnostics-section" aria-label={$t('diagnostics.title')} aria-busy={loading}>
   <div class="section-actions">
-    <button type="button" onclick={() => void loadDiagnostics()} disabled={loading}>
+    <FluentButton data-fluent-owner="lib-components-server-diagnostics-panel"
+      type="button"
+      onclick={() => void loadDiagnostics()}
+      disabled={loading}
+      appearance="subtle"
+    >
       {#if loading}
         <ProgressRing size={17} strokeWidth={2.4} label={$t('diagnostics.loading')} />
       {:else}
         <Icon name="refresh" size="18px" />
       {/if}
       {diagnostics ? $t('diagnostics.refresh') : $t('diagnostics.load')}
-    </button>
+    </FluentButton>
   </div>
 
   {#if error}
@@ -143,7 +149,7 @@
 <style>
   .diagnostics-section {
     display: grid;
-    gap: 1rem;
+    gap: 16px;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
     padding-top: 1.25rem;
   }
@@ -163,35 +169,35 @@
     font-family: var(--font-md3-sans);
   }
 
-  button {
+  :global(.cfms-button[data-fluent-owner="lib-components-server-diagnostics-panel"]) {
     display: inline-flex;
     min-height: 2.35rem;
     flex: none;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
-    border-radius: 6px;
+    gap: 8px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.85rem;
     color: var(--color-md3-primary-emphasis);
     background: transparent;
     font-family: var(--font-md3-sans);
-    font-size: 0.875rem;
+    font-size: 14px;
     font-weight: 700;
     transition:
       background-color var(--motion-duration-short4) var(--motion-easing-standard),
       opacity var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  button:hover:not(:disabled) {
+  :global(.cfms-button[data-fluent-owner="lib-components-server-diagnostics-panel"]:hover:not(:is(:disabled, [disabled]))) {
     background: color-mix(in srgb, var(--color-md3-primary-emphasis) 10%, transparent);
   }
 
-  button:focus-visible {
-    outline: 2px solid var(--color-md3-primary-emphasis);
+  :global(.cfms-button[data-fluent-owner="lib-components-server-diagnostics-panel"]:focus-visible) {
+    outline: none;
     outline-offset: 2px;
   }
 
-  button:disabled {
+  :global(.cfms-button[data-fluent-owner="lib-components-server-diagnostics-panel"]:is(:disabled, [disabled])) {
     opacity: 0.55;
   }
 
@@ -200,10 +206,10 @@
     display: flex;
     min-height: 4.5rem;
     align-items: center;
-    gap: 0.7rem;
+    gap: 12px;
     padding: 0.8rem 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
   }
 
   .load-error {
@@ -237,9 +243,9 @@
   h3 {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    font-size: 0.9rem;
-    font-weight: 650;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
   }
 
   dl {
@@ -259,8 +265,8 @@
 
   dt {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.7rem;
-    font-weight: 650;
+    font-size: 12px;
+    font-weight: 600;
   }
 
   dd {
@@ -268,7 +274,7 @@
     overflow-wrap: anywhere;
     color: var(--color-md3-on-surface);
     font-family: var(--font-md3-mono);
-    font-size: 0.78rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -288,7 +294,7 @@
     min-width: 0;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 42%, transparent);
     padding: 0.65rem 0;
   }
@@ -300,7 +306,7 @@
   li span {
     display: grid;
     min-width: 0;
-    gap: 0.12rem;
+    gap: 4px;
   }
 
   li strong,
@@ -310,13 +316,13 @@
 
   li strong {
     color: var(--color-md3-on-surface);
-    font-size: 0.82rem;
+    font-size: 14px;
   }
 
   li small,
   .empty-copy {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.74rem;
+    font-size: 12px;
   }
 
   code {
@@ -331,7 +337,7 @@
 
   .extension-flags {
     display: grid;
-    gap: 0.25rem;
+    gap: 4px;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 42%, transparent);
     margin-top: 0.45rem;
     padding-top: 0.75rem;
@@ -339,7 +345,7 @@
 
   .extension-flags strong {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.7rem;
+    font-size: 12px;
   }
 
   .extension-flags code {
@@ -349,7 +355,7 @@
   }
 
   @media (max-width: 640px) {
-    button {
+    :global(.cfms-button[data-fluent-owner="lib-components-server-diagnostics-panel"]) {
       width: fit-content;
       min-height: 2.75rem;
     }
@@ -375,7 +381,7 @@
     li {
       align-items: flex-start;
       flex-direction: column;
-      gap: 0.3rem;
+      gap: 4px;
     }
   }
 </style>

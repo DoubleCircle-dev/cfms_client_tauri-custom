@@ -17,6 +17,7 @@ mod preference_keys;
 mod public_key_auth;
 mod secure_store;
 mod mobile_keepalive;
+mod window_backdrop;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -594,7 +595,6 @@ pub fn run() {
                 .find(|config| config.label == "main")
                 .cloned()
                 .ok_or_else(|| std::io::Error::other("Main window configuration is missing"))?;
-
             // Dev builds: make the window obviously non-production by suffixing
             // the title with "-dev".
             #[cfg(debug_assertions)]
@@ -602,7 +602,11 @@ pub fn run() {
                 main_window_config.title.push_str("-dev");
             }
 
-            tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?.build()?;
+            let main_window =
+                tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?;
+            #[cfg(target_os = "windows")]
+            let main_window = main_window.transparent(true);
+            main_window.build()?;
 
             // Dev mode: auto-open the vulnerability testing tool in a separate window.
             #[cfg(all(debug_assertions, not(any(target_os = "android", target_os = "ios"))))]
@@ -638,6 +642,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            window_backdrop::set_window_backdrop,
             commands::greet,
             commands::ping,
             commands::protocol_version,

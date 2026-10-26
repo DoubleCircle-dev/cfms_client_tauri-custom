@@ -12,6 +12,7 @@
     isContextMenuDivider,
   } from '$lib/components/context-menu';
   import { focusRovingItem } from '$lib/keyboard';
+  import { portal } from '$lib/actions/portal';
 
   interface Props {
     open: boolean;
@@ -115,6 +116,7 @@
 {#if open && visibleItems.length > 0}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
+    use:portal
     class="fixed inset-0 z-40"
     role="presentation"
     transition:fade={{ duration: 90 }}
@@ -126,9 +128,8 @@
   ></div>
   <div
     bind:this={menuEl}
-    class="context-menu-surface fixed z-50 bg-md3-surface-container/95 backdrop-blur-sm
-           rounded-xl border border-md3-outline shadow-lg
-           py-1 min-w-[190px] max-w-[min(260px,calc(100vw-16px))]"
+    use:portal
+    class="context-menu-surface cfms-acrylic-surface cfms-menu-surface fixed z-50"
     style="left: {menuX}px; top: {menuY}px; transform-origin: {originX} {originY};"
     transition:menuScale={{ duration: 140 }}
     role="menu"
@@ -138,23 +139,19 @@
   >
     {#each visibleItems as item, index (`${isContextMenuDivider(item) ? 'divider' : item.id}:${index}`)}
       {#if isContextMenuDivider(item)}
-        <div class="my-1 border-t border-md3-outline/60" role="separator"></div>
+        <div class="context-menu-separator" role="separator"></div>
       {:else}
         <button
           data-menu-item
-          class="w-full text-left px-3 py-2 text-sm transition-colors
-                 flex items-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed
-                 {item.danger
-                   ? 'text-md3-error hover:bg-md3-error-container/30'
-                   : 'text-md3-on-surface hover:bg-md3-primary-container/30'}"
-          style="font-family: var(--font-md3-sans);"
+          class="context-menu-item"
+          class:danger={item.danger}
           role="menuitem"
           tabindex="-1"
           onclick={() => handleItemSelect(item)}
           disabled={item.disabled}
         >
-          <Icon name={item.icon} size="16px" />
-          <span class="truncate">{item.label}</span>
+          <Icon name={item.icon} size="20px" filled={item.iconFilled} duotone={!item.iconFilled && !item.danger && !item.disabled} />
+          <span class="context-menu-label">{item.label}</span>
         </button>
       {/if}
     {/each}
@@ -163,11 +160,40 @@
 
 <style>
   .context-menu-surface {
+    width: max-content;
+    min-width: min(190px, calc(100vw - 16px));
+    max-width: min(320px, calc(100vw - 16px));
+    padding: 4px;
     max-height: calc(100dvh - 16px);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    will-change: opacity, transform, filter;
+    font: 400 14px/20px var(--fontFamilyBase);
   }
-
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-block-size: 32px;
+    padding: 6px 8px;
+    border-radius: var(--borderRadiusMedium);
+    color: var(--colorNeutralForeground1);
+    text-align: start;
+    cursor: default;
+    transition: background-color var(--durationFaster) var(--curveEasyEase);
+  }
+  .context-menu-item:hover:not(:disabled), .context-menu-item:focus-visible { background: var(--colorSubtleBackgroundHover); }
+  .context-menu-item:active:not(:disabled) { background: var(--colorSubtleBackgroundPressed); }
+  .context-menu-item.danger { color: var(--colorStatusDangerForeground1); }
+  .context-menu-item:disabled { color: var(--colorNeutralForegroundDisabled); cursor: not-allowed; }
+  .context-menu-label { min-width: 0; overflow-wrap: anywhere; }
+  .context-menu-separator { margin-block: 4px; border-top: 1px solid var(--colorNeutralStroke2); }
+  @media (pointer: coarse) { .context-menu-item { min-block-size: 44px; } }
+  @media (forced-colors: active) {
+    .context-menu-item.danger { color: CanvasText; }
+    .context-menu-item:disabled { color: GrayText; }
+    .context-menu-item:is(:hover, :focus-visible, :active):not(:disabled) { color: HighlightText; background: Highlight; }
+    .context-menu-separator { border-color: CanvasText; }
+  }
 </style>

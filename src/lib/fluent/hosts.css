@@ -1,0 +1,98 @@
+/* Tailwind preflight's universal border/padding reset crosses the shadow host
+ * boundary and wins over normal :host rules. Restore only those host defaults;
+ * Fluent still owns the internal geometry, focus and background states. */
+.cfms-button {
+  border: 1px solid var(--colorNeutralStroke1);
+  border-radius: var(--borderRadiusMedium);
+  padding: 5px 12px;
+}
+.cfms-button:is([appearance="primary"], [appearance="subtle"], [appearance="transparent"]) {
+  border-color: transparent;
+}
+.cfms-button[disabled][appearance="outline"] { border-color: var(--colorNeutralStrokeDisabled); }
+.cfms-button[data-tone="primary"] { --colorNeutralForeground2: var(--colorBrandForeground1); }
+/* Continuous lists own their outer stroke and separators. The native grid
+ * inside the content part owns columns; the Fluent host remains the button. */
+.cfms-button.cfms-list-row {
+  display: flex;
+  inline-size: 100%;
+  min-inline-size: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  text-align: start;
+  box-shadow: none;
+}
+.cfms-button.cfms-list-row[shape="square"]::part(content) {
+  display: block;
+  inline-size: 100%;
+  min-inline-size: 0;
+  white-space: normal;
+}
+.cfms-list-rows > .cfms-list-row + .cfms-list-row {
+  border-block-start: 1px solid color-mix(in srgb, var(--colorNeutralStroke1) 50%, transparent);
+}
+.cfms-button.cfms-list-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--colorStrokeFocus2);
+}
+@media (forced-colors: active) {
+  .cfms-button.cfms-list-row:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+    box-shadow: none;
+  }
+}
+.cfms-button[data-tone="warning"] { --colorNeutralForeground2: var(--colorStatusWarningForeground1); }
+.cfms-button[data-tone="danger"] {
+  --colorNeutralForeground2: var(--colorStatusDangerForeground1);
+  --colorBrandBackground: var(--colorStatusDangerBackground3);
+  --colorBrandBackgroundHover: var(--colorStatusDangerBackground3Hover);
+  --colorBrandBackgroundPressed: var(--colorStatusDangerBackground3Pressed);
+  --colorNeutralForegroundOnBrand: var(--colorNeutralForegroundStaticInverted);
+}
+.cfms-switch, .cfms-checkbox, .cfms-radio {
+  border: 1px solid var(--colorNeutralStrokeAccessible);
+}
+.cfms-switch { padding: 0 2px; }
+.cfms-switch[aria-checked="true"],
+.cfms-checkbox[aria-checked="true"],
+.cfms-radio[aria-checked="true"] { border-color: var(--colorCompoundBrandStroke); }
+.cfms-switch[aria-disabled="true"],
+.cfms-checkbox[aria-disabled="true"],
+.cfms-radio[aria-disabled="true"] { border-color: var(--colorNeutralStrokeDisabled); }
+@media (forced-colors: active) {
+  .cfms-button, .cfms-switch, .cfms-checkbox, .cfms-radio { border-color: ButtonText; }
+  .cfms-switch[aria-checked="true"],
+  .cfms-checkbox[aria-checked="true"],
+  .cfms-radio[aria-checked="true"] { border-color: Highlight; }
+  .cfms-button[aria-disabled="true"],
+  .cfms-switch[aria-disabled="true"],
+  .cfms-checkbox[aria-disabled="true"],
+  .cfms-radio[aria-disabled="true"] { border-color: GrayText; }
+}
+
+/* EscalationControl.svelte */
+.escalation-button[data-fluent-owner="lib-components-escalation-control"] { display: inline-flex; inline-size: 32px; block-size: 32px; padding: 0; align-items: center; justify-content: center; }
+@media (pointer: coarse) {
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"] { inline-size: 44px; block-size: 44px; }
+}
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='true'],
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='true']:hover:not(:is(:disabled, [disabled])) {
+    color: var(--explorer-danger);
+    background: color-mix(in srgb, var(--explorer-danger) 14%, transparent);
+  }
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='false']:hover:not(:is(:disabled, [disabled])),
+  .escalation-button[data-fluent-owner="lib-components-escalation-control"][data-active='false']:focus-visible {
+    color: var(--explorer-warning);
+    background: color-mix(in srgb, var(--explorer-warning) 14%, transparent);
+  }
+
+/* DialogActionButton.svelte */
+.dialog-action-button--danger {
+    --colorBrandBackground: var(--colorStatusDangerBackground3);
+    --colorBrandBackgroundHover: var(--colorStatusDangerBackground3Hover);
+    --colorBrandBackgroundPressed: var(--colorStatusDangerBackground3Pressed);
+    --colorNeutralForegroundOnBrand: var(--colorNeutralForegroundStaticInverted);
+  }
+  .dialog-action-button--tonal { --colorNeutralBackground1: var(--colorBrandBackground2); }
+  .dialog-action-button .md-progress-ring { color: inherit; }

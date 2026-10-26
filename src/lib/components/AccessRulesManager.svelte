@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { untrack, type Snippet } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -290,24 +291,26 @@
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden" inert={saving} aria-busy={saving}>
   <div class="border-b border-md3-outline px-5 py-3">
     <div class="flex flex-wrap items-center gap-2">
-      <button
+      <FluentButton data-fluent-owner="lib-components-access-rules-manager"
         type="button"
-        class="editor-tab {activeView === 'visual' ? 'editor-tab-active' : ''}"
         onclick={() => selectEditorView('visual')}
         disabled={saving}
+        appearance="subtle"
+        class={"editor-tab " + (activeView === 'visual' ? 'editor-tab-active' : '')}
       >
         <Icon name="rule" size="17px" />
         {$t('files.accessRulesVisualization')}
-      </button>
-      <button
+      </FluentButton>
+      <FluentButton data-fluent-owner="lib-components-access-rules-manager"
         type="button"
-        class="editor-tab {activeView === 'source' ? 'editor-tab-active' : ''}"
         onclick={() => selectEditorView('source')}
         disabled={saving}
+        appearance="subtle"
+        class={"editor-tab " + (activeView === 'source' ? 'editor-tab-active' : '')}
       >
         <Icon name="code" size="17px" />
         {$t('files.sourceCode')}
-      </button>
+      </FluentButton>
       <div class="ml-auto flex items-center gap-2 text-sm text-md3-on-surface-variant">
         <MdSwitch
           bind:checked={inherit}
@@ -322,17 +325,18 @@
 
   {#if activeView === 'visual'}
     <div class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[150px_1fr]">
-      <nav class="border-b border-md3-outline bg-md3-surface-container/60 p-3 md:border-b-0 md:border-r">
+      <nav class="border-b border-md3-outline bg-md3-surface-container p-3 md:border-b-0 md:border-r">
         <p class="mb-2 px-2 text-[11px] font-medium uppercase text-md3-on-surface-variant">
           {$t('files.accessOperation')}
         </p>
         <div class="grid grid-cols-2 gap-2 md:grid-cols-1">
           {#each ACCESS_OPERATIONS as operation}
-            <button
+            <FluentButton data-fluent-owner="lib-components-access-rules-manager"
               type="button"
-              class="operation-button {activeOperation === operation ? 'operation-button-active' : ''}"
               onclick={() => setActiveOperation(operation)}
               disabled={saving}
+              appearance="subtle"
+              class={"operation-button " + (activeOperation === operation ? 'operation-button-active' : '')}
             >
               {#if operation === 'read'}
                 <Icon name="visibility" size="18px" />
@@ -344,7 +348,7 @@
                 <Icon name="manageAccounts" size="18px" />
               {/if}
               {$t(`files.operation.${operation}`)}
-            </button>
+            </FluentButton>
           {/each}
         </div>
       </nav>
@@ -359,15 +363,16 @@
               {$t('files.ruleGroupsCount', { values: { count: operationRules.length } })}
             </p>
           </div>
-          <button
+          <FluentButton data-fluent-owner="lib-components-access-rules-manager"
             type="button"
-            class="filled-button"
             onclick={addRuleGroup}
             disabled={saving}
+            appearance="subtle"
+            class="filled-button"
           >
             <Icon name="add" size="17px" />
             {$t('files.addRuleGroup')}
-          </button>
+          </FluentButton>
         </div>
 
         {#if operationRules.length === 0}
@@ -377,7 +382,7 @@
         {:else}
           <div class="space-y-4">
             {#each operationRules as group, groupIndex}
-              <section class="rounded-lg border border-md3-outline bg-md3-surface-container/70">
+              <section class="rounded-lg border border-md3-outline bg-md3-surface-container">
                 <div class="flex flex-wrap items-center gap-3 border-b border-md3-outline px-4 py-3">
                   <div class="min-w-0">
                     <h5 class="text-sm font-semibold text-md3-on-surface">
@@ -387,7 +392,7 @@
                   <label class="ml-auto flex items-center gap-2 text-xs text-md3-on-surface-variant">
                     {$t('files.matchMode')}
                     <select
-                      class="select-field"
+                      class="cfms-native-field select-field"
                       value={group.match}
                       onchange={(event) => updateRuleGroup(groupIndex, { match: selectValue(event) as MatchMode })}
                       disabled={saving}
@@ -396,20 +401,24 @@
                       <option value="any">{$t('files.anyOr')}</option>
                     </select>
                   </label>
-                  <button
+                  <FluentButton data-fluent-owner="lib-components-access-rules-manager"
                     type="button"
-                    class="icon-button danger-button"
                     title={$t('files.deleteRuleGroup')}
                     onclick={() => removeRuleGroup(groupIndex)}
                     disabled={saving}
+                    appearance="subtle"
+                    tone="danger"
+                    class="icon-button danger-button"
+                    iconOnly
+                    aria-label={$t('files.deleteRuleGroup')}
                   >
                     <Icon name="delete" size="18px" />
-                  </button>
+                  </FluentButton>
                 </div>
 
                 <div class="space-y-3 p-4">
                   {#each group.match_groups as subRule, subRuleIndex}
-                    <article class="rounded-lg border border-md3-outline/70 bg-md3-surface/35">
+                    <article class="rounded-lg border border-md3-outline/70 bg-md3-surface">
                       <div class="flex flex-wrap items-center gap-3 border-b border-md3-outline/60 px-3 py-2.5">
                         <span class="text-sm font-medium text-md3-on-surface">
                           {$t('files.subgroup')} #{subRuleIndex + 1}
@@ -417,7 +426,7 @@
                         <label class="ml-auto flex items-center gap-2 text-xs text-md3-on-surface-variant">
                           {$t('files.matchMode')}
                           <select
-                            class="select-field"
+                            class="cfms-native-field select-field"
                             value={subRule.match}
                             onchange={(event) => updateSubRule(groupIndex, subRuleIndex, { match: selectValue(event) as MatchMode })}
                             disabled={saving}
@@ -426,28 +435,32 @@
                             <option value="any">{$t('files.anyOr')}</option>
                           </select>
                         </label>
-                        <button
+                        <FluentButton data-fluent-owner="lib-components-access-rules-manager"
                           type="button"
-                          class="icon-button danger-button"
                           title={$t('files.deleteSubgroup')}
                           onclick={() => removeSubRule(groupIndex, subRuleIndex)}
                           disabled={saving}
+                          appearance="subtle"
+                          tone="danger"
+                          class="icon-button danger-button"
+                          iconOnly
+                          aria-label={$t('files.deleteSubgroup')}
                         >
                           <Icon name="remove" size="18px" />
-                        </button>
+                        </FluentButton>
                       </div>
 
                       <div class="grid gap-3 p-3 lg:grid-cols-2">
                         {#each CONDITION_TYPES as type}
                           {@const block = subRule[type]}
                           {#if block}
-                            <div class="rounded-lg border border-md3-outline/60 bg-md3-surface-container/55 p-3">
+                            <div class="rounded-lg border border-md3-outline/60 bg-md3-surface-container p-3">
                               <div class="mb-3 flex items-center gap-2">
                                 <span class="text-sm font-medium text-md3-on-surface">
                                   {$t(`files.condition.${type}`)}
                                 </span>
                                 <select
-                                  class="select-field ml-auto"
+                                  class="cfms-native-field select-field ml-auto"
                                   value={block.match}
                                   onchange={(event) => updateConditionBlock(groupIndex, subRuleIndex, type, { match: selectValue(event) as MatchMode })}
                                   disabled={saving}
@@ -455,15 +468,19 @@
                                   <option value="all">{$t('files.allAnd')}</option>
                                   <option value="any">{$t('files.anyOr')}</option>
                                 </select>
-                                <button
+                                <FluentButton data-fluent-owner="lib-components-access-rules-manager"
                                   type="button"
-                                  class="icon-button danger-button"
                                   title={$t('files.removeSection')}
                                   onclick={() => setConditionBlock(groupIndex, subRuleIndex, type, undefined)}
                                   disabled={saving}
+                                  appearance="subtle"
+                                  tone="danger"
+                                  class="icon-button danger-button"
+                                  iconOnly
+                                  aria-label={$t('files.removeSection')}
                                 >
                                   <Icon name="close" size="17px" />
-                                </button>
+                                </FluentButton>
                               </div>
 
                               {#if block.require.length === 0}
@@ -475,15 +492,19 @@
                                   {#each block.require as entry, entryIndex}
                                     <span class="inline-flex max-w-full items-center gap-1 rounded-full bg-md3-surface-container-high px-2.5 py-1 text-xs text-md3-on-surface">
                                       <span class="truncate">{entry}</span>
-                                      <button
+                                      <FluentButton data-fluent-owner="lib-components-access-rules-manager"
                                         type="button"
-                                        class="text-md3-on-surface-variant hover:text-md3-error"
                                         title={$t('files.removeEntry')}
                                         onclick={() => removeConditionEntry(groupIndex, subRuleIndex, type, entryIndex)}
                                         disabled={saving}
+                                        appearance="subtle"
+                                        tone="danger"
+                                        class="text-md3-on-surface-variant hover:text-md3-error"
+                                        iconOnly
+                                        aria-label={$t('files.removeEntry')}
                                       >
                                         <Icon name="close" size="14px" />
-                                      </button>
+                                      </FluentButton>
                                     </span>
                                   {/each}
                                 </div>
@@ -500,13 +521,21 @@
                               >
                                 <input
                                   name="entry"
-                                  class="min-w-0 flex-1 rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
+                                  class="cfms-native-field min-w-0 flex-1 rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
                                   placeholder={type === 'rights' ? $t('files.rightNamePlaceholder') : $t('files.groupNamePlaceholder')}
                                   disabled={saving}
                                 />
-                                <button type="submit" class="icon-button primary-button" title={$t('files.addEntry')} disabled={saving}>
+                                <FluentButton data-fluent-owner="lib-components-access-rules-manager"
+                                  type="submit"
+                                  title={$t('files.addEntry')}
+                                  disabled={saving}
+                                  appearance="subtle"
+                                  class="icon-button primary-button"
+                                  iconOnly
+                                  aria-label={$t('files.addEntry')}
+                                >
                                   <Icon name="add" size="18px" />
-                                </button>
+                                </FluentButton>
                               </form>
                             </div>
                           {/if}
@@ -515,26 +544,28 @@
                         {#if !subRule.rights || !subRule.groups}
                           <div class="flex flex-wrap items-start gap-2">
                             {#if !subRule.rights}
-                              <button
+                              <FluentButton data-fluent-owner="lib-components-access-rules-manager"
                                 type="button"
-                                class="outline-button"
                                 onclick={() => setConditionBlock(groupIndex, subRuleIndex, 'rights', createConditionBlock())}
                                 disabled={saving}
+                                appearance="subtle"
+                                class="outline-button"
                               >
                                 <Icon name="add" size="17px" />
                                 {$t('files.addRightsSection')}
-                              </button>
+                              </FluentButton>
                             {/if}
                             {#if !subRule.groups}
-                              <button
+                              <FluentButton data-fluent-owner="lib-components-access-rules-manager"
                                 type="button"
-                                class="outline-button"
                                 onclick={() => setConditionBlock(groupIndex, subRuleIndex, 'groups', createConditionBlock())}
                                 disabled={saving}
+                                appearance="subtle"
+                                class="outline-button"
                               >
                                 <Icon name="add" size="17px" />
                                 {$t('files.addGroupsSection')}
-                              </button>
+                              </FluentButton>
                             {/if}
                           </div>
                         {/if}
@@ -542,15 +573,16 @@
                     </article>
                   {/each}
 
-                  <button
+                  <FluentButton data-fluent-owner="lib-components-access-rules-manager"
                     type="button"
-                    class="outline-button"
                     onclick={() => addSubRule(groupIndex)}
                     disabled={saving}
+                    appearance="subtle"
+                    class="outline-button"
                   >
                     <Icon name="add" size="17px" />
                     {$t('files.addSubgroup')}
-                  </button>
+                  </FluentButton>
                 </div>
               </section>
             {/each}
@@ -606,15 +638,15 @@
 </div>
 
 <style>
-  .editor-tab,
-  .operation-button,
-  .filled-button,
-  .outline-button,
-  .icon-button {
+  :global(.editor-tab[data-fluent-owner="lib-components-access-rules-manager"]),
+  :global(.operation-button[data-fluent-owner="lib-components-access-rules-manager"]),
+  :global(.filled-button[data-fluent-owner="lib-components-access-rules-manager"]),
+  :global(.outline-button[data-fluent-owner="lib-components-access-rules-manager"]),
+  :global(.icon-button[data-fluent-owner="lib-components-access-rules-manager"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem;
+    gap: 8px;
     transition:
       background-color 150ms ease,
       border-color 150ms ease,
@@ -622,83 +654,83 @@
       filter 150ms ease;
   }
 
-  .editor-tab {
+  :global(.editor-tab[data-fluent-owner="lib-components-access-rules-manager"]) {
     min-height: 2.25rem;
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.45rem 0.85rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
   }
 
-  .editor-tab:hover,
-  .operation-button:hover,
-  .outline-button:hover,
-  .icon-button:hover {
+  :global(.editor-tab[data-fluent-owner="lib-components-access-rules-manager"]):hover,
+  :global(.operation-button[data-fluent-owner="lib-components-access-rules-manager"]:hover),
+  :global(.outline-button[data-fluent-owner="lib-components-access-rules-manager"]:hover),
+  :global(.icon-button[data-fluent-owner="lib-components-access-rules-manager"]:hover) {
     background: color-mix(in srgb, var(--color-md3-primary-container) 34%, transparent);
   }
 
-  .editor-tab-active,
-  .operation-button-active {
+  :global(.editor-tab-active[data-fluent-owner="lib-components-access-rules-manager"]),
+  :global(.operation-button-active[data-fluent-owner="lib-components-access-rules-manager"]) {
     background: var(--color-md3-primary-container);
     color: var(--color-md3-on-primary-container);
   }
 
-  .operation-button {
+  :global(.operation-button[data-fluent-owner="lib-components-access-rules-manager"]) {
     min-height: 2.5rem;
-    border-radius: 0.5rem;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.55rem 0.7rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
   }
 
-  .filled-button {
+  :global(.filled-button[data-fluent-owner="lib-components-access-rules-manager"]) {
     min-height: 2.25rem;
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     background: var(--color-md3-primary);
     color: var(--color-md3-on-primary);
     padding: 0.5rem 1rem;
-    font-size: 0.875rem;
+    font-size: 14px;
     font-weight: 500;
   }
 
-  .outline-button {
+  :global(.outline-button[data-fluent-owner="lib-components-access-rules-manager"]) {
     min-height: 2.25rem;
     border: 1px solid var(--color-md3-outline);
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     color: var(--color-md3-on-surface);
     padding: 0.45rem 0.85rem;
-    font-size: 0.8125rem;
+    font-size: 12px;
   }
 
-  .icon-button {
+  :global(.icon-button[data-fluent-owner="lib-components-access-rules-manager"]) {
     width: 2rem;
     height: 2rem;
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     color: var(--color-md3-on-surface-variant);
   }
 
-  .primary-button {
+  :global(.primary-button[data-fluent-owner="lib-components-access-rules-manager"]) {
     background: var(--color-md3-primary-container);
     color: var(--color-md3-on-primary-container);
   }
 
-  .danger-button:hover {
+  :global(.danger-button[data-fluent-owner="lib-components-access-rules-manager"]:hover) {
     background: var(--color-md3-error-container);
     color: var(--color-md3-on-error-container);
   }
 
-  .filled-button:disabled,
-  .outline-button:disabled,
-  .icon-button:disabled,
-  .editor-tab:disabled,
-  .operation-button:disabled {
+  :global(.filled-button[data-fluent-owner="lib-components-access-rules-manager"]:is(:disabled, [disabled])),
+  :global(.outline-button[data-fluent-owner="lib-components-access-rules-manager"]:is(:disabled, [disabled])),
+  :global(.icon-button[data-fluent-owner="lib-components-access-rules-manager"]:is(:disabled, [disabled])),
+  :global(.editor-tab[data-fluent-owner="lib-components-access-rules-manager"]):is(:disabled, [disabled]),
+  :global(.operation-button[data-fluent-owner="lib-components-access-rules-manager"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.55;
   }
 
   .select-field {
     min-height: 2rem;
-    border-radius: 0.5rem;
+    border-radius: var(--borderRadiusMedium);
     border: 1px solid var(--color-md3-outline);
     background: var(--color-md3-field);
     color: var(--color-md3-on-surface);

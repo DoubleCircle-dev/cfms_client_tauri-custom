@@ -28,3 +28,20 @@ it('accepts an explicit user ID when list permission is unavailable', async () =
   await fireEvent.click(screen.getByRole('button', { name: /files.grantAccessAction/ }));
   expect(submit).toHaveBeenCalledWith(expect.objectContaining({ entityType: 'user', entityIdentifier: userId }));
 });
+
+it('changes the selected search result and submits that result’s immutable ID', async () => {
+  const users = [
+    { user_id: 'user-alice', username: 'alice', nickname: 'Alice' },
+    { user_id: 'user-bob', username: 'bob', nickname: 'Bob' },
+  ];
+  mocks.users.mockResolvedValue(users);
+  const submit = vi.fn();
+  render(AuthorizeAccessDialog, { targetName: 'Document', targetType: 'document', canListUsers: true, canListGroups: false, onSubmit: submit, onCancel: vi.fn() });
+  await fireEvent.input(screen.getByPlaceholderText('files.usernamePlaceholder'), { target: { value: 'user' } });
+  await fireEvent.click(screen.getByRole('button', { name: /files.searchEntity/ }));
+  await fireEvent.click(await screen.findByRole('button', { name: /alice Alice/ }));
+  const bob = screen.getByRole('button', { name: /bob Bob/ });
+  await fireEvent.click(bob);
+  await fireEvent.click(screen.getByRole('button', { name: /files.grantAccessAction/ }));
+  expect(submit).toHaveBeenCalledWith(expect.objectContaining({ entityType: 'user', entityIdentifier: 'user-bob' }));
+});

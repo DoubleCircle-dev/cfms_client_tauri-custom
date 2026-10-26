@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import {
     changelogEntries,
@@ -24,16 +25,17 @@
       <p>{$t('changelog.description')}</p>
     </div>
     {#if changelogEntries.length > 1}
-      <button
+      <FluentButton data-fluent-owner="lib-components-changelog-panel"
         type="button"
-        class="text-action"
         aria-expanded={expanded}
         aria-controls="changelog-entries"
         onclick={() => (expanded = !expanded)}
+        appearance="subtle"
+        class="text-action"
       >
         <Icon name={expanded ? 'expandLess' : 'expandMore'} size="18px" />
         {expanded ? $t('changelog.showLess') : $t('changelog.showAll')}
-      </button>
+      </FluentButton>
     {/if}
   </div>
 
@@ -65,7 +67,7 @@
 <style>
   .changelog-panel {
     display: grid;
-    gap: 1.05rem;
+    gap: 16px;
     padding-top: 1.5rem;
     border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
   }
@@ -74,7 +76,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
   }
 
   h2,
@@ -87,34 +89,34 @@
   h3 {
     color: var(--color-md3-on-surface);
     font-family: var(--font-md3-sans);
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: -0.01em;
   }
 
   h2 {
-    font-size: 1rem;
+    font-size: 16px;
   }
 
   h3 {
     margin-top: 0.1rem;
-    font-size: 0.95rem;
+    font-size: 16px;
   }
 
   p {
     margin-top: 0.3rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
   }
 
   .entry-list {
     display: grid;
-    gap: 1rem;
+    gap: 16px;
   }
 
   .changelog-entry {
     display: grid;
     grid-template-columns: 1.2rem minmax(0, 1fr);
-    gap: 0.85rem;
+    gap: 12px;
     min-width: 0;
   }
 
@@ -156,14 +158,14 @@
   .entry-body {
     min-width: 0;
     display: grid;
-    gap: 0.65rem;
+    gap: 12px;
     padding-bottom: 0.15rem;
   }
 
   .entry-title {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 16px;
   }
 
   .version {
@@ -176,17 +178,17 @@
     flex: none;
     color: var(--color-md3-on-surface-variant);
     font-family: var(--font-md3-sans);
-    font-size: 0.75rem;
+    font-size: 12px;
   }
 
-  .text-action {
+  :global(.text-action[data-fluent-owner="lib-components-changelog-panel"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.35rem;
+    gap: 4px;
     min-height: 2.2rem;
     flex: none;
-    border-radius: 6px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0 0.65rem;
     color: var(--color-md3-primary-emphasis);
     font: 650 0.8125rem var(--font-md3-sans);
@@ -195,12 +197,12 @@
       transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate);
   }
 
-  .text-action:hover {
+  :global(.text-action[data-fluent-owner="lib-components-changelog-panel"]:hover) {
     background: color-mix(in srgb, var(--color-md3-primary-emphasis) 10%, transparent);
   }
 
-  .text-action:active {
-    transform: scale(0.97);
+  :global(.text-action[data-fluent-owner="lib-components-changelog-panel"]:active) {
+    transform: none;
   }
 
   .entry-revealed {
@@ -223,7 +225,7 @@
   }
 
   @media (pointer: coarse) {
-    .text-action {
+    :global(.text-action[data-fluent-owner="lib-components-changelog-panel"]) {
       min-height: 44px;
     }
   }

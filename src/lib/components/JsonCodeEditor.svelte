@@ -188,6 +188,8 @@
 
 <style>
   .code-editor {
+    --color-md3-field: var(--colorNeutralBackground1);
+    --color-md3-surface-container-high: var(--colorNeutralBackground2);
     position: relative;
     overflow: hidden;
     border: 1px solid var(--color-md3-outline);

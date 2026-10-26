@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
   import { onMount, tick } from 'svelte';
   import { page } from '$app/stores';
+  import FluentButton from "$lib/components/FluentButton.svelte";
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
   import {
@@ -421,7 +422,7 @@
 <div class="explorer-shell">
   <header class="explorer-topbar" data-keyboard-region="toolbar">
     <div class="explorer-topbar-leading">
-      <button
+      <FluentButton appearance="subtle" iconOnly
         type="button"
         class="explorer-command-button explorer-mobile-menu"
         title={$t('workspace.toggleNavigation')}
@@ -430,7 +431,7 @@
         onclick={(event) => { event.stopPropagation(); drawerOpen = !drawerOpen; }}
       >
         <Icon name="sidebarToggle" size="20px" />
-      </button>
+      </FluentButton>
 
       {#if isSettingsRoute}
         <span class="explorer-route-title">{currentTitle}</span>
@@ -489,7 +490,7 @@
         </button>
 
         {#if accountMenuOpen}
-          <div class="explorer-account-menu" role="menu" tabindex="-1" onkeydown={handleAccountMenuKeydown}>
+          <div class="explorer-account-menu cfms-acrylic-surface cfms-account-surface" role="menu" tabindex="-1" onkeydown={handleAccountMenuKeydown}>
             <div class="explorer-account-summary" role="presentation">
               {#if canChangeOwnAvatar}
                 <button
@@ -695,15 +696,14 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: color-mix(in srgb, var(--explorer-surface-raised) 88%, transparent);
-    backdrop-filter: blur(24px) saturate(1.25);
+    background: var(--colorNeutralBackground2);
   }
 
   .explorer-topbar-leading { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
   .explorer-topbar:has(:global(.lockdown-reason-entry)) { grid-template-columns: minmax(0, 1fr) auto; }
   .explorer-topbar:has(:global(.lockdown-reason-entry)) .explorer-topbar-actions { grid-column: 2; grid-row: 1; }
   .explorer-topbar:has(:global(.lockdown-reason-entry)) :global(.escalation-countdown) { grid-column: 1 / -1; grid-row: 2; }
-  .explorer-mobile-menu { display: none; width: 34px; padding: 0; }
+  .explorer-topbar :global(.explorer-mobile-menu) { display: none; width: 34px; padding: 0; }
   .explorer-route-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--explorer-text); font-family: var(--font-md3-sans); font-size: 0.9rem; font-weight: 600; }
   .explorer-topbar-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 0.4rem; }
   .explorer-public-utility-close {
@@ -724,8 +724,8 @@
   .explorer-account-trigger > strong { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; font-weight: 600; }
   .explorer-connection-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; background: var(--explorer-danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--explorer-danger) 15%, transparent); }
   .explorer-connection-dot.connected { background: var(--explorer-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--explorer-success) 15%, transparent); }
-  .explorer-account-menu { position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 80; display: grid; min-width: 220px; overflow: hidden; border: 1px solid var(--explorer-border-strong); border-radius: var(--explorer-radius-medium); padding: 0.3rem; background: color-mix(in srgb, var(--explorer-surface-raised) 96%, transparent); box-shadow: var(--explorer-shadow); backdrop-filter: blur(24px); animation: menu-enter 120ms ease-out both; }
-  .explorer-account-menu button { display: flex; align-items: center; gap: 0.65rem; border-radius: 5px; padding: 0.5rem 0.6rem; color: var(--explorer-text); font-size: 0.78rem; text-align: left; }
+  .explorer-account-menu { position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 80; display: grid; min-width: 220px; overflow: hidden; padding: 0.3rem; animation: menu-enter 120ms ease-out both; }
+  .explorer-account-menu button { display: flex; align-items: center; gap: 0.65rem; border-radius: var(--borderRadiusMedium); padding: 0.5rem 0.6rem; color: var(--explorer-text); font-size: 0.78rem; text-align: left; }
   .explorer-account-menu button:hover:not(:disabled) { background: var(--explorer-surface-hover); }
   .explorer-account-menu button:disabled { opacity: 0.45; }
   .explorer-account-summary { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 0.7rem; padding: 0.65rem; }
@@ -740,6 +740,10 @@
   .explorer-menu-separator { height: 1px; margin: 0.25rem 0.35rem; background: var(--explorer-border); }
   .explorer-workspace { position: relative; display: flex; flex: 1; min-height: 0; }
   .explorer-navigation { z-index: 35; display: flex; width: 244px; min-width: 244px; flex-direction: column; border-right: 1px solid var(--explorer-border); padding: 0.55rem; background: var(--explorer-surface); }
+  :global(html[data-window-backdrop="mica"]) .explorer-topbar::before,
+  :global(html[data-window-backdrop="mica"]) .explorer-navigation,
+  :global(html[data-window-backdrop="mica"]) .explorer-content { background: transparent; }
+  @media (max-width: 820px) { :global(html[data-window-backdrop="mica"]) .explorer-navigation { background: var(--cfms-acrylic); } }
   .explorer-navigation-main { min-height: 0; flex: 1; overflow-y: auto; }
   .explorer-navigation-bottom { display: grid; gap: 0.1rem; border-top: 1px solid var(--explorer-border); padding-top: 0.45rem; }
   .explorer-nav-item { position: relative; display: grid; width: 100%; min-height: 36px; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 0.45rem; border-radius: var(--explorer-radius-small); padding: 0.35rem 0.55rem; color: var(--explorer-text); font-size: 0.79rem; text-align: left; transition: background 100ms ease; }
@@ -749,20 +753,26 @@
   .explorer-nav-item span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .explorer-nav-badge { min-width: 19px; border-radius: 999px; padding: 0.08rem 0.35rem; color: var(--explorer-text); background: var(--explorer-accent-soft); font-size: 0.65rem; text-align: center; }
   .explorer-nav-section { margin-top: 0.65rem; border-top: 1px solid var(--explorer-border); padding-top: 0.65rem; }
-  .explorer-nav-section-title { padding: 0 0.55rem 0.35rem; color: var(--explorer-text-muted); font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .explorer-nav-section-title { padding: 0 0.55rem 0.35rem; color: var(--explorer-text-muted); font-size: 0.68rem; font-weight: 600; text-transform: none; letter-spacing: normal; }
   .explorer-nav-favorite { color: var(--explorer-text-muted); }
-  .explorer-nav-favorite :global(.material-symbols-rounded) { color: var(--explorer-folder); }
+  .explorer-nav-favorite :global(.cfms-icon) { color: var(--explorer-folder); }
   .explorer-nav-empty { padding: 0.3rem 0.55rem; color: var(--explorer-text-muted); font-size: 0.7rem; line-height: 1.4; }
   .explorer-nav-loading { padding: 0.5rem; }
-  .explorer-content { position: relative; min-width: 0; flex: 1; overflow: hidden; background: var(--explorer-background); }
+  .explorer-content { position: relative; min-width: 0; flex: 1; overflow: hidden; background: var(--colorNeutralBackground1); }
   .explorer-route-view { height: 100%; min-height: 0; overflow-y: auto; container-type: inline-size; animation: route-enter 160ms ease-out; }
   .explorer-drawer-scrim { display: none; }
+
+  @media (forced-colors: active) {
+    .explorer-topbar::before,
+    .explorer-navigation,
+    .explorer-content { background: Canvas !important; }
+  }
 
   @keyframes route-enter { from { opacity: 0; } to { opacity: 1; } }
   @keyframes menu-enter { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
   @media (max-width: 820px) {
-    .explorer-mobile-menu { display: inline-flex; }
+    .explorer-topbar :global(.explorer-mobile-menu) { display: inline-flex; }
     .explorer-navigation {
       position: absolute;
       top: 0;
@@ -772,11 +782,12 @@
       min-width: min(86vw, 320px);
       transform: translateX(-102%);
       border-right-color: var(--explorer-border-strong);
-      border-radius: 0 20px 20px 0;
+      border-radius: 0 12px 12px 0;
       padding: 0.75rem 0.7rem max(0.75rem, var(--safe-area-bottom));
-      background: color-mix(in srgb, var(--explorer-surface-raised) 96%, transparent);
-      box-shadow: var(--explorer-shadow);
-      backdrop-filter: blur(24px) saturate(1.2);
+      background: var(--cfms-acrylic);
+      box-shadow: var(--shadow64);
+      -webkit-backdrop-filter: var(--cfms-material-filter);
+      backdrop-filter: var(--cfms-material-filter);
       transition: transform 220ms var(--motion-easing-emphasized-decelerate);
     }
     .explorer-navigation--open { transform: translateX(0); }
@@ -785,7 +796,7 @@
     .explorer-nav-item {
       min-height: 48px;
       gap: 0.7rem;
-      border-radius: 14px;
+      border-radius: var(--borderRadiusXLarge);
       padding: 0.65rem 0.75rem;
       font-size: 0.84rem;
       touch-action: manipulation;
@@ -801,7 +812,6 @@
       display: block;
       border: 0;
       background: rgba(0, 0, 0, 0.42);
-      backdrop-filter: blur(2px);
       animation: drawer-scrim-in 180ms ease-out both;
     }
 
@@ -824,5 +834,16 @@
     .explorer-route-title { font-size: 0.82rem; }
     .explorer-public-utility-close span { display: none; }
     .explorer-public-utility-close { width: 34px; padding-inline: 0; }
+  }
+
+  @media (pointer: coarse) {
+    .explorer-account-trigger,
+    .explorer-account-menu button,
+    .explorer-public-utility-close,
+    .explorer-topbar-actions :global(button) { min-height: 44px; min-width: 44px; }
+    .explorer-topbar :global(.explorer-mobile-menu) { min-width: 44px; min-height: 44px; }
+  }
+  @media (forced-colors: active) {
+    .explorer-navigation { box-shadow: none; }
   }
 </style>

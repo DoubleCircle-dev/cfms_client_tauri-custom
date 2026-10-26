@@ -1,4 +1,6 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -110,6 +112,7 @@
       busy = false;
     }
   }
+  const outlinedId = $props.id();
 </script>
 
 <ModalFrame
@@ -132,18 +135,19 @@
       </div>
       <div class="grid gap-2 sm:grid-cols-3">
         {#each blockOptions as option}
-          <button
+          <FluentButton data-fluent-owner="lib-components-block-user-dialog"
             type="button"
-            class="flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {selectedTypes.has(option.id)
-              ? 'border-md3-primary bg-md3-primary-container text-md3-on-primary-container shadow-lg shadow-md3-primary/10'
-              : 'border-md3-outline bg-md3-surface-container-high/40 text-md3-on-surface-variant hover:bg-md3-surface-container-high'}"
             disabled={busy}
             aria-pressed={selectedTypes.has(option.id)}
             onclick={() => toggleType(option.id)}
+            appearance="outline"
+            class={"flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 " + (selectedTypes.has(option.id)
+              ? 'border-md3-primary bg-md3-primary-container text-md3-on-primary-container shadow-lg shadow-md3-primary/10'
+              : 'border-md3-outline bg-md3-surface-container-high/40 text-md3-on-surface-variant hover:bg-md3-surface-container-high')}
           >
             <Icon name={option.icon} size="18px" />
             {$t(option.labelKey)}
-          </button>
+          </FluentButton>
         {/each}
       </div>
     </section>
@@ -155,49 +159,50 @@
       </div>
       <div class="grid gap-2 sm:grid-cols-3">
         {#each ['all', 'directory', 'document'] as type}
-          <button
+          <FluentButton data-fluent-owner="lib-components-block-user-dialog"
             type="button"
-            class="rounded-lg border px-3 py-2.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {targetType === type
-              ? 'border-md3-primary bg-md3-primary-container text-md3-on-primary-container'
-              : 'border-md3-outline bg-md3-surface-container-high/40 text-md3-on-surface-variant hover:bg-md3-surface-container-high'}"
             disabled={busy}
             aria-pressed={targetType === type}
             onclick={() => chooseTarget(type as TargetType)}
+            appearance="outline"
+            class={"rounded-lg border px-3 py-2.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 " + (targetType === type
+              ? 'border-md3-primary bg-md3-primary-container text-md3-on-primary-container'
+              : 'border-md3-outline bg-md3-surface-container-high/40 text-md3-on-surface-variant hover:bg-md3-surface-container-high')}
           >
             {type === 'all' ? $t('tasks.all') : type === 'directory' ? $t('files.directory') : $t('files.document')}
-          </button>
+          </FluentButton>
         {/each}
       </div>
 
       {#if targetType !== 'all'}
-        <label class="block">
-          <span class="mb-1.5 block text-sm font-medium text-md3-on-surface">
-            {targetType === 'directory' ? $t('manage.directoryId') : $t('manage.documentId')}
-          </span>
-          <input
-            class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
-            placeholder={targetType === 'directory' ? $t('manage.directoryIdPlaceholder') : $t('manage.documentIdPlaceholder')}
-            bind:value={targetId}
-            disabled={busy}
-          />
-        </label>
+        <div class="block">
+          <MdOutlinedField inputId={`${outlinedId}-1`} label={targetType === 'directory' ? $t('manage.directoryId') : $t('manage.documentId')} disabled={busy}>
+            <input id={`${outlinedId}-1`} data-focus-ring="delegated"
+              class="cfms-native-field w-full px-3 py-2.5 text-sm text-md3-on-surface transition"
+              placeholder={targetType === 'directory' ? $t('manage.directoryIdPlaceholder') : $t('manage.documentIdPlaceholder')}
+              bind:value={targetId}
+              disabled={busy}
+            />
+          </MdOutlinedField>
+        </div>
       {/if}
     </section>
 
-    <label class="grid gap-2 text-sm text-md3-on-surface">
-      <span class="font-medium">{$t('manage.blockReasonLabel')}</span>
-      <textarea
-        bind:value={reason}
-        maxlength="1024"
-        rows="3"
-        placeholder={$t('manage.blockReasonPlaceholder')}
-        disabled={busy}
-        class="w-full resize-y rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition disabled:opacity-50"
-      ></textarea>
+    <div class="grid gap-2 text-sm text-md3-on-surface">
+      <MdOutlinedField inputId={`${outlinedId}-2`} label={$t('manage.blockReasonLabel')} disabled={busy}>
+        <textarea id={`${outlinedId}-2`} data-focus-ring="delegated"
+          bind:value={reason}
+          maxlength="1024"
+          rows="3"
+          placeholder={$t('manage.blockReasonPlaceholder')}
+          disabled={busy}
+          class="cfms-native-field w-full resize-y px-3 py-2.5 text-sm text-md3-on-surface transition disabled:opacity-50"
+        ></textarea>
+      </MdOutlinedField>
       <span class="text-xs text-md3-on-surface-variant">
         {$t('manage.blockReasonHelp', { values: { count: 1024 - reason.length } })}
       </span>
-    </label>
+    </div>
 
     <section class="space-y-3 rounded-lg border border-md3-outline/60 p-3">
       <div class="flex items-start gap-3">
@@ -214,24 +219,26 @@
 
       {#if expiryEnabled}
         <div class="grid gap-3 sm:grid-cols-2">
-          <label>
-            <span class="mb-1.5 block text-xs font-medium text-md3-on-surface-variant">{$t('manage.expiryDate')}</span>
-            <input
-              class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
-              type="date"
-              bind:value={expiryDate}
-              disabled={busy}
-            />
-          </label>
-          <label>
-            <span class="mb-1.5 block text-xs font-medium text-md3-on-surface-variant">{$t('manage.expiryTime')}</span>
-            <input
-              class="w-full rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
-              type="time"
-              bind:value={expiryTime}
-              disabled={busy}
-            />
-          </label>
+          <div>
+            <MdOutlinedField inputId={`${outlinedId}-3`} label={$t('manage.expiryDate')} disabled={busy}>
+              <input id={`${outlinedId}-3`} data-focus-ring="delegated"
+                class="cfms-native-field w-full px-3 py-2.5 text-sm text-md3-on-surface transition"
+                type="date"
+                bind:value={expiryDate}
+                disabled={busy}
+              />
+            </MdOutlinedField>
+          </div>
+          <div>
+            <MdOutlinedField inputId={`${outlinedId}-4`} label={$t('manage.expiryTime')} disabled={busy}>
+              <input id={`${outlinedId}-4`} data-focus-ring="delegated"
+                class="cfms-native-field w-full px-3 py-2.5 text-sm text-md3-on-surface transition"
+                type="time"
+                bind:value={expiryTime}
+                disabled={busy}
+              />
+            </MdOutlinedField>
+          </div>
         </div>
       {/if}
     </section>

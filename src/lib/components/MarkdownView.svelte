@@ -21,16 +21,16 @@
 <style>
   .markdown-view {
     display: grid;
-    gap: 0.7rem;
+    gap: 12px;
     color: var(--color-md3-on-surface-variant);
     font-family: var(--font-md3-sans);
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.65;
   }
 
   .markdown-view.compact {
-    gap: 0.45rem;
-    font-size: 0.8125rem;
+    gap: 8px;
+    font-size: 12px;
     line-height: 1.55;
   }
 
@@ -50,11 +50,11 @@
   }
 
   .markdown-view :global(:where(h1, h2, h3)) {
-    font-size: 1rem;
+    font-size: 28px;
   }
 
   .markdown-view :global(:where(h4, h5, h6)) {
-    font-size: 0.9rem;
+    font-size: 14px;
   }
 
   .markdown-view :global(:where(p, li, blockquote)) {
@@ -63,7 +63,7 @@
 
   .markdown-view :global(:where(ul, ol)) {
     display: grid;
-    gap: 0.35rem;
+    gap: 4px;
     padding-left: 1.25rem;
   }
 
@@ -79,14 +79,14 @@
   }
 
   .markdown-view :global(a:hover) {
-    filter: brightness(1.18);
+    filter: none;
     text-decoration: underline;
   }
 
   .markdown-view :global(:where(code, kbd)) {
     border-radius: 4px;
     padding: 0.1rem 0.28rem;
-    background: color-mix(in srgb, var(--color-md3-surface-container-high) 82%, transparent);
+    background: color-mix(in srgb, var(--colorNeutralBackground1) 82%, transparent);
     color: var(--color-md3-on-surface);
     font: 0.8rem/1.45 var(--font-md3-mono);
   }

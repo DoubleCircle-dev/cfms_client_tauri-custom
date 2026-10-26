@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import type { Snippet } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import type { UserAuthentication } from '$lib/api';
@@ -24,6 +25,7 @@
     event.preventDefault();
     if (await onRegister(publicKey.trim(), label.trim())) { publicKey = ''; label = ''; adding = false; }
   }
+  const outlinedId = $props.id();
 </script>
 
 <div class="auth-method-list">
@@ -59,8 +61,16 @@
     {#if adding}
       <form class="auth-form auth-inset" onsubmit={register}>
         <p>{$t('authManagement.keyHelp')}</p>
-        <label>{$t('authManagement.publicKey')}<textarea bind:value={publicKey} disabled={!writable} rows="3" spellcheck="false" placeholder="ssh-ed25519 AAAA…"></textarea></label>
-        <label>{$t('authManagement.keyLabel')}<input bind:value={label} disabled={!writable} maxlength="255" /></label>
+        <div>
+          <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('authManagement.publicKey')} disabled={!writable}>
+            <textarea id={`${outlinedId}-1`} data-focus-ring="delegated" class="cfms-native-field" bind:value={publicKey} disabled={!writable} rows="3" spellcheck="false" placeholder="ssh-ed25519 AAAA…"></textarea>
+          </MdOutlinedField>
+        </div>
+        <div>
+          <MdOutlinedField inputId={`${outlinedId}-2`} label={$t('authManagement.keyLabel')} disabled={!writable}>
+            <input id={`${outlinedId}-2`} data-focus-ring="delegated" class="cfms-native-field" bind:value={label} disabled={!writable} maxlength="255" />
+          </MdOutlinedField>
+        </div>
         <div class="auth-actions"><DialogActionButton type="submit" variant="primary" disabled={!writable || !publicKey.trim()}>{$t('authManagement.registerKey')}</DialogActionButton></div>
       </form>
     {/if}

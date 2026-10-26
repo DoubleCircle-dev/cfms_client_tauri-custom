@@ -31,6 +31,7 @@
     cycleKeyboardRegion,
     dispatchKeyboardCommand,
     KEYBOARD_HELP_SHORTCUTS,
+    isEditableTarget,
     registerKeyboardCommands,
     type KeyboardCommand,
   } from "$lib/keyboard";
@@ -70,7 +71,7 @@
   afterNavigate((navigation) => {
     // SvelteKit always passes a `from` object; on the first navigation its `url`
     // is null, so `!navigation.from` alone is not enough of a guard here.
-    if (!navigation.from?.url || navigation.from.url.pathname === navigation.to?.url.pathname) return;
+    if (!navigation.from?.url || navigation.from.url.pathname === navigation.to?.url?.pathname) return;
     void tick().then(() => {
       const heading = document.querySelector<HTMLElement>(
         '.explorer-content h1, #app-main-content main h1, #app-main-content h1',
@@ -564,7 +565,7 @@
 
   function shouldAllowNativeContextMenu(target: EventTarget | null) {
     if (!(target instanceof Element)) return false;
-    if (target.closest('input, textarea, [contenteditable="true"], .allow-native-context-menu')) {
+    if (isEditableTarget(target) || target.closest('.allow-native-context-menu')) {
       return true;
     }
     if (
@@ -712,7 +713,7 @@
     color: var(--color-md3-on-primary);
     background: var(--color-md3-primary);
     box-shadow: var(--explorer-shadow);
-    font-size: 0.8rem;
+    font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
   }

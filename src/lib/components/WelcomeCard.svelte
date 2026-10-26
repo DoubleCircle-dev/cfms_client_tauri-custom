@@ -10,7 +10,7 @@
 </script>
 
 <div
-  class="bg-md3-surface-container/70 backdrop-blur-sm rounded-xl
+  class="cfms-content-surface  rounded-xl
          border border-md3-outline p-5 flex items-start gap-4"
   transition:flyScale={{ y: 14, duration: 320 }}
   use:hoverLift

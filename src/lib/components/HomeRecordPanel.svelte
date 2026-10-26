@@ -166,7 +166,7 @@
     filter: grayscale(1);
   }
 
-  .blueprint-record-row--unavailable :global(.material-symbols-rounded) {
+  .blueprint-record-row--unavailable :global(.cfms-icon) {
     color: var(--color-md3-outline);
   }
 

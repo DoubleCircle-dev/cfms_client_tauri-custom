@@ -16,41 +16,6 @@ export interface SmoothPositionParams {
   duration?: number;
 }
 
-export const ripple: Action<HTMLElement> = (node) => {
-  if (isReducedMotionEnabled()) {
-    return { destroy() {} };
-  }
-
-  const rippleRoot = document.createElement("span");
-  rippleRoot.className = "motion-ripple-root";
-  node.prepend(rippleRoot);
-
-  const handleClick = (event: MouseEvent) => {
-    if (isReducedMotionEnabled()) return;
-    const rect = node.getBoundingClientRect();
-    const size = Math.max(rect.width, rect.height) * 2;
-    const circle = document.createElement("span");
-
-    circle.className = "motion-ripple";
-    circle.style.width = `${size}px`;
-    circle.style.height = `${size}px`;
-    circle.style.left = `${event.clientX - rect.left}px`;
-    circle.style.top = `${event.clientY - rect.top}px`;
-
-    rippleRoot.appendChild(circle);
-    circle.addEventListener("animationend", () => circle.remove(), { once: true });
-  };
-
-  node.addEventListener("click", handleClick);
-
-  return {
-    destroy() {
-      node.removeEventListener("click", handleClick);
-      rippleRoot.remove();
-    },
-  };
-};
-
 export const hoverLift: Action<HTMLElement, HoverLiftParams | undefined> = (
   node,
   params = {},

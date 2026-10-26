@@ -1,13 +1,14 @@
 .authentication-management { container: auth-management / inline-size; display: grid; gap: 1.25rem; min-width: 0; color: var(--explorer-text); }
-.authentication-management h2 { margin: 0; font-size: .9375rem; line-height: 1.4; font-weight: 650; }
-.authentication-management h3 { margin: 0; font-size: .875rem; font-weight: 600; }
-.authentication-management p { margin: 0; font-size: .8125rem; line-height: 1.6; color: var(--explorer-text-muted); }
+.authentication-management .auth-heading { display: grid; gap: 4px; }
+.authentication-management h2 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; }
+.authentication-management h3 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; }
+.authentication-management p { margin: 0; font-size: 12px; line-height: 16px; color: var(--explorer-text-muted); }
 .authentication-management .auth-row, .authentication-management .auth-method-heading, .authentication-management .auth-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .875rem; }
 .authentication-management .auth-grow { flex: 1; min-width: 0; }
 .authentication-management .auth-method-heading > [data-icon] { flex: none; color: var(--explorer-accent); }
 .authentication-management .auth-method { padding: 1.25rem 0; border-bottom: 1px solid var(--explorer-border); }
 .authentication-management .auth-method:first-child { padding-top: .25rem; }
-.authentication-management .auth-method-heading p { margin-top: .25rem; }
+.authentication-management .auth-method-heading .auth-grow { display: grid; gap: 4px; }
 .authentication-management .auth-usage { margin-top: .65rem; }
 .authentication-management .auth-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: .5rem; }
 .authentication-management .auth-key-list { list-style: none; padding: 0; margin: .75rem 0 0; }
@@ -46,5 +47,5 @@
 .authentication-management .auth-empty { padding-block: .875rem; }
 .authentication-management [hidden] { display: none !important; }
 @container auth-management (max-width: 900px) { .authentication-management .auth-flow-layout { grid-template-columns: minmax(0, 1fr); } }
-@container auth-management (max-width: 540px) { .authentication-management .auth-method-heading, .authentication-management .auth-row { flex-wrap: wrap; } .authentication-management .auth-method-heading > .dialog-action-button, .authentication-management .auth-row > .auth-actions { margin-left: auto; } .authentication-management .auth-savebar { flex-wrap: wrap; } .authentication-management .auth-inset { padding: .75rem; } }
+@container auth-management (max-width: 540px) { .authentication-management .auth-method-heading, .authentication-management .auth-row { flex-wrap: wrap; } .authentication-management .auth-method-heading > .auth-grow { flex-basis: calc(100% - 36px); } .authentication-management .auth-method-heading > .dialog-action-button, .authentication-management .auth-row > .auth-actions { margin-left: auto; } .authentication-management .auth-savebar { flex-wrap: wrap; } .authentication-management .auth-inset { padding: .75rem; } }
 @media (pointer: coarse) { .authentication-management .auth-choice, .authentication-management summary { min-height: 44px; } .authentication-management summary { align-content: center; } }

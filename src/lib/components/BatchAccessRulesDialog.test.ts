@@ -10,6 +10,8 @@ import { dialogStore, type ChoiceDialogOptions, type ChoiceDialogResult } from '
 import { floatingProgressStore } from '$lib/stores.svelte';
 import type { BatchRulesProblem, BatchRulesTarget } from '$lib/files/batch-access-rules';
 import type { AccessRulesRecord } from '$lib/access-rules';
+import { en } from '$lib/i18n/messages/en';
+import { zh_CN as zhCN } from '$lib/i18n/messages/zh-CN';
 import '$lib/i18n';
 
 vi.mock('$lib/api', async (importOriginal) => ({
@@ -63,8 +65,8 @@ function setup(options: Partial<Props> = {}) {
 function submittedRules(index: number): AccessRulesRecord {
   return vi.mocked(setAccessRules).mock.calls[index][2] as AccessRulesRecord;
 }
-async function initialized(name = 'Documents') {
-  await screen.findByText('Shared rule template from: ' + name);
+async function initialized(name?: string) {
+  if (name) await screen.findByText('Shared rule template from: ' + name);
   await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'OK' }).disabled).toBe(false));
 }
 async function confirmScope(count = 2) {
@@ -107,6 +109,96 @@ afterEach(() => {
 });
 
 describe('BatchAccessRulesDialog property-style editing', () => {
+  it.each([
+    { language: 'en', messages: en, target: targets[0] },
+    { language: 'en', messages: en, target: targets[1] },
+    { language: 'zh-CN', messages: zhCN, target: targets[0] },
+    { language: 'zh-CN', messages: zhCN, target: targets[1] },
+  ])('hides batch template controls for a single $target.objectType in $language', async ({ language, messages, target }) => {
+    locale.set(language);
+    setup({ targets: [target] });
+    await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: messages.files.batchRules.ok }).disabled).toBe(false));
+    expect(getAccessRules).toHaveBeenCalledExactlyOnceWith(target.objectType, target.objectId);
+    expect(screen.queryByRole('combobox', { name: messages.files.batchRules.templateObject })).toBeNull();
+    expect(screen.queryByRole('button', { name: messages.files.batchRules.loadTemplate })).toBeNull();
+    expect(screen.queryByText(messages.files.batchRules.templateSource.replace('{name}', target.name))).toBeNull();
+    expect(screen.queryByText(messages.files.batchRules.overwrite)).toBeNull();
+    expect(screen.queryByText(messages.files.batchRules.newDraft)).toBeNull();
+    expect(!!screen.queryByRole('checkbox', { name: messages.files.batchRules.recursive })).toBe(target.objectType === 'directory');
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: messages.files.batchRules.applyChanges }).disabled).toBe(true);
+  });
+
+  it.each([
+    { language: 'en', messages: en },
+    { language: 'zh-CN', messages: zhCN },
+  ])('keeps batch template controls for multiple objects in $language', async ({ language, messages }) => {
+    locale.set(language);
+    setup();
+    await screen.findByText(messages.files.batchRules.templateSource.replace('{name}', targets[0].name));
+    expect(screen.getByRole('combobox', { name: messages.files.batchRules.templateObject })).toBeTruthy();
+    expect(screen.getByRole('button', { name: messages.files.batchRules.loadTemplate })).toBeTruthy();
+    expect(screen.getByText(messages.files.batchRules.overwrite)).toBeTruthy();
+  });
+
+  it('shows a generic loading state for a single object and blocks submission until its rules arrive', async () => {
+    const response = deferred<{ rules: unknown; inherit: boolean }>();
+    vi.mocked(getAccessRules).mockReturnValueOnce(response.promise);
+    setup({ targets: [targets[1]] });
+    expect(await screen.findByRole('status', { name: en.common.loadingEllipsis })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Load as template' })).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'OK' }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Apply' }).disabled).toBe(true);
+    response.resolve({ rules: templateRules, inherit: false });
+    await initialized();
+    expect(screen.queryByRole('status', { name: en.common.loadingEllipsis })).toBeNull();
+    expect(screen.getByRole('switch', { name: inheritLabel }).getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('retries a failed single-object read without showing template controls', async () => {
+    vi.mocked(getAccessRules).mockRejectedValueOnce('Server returned 403: denied');
+    setup({ targets: [targets[1]] });
+    await screen.findByText('Server returned 403: denied');
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Apply' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Create empty rules' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await initialized();
+    expect(getAccessRules).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Server returned 403: denied')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Load as template' })).toBeNull();
+  });
+
+  it.each([true, false])('allows a single-object draft without current rules (read permission: %s)', async (canReadTemplate) => {
+    vi.mocked(getAccessRules).mockRejectedValueOnce('Server returned 403: denied');
+    setup({ targets: [targets[1]], canReadTemplate });
+    if (canReadTemplate) {
+      await screen.findByText('Server returned 403: denied');
+      await fireEvent.click(screen.getByRole('button', { name: 'Create empty rules' }));
+    }
+    await screen.findByText('New rule draft; current rules have not been read');
+    await initialized();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Apply' }).disabled).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Load as template' })).toBeNull();
+    expect(screen.queryByText(en.files.batchRules.overwrite)).toBeNull();
+    expect(getAccessRules).toHaveBeenCalledTimes(canReadTemplate ? 1 : 0);
+    await fireEvent.click(screen.getByRole('button', { name: 'Add Rule Group' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await screen.findByText('Applied to 1 objects');
+    expect(setAccessRules).toHaveBeenCalledExactlyOnceWith('document', 'document', expect.any(Object), true);
+  });
+
+  it('applies changes to a single object and restores its clean baseline', async () => {
+    setup({ targets: [targets[1]] });
+    await initialized();
+    await fireEvent.click(screen.getByRole('switch', { name: inheritLabel }));
+    await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Apply' }).disabled).toBe(false));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await screen.findByText('Applied to 1 objects');
+    expect(setAccessRules).toHaveBeenCalledExactlyOnceWith('document', 'document', expect.objectContaining(templateRules), true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Apply' }).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Load as template' })).toBeNull();
+  });
+
   it.each([
     ['en', 'Set permissions'],
     ['zh-CN', '设置权限'],
@@ -171,7 +263,7 @@ describe('BatchAccessRulesDialog property-style editing', () => {
     await waitFor(() => expect(view.onApplied).toHaveBeenCalledOnce());
     expect(view.onClose).not.toHaveBeenCalled();
     expect(screen.getByText('Refreshing the directory…')).toBeTruthy();
-    expect(view.container.querySelector('.batch-rules-editor')).not.toBeNull();
+    expect(view.baseElement.querySelector('.batch-rules-editor')).not.toBeNull();
     refresh.resolve();
     if (action === 'OK') await waitFor(() => expect(view.onClose).toHaveBeenCalledOnce());
     else {

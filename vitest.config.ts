@@ -8,6 +8,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    setupFiles: ['src/test/fluent-dom.ts'],
     include: ['src/**/*.test.ts'],
     clearMocks: true,
   },

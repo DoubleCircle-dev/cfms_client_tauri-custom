@@ -9,6 +9,7 @@
   "permissions": [
     "core:default",
     "core:window:allow-set-content-protected",
+    "core:window:allow-set-theme",
     "log:default",
     "notification:default",
     "os:default",
