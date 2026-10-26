@@ -77,4 +77,22 @@ describe('settings entry visibility', () => {
 
     expect(entries.some((entry) => entry.href === '/home/settings/extensions')).toBe(false);
   });
+
+  it('offers window and tray settings on desktop only, signed in or not', () => {
+    const desktopSignedOut = getVisibleSettingsEntries({ isLoggedIn: false, isMobile: false });
+    const desktopSignedIn = getVisibleSettingsEntries({ isLoggedIn: true, isMobile: false });
+    const mobile = getVisibleSettingsEntries({ isLoggedIn: true, isMobile: true });
+
+    expect(desktopSignedOut.some((entry) => entry.href === '/home/settings/window')).toBe(true);
+    expect(desktopSignedIn.some((entry) => entry.href === '/home/settings/window')).toBe(true);
+    expect(mobile.some((entry) => entry.href === '/home/settings/window')).toBe(false);
+  });
+
+  it('keeps the mobile interaction page off desktop', () => {
+    const desktop = getVisibleSettingsEntries({ isLoggedIn: true, isMobile: false });
+    const mobile = getVisibleSettingsEntries({ isLoggedIn: true, isMobile: true });
+
+    expect(desktop.some((entry) => entry.href === '/home/settings/behavior')).toBe(false);
+    expect(mobile.some((entry) => entry.href === '/home/settings/behavior')).toBe(true);
+  });
 });

@@ -775,7 +775,7 @@
         font-size: 11px;
         outline: none;
     }
-    .save-dialog input:focus { border-color: var(--blue); }
+    /* Field focus is painted by the global native-field indicator. */
 
     /* ===== Main Layout ===== */
     .main-content {
@@ -1046,7 +1046,7 @@
         tab-size: 2;
         box-sizing: border-box;
     }
-    .http-textarea:focus { border-color: var(--blue); }
+    /* Field focus is painted by the global native-field indicator. */
     .http-textarea::placeholder { color: var(--text-muted); }
     .http-send-btn {
         align-self: flex-start;

@@ -11,6 +11,7 @@ export * from './api/files';
 export * from './api/trash';
 export * from './api/admin';
 export * from './api/settings';
+export * from './api/desktop-shell';
 export * from './api/mobile';
 export * from './api/avatars';
 export * from './api/preferences';
