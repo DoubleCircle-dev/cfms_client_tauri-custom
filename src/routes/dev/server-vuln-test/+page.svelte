@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount, tick } from "svelte";
+    import { onDestroy, onMount, tick } from "svelte";
     import { goto } from "$app/navigation";
     import { invoke } from "@tauri-apps/api/core";
 
@@ -16,6 +16,9 @@
         { label: "🔐 认证", cmds: [
             { action: "login", desc: "用户登录", requireAuth: false, data: { username: "PLACEHOLDER", password: "PLACEHOLDER" } },
             { action: "refresh_token", desc: "刷新访问令牌", requireAuth: true, data: {} },
+            { action: "exchange_token", desc: "协议28提权测试：空 escalation 策略（会为当前账号签发 5 分钟令牌）", requireAuth: true, data: { target_purpose: 12 } },
+            { action: "exchange_token", desc: "协议28提权测试：策略要求密码时验证；空策略仍会直接签发", requireAuth: true, data: { target_purpose: 12, method: "password", data: { password: "PLACEHOLDER" } } },
+            { action: "exchange_token", desc: "协议28提权测试：策略要求 TOTP 时验证；空策略仍会直接签发", requireAuth: true, data: { target_purpose: 12, method: "totp", data: { token: "PLACEHOLDER" } } },
         ]},
         { label: "🔑 双因素认证", cmds: [
             { action: "setup_2fa", desc: "设置双因素认证(TOTP)", requireAuth: true, data: { method: "totp" } },
@@ -73,6 +76,7 @@
             { action: "search", desc: "搜索文档和目录", requireAuth: true, data: { query: "PLACEHOLDER" } },
         ]},
         { label: "👤 用户管理", cmds: [
+            { action: "core.user.info.get", desc: "读取用户实际权限（effective_permissions）", requireAuth: true, data: { user_id: "PLACEHOLDER" } },
             { action: "list_users", desc: "列出用户", requireAuth: true, data: {} },
             { action: "create_user", desc: "创建用户", requireAuth: true, data: { username: "PLACEHOLDER", password: "PLACEHOLDER" } },
             { action: "delete_user", desc: "删除用户", requireAuth: true, data: { username: "PLACEHOLDER" } },
@@ -163,6 +167,10 @@
     let showSaveDialog = $state(false);
     let activeTab = $state<"commands" | "saved" | "http">("commands");
     let selectedSavedIdx = $state(-1);
+    let elevatedToken = $state<string | null>(null);
+    let elevatedTokenExpiresAt = $state(0);
+    let useElevatedToken = $state(false);
+    let acquiringElevatedToken = $state(false);
 
     // ---- HTTP request state ----
     let httpPath = $state("/");
@@ -170,6 +178,10 @@
     let httpHeaders = $state('{"Accept": "text/html,application/json"}');
     let httpBody = $state("");
     let httpSending = $state(false);
+
+    onDestroy(() => {
+        elevatedToken = null;
+    });
 
     function loadCmdTemplate(cmd: CmdEntry) {
         payloadText = JSON.stringify({ action: cmd.action, data: cmd.data }, null, 2);
@@ -210,6 +222,117 @@
         tick().then(() => { if (logRef) logRef.scrollTop = logRef.scrollHeight; });
     }
     function clearLog() { logEntries = []; }
+
+    function isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === "object" && value !== null && !Array.isArray(value);
+    }
+
+    function redactSensitiveValues(value: unknown): unknown {
+        if (Array.isArray(value)) return value.map(redactSensitiveValues);
+        if (!isRecord(value)) return value;
+
+        return Object.fromEntries(Object.entries(value).map(([key, nestedValue]) => [
+            key,
+            /(^|_)(token|password|credential|signature|secret|backup_codes?)($|_)/i.test(key)
+                ? "[REDACTED]"
+                : redactSensitiveValues(nestedValue),
+        ]));
+    }
+
+    function safeJsonForLog(value: unknown): string {
+        return JSON.stringify(redactSensitiveValues(value));
+    }
+
+    function getElevatedTokenForRequest(): string | null {
+        if (!useElevatedToken || !elevatedToken) return null;
+        if (Date.now() / 1000 >= elevatedTokenExpiresAt) {
+            clearElevatedToken();
+            addLog("warn", "提权令牌已过期，已停止附加");
+            return null;
+        }
+        return elevatedToken;
+    }
+
+    function clearElevatedToken() {
+        elevatedToken = null;
+        elevatedTokenExpiresAt = 0;
+        useElevatedToken = false;
+        addLog("info", "已清除页面内存中的提权令牌");
+    }
+
+    async function acquireElevatedToken() {
+        if (acquiringElevatedToken) return;
+
+        let request: unknown;
+        try {
+            request = JSON.parse(payloadText);
+        } catch (err) {
+            addLog("error", `JSON 解析错误: ${(err as Error).message}`);
+            return;
+        }
+        if (!isRecord(request) || !["exchange_token", "core.auth.token.exchange"].includes(String(request.action))) {
+            addLog("warn", "请先加载 exchange_token 模板，并按需填写提权验证凭据");
+            return;
+        }
+
+        if (!isRecord(request.data)) {
+            addLog("warn", "exchange_token 请求需要对象类型的 data 字段");
+            return;
+        }
+        const data = request.data;
+        const exchangeRequest = {
+            ...request,
+            data: { ...data, target_purpose: 12 },
+        };
+        const method = typeof data.method === "string" ? data.method : "未指定";
+        acquiringElevatedToken = true;
+        authenticated = true;
+        statusInfo = "申请提权令牌...";
+        statusColor = "#d2991d";
+        addLog("sent", `→ [AUTH] ${String(request.action)}（申请提权，method=${method}；敏感字段已隐藏）`);
+        addLog("warn", "若该账号的 escalation 策略为空，服务端可能直接签发提权令牌；仅在授权测试环境中使用");
+
+        try {
+            const response = await invoke<string>("send_raw_request", {
+                payload: JSON.stringify(exchangeRequest),
+                authenticated: true,
+                tokenOverride: null,
+            });
+            let parsed: unknown;
+            try {
+                parsed = JSON.parse(response);
+            } catch {
+                addLog("error", "提权响应不是有效 JSON；未保存令牌");
+                statusInfo = "响应错误";
+                statusColor = "#f85149";
+                return;
+            }
+
+            if (!isRecord(parsed) || parsed.code !== 200 || !isRecord(parsed.data)
+                || typeof parsed.data.token !== "string" || parsed.data.purpose !== 12
+                || typeof parsed.data.exp !== "number") {
+                addLog("warn", `提权未成功：${safeJsonForLog(parsed)}`);
+                statusInfo = "提权未成功";
+                statusColor = "#f85149";
+                return;
+            }
+
+            elevatedToken = parsed.data.token;
+            elevatedTokenExpiresAt = parsed.data.exp;
+            useElevatedToken = true;
+            statusInfo = "提权令牌已启用";
+            statusColor = "#3fb950";
+            addLog("recv", `提权令牌已取得并启用（purpose=12，过期时间 ${new Date(parsed.data.exp * 1000).toLocaleString()}）；令牌仅保存在当前页面内存`);
+        } catch (err) {
+            const msg = typeof err === "string" ? err : ((err as Error).message ?? JSON.stringify(err));
+            addLog("error", `✖ ${msg}`);
+            statusInfo = "错误";
+            statusColor = "#f85149";
+        } finally {
+            acquiringElevatedToken = false;
+            setTimeout(() => { statusInfo = "就绪"; statusColor = ""; }, 3000);
+        }
+    }
 
     function loadSavedTemplate(t: SavedTemplate, idx: number) {
         payloadText = JSON.stringify(t.payload, null, 2);
@@ -294,11 +417,18 @@
             return;
         }
         const jsonStr = JSON.stringify(json);
-        addLog("sent", `\u2192 ${authenticated ? "[AUTH]" : "[NOAUTH]"} ${jsonStr}`);
+        const tokenOverride = authenticated ? getElevatedTokenForRequest() : null;
+        addLog("sent", `\u2192 ${authenticated ? (tokenOverride ? "[ESCALATION]" : "[AUTH]") : "[NOAUTH]"} ${safeJsonForLog(json)}`);
         statusInfo = "发送中..."; statusColor = "#58a6ff";
         try {
-            const response = await invoke<string>("send_raw_request", { payload: jsonStr, authenticated });
-            addLog("recv", `\u2190 ${response}`);
+            const response = await invoke<string>("send_raw_request", {
+                payload: jsonStr,
+                authenticated,
+                tokenOverride,
+            });
+            let safeResponse = response;
+            try { safeResponse = safeJsonForLog(JSON.parse(response)); } catch { /* Keep non-JSON transport responses readable. */ }
+            addLog("recv", `\u2190 ${safeResponse}`);
             statusInfo = "就绪"; statusColor = "";
         } catch (err) {
             const msg = typeof err === "string" ? err : ((err as Error).message ?? JSON.stringify(err));
@@ -366,6 +496,21 @@
                 <input type="checkbox" bind:checked={authenticated} />
                 <span>附带认证</span>
             </label>
+            <button
+                class="btn btn-elevate"
+                onclick={acquireElevatedToken}
+                disabled={acquiringElevatedToken}
+                title="使用当前 exchange_token 请求申请；空 escalation 策略可能无需额外验证"
+            >
+                {acquiringElevatedToken ? "申请中..." : "⬆ 提权并附加"}
+            </button>
+            <label class="auth-toggle">
+                <input type="checkbox" bind:checked={useElevatedToken} disabled={!elevatedToken || !authenticated} />
+                <span>使用提权令牌</span>
+            </label>
+            {#if elevatedToken}
+                <button class="btn btn-clear" onclick={clearElevatedToken}>清除提权</button>
+            {/if}
             <span class="status" style="color: {statusColor || 'var(--text-muted)'}">{statusInfo}</span>
             <span class="validation {validationOk ? 'val-ok' : 'val-err'}">{validationMsg || "输入 JSON"}</span>
             <button class="btn btn-save" onclick={saveAsNewTemplate}>💾 保存模板</button>
@@ -547,6 +692,7 @@
     /* ===== Toolbar ===== */
     .toolbar {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 8px;
         padding: 6px 12px;
@@ -585,6 +731,17 @@
     }
     .btn-save:hover {
         background: #22753a;
+    }
+    .btn-elevate {
+        background: #5a3e12;
+        color: #f0c674;
+    }
+    .btn-elevate:hover:not(:disabled) {
+        background: #765218;
+    }
+    .btn-elevate:disabled {
+        cursor: wait;
+        opacity: 0.7;
     }
 
     .validation {
