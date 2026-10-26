@@ -66,6 +66,9 @@ pub async fn check_app_update(
         .updater_builder()
         .endpoints(vec![endpoint])
         .map_err(|e| format!("Failed to configure updater endpoint: {e}"))?;
+    updater_builder = updater_builder.version_comparator(move |current, update| {
+        is_release_newer_for_source(&update.version.to_string(), &current.to_string(), source)
+    });
     if let Some(proxy_url) = proxy_url {
         updater_builder = updater_builder.proxy(proxy_url);
     }
@@ -261,7 +264,7 @@ async fn check_android_app_update(
     };
 
     let current_version = app.package_info().version.to_string();
-    if !is_release_newer(&release.tag_name, &current_version) {
+    if !is_release_newer_for_source(&release.tag_name, &current_version, source) {
         clear_mobile_pending_update(&state)?;
         return Ok(None);
     }
@@ -872,19 +875,40 @@ fn parse_release_version(tag: &str) -> Option<semver::Version> {
     semver::Version::parse(tag.trim_start_matches('v')).ok()
 }
 
-#[cfg(target_os = "android")]
-fn is_release_newer(release_tag: &str, current_version: &str) -> bool {
+fn is_release_newer_for_source(
+    release_tag: &str,
+    current_version: &str,
+    source: UpdateSource,
+) -> bool {
     let Some(release_version) = parse_release_version(release_tag) else {
         return false;
     };
     let Some(current_version) = parse_release_version(current_version) else {
         return true;
     };
-    release_version > current_version
+    if release_version > current_version {
+        return true;
+    }
+
+    source == UpdateSource::Custom
+        && is_custom_iteration(&release_version)
+        && current_version.pre.is_empty()
+        && release_version.major == current_version.major
+        && release_version.minor == current_version.minor
+        && release_version.patch == current_version.patch
+}
+
+fn is_custom_iteration(version: &semver::Version) -> bool {
+    let Some(iteration) = version.pre.as_str().strip_prefix("custom-") else {
+        return false;
+    };
+    iteration.len() == 2
+        && iteration != "00"
+        && iteration.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 #[cfg(test)]
-mod android_apk_selection_tests {
+mod app_update_tests {
     use super::*;
 
     fn asset(name: &str) -> GithubAssetDto {
@@ -907,6 +931,49 @@ mod android_apk_selection_tests {
             published_at: None,
             assets: asset_names.iter().map(|name| asset(name)).collect(),
         }
+    }
+
+    #[test]
+    fn custom_iteration_is_newer_than_same_base_stable_only_for_custom_source() {
+        assert!(is_release_newer_for_source(
+            "v0.55.1-custom-01",
+            "0.55.1",
+            UpdateSource::Custom
+        ));
+        assert!(!is_release_newer_for_source(
+            "v0.55.1-custom-01",
+            "0.55.1",
+            UpdateSource::Official
+        ));
+        assert!(is_release_newer_for_source(
+            "v0.55.1-custom-02",
+            "0.55.1-custom-01",
+            UpdateSource::Custom
+        ));
+    }
+
+    #[test]
+    fn custom_comparison_keeps_normal_semver_ordering_for_other_versions() {
+        assert!(is_release_newer_for_source(
+            "v0.55.2-custom-01",
+            "0.55.1",
+            UpdateSource::Custom
+        ));
+        assert!(is_release_newer_for_source(
+            "v0.55.2",
+            "0.55.1-custom-01",
+            UpdateSource::Official
+        ));
+        assert!(!is_release_newer_for_source(
+            "v0.55.1-custom-100",
+            "0.55.1",
+            UpdateSource::Custom
+        ));
+        assert!(!is_release_newer_for_source(
+            "v0.55.1-custom-00",
+            "0.55.1",
+            UpdateSource::Custom
+        ));
     }
 
     #[test]

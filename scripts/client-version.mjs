@@ -29,9 +29,13 @@ Usage:
   pnpm app:version check
   pnpm app:version set <version> [--build-number <number>] [--dry-run]
   pnpm app:version bump <major|minor|patch|prerelease> [--preid beta] [--dry-run]
+  pnpm app:version custom <base-version> [--dry-run]
 
 Notes:
   - <version> may be prefixed with "v"; files are written without the prefix.
+  - custom creates the next <base-version>-custom-NN version from local Git tags.
+  - Fetch origin tags before custom so its iteration follows published releases.
+  - Custom iteration numbers are added to the base build number for Android/iOS.
   - --build-number sets both iOS CFBundleVersion and Android versionCode.
   - Version set/bump also prepares a changelog entry unless --skip-changelog is passed.
   - Local generated Android metadata is synced when src-tauri/gen/android/app/tauri.properties exists.
@@ -113,7 +117,47 @@ function versionBuildNumber(version) {
       `Version ${version} is too large for the default build number formula`,
     );
   }
-  return parsed.major * 1_000_000 + parsed.minor * 1_000 + parsed.patch;
+  const baseBuildNumber =
+    parsed.major * 1_000_000 + parsed.minor * 1_000 + parsed.patch;
+  const customIteration = parsed.pre.match(/^custom-(\d{2})$/);
+  if (customIteration && Number(customIteration[1]) === 0) {
+    throw new Error("Custom iteration numbers must be between 01 and 99");
+  }
+  return baseBuildNumber + (customIteration ? Number(customIteration[1]) : 0);
+}
+
+function nextCustomIteration(base, tags) {
+  const parsed = parseVersion(base);
+  if (parsed.pre || parsed.build) {
+    throw new Error("Custom base version must be a plain major.minor.patch version");
+  }
+
+  const basePattern = baseVersion(base).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tagPattern = new RegExp(`^v?${basePattern}-custom-(\\d{2})$`);
+  let highestIteration = 0;
+
+  for (const tag of tags) {
+    const match = tag.match(tagPattern);
+    if (match) {
+      highestIteration = Math.max(highestIteration, Number(match[1]));
+    }
+  }
+
+  if (highestIteration >= 99) {
+    throw new Error(
+      `Custom iteration limit reached for ${baseVersion(base)}; choose a newer base version`,
+    );
+  }
+  return highestIteration + 1;
+}
+
+function readLocalTags(pattern) {
+  return execFileSync("git", ["tag", "--list", pattern], {
+    cwd: root,
+    encoding: "utf8",
+  })
+    .split(/\r?\n/)
+    .filter(Boolean);
 }
 
 function parseArgs(argv) {
@@ -580,6 +624,22 @@ function commandBump(positionals, flags) {
   setVersion(next, flags);
 }
 
+function commandCustom(positionals, flags) {
+  const rawBase = positionals[1];
+  if (!rawBase) {
+    usage(1);
+  }
+
+  const base = normalizeVersion(rawBase);
+  const iteration = nextCustomIteration(
+    base,
+    readLocalTags(`v${baseVersion(base)}-custom-*`),
+  );
+  const version = `${baseVersion(base)}-custom-${String(iteration).padStart(2, "0")}`;
+  process.stdout.write(`Using the next local Custom version: ${version}\n`);
+  setVersion(version, flags);
+}
+
 function main() {
   const { positionals, flags } = parseArgs(process.argv.slice(2));
   const command = positionals[0] ?? "help";
@@ -597,6 +657,9 @@ function main() {
     case "bump":
       commandBump(positionals, flags);
       break;
+    case "custom":
+      commandCustom(positionals, flags);
+      break;
     case "help":
     case "--help":
     case "-h":
@@ -607,9 +670,16 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  process.stderr.write(`${error.message}\n`);
-  process.exit(1);
+export { nextCustomIteration, versionBuildNumber };
+
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    main();
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exit(1);
+  }
 }
