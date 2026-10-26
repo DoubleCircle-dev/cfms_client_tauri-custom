@@ -20,6 +20,7 @@
   import { _ as t } from "svelte-i18n";
   import { onBackButtonPress } from "@tauri-apps/api/app";
   import { initEventListeners } from "$lib/events";
+  import { initDesktopShell } from "$lib/desktop-shell";
   import { initI18n } from "$lib/i18n";
   import { initNavigationHistory, navigateUp, parentRouteFor } from "$lib/navigation";
   import { appUpdateState } from "$lib/app-update-state.svelte";
@@ -305,6 +306,9 @@
 
     // Start listening for backend events.
     await initEventListeners();
+
+    // Desktop shell: close-button prompt and localized tray menu.
+    await initDesktopShell();
 
     // Diagnostic: log the local host IP addresses to the DevTools console.
     try {
