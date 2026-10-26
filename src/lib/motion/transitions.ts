@@ -1,4 +1,7 @@
 import { spring } from "svelte/motion";
+import { flip } from "svelte/animate";
+import { cubicIn, cubicOut } from "svelte/easing";
+import type { AnimationConfig } from "svelte/animate";
 import type { TransitionConfig } from "svelte/transition";
 import { isReducedMotionEnabled } from "$lib/appearance";
 
@@ -134,23 +137,30 @@ export function menuScale(
 export function snackbarMotion(
   _node: Element,
   params: SnackbarMotionParams = {},
+  { direction = "in" }: { direction?: "in" | "out" | "both" } = {},
 ): TransitionConfig {
   if (isReducedMotionEnabled()) return instant();
 
   const {
-    y = 18,
-    duration = 220,
+    y = direction === "out" ? 8 : 12,
+    duration = direction === "out" ? 150 : 250,
     delay = 0,
   } = params;
 
   return {
     delay,
     duration,
-    easing: emphasized,
+    easing: direction === "out" ? cubicIn : cubicOut,
     css: (t, u) => `
       opacity: ${t};
-      transform: translate3d(0, ${u * y}px, 0) scale(${0.96 + t * 0.04});
-      filter: blur(${u * 5}px);
+      transform: translate3d(0, ${u * y}px, 0);
     `,
   };
+}
+
+export function snackbarReflow(
+  node: Element,
+  bounds: { from: DOMRect; to: DOMRect },
+): AnimationConfig {
+  return flip(node, bounds, { duration: isReducedMotionEnabled() ? 0 : 200, easing: cubicOut });
 }

@@ -195,6 +195,7 @@
             <li>
               <button
                 class="settings-entry"
+                class:settings-entry--has-status={!!status}
                 class:settings-entry--danger={entry.tone === 'danger'}
                 type="button"
                 onclick={() => goto(entry.href)}
@@ -239,14 +240,14 @@
   .settings-overview__header {
     display: flex;
     align-items: center;
-    gap: 0.68rem;
+    gap: 12px;
     margin-bottom: 1rem;
   }
 
   .settings-overview__header h1 {
     margin: 0;
     color: var(--color-md3-on-surface);
-    font: 700 1.4rem/1.2 var(--font-md3-sans);
+    font: 700 28px/36px var(--font-md3-sans);
     letter-spacing: -0.02em;
   }
 
@@ -263,7 +264,7 @@
     display: grid;
     grid-template-columns: 32px minmax(0, 1fr);
     align-items: center;
-    gap: 0.75rem;
+    gap: 12px;
     margin-bottom: 1.5rem;
     border-block: 1px solid color-mix(in srgb, var(--color-md3-outline) 80%, transparent);
     padding: 0.78rem 0.35rem;
@@ -301,19 +302,19 @@
 
   .protection-summary__copy h2 {
     color: var(--color-md3-on-surface);
-    font: 650 0.8rem/1.3 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
   }
 
   .protection-summary__copy p {
     margin-top: 0.16rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
   .settings-groups {
     display: grid;
-    gap: 1.55rem;
+    gap: 24px;
   }
 
   .settings-group {
@@ -324,13 +325,13 @@
     margin: 0;
     padding: 0 0.35rem 0.55rem;
     color: var(--color-md3-on-surface-variant);
-    font: 650 0.76rem/1.3 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
     letter-spacing: 0.025em;
   }
 
   .settings-group__entries {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     column-gap: 1.5rem;
     margin: 0;
     border-top: 1px solid var(--color-md3-outline);
@@ -340,6 +341,7 @@
 
   .settings-group__entries li {
     min-width: 0;
+    container: settings-entry / inline-size;
   }
 
   .settings-entry {
@@ -347,11 +349,13 @@
     display: grid;
     width: 100%;
     min-width: 0;
+    height: 100%;
     min-height: 68px;
-    grid-template-areas: 'icon copy status arrow';
-    grid-template-columns: 28px minmax(0, 1fr) minmax(6.5rem, auto) 20px;
+    grid-template-areas: 'icon copy arrow';
+    grid-template-columns: 28px minmax(0, 1fr) 20px;
     align-items: center;
-    gap: 0.8rem;
+    gap: 12px;
+    row-gap: 8px;
     border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 62%, transparent);
     padding: 0.72rem 0.35rem;
     color: var(--color-md3-on-surface);
@@ -360,6 +364,10 @@
     transition:
       color var(--motion-duration-short4) var(--motion-easing-standard),
       background-color var(--motion-duration-short4) var(--motion-easing-standard);
+  }
+
+  .settings-entry--has-status {
+    grid-template-areas: 'icon copy arrow' '. status arrow';
   }
 
   .settings-entry::after {
@@ -406,46 +414,43 @@
     display: grid;
     min-width: 0;
     grid-area: copy;
+    overflow-wrap: anywhere;
   }
 
   .settings-entry__title {
-    font: 650 0.84rem/1.3 var(--font-md3-sans);
+    font: 600 14px/20px var(--font-md3-sans);
   }
 
   .settings-entry__description {
-    display: -webkit-box;
-    overflow: hidden;
+    display: block;
     margin-top: 0.22rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.45;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
   }
 
   .settings-entry__status {
     display: grid;
     min-width: 0;
-    max-width: 10rem;
     grid-area: status;
-    justify-items: end;
-    gap: 0.16rem;
-    text-align: right;
+    justify-items: start;
+    gap: 4px;
+    text-align: left;
   }
 
   .settings-entry__status-value {
     display: inline-flex;
     min-width: 0;
     align-items: center;
-    justify-content: flex-end;
-    gap: 0.28rem;
+    justify-content: flex-start;
+    gap: 4px;
     color: var(--color-md3-on-surface-variant);
-    font: 600 0.68rem/1.3 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
   }
 
   .settings-entry__status-value span {
     min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .settings-entry__status-value--enabled {
@@ -461,8 +466,10 @@
   }
 
   .settings-entry__scope {
+    min-width: 0;
+    overflow-wrap: anywhere;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 500;
     line-height: 1.25;
   }
@@ -483,37 +490,25 @@
     transform: translateX(2px);
   }
 
-  @media (max-width: 900px) {
-    .settings-entry {
-      grid-template-areas:
-        'icon copy arrow'
-        'icon status arrow';
-      grid-template-columns: 28px minmax(0, 1fr) 20px;
-      row-gap: 0.36rem;
-    }
-
-    .settings-entry__status {
-      max-width: none;
-      justify-items: start;
-      text-align: left;
-    }
-
-    .settings-entry__status-value {
-      justify-content: flex-start;
+  @container (min-width: 800px) {
+    .settings-group__entries {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
-  @media (max-width: 700px) {
-    .settings-group__entries {
-      grid-template-columns: minmax(0, 1fr);
-      column-gap: 0;
+  @container settings-entry (min-width: 360px) {
+    .settings-entry--has-status {
+      grid-template-areas: 'icon copy status arrow';
+      grid-template-columns: 28px minmax(0, 1fr) fit-content(40%) 20px;
     }
 
-    .settings-entry__description {
-      display: block;
-      overflow: visible;
-      -webkit-line-clamp: unset;
-      line-clamp: unset;
+    .settings-entry__status {
+      justify-items: end;
+      text-align: right;
+    }
+
+    .settings-entry__status-value {
+      justify-content: flex-end;
     }
   }
 
@@ -529,7 +524,7 @@
     }
 
     .settings-entry {
-      gap: 0.65rem;
+      gap: 12px;
       padding-inline: 0.25rem;
     }
   }

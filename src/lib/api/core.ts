@@ -1,5 +1,12 @@
 // CFMS Client - typed Tauri IPC wrappers.
 import { invoke } from '@tauri-apps/api/core';
+
+export type WindowBackdropMode = 'mica' | 'solid';
+
+/** Applies the native window base and reports the material actually applied. */
+export function setWindowBackdrop(theme: 'light' | 'dark', enabled: boolean): Promise<WindowBackdropMode> {
+  return invoke('set_window_backdrop', { theme, enabled });
+}
 import type { AndroidPasskeyAssertion, AndroidPasskeyAvailability, AndroidPasskeyRegistration, FileShortcutValidationResult, ServiceStatusInfo } from './types';
 
 /** Ping the Rust backend. */

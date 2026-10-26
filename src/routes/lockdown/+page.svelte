@@ -311,7 +311,7 @@
     max-inline-size: 850px;
     align-items: center;
     justify-content: center;
-    gap: 0.85rem;
+    gap: 12px;
     margin: clamp(1.75rem, 4vh, 2.75rem) auto 0;
   }
 
@@ -336,7 +336,7 @@
     border-inline-end: 1px solid var(--explorer-border-strong);
     padding-inline-end: 1rem;
     color: var(--explorer-danger);
-    font: 700 1.0625rem/1.3 var(--font-md3-sans);
+    font: 700 28px/36px var(--font-md3-sans);
     letter-spacing: -0.015em;
   }
 
@@ -345,7 +345,7 @@
     margin: 0;
     padding-inline-start: 1rem;
     color: var(--explorer-text-muted);
-    font: 400 0.8125rem/1.55 var(--font-md3-sans);
+    font: 400 12px/16px var(--font-md3-sans);
   }
 
   .lockdown-shelf {
@@ -380,7 +380,7 @@
   .lockdown-context-label {
     margin: 0 0 0.55rem;
     color: var(--explorer-text-muted);
-    font: 600 0.75rem/1.3 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
   }
 
   .lockdown-context-copy {
@@ -388,14 +388,14 @@
     overflow-wrap: anywhere;
     white-space: pre-wrap;
     color: var(--explorer-text);
-    font: 400 0.875rem/1.6 var(--font-md3-sans);
+    font: 400 14px/20px var(--font-md3-sans);
   }
 
   .lockdown-session-note {
     display: grid;
     grid-template-columns: 20px minmax(0, 1fr);
     align-items: start;
-    gap: 0.75rem;
+    gap: 12px;
   }
 
   .lockdown-detail-icon {
@@ -407,7 +407,7 @@
     display: grid;
     min-inline-size: 0;
     align-content: center;
-    gap: 1.1rem;
+    gap: 16px;
     border-inline-start: 1px solid var(--explorer-border);
     padding: clamp(1.25rem, 2.5vw, 1.75rem);
   }
@@ -428,21 +428,21 @@
   .lockdown-wait-copy {
     margin: 0;
     color: var(--explorer-text);
-    font: 600 0.8125rem/1.45 var(--font-md3-sans);
+    font: 600 12px/16px var(--font-md3-sans);
   }
 
   .lockdown-quit-hint {
     max-inline-size: 66ch;
     margin: 0.4rem 0 0;
     color: var(--explorer-text-muted);
-    font: 400 0.75rem/1.5 var(--font-md3-sans);
+    font: 400 12px/16px var(--font-md3-sans);
   }
 
   .lockdown-actions {
     display: grid;
     grid-template-columns: repeat(3, max-content);
     justify-content: end;
-    gap: 0.375rem;
+    gap: 8px;
   }
 
   .lockdown-actions--signed-out {
@@ -454,7 +454,7 @@
     inline-size: auto;
     justify-self: center;
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--borderRadiusMedium);
     padding-inline: 0.875rem;
     box-shadow: none;
     white-space: nowrap;
@@ -553,7 +553,7 @@
 
     .lockdown-status-copy {
       display: grid;
-      gap: 0.4rem;
+      gap: 8px;
     }
 
     .lockdown-status-copy h1 {

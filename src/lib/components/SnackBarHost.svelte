@@ -1,340 +1,312 @@
 <script lang="ts">
-  import Icon from "$lib/components/Icon.svelte";
-  import ProgressRing from "$lib/components/ProgressRing.svelte";
-  import { snackbarMotion } from "$lib/motion/transitions";
+  import { onDestroy, untrack } from 'svelte';
+  import { _ as t } from 'svelte-i18n';
+  import FluentButton from '$lib/components/FluentButton.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import ProgressRing from '$lib/components/ProgressRing.svelte';
+  import { portal } from '$lib/actions/portal';
+  import { snackbarMotion, snackbarReflow } from '$lib/motion/transitions';
   import {
-    chromeStore,
-    floatingProgressStore,
-    notificationStore,
-    type FloatingProgressEntry,
-    type NotificationEntry,
-  } from "$lib/stores.svelte";
+    chromeStore, floatingProgressStore, notificationStore,
+    type FloatingProgressEntry, type NotificationEntry,
+  } from '$lib/stores.svelte';
 
-  const SNACKBAR_BOTTOM_GAP = 20;
+  interface TimerState {
+    entry: NotificationEntry;
+    timer?: number;
+    remaining: number;
+    startedAt: number;
+    hovered: boolean;
+    focused: boolean;
+  }
+  type StackEntry =
+    | { kind: 'progress'; key: string; createdAt: number; entry: FloatingProgressEntry }
+    | { kind: 'notification'; key: string; createdAt: number; entry: NotificationEntry };
 
-  let now = $state(Date.now());
-  const timers = new Map<number, { timer: number; createdAt: number }>();
+  const timers = new Map<number, TimerState>();
   let expandedIds = $state<Set<number>>(new Set());
   let hostEl = $state<HTMLDivElement | null>(null);
-  type StackEntry =
-    | { kind: "progress"; key: string; createdAt: number; entry: FloatingProgressEntry }
-    | { kind: "notification"; key: string; createdAt: number; entry: NotificationEntry };
+  let progressClock = $state(Date.now());
+  let readyProgressIds = $state<Set<string>>(new Set());
 
-  const stackEntries = $derived<StackEntry[]>(
-    [
-      ...floatingProgressStore.entries.map((entry) => ({
-        kind: "progress" as const,
-        key: `progress:${entry.id}`,
-        createdAt: entry.createdAt,
-        entry,
-      })),
-      ...notificationStore.entries.map((entry) => ({
-        kind: "notification" as const,
-        key: `notification:${entry.id}`,
-        createdAt: entry.createdAt,
-        entry,
-      })),
-    ].sort((a, b) => b.createdAt - a.createdAt),
-  );
+  const stackEntries = $derived<StackEntry[]>([
+    ...floatingProgressStore.entries.slice().reverse()
+      .filter((entry) => readyProgressIds.has(entry.id))
+      .map((entry) => ({ kind: 'progress' as const, key: `progress:${entry.id}`, createdAt: entry.createdAt, entry })),
+    ...notificationStore.entries.slice().reverse()
+      .map((entry) => ({ kind: 'notification' as const, key: `notification:${entry.id}`, createdAt: entry.createdAt, entry })),
+  ].sort((a, b) => a.createdAt - b.createdAt));
 
   $effect(() => {
-    const interval = window.setInterval(() => {
-      now = Date.now();
-    }, 100);
-
-    return () => {
-      window.clearInterval(interval);
-    };
+    const entries = floatingProgressStore.entries;
+    progressClock;
+    return untrack(() => {
+      const now = Date.now();
+      readyProgressIds = new Set(entries.filter((entry) => entry.createdAt + 1000 <= now).map((entry) => entry.id));
+      const pending = entries.map((entry) => entry.createdAt + 1000 - now).filter((delay) => delay > 0);
+      if (!pending.length) return;
+      const timer = window.setTimeout(() => { progressClock = Date.now(); }, Math.min(...pending));
+      return () => window.clearTimeout(timer);
+    });
   });
 
   $effect(() => {
-    const updateHeight = () => {
-      if (stackEntries.length === 0) {
-        chromeStore.setSnackbarStackHeight(0);
-        return;
-      }
-
-      const rect = hostEl?.getBoundingClientRect();
-      const height = (rect?.height ?? 0) + SNACKBAR_BOTTOM_GAP;
-
-      chromeStore.setSnackbarStackHeight(height);
-    };
-
-    if (!hostEl || typeof ResizeObserver === "undefined") {
-      chromeStore.setSnackbarStackHeight(
-        stackEntries.length > 0 ? 96 : 0,
-      );
-      return;
-    }
-
-    updateHeight();
-
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(hostEl);
-
-    return () => {
-      observer.disconnect();
-    };
-  });
-
-  $effect(() => {
-    const activeIds = new Set(
-      notificationStore.entries.map((entry) => entry.id),
-    );
-
-    for (const [id, timerState] of timers) {
-      if (!activeIds.has(id)) {
-        window.clearTimeout(timerState.timer);
+    const entries = notificationStore.entries;
+    untrack(() => {
+      const activeIds = new Set(entries.map((entry) => entry.id));
+      for (const [id, state] of timers) {
+        if (activeIds.has(id)) continue;
+        window.clearTimeout(state.timer);
         timers.delete(id);
       }
-    }
-
-    for (const entry of notificationStore.entries) {
-      if (entry.timeoutMs === null) continue;
-
-      const existing = timers.get(entry.id);
-
-      if (existing && existing.createdAt === entry.createdAt) continue;
-
-      if (existing) {
-        window.clearTimeout(existing.timer);
+      expandedIds = new Set([...expandedIds].filter((id) => activeIds.has(id)));
+      for (const entry of entries) {
+        const previous = timers.get(entry.id);
+        // Identity also detects two group updates in the same millisecond.
+        if (previous?.entry === entry) continue;
+        window.clearTimeout(previous?.timer);
+        const state: TimerState = {
+          entry,
+          remaining: entry.timeoutMs === null ? 0 : Math.max(0, entry.timeoutMs - (Date.now() - entry.createdAt)),
+          startedAt: Date.now(),
+          hovered: previous?.hovered ?? false,
+          focused: previous?.focused ?? false,
+        };
+        timers.set(entry.id, state);
+        resumeTimer(state);
       }
-
-      const remaining = Math.max(
-        0,
-        entry.timeoutMs - (Date.now() - entry.createdAt),
-      );
-
-      const timer = window.setTimeout(() => {
-        notificationStore.remove(entry.id);
-        timers.delete(entry.id);
-      }, remaining);
-
-      timers.set(entry.id, {
-        timer,
-        createdAt: entry.createdAt,
-      });
-    }
-
-    return () => {
-      for (const timerState of timers.values()) {
-        window.clearTimeout(timerState.timer);
-      }
-
-      timers.clear();
-    };
+    });
   });
 
   $effect(() => {
-    return () => {
-      chromeStore.setSnackbarStackHeight(0);
+    const count = stackEntries.length;
+    const element = hostEl;
+    if (!element) return;
+    let previousHeight = element.clientHeight;
+    let previousScrollHeight = element.scrollHeight;
+    const updateHeight = () => {
+      // Resizing a bottom-anchored stack should keep the newest toast visible,
+      // while someone reading older messages retains their scroll position.
+      if (previousScrollHeight - element.scrollTop - previousHeight <= 1) {
+        element.scrollTop = element.scrollHeight;
+      }
+      previousHeight = element.clientHeight;
+      previousScrollHeight = element.scrollHeight;
+      const rect = element.getBoundingClientRect();
+      chromeStore.setSnackbarStackHeight(count ? rect.height + window.innerHeight - rect.bottom : 0);
     };
+    updateHeight();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => observer.disconnect();
   });
 
-  function progress(entry: NotificationEntry) {
-    if (entry.timeoutMs === null) return 1;
+  // Keep new messages reachable when a short window makes the stack scroll.
+  const latestKey = $derived(stackEntries.at(-1)?.key);
+  $effect(() => {
+    const element = hostEl;
+    if (latestKey && element) element.scrollTop = element.scrollHeight;
+  });
 
-    const elapsed = Math.max(0, now - entry.createdAt);
+  onDestroy(() => {
+    for (const state of timers.values()) window.clearTimeout(state.timer);
+    timers.clear();
+    chromeStore.setSnackbarStackHeight(0);
+  });
 
-    return Math.max(0, 1 - elapsed / entry.timeoutMs);
+  function resumeTimer(state: TimerState) {
+    if (state.entry.timeoutMs === null || state.hovered || state.focused) return;
+    state.startedAt = Date.now();
+    state.timer = window.setTimeout(() => remove(state.entry.id), state.remaining);
   }
 
-  function iconFor(type: NotificationEntry["type"]) {
-    if (type === "success") return "checkCircle";
-    if (type === "error") return "errorFilled";
-    if (type === "warning") return "warningAmber";
-
-    return "info";
+  function setPaused(id: number, reason: 'hovered' | 'focused', value: boolean) {
+    const state = timers.get(id);
+    if (!state || state[reason] === value) return;
+    const wasPaused = state.hovered || state.focused;
+    state[reason] = value;
+    const paused = state.hovered || state.focused;
+    if (paused === wasPaused) return;
+    if (paused) {
+      window.clearTimeout(state.timer);
+      state.timer = undefined;
+      state.remaining = Math.max(0, state.remaining - (Date.now() - state.startedAt));
+    } else resumeTimer(state);
   }
 
-  function toneClass(type: NotificationEntry["type"]) {
-    if (type === "success") return "snackbar-success";
-    if (type === "error") return "snackbar-error";
-    if (type === "warning") return "snackbar-warning";
+  function focusLeft(id: number, event: FocusEvent) {
+    const target = event.relatedTarget;
+    if (target instanceof Node && (event.currentTarget as HTMLElement).contains(target)) return;
+    setPaused(id, 'focused', false);
+  }
 
-    return "snackbar-info";
+  function iconFor(type: NotificationEntry['type']) {
+    if (type === 'success') return 'checkCircle';
+    if (type === 'error') return 'errorFilled';
+    if (type === 'warning') return 'warningAmber';
+    return 'info';
   }
 
   function toggleExpanded(id: number) {
     const next = new Set(expandedIds);
-
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
-
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     expandedIds = next;
   }
 
   function remove(id: number) {
-    const next = new Set(expandedIds);
-    next.delete(id);
-    expandedIds = next;
-
+    window.clearTimeout(timers.get(id)?.timer);
+    timers.delete(id);
     notificationStore.remove(id);
+  }
+
+  function hasTotal(entry: FloatingProgressEntry) {
+    return Number.isFinite(entry.total) && entry.total > 0 && Number.isFinite(entry.current);
+  }
+
+  function percent(entry: FloatingProgressEntry) {
+    return Math.round(Math.min(1, Math.max(0, entry.current / entry.total)) * 100);
   }
 </script>
 
-<div
-  bind:this={hostEl}
-  class="pointer-events-none fixed inset-x-0 bottom-5 z-[80] flex flex-col items-center gap-2 px-4"
->
+<div bind:this={hostEl} use:portal class="snackbar-host">
   {#each stackEntries as item (item.key)}
-    {#if item.kind === "progress"}
-      <div
-        class="snackbar snackbar-progress pointer-events-auto relative flex w-full max-w-md items-center gap-4 overflow-hidden rounded-lg px-5 py-4 shadow-2xl"
-        role="status"
-        transition:snackbarMotion={{ y: 22, duration: 220 }}
-      >
-        <ProgressRing
-          size={34}
-          strokeWidth={5}
-          class="snackbar-progress-ring"
-          label={item.entry.title}
-        />
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-base font-bold leading-6">
-            {item.entry.title}
-          </p>
-          <p class="truncate text-sm leading-5 opacity-90">
-            {item.entry.text}
-          </p>
-        </div>
-      </div>
-    {:else}
-      {@const entry = item.entry}
-      <div
-        class="snackbar pointer-events-auto relative flex w-full max-w-md items-start gap-3 overflow-hidden rounded-lg px-4 py-3 shadow-2xl {toneClass(
-          entry.type,
-        )}"
-        role="status"
-        transition:snackbarMotion={{ y: 22, duration: 220 }}
-      >
-        <span class="mt-0.5 shrink-0">
-          <Icon name={iconFor(entry.type)} size="20px" />
-        </span>
-
-        <div class="min-w-0 flex-1">
-          {#if entry.groupTitle}
-            <p class="truncate text-sm font-semibold leading-5">
-              {entry.groupTitle}
-            </p>
-            <p class="text-sm leading-5 opacity-90">{entry.text}</p>
-          {:else}
-            <p class="text-sm leading-5">{entry.text}</p>
+    <div class="snackbar-slot" animate:snackbarReflow>
+      {#if item.kind === 'progress'}
+        {@const entry = item.entry}
+        <div class="snackbar snackbar-progress" role="status" aria-atomic="true"
+          in:snackbarMotion|global out:snackbarMotion|global>
+          {#if !hasTotal(entry)}
+            <span class="snackbar-icon" aria-hidden="true">
+              <ProgressRing size={20} strokeWidth={2} label={entry.title} />
+            </span>
           {/if}
-
-          {#if expandedIds.has(entry.id) && entry.items.length > 1}
-            <div
-              class="mt-2 max-h-32 space-y-1 overflow-auto rounded-md bg-black/10 p-2"
-            >
-              {#each entry.items.slice().reverse() as item}
-                <p class="truncate text-xs leading-4 opacity-90">{item.text}</p>
-              {/each}
-            </div>
-          {/if}
+          <div class="snackbar-copy">
+            <p class="snackbar-title">{entry.title}</p>
+            <p class="snackbar-description">{entry.text}</p>
+            {#if hasTotal(entry)}
+              <progress class="snackbar-meter" max="100" value={percent(entry)} aria-label={entry.title}></progress>
+            {/if}
+          </div>
         </div>
-
-        {#if entry.items.length > 1}
-          <button
-            class="flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold opacity-85 transition hover:bg-white/10 hover:opacity-100"
-            aria-label={expandedIds.has(entry.id)
-              ? "Collapse notifications"
-              : "Expand notifications"}
-            onclick={() => toggleExpanded(entry.id)}
-          >
-            {entry.items.length}
-            <Icon
-              name={expandedIds.has(entry.id) ? "expandLess" : "expandMore"}
-              size="16px"
-            />
-          </button>
-        {/if}
-
-        {#if entry.action}
-          <button
-            class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold opacity-90 transition hover:bg-white/20 hover:opacity-100"
-            onclick={(event) => {
-              event.stopPropagation();
-              entry.action?.run();
-              notificationStore.remove(entry.id);
-            }}
-          >
-            {entry.action.label}
-          </button>
-        {/if}
-
-        <button
-          class="shrink-0 rounded-full p-0.5 opacity-75 transition hover:bg-white/10 hover:opacity-100"
-          aria-label="Close"
-          onclick={() => remove(entry.id)}
-        >
-          <Icon name="close" size="18px" />
-        </button>
-
-        {#if entry.timeoutMs !== null}
-          <span class="absolute inset-x-0 bottom-0 h-1 bg-white/12">
-            <span
-              class="block h-full bg-current opacity-80 transition-[width] duration-100 ease-linear"
-              style={`width: ${progress(entry) * 100}%`}
-            ></span>
-          </span>
-        {/if}
-      </div>
-    {/if}
+      {:else}
+        {@const entry = item.entry}
+        <div class="snackbar snackbar-{entry.type}" role={entry.type === 'error' ? 'alert' : 'status'} aria-atomic="true"
+          onmouseenter={() => setPaused(entry.id, 'hovered', true)}
+          onmouseleave={() => setPaused(entry.id, 'hovered', false)}
+          onfocusin={() => setPaused(entry.id, 'focused', true)}
+          onfocusout={(event) => focusLeft(entry.id, event)}
+          in:snackbarMotion|global out:snackbarMotion|global>
+          <span class="snackbar-icon"><Icon name={iconFor(entry.type)} size={20} /></span>
+          <div class="snackbar-copy">
+            {#if entry.groupTitle}
+              <p class="snackbar-title">{entry.groupTitle}</p>
+              <p class="snackbar-description">{entry.text}</p>
+            {:else}
+              <p>{entry.text}</p>
+            {/if}
+            {#if expandedIds.has(entry.id) && entry.items.length > 1}
+              <div class="snackbar-details" id={`snackbar-details-${entry.id}`}>
+                {#each entry.items.slice().reverse() as detail}
+                  <p>{detail.text}</p>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <div class="snackbar-actions">
+            {#if entry.action}
+              <FluentButton data-fluent-owner="lib-components-snack-bar-host" appearance="subtle" class="snackbar-action"
+                onclick={(event) => {
+                  event.stopPropagation();
+                  entry.action?.run();
+                  remove(entry.id);
+                }}>
+                {entry.action.label}
+              </FluentButton>
+            {/if}
+            {#if entry.items.length > 1}
+              <FluentButton data-fluent-owner="lib-components-snack-bar-host" appearance="subtle" class="snackbar-expand"
+                aria-label={$t(expandedIds.has(entry.id) ? 'common.showLess' : 'common.showMore')}
+                aria-expanded={expandedIds.has(entry.id)}
+                aria-controls={expandedIds.has(entry.id) ? `snackbar-details-${entry.id}` : undefined}
+                onclick={() => toggleExpanded(entry.id)}>
+                {entry.items.length}
+                <Icon name={expandedIds.has(entry.id) ? 'expandLess' : 'expandMore'} size={16} />
+              </FluentButton>
+            {/if}
+            <FluentButton data-fluent-owner="lib-components-snack-bar-host" appearance="subtle" iconOnly
+              aria-label={$t('common.close')} onclick={() => remove(entry.id)}>
+              <Icon name="close" size={20} />
+            </FluentButton>
+          </div>
+        </div>
+      {/if}
+    </div>
   {/each}
 </div>
 
 <style>
-  .snackbar {
-    color: white;
-    border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-    backdrop-filter: blur(18px);
-    box-shadow:
-      0 18px 56px rgba(0, 0, 0, 0.28),
-      0 1px 10px rgba(255, 255, 255, 0.1) inset;
-    transform-origin: 50% 100%;
-  }
-
-  .snackbar::before {
-    content: "";
-    position: absolute;
-    inset: 0;
+  .snackbar-host {
+    --snackbar-gap: 16px;
+    position: fixed;
+    z-index: 80;
+    left: calc(var(--snackbar-gap) + var(--safe-area-left, 0px));
+    right: calc(var(--snackbar-gap) + var(--safe-area-right, 0px));
+    bottom: calc(var(--snackbar-gap) + var(--safe-area-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    max-height: calc(100dvh - 2 * var(--snackbar-gap) - var(--safe-area-top, 0px) - var(--safe-area-bottom, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     pointer-events: none;
-    background: linear-gradient(
-      120deg,
-      rgba(255, 255, 255, 0.22),
-      transparent 34%
-    );
-    opacity: 0.75;
+    /* Leave room for elevation and focus without widening the pointer surface. */
+    padding: 8px;
+    margin: -8px;
+    scroll-padding-block: 8px;
   }
-
-  .snackbar-info {
-    background: color-mix(
-      in srgb,
-      var(--md3-inverse-surface, #313033) 92%,
-      transparent
-    );
+  .snackbar-slot { width: 100%; max-width: 384px; flex: none; pointer-events: auto; }
+  .snackbar {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 8px;
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow16);
+    font: 400 14px/20px var(--fontFamilyBase);
   }
-
-  .snackbar-progress {
-    background: color-mix(in srgb, var(--md3-inverse-surface, #313033) 94%, transparent);
+  .snackbar p { margin: 0; overflow-wrap: anywhere; }
+  .snackbar-copy { flex: 1; min-width: 0; }
+  .snackbar-title { font-weight: 600; }
+  .snackbar-description { color: var(--colorNeutralForeground2); }
+  .snackbar-title + .snackbar-description { margin-top: 4px; }
+  .snackbar-icon { display: flex; flex: none; color: var(--colorNeutralForeground2); }
+  .snackbar-success .snackbar-icon { color: var(--colorStatusSuccessForeground1); }
+  .snackbar-warning .snackbar-icon { color: var(--colorStatusWarningForeground1); }
+  .snackbar-error .snackbar-icon { color: var(--colorStatusDangerForeground1); }
+  .snackbar-actions { display: flex; flex: none; align-items: center; gap: 4px; margin: -6px -6px -6px 0; }
+  :global(.snackbar-expand[data-fluent-owner="lib-components-snack-bar-host"]) { min-inline-size: 0; padding-inline: 8px; }
+  .snackbar-details { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--colorNeutralStroke2); max-height: 128px; overflow: auto; font-size: 12px; line-height: 16px; }
+  .snackbar-details p + p { margin-top: 4px; }
+  .snackbar-meter { display: block; appearance: none; width: 100%; height: 4px; margin-top: 12px; border: 0; border-radius: 2px; overflow: hidden; background: var(--colorNeutralBackground6); color: var(--colorBrandBackground); }
+  .snackbar-meter::-webkit-progress-bar { background: var(--colorNeutralBackground6); }
+  .snackbar-meter::-webkit-progress-value { background: var(--colorBrandBackground); }
+  .snackbar-meter::-moz-progress-bar { background: var(--colorBrandBackground); }
+  @media (min-width: 640px) {
+    .snackbar-host { --snackbar-gap: 24px; left: auto; width: min(384px, calc(100vw - 48px - var(--safe-area-left, 0px) - var(--safe-area-right, 0px))); box-sizing: content-box; }
   }
-
-  :global(.snackbar-progress-ring) {
-    color: #22d3ee;
-  }
-
-  .snackbar-success {
-    background: color-mix(in srgb, #166534 88%, transparent);
-  }
-
-  .snackbar-warning {
-    background: color-mix(in srgb, #8a4b0f 90%, transparent);
-  }
-
-  .snackbar-error {
-    background: color-mix(in srgb, var(--md3-error, #ba1a1a) 90%, #1b1b1f);
+  @media (forced-colors: active) {
+    .snackbar { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; }
+    .snackbar .snackbar-icon, .snackbar-description { color: CanvasText; }
+    .snackbar-details { border-color: CanvasText; }
+    .snackbar-meter { forced-color-adjust: none; color: Highlight; background: Canvas; border: 1px solid CanvasText; }
+    .snackbar-meter::-webkit-progress-bar { background: Canvas; }
+    .snackbar-meter::-webkit-progress-value { background: Highlight; }
+    .snackbar-meter::-moz-progress-bar { background: Highlight; }
   }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
 
   let {
@@ -49,12 +50,17 @@
     </dl>
   </div>
 
-  <button type="button" class="account-disabled-back" onclick={onBack}>
+  <FluentButton data-fluent-owner="lib-components-account-disabled-notice"
+    type="button"
+    onclick={onBack}
+    appearance="subtle"
+    class="account-disabled-back"
+  >
     <span class="account-disabled-back__icon">
       <Icon name="arrowBack" size="20px" />
     </span>
     <span class="account-disabled-back__label">{backLabel}</span>
-  </button>
+  </FluentButton>
 </section>
 
 <style>
@@ -72,7 +78,7 @@
   .account-disabled-heading {
     display: grid;
     justify-items: center;
-    gap: 0.7rem;
+    gap: 12px;
   }
 
   h1,
@@ -84,7 +90,7 @@
     color: var(--explorer-text);
     font-family: var(--font-md3-sans);
     font-size: clamp(1.55rem, 4vw, 1.85rem);
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: -0.025em;
     line-height: 1.2;
   }
@@ -93,9 +99,9 @@
     display: flex;
     max-width: min(100%, 18rem);
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     color: var(--explorer-text-muted);
-    font-size: 0.84rem;
+    font-size: 14px;
     font-weight: 560;
   }
 
@@ -110,7 +116,7 @@
     width: 100%;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
-    gap: 0.75rem;
+    gap: 12px;
     margin-top: 2.15rem;
     border: 1px solid color-mix(in srgb, var(--explorer-warning) 36%, transparent);
     border-radius: var(--explorer-radius-large);
@@ -127,7 +133,7 @@
   }
 
   .account-disabled-reason p {
-    font-size: 0.86rem;
+    font-size: 14px;
     font-weight: 400;
     line-height: 1.55;
   }
@@ -140,7 +146,7 @@
 
   .account-disabled-description {
     color: var(--explorer-text-muted);
-    font-size: 0.9rem;
+    font-size: 14px;
     line-height: 1.65;
   }
 
@@ -155,7 +161,7 @@
     align-items: baseline;
     justify-content: center;
     gap: 0.4rem 0.65rem;
-    font-size: 0.8rem;
+    font-size: 12px;
     line-height: 1.5;
   }
 
@@ -169,12 +175,12 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .account-disabled-back {
+  :global(.account-disabled-back[data-fluent-owner="lib-components-account-disabled-notice"]) {
     display: inline-flex;
     min-height: 44px;
     align-items: center;
     justify-content: center;
-    gap: 0.55rem;
+    gap: 8px;
     margin-top: 1.5rem;
     border: 0;
     border-radius: 0;
@@ -182,8 +188,8 @@
     color: var(--color-md3-primary-emphasis, var(--color-md3-primary));
     background: transparent;
     font-family: var(--font-md3-sans);
-    font-size: 0.9rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     transition:
       color var(--motion-duration-short4) var(--motion-easing-standard),
       filter var(--motion-duration-short4) var(--motion-easing-standard);
@@ -194,7 +200,7 @@
     display: inline-flex;
   }
 
-  .account-disabled-back:hover {
+  :global(.account-disabled-back[data-fluent-owner="lib-components-account-disabled-notice"]:hover) {
     color: color-mix(in srgb, var(--color-md3-primary-emphasis, var(--color-md3-primary)) 78%, white);
     filter: drop-shadow(0 0 5px color-mix(in srgb, currentColor 32%, transparent));
   }

@@ -168,6 +168,7 @@ const SERVER_STATE: ServerState = {
 };
 
 const AUTH_STATUS: AuthStatus = {
+  user_id: 'preview-user-id',
   username: USERNAME,
   nickname: NICKNAME,
   has_token: true,

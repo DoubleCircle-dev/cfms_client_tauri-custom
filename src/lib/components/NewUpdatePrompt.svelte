@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { fade } from 'svelte/transition';
@@ -126,23 +127,41 @@
       {/if}
 
       <div class="actions">
-        <button type="button" class="primary-action" onclick={installUpdate} disabled={appUpdateState.installing}>
+        <FluentButton data-fluent-owner="lib-components-new-update-prompt"
+          type="button"
+          onclick={installUpdate}
+          disabled={appUpdateState.installing}
+          appearance="subtle"
+          class="primary-action"
+        >
           {#if appUpdateState.installing}
             <ProgressRing size={18} strokeWidth={2.4} label={$t('settings.updates.installing')} />
           {:else}
             <Icon name="download" size="18px" />
           {/if}
           {installButtonLabel}
-        </button>
+        </FluentButton>
 
-        <button type="button" class="tonal-action" onclick={openReleasePage} disabled={appUpdateState.installing}>
+        <FluentButton data-fluent-owner="lib-components-new-update-prompt"
+          type="button"
+          onclick={openReleasePage}
+          disabled={appUpdateState.installing}
+          appearance="subtle"
+          class="tonal-action"
+        >
           <Icon name="openInNew" size="18px" />
           {$t('settings.updates.openRelease')}
-        </button>
+        </FluentButton>
 
-        <button type="button" class="text-action" onclick={closePrompt} disabled={appUpdateState.installing}>
+        <FluentButton data-fluent-owner="lib-components-new-update-prompt"
+          type="button"
+          onclick={closePrompt}
+          disabled={appUpdateState.installing}
+          appearance="subtle"
+          class="text-action"
+        >
           {$t('settings.updates.notNow')}
-        </button>
+        </FluentButton>
       </div>
     </div>
   </div>
@@ -155,39 +174,17 @@
     padding-block-end: calc(var(--safe-area-bottom, 0px) + 2.5rem);
     padding-inline-start: max(1.25rem, var(--safe-area-left, 0px));
     padding-inline-end: max(1.25rem, var(--safe-area-right, 0px));
-    background:
-      linear-gradient(145deg, rgba(17, 22, 29, 0.98), rgba(18, 24, 32, 0.98)),
-      var(--color-md3-surface);
-    -webkit-backdrop-filter: blur(18px);
-    backdrop-filter: blur(18px);
-  }
-
-  :global(html[data-theme='light']) .update-prompt {
-    background:
-      linear-gradient(145deg, rgba(250, 250, 250, 0.98), rgba(243, 243, 243, 0.98)),
-      var(--color-md3-surface);
-  }
-
-  :global(html[data-theme='light']) .release-icon,
-  :global(html[data-theme='light']) .eyebrow,
-  :global(html[data-theme='light']) .notes :global(.markdown-view li::marker),
-  :global(html[data-theme='light']) .notes :global(.markdown-view a) {
-    color: var(--color-md3-primary);
-  }
-
-  :global(html[data-theme='light']) :where(h2, .subtitle, .notes, .notes :global(.markdown-view), .notes :global(.markdown-view :where(h1, h2, h3, h4, h5, h6))) {
-    color: var(--color-md3-on-surface);
-  }
-
-  :global(html[data-theme='light']) .notes {
-    border-color: var(--color-md3-outline);
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground1);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   .prompt-content {
     width: min(760px, 100%);
     display: grid;
     justify-items: center;
-    gap: 1.05rem;
+    gap: 16px;
     text-align: center;
     transform: translateY(-1.75vh);
   }
@@ -197,13 +194,12 @@
     width: 4.75rem;
     height: 4.75rem;
     place-items: center;
-    color: #b9c5ff;
-    filter: drop-shadow(0 0.7rem 1.6rem rgba(79, 70, 229, 0.18));
+    color: var(--colorBrandForeground1);
   }
 
   .copy {
     display: grid;
-    gap: 0.5rem;
+    gap: 8px;
     justify-items: center;
   }
 
@@ -214,54 +210,52 @@
   }
 
   .eyebrow {
-    color: rgba(185, 197, 255, 0.92);
-    font: 800 0.82rem/1.25 var(--font-md3-sans);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    color: var(--colorBrandForeground1);
+    font: 600 14px/20px var(--font-md3-sans);
   }
 
   h2 {
-    color: rgba(248, 250, 252, 0.92);
+    color: var(--colorNeutralForeground1);
     font-family: var(--font-md3-sans);
-    font-size: clamp(2.2rem, 4.4vw, 3rem);
-    font-weight: 850;
+    font-size: 28px;
+    font-weight: 600;
     letter-spacing: 0;
-    line-height: 1.08;
+    line-height: 36px;
   }
 
   .subtitle {
-    color: rgba(248, 250, 252, 0.78);
+    color: var(--colorNeutralForeground3);
     max-width: 100%;
-    font: 500 1rem/1.55 var(--font-md3-sans);
+    font: 500 16px/22px var(--font-md3-sans);
   }
 
   .notes {
     width: min(720px, 100%);
     max-height: min(34vh, 18rem);
     overflow: auto;
-    border-block: 1px solid rgba(226, 232, 240, 0.22);
+    border-block: 1px solid var(--colorNeutralStroke2);
     margin-top: 0.15rem;
     padding: 1rem 0.9rem 1rem 0;
     text-align: left;
-    color: rgba(248, 250, 252, 0.78);
+    color: var(--colorNeutralForeground3);
     scrollbar-gutter: stable;
   }
 
   .notes :global(.markdown-view) {
-    color: rgba(248, 250, 252, 0.78);
-    font-size: 0.95rem;
+    color: var(--colorNeutralForeground3);
+    font-size: 16px;
     line-height: 1.7;
   }
 
   .notes :global(.markdown-view :where(h1, h2, h3, h4, h5, h6)) {
-    color: rgba(248, 250, 252, 0.9);
-    font-size: 1.05rem;
+    color: var(--colorNeutralForeground1);
+    font-size: 28px;
     line-height: 1.45;
   }
 
   .notes :global(.markdown-view li::marker),
   .notes :global(.markdown-view a) {
-    color: #b9c5ff;
+    color: var(--colorBrandForegroundLink);
   }
 
   .notes::-webkit-scrollbar {
@@ -277,22 +271,22 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 0.75rem;
+    gap: 12px;
     padding-top: 0.3rem;
   }
 
-  .primary-action,
-  .tonal-action,
-  .text-action {
+  :global(.primary-action[data-fluent-owner="lib-components-new-update-prompt"]),
+  :global(.tonal-action[data-fluent-owner="lib-components-new-update-prompt"]),
+  :global(.text-action[data-fluent-owner="lib-components-new-update-prompt"]) {
     display: inline-flex;
     min-height: 2.625rem;
     align-items: center;
     justify-content: center;
-    gap: 0.6rem;
-    border-radius: 999px;
+    gap: 8px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0 1.15rem;
     font-family: var(--font-md3-sans);
-    font-size: 0.9rem;
+    font-size: 14px;
     font-weight: 750;
     line-height: 1;
     white-space: nowrap;
@@ -302,41 +296,41 @@
       opacity var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  .primary-action :global(.material-symbols-outlined),
-  .tonal-action :global(.material-symbols-outlined) {
+  :global(.primary-action[data-fluent-owner="lib-components-new-update-prompt"]) :global(.cfms-icon),
+  :global(.tonal-action[data-fluent-owner="lib-components-new-update-prompt"]) :global(.cfms-icon) {
     flex: 0 0 auto;
   }
 
-  .primary-action {
+  :global(.primary-action[data-fluent-owner="lib-components-new-update-prompt"]) {
     min-width: 10rem;
     background: var(--color-md3-primary);
     color: var(--color-md3-on-primary);
   }
 
-  .tonal-action {
+  :global(.tonal-action[data-fluent-owner="lib-components-new-update-prompt"]) {
     min-width: 10.75rem;
     background: color-mix(in srgb, var(--color-md3-primary-container) 74%, transparent);
     color: var(--color-md3-on-primary-container);
   }
 
-  .text-action {
+  :global(.text-action[data-fluent-owner="lib-components-new-update-prompt"]) {
     min-width: 6.5rem;
     background: transparent;
     color: var(--color-md3-on-surface-variant);
   }
 
-  .primary-action:hover:not(:disabled),
-  .tonal-action:hover:not(:disabled),
-  .text-action:hover:not(:disabled) {
+  :global(.primary-action[data-fluent-owner="lib-components-new-update-prompt"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.tonal-action[data-fluent-owner="lib-components-new-update-prompt"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.text-action[data-fluent-owner="lib-components-new-update-prompt"]:hover:not(:is(:disabled, [disabled]))) {
     transform: translateY(-1px);
   }
 
-  .text-action:hover:not(:disabled) {
+  :global(.text-action[data-fluent-owner="lib-components-new-update-prompt"]:hover:not(:is(:disabled, [disabled]))) {
     background: color-mix(in srgb, var(--color-md3-on-surface) 8%, transparent);
     color: var(--color-md3-on-surface);
   }
 
-  button:disabled {
+  :global(.cfms-button[data-fluent-owner="lib-components-new-update-prompt"]:is(:disabled, [disabled])) {
     opacity: 0.55;
   }
 
@@ -347,7 +341,7 @@
     }
 
     .prompt-content {
-      gap: 1rem;
+      gap: 16px;
       transform: none;
     }
 
@@ -357,17 +351,17 @@
     }
 
     h2 {
-      font-size: clamp(2rem, 10vw, 2.65rem);
+      font-size: 28px;
     }
 
     .actions {
       width: 100%;
-      gap: 0.6rem;
+      gap: 8px;
     }
 
-    .primary-action,
-    .tonal-action,
-    .text-action {
+    :global(.primary-action[data-fluent-owner="lib-components-new-update-prompt"]),
+    :global(.tonal-action[data-fluent-owner="lib-components-new-update-prompt"]),
+    :global(.text-action[data-fluent-owner="lib-components-new-update-prompt"]) {
       width: 100%;
     }
   }

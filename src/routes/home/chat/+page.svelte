@@ -1172,7 +1172,7 @@
     text-align: center;
   }
 
-  .chat-state :global(.material-symbols-rounded) {
+  .chat-state :global(.cfms-icon) {
     color: var(--explorer-text-muted);
   }
 

@@ -137,7 +137,7 @@
       {#if backgroundBehaviorUnavailable}
         <div
           class="flex flex-wrap items-center gap-3 rounded-lg border border-md3-outline/70
-                 bg-md3-surface-container-high/55 px-3 py-3 text-sm text-md3-on-surface"
+                 bg-md3-surface-container-high px-3 py-3 text-sm text-md3-on-surface"
         >
           <span class="shrink-0 text-md3-primary-emphasis">
             <Icon name="warningAmber" size="20px" />
@@ -180,7 +180,7 @@
             onkeydown={(event) => handleOptionKeydown(event, option.value)}
           >
             <span class="mt-0.5 shrink-0 {behavior === option.value ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'}" aria-hidden="true">
-              <Icon name={behavior === option.value ? 'radioChecked' : 'radioUnchecked'} size="22px" />
+              <Icon name={behavior === option.value ? 'radioChecked' : 'radioUnchecked'} filled={behavior === option.value} size="22px" />
             </span>
             <span class="min-w-0">
               <span class="block font-medium">{$t(option.labelKey)}</span>

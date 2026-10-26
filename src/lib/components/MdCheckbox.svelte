@@ -1,69 +1,23 @@
 <script lang="ts">
-  import Icon from '$lib/components/Icon.svelte';
-
+  import '@fluentui/web-components/checkbox.js';
+  import type { Checkbox } from '@fluentui/web-components';
+  import { disabledAttribute } from '$lib/fluent/control';
   interface Props {
-    checked?: boolean;
-    disabled?: boolean;
-    ariaLabel?: string;
-    class?: string;
+    checked?: boolean; disabled?: boolean; ariaLabel?: string; class?: string;
     onChange?: (checked: boolean) => void;
   }
-
-  let {
-    checked = $bindable(false),
-    disabled = false,
-    ariaLabel = '',
-    class: className = '',
-    onChange,
-  }: Props = $props();
-
-  function toggle() {
-    if (disabled) return;
-    checked = !checked;
-    onChange?.(checked);
-  }
+  let { checked = $bindable(false), disabled = false, ariaLabel = '', class: className = '', onChange }: Props = $props();
+  const controlId = $props.id();
+  let element: Checkbox | undefined = $state();
+  $effect(() => { if (element) element.checked = checked; });
 </script>
-
-<button
-  type="button"
-  role="checkbox"
-  aria-checked={checked}
-  aria-label={ariaLabel}
-  disabled={disabled}
-  class="md-choice-button {checked ? 'text-md3-primary-emphasis' : 'text-md3-on-surface-variant'} {className}"
-  onclick={toggle}
->
-  <Icon name={checked ? 'checkBox' : 'checkBoxBlank'} size="22px" />
-</button>
-
+<label class="cfms-choice-target" for={controlId}><fluent-checkbox bind:this={element} id={controlId} role="checkbox" use:disabledAttribute={disabled} aria-label={ariaLabel}
+  aria-checked={checked} aria-disabled={disabled || undefined} data-focus-ring="fluent"
+  size="large" class="cfms-checkbox {className}"
+  onchange={() => { if (element && !disabled) { checked = element.checked; onChange?.(checked); } }}
+></fluent-checkbox></label>
 <style>
-  .md-choice-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    inline-size: 28px;
-    block-size: 28px;
-    padding: 0;
-    border: 0;
-    border-radius: 9999px;
-    background: transparent;
-    cursor: pointer;
-    transition:
-      color var(--motion-duration-short4) var(--motion-easing-standard),
-      background var(--motion-duration-short4) var(--motion-easing-standard),
-      transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate);
-  }
-
-  .md-choice-button:hover:not(:disabled) {
-    background: color-mix(in srgb, currentColor 12%, transparent);
-  }
-
-  .md-choice-button:active:not(:disabled) {
-    transform: scale(0.92);
-  }
-
-  .md-choice-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
+  .cfms-checkbox { vertical-align: middle; flex-shrink: 0; }
+  .cfms-choice-target { display: inline-flex; align-items: center; justify-content: center; min-inline-size: 28px; min-block-size: 28px; position: relative; }
+  @media (pointer: coarse) { .cfms-choice-target { min-block-size: 44px; min-inline-size: 44px; } }
 </style>

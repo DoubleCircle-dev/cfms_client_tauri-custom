@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import { resetLocalData } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
@@ -43,14 +44,15 @@
         </p>
       </div>
 
-      <button
+      <FluentButton data-fluent-owner="routes-home-settings-data-page"
         type="button"
-        class="reset-app-button"
         onclick={() => { dialogOpen = true; }}
+        appearance="subtle"
+        class="reset-app-button"
       >
         <Icon name="restartAlt" size="19px" />
         {$t('settings.localData.openAction')}
-      </button>
+      </FluentButton>
     </section>
   </div>
 </div>
@@ -63,24 +65,24 @@
 />
 
 <style>
-  .reset-app-button {
+  :global(.reset-app-button[data-fluent-owner="routes-home-settings-data-page"]) {
     display: inline-flex;
     min-height: 2.5rem;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    border-radius: var(--explorer-radius-small, 5px);
+    gap: 8px;
+    border-radius: var(--borderRadiusMedium);
     padding-inline: 1rem;
     color: var(--color-md3-on-primary-container);
     background: var(--color-md3-primary-container);
-    font: 600 0.875rem/1.25 var(--font-md3-sans);
+    font: 600 14px/20px var(--font-md3-sans);
     transition:
       background-color var(--motion-duration-short4) var(--motion-easing-standard),
       box-shadow var(--motion-duration-short4) var(--motion-easing-standard),
       transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate);
   }
 
-  .reset-app-button:hover {
+  :global(.reset-app-button[data-fluent-owner="routes-home-settings-data-page"]:hover) {
     background: color-mix(
       in srgb,
       var(--color-md3-on-primary-container) 8%,
@@ -90,7 +92,7 @@
     transform: translateY(-1px);
   }
 
-  .reset-app-button:active {
-    transform: translateY(0) scale(0.98);
+  :global(.reset-app-button[data-fluent-owner="routes-home-settings-data-page"]:active) {
+    transform: none;
   }
 </style>

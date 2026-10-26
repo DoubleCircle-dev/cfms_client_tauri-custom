@@ -1,4 +1,6 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { _ as t } from 'svelte-i18n';
@@ -328,7 +330,7 @@
       <label class="mt-4 block space-y-1.5 text-sm text-md3-on-surface" style="font-family: var(--font-md3-sans);">
         {$t('appLock.settings.timedLockTimeout')}
         <select
-          class="w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
+          class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-surface-container-high
                  px-3 py-2 text-md3-on-surface disabled:opacity-60"
           value={appLockStore.settings.timedLockMs}
           disabled={!appLockStore.settings.timedLockEnabled || busy !== null}
@@ -360,30 +362,35 @@
       </div>
 
       <div class="mt-4 flex flex-wrap gap-2">
-        <button
-          class="app-lock-action app-lock-action--primary"
+        <FluentButton data-fluent-owner="routes-home-settings-app-lock-page"
           onclick={openPinSetup}
           disabled={busy !== null}
+          type="button"
+          appearance="subtle"
+          class="app-lock-action app-lock-action--primary"
         >
           <Icon name="pin" size="18px" />
           {appLockStore.hasPin ? $t('appLock.settings.changePin') : $t('appLock.settings.setPin')}
-        </button>
+        </FluentButton>
         {#if appLockStore.hasPin}
-          <button
-            class="app-lock-action app-lock-action--danger"
+          <FluentButton data-fluent-owner="routes-home-settings-app-lock-page"
             onclick={removePin}
             disabled={busy !== null}
+            type="button"
+            appearance="subtle"
+            tone="danger"
+            class="app-lock-action app-lock-action--danger"
           >
             <Icon name="delete" size="18px" />
             {$t('appLock.settings.removePin')}
-          </button>
+          </FluentButton>
         {/if}
       </div>
     </section>
 
     {#if isMobile}
       <section class="settings-section">
-        <div class="flex items-start justify-between gap-4">
+        <div class="flex flex-wrap items-start justify-between gap-4">
           <div class="min-w-0">
             <h2 class="text-sm font-semibold text-md3-on-surface" style="font-family: var(--font-md3-sans);">
               {$t('appLock.settings.biometricTitle')}
@@ -403,6 +410,7 @@
               <Icon name={appLockStore.biometricAvailable ? 'verified' : 'warningAmber'} size="16px" />
               {biometricStatus}
             </span>
+            <IconButton icon="refresh" label={$t('common.refresh')} disabled={busy !== null} onclick={refreshBiometricAvailability} />
             <MdSwitch
               checked={appLockStore.settings.biometricEnabled}
               disabled={!appLockStore.biometricAvailable || busy !== null}
@@ -412,16 +420,6 @@
           </div>
         </div>
 
-        <div class="mt-4 flex flex-wrap gap-2">
-          <button
-            class="app-lock-action"
-            onclick={refreshBiometricAvailability}
-            disabled={busy !== null}
-          >
-            <Icon name="refresh" size="18px" />
-            {$t('common.refresh')}
-          </button>
-        </div>
       </section>
     {/if}
 
@@ -435,22 +433,25 @@
             {$t('appLock.settings.platformDescription')}
           </p>
         </div>
-        <span
-          class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
-          class:bg-md3-primary-container={appLockStore.platformAvailable}
-          class:text-md3-on-primary-container={appLockStore.platformAvailable}
-          class:bg-md3-surface-container-high={!appLockStore.platformAvailable}
-          class:text-md3-on-surface-variant={!appLockStore.platformAvailable}
-        >
-          <Icon name={appLockStore.platformAvailable ? 'verified' : 'warningAmber'} size="16px" />
-          {platformStatus}
-        </span>
+        <div class="flex shrink-0 items-center gap-2">
+          <span
+            class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
+            class:bg-md3-primary-container={appLockStore.platformAvailable}
+            class:text-md3-on-primary-container={appLockStore.platformAvailable}
+            class:bg-md3-surface-container-high={!appLockStore.platformAvailable}
+            class:text-md3-on-surface-variant={!appLockStore.platformAvailable}
+          >
+            <Icon name={appLockStore.platformAvailable ? 'verified' : 'warningAmber'} size="16px" />
+            {platformStatus}
+          </span>
+          <IconButton icon="refresh" label={$t('common.refresh')} disabled={busy !== null} onclick={() => appLockStore.refreshPlatformAvailability()} />
+        </div>
       </div>
 
       {#if appLockStore.settings.platformCredentials.length > 0}
         <div class="mt-4 divide-y divide-md3-outline/50 overflow-hidden rounded-lg border border-md3-outline/60">
           {#each appLockStore.settings.platformCredentials as credential}
-            <div class="flex items-center gap-3 bg-md3-surface-container-high/35 px-3 py-2.5">
+            <div class="flex items-center gap-3 bg-md3-surface-container-high px-3 py-2.5">
               <span class="text-md3-primary-emphasis">
                 <Icon name="passkey" size="22px" />
               </span>
@@ -462,36 +463,34 @@
                   {formatDate(credential.createdAt)}
                 </p>
               </div>
-              <button
-                class="rounded-full p-2 text-md3-error transition-colors hover:bg-md3-error-container hover:text-md3-on-error-container disabled:opacity-45"
+              <FluentButton data-fluent-owner="routes-home-settings-app-lock-page"
                 aria-label={$t('appLock.settings.removePlatform')}
                 onclick={() => removePlatformCredential(credential.id)}
                 disabled={busy !== null}
+                type="button"
+                appearance="subtle"
+                tone="danger"
+                class="rounded p-2 text-md3-error transition-colors hover:bg-md3-error-container hover:text-md3-on-error-container disabled:opacity-45"
+                iconOnly
               >
                 <Icon name="delete" size="18px" />
-              </button>
+              </FluentButton>
             </div>
           {/each}
         </div>
       {/if}
 
       <div class="mt-4 flex flex-wrap gap-2">
-        <button
-          class="app-lock-action app-lock-action--primary"
+        <FluentButton data-fluent-owner="routes-home-settings-app-lock-page"
           onclick={addPlatformCredential}
           disabled={!appLockStore.platformAvailable || busy !== null}
+          type="button"
+          appearance="subtle"
+          class="app-lock-action app-lock-action--primary"
         >
           <Icon name="passkey" size="18px" />
           {$t('appLock.settings.addPlatform')}
-        </button>
-        <button
-          class="app-lock-action"
-          onclick={() => appLockStore.refreshPlatformAvailability()}
-          disabled={busy !== null}
-        >
-          <Icon name="refresh" size="18px" />
-          {$t('common.refresh')}
-        </button>
+        </FluentButton>
       </div>
     </section>
     </div>
@@ -532,57 +531,58 @@
           deleteLabel={$t('common.delete')}
         />
 
-        <button
+        <FluentButton data-fluent-owner="routes-home-settings-app-lock-page"
           type="button"
-          class="pin-setup-cancel mt-7"
           onclick={() => closePinSetup()}
           disabled={busy === 'pin'}
+          appearance="subtle"
+          class="pin-setup-cancel mt-7"
         >
           <Icon name="arrowBack" size="20px" />
           {$t('common.cancel')}
-        </button>
+        </FluentButton>
       </div>
     </ViewportScaleFrame>
   </div>
 {/if}
 
 <style>
-  .app-lock-action {
+  :global(.app-lock-action[data-fluent-owner="routes-home-settings-app-lock-page"]) {
     display: inline-flex;
     min-block-size: 40px;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
+    gap: 8px;
     border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-small, 5px);
+    border-radius: var(--borderRadiusMedium);
     background: transparent;
     color: var(--color-md3-on-surface);
     padding: 0.55rem 0.9rem;
-    font-size: 0.8125rem;
-    font-weight: 650;
+    font-size: 12px;
+    font-weight: 600;
     transition:
       background var(--motion-duration-short4) var(--motion-easing-standard),
       transform var(--motion-duration-short4) var(--motion-easing-emphasized-decelerate),
       opacity var(--motion-duration-short4) var(--motion-easing-standard);
   }
 
-  .app-lock-action:hover:not(:disabled) {
+  :global(.app-lock-action[data-fluent-owner="routes-home-settings-app-lock-page"]:hover:not(:is(:disabled, [disabled]))) {
     background: var(--color-md3-surface-container-highest);
     transform: translateY(-1px);
   }
 
-  .app-lock-action:disabled {
+  :global(.app-lock-action[data-fluent-owner="routes-home-settings-app-lock-page"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.45;
   }
 
-  .app-lock-action--primary {
+  :global(.app-lock-action--primary[data-fluent-owner="routes-home-settings-app-lock-page"]) {
     border-color: color-mix(in srgb, var(--color-md3-primary) 55%, transparent);
     background: var(--color-md3-primary-container);
     color: var(--color-md3-on-primary-container);
   }
 
-  .app-lock-action--danger {
+  :global(.app-lock-action--danger[data-fluent-owner="routes-home-settings-app-lock-page"]) {
     border-color: color-mix(in srgb, var(--color-md3-error) 55%, transparent);
     color: var(--color-md3-error);
   }
@@ -617,45 +617,45 @@
     animation: pin-setup-enter 360ms var(--motion-easing-emphasized-decelerate) both;
   }
 
-  .pin-setup-cancel {
+  :global(.pin-setup-cancel[data-fluent-owner="routes-home-settings-app-lock-page"]) {
     display: inline-flex;
     min-block-size: 42px;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
+    gap: 8px;
     border: 0;
     border-radius: 9999px;
     background: transparent;
     color: white;
     padding: 0.55rem 1rem;
     font-family: var(--font-md3-sans);
-    font-size: 0.875rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     transition:
       background-color 160ms var(--motion-easing-standard),
       transform 160ms var(--motion-easing-emphasized-decelerate),
       opacity 160ms var(--motion-easing-standard);
   }
 
-  .pin-setup-cancel:hover:not(:disabled) {
+  :global(.pin-setup-cancel[data-fluent-owner="routes-home-settings-app-lock-page"]:hover:not(:is(:disabled, [disabled]))) {
     background: rgba(255, 255, 255, 0.1);
     transform: translateY(-1px);
   }
 
-  .pin-setup-cancel:active:not(:disabled) {
-    transform: scale(0.97);
+  :global(.pin-setup-cancel[data-fluent-owner="routes-home-settings-app-lock-page"]:active:not(:is(:disabled, [disabled]))) {
+    transform: none;
   }
 
-  .pin-setup-cancel:disabled {
+  :global(.pin-setup-cancel[data-fluent-owner="routes-home-settings-app-lock-page"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.45;
   }
 
-  :global(html[data-theme='light']) .pin-setup-cancel {
+  :global(html[data-theme='light']) :global(.pin-setup-cancel[data-fluent-owner="routes-home-settings-app-lock-page"]) {
     color: var(--color-md3-on-surface-variant);
   }
 
-  :global(html[data-theme='light']) .pin-setup-cancel:hover:not(:disabled) {
+  :global(html[data-theme='light']) :global(.pin-setup-cancel[data-fluent-owner="routes-home-settings-app-lock-page"]:hover:not(:is(:disabled, [disabled]))) {
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-highest);
   }

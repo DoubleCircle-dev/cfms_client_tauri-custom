@@ -1,4 +1,6 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { onDestroy } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import DialogActionButton from '$lib/components/DialogActionButton.svelte';
@@ -127,7 +129,7 @@
       submit();
     }}
   >
-    <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high/40 p-3">
+    <div class="flex items-start gap-3 rounded-lg border border-md3-outline/60 bg-md3-surface-container-high p-3">
       <span class="rounded-lg bg-md3-primary-container/70 p-2 text-md3-primary-emphasis">
         <Icon name="password" size="20px" />
       </span>
@@ -137,43 +139,47 @@
     </div>
 
     <div>
-      <label class="mb-1.5 block text-sm font-medium text-md3-on-surface" for="reset-password">
-        {$t('dialog.changePassword.newPassword')}
-      </label>
-      <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-          <Icon name="password" size="18px" />
-        </span>
-        <input
-          id="reset-password"
-          class="w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-20 text-sm text-md3-on-surface outline-none transition"
-          type={visible ? 'text' : 'password'}
-          placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}
-          autocomplete="new-password"
-          bind:value={password}
-          disabled={busy}
-        />
-        <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-          <button
-            type="button"
-            class="rounded-full p-1 text-md3-on-surface-variant transition-colors hover:text-md3-primary-emphasis disabled:opacity-45"
-            title={$t('dialog.changePassword.generateStrongPassword')}
+      <MdOutlinedField inputId="reset-password" label={$t('dialog.changePassword.newPassword')} disabled={busy}>
+        <div data-outlined-content class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+            <Icon name="password" size="18px" />
+          </span>
+          <input data-focus-ring="delegated"
+            id="reset-password"
+            class="w-full py-2.5 pl-10 pr-20 text-sm text-md3-on-surface transition"
+            type={visible ? 'text' : 'password'}
+            placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}
+            autocomplete="new-password"
+            bind:value={password}
             disabled={busy}
-            onclick={generate}
-          >
-            <Icon name="ifl" size="18px" />
-          </button>
-          <button
-            type="button"
-            class="rounded-full p-1 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface disabled:opacity-45"
-            aria-label={visible ? $t('login.hidePassword') : $t('login.showPassword')}
-            disabled={busy}
-            onclick={() => (visible = !visible)}
-          >
-            <Icon name="visibility" size="18px" />
-          </button>
+          />
+          <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+            <FluentButton data-fluent-owner="lib-components-reset-user-password-dialog"
+              type="button"
+              title={$t('dialog.changePassword.generateStrongPassword')}
+              disabled={busy}
+              onclick={generate}
+              appearance="subtle"
+              class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-primary-emphasis disabled:opacity-45"
+              iconOnly
+              aria-label={$t('dialog.changePassword.generateStrongPassword')}
+            >
+              <Icon name="ifl" size="18px" />
+            </FluentButton>
+            <FluentButton data-fluent-owner="lib-components-reset-user-password-dialog"
+              type="button"
+              aria-label={visible ? $t('login.hidePassword') : $t('login.showPassword')}
+              disabled={busy}
+              onclick={() => (visible = !visible)}
+              appearance="subtle"
+              class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface disabled:opacity-45"
+              iconOnly
+            >
+              <Icon name="visibility" size="18px" />
+            </FluentButton>
+          </div>
         </div>
-      </div>
+      </MdOutlinedField>
 
       {#if password}
         <div class="mt-2 flex items-center gap-2">

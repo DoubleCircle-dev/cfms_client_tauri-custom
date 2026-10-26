@@ -171,7 +171,7 @@
   .about-page {
     display: grid;
     width: min(100%, 45rem);
-    gap: 1.5rem;
+    gap: 24px;
     margin-inline: auto;
     padding: 1.5rem 1.25rem 3rem;
   }
@@ -192,14 +192,14 @@
 
   .product-heading h2 {
     color: var(--color-md3-on-surface);
-    font: 700 1.25rem/1.2 var(--font-md3-sans);
+    font: 700 20px/26px var(--font-md3-sans);
     letter-spacing: -0.01em;
     text-wrap: balance;
   }
 
   .product-heading p {
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.5;
   }
 
@@ -218,14 +218,14 @@
   .product-legal dl > div {
     display: inline-flex;
     align-items: baseline;
-    gap: 0.45rem;
+    gap: 8px;
     min-width: 0;
   }
 
   .product-legal dt {
     color: var(--color-md3-on-surface-variant);
     font-family: var(--font-md3-sans);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.04em;
   }
@@ -233,7 +233,7 @@
   .product-legal dd {
     margin: 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.5;
   }
 
@@ -323,7 +323,7 @@
 
     .product-heading {
       display: grid;
-      gap: 0.25rem;
+      gap: 4px;
     }
   }
 </style>

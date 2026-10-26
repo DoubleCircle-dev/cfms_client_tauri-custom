@@ -9,6 +9,8 @@
   import DialogActionButton from './DialogActionButton.svelte';
   import MdOutlinedField from './MdOutlinedField.svelte';
   import ProgressRing from './ProgressRing.svelte';
+  import Icon from './Icon.svelte';
+  import type { IconName } from '$lib/icons';
   import PublicKeyVerification from './PublicKeyVerification.svelte';
   import type { PublicKeyInteraction } from '$lib/api';
 
@@ -19,6 +21,7 @@
     onCancel: () => void;
     allowPublicKey?: boolean;
   } = $props();
+  const methodIcons: Record<string, IconName> = { password: 'password', totp: 'personPasskey', publickey: 'passkey' };
   const available = $derived(methods.filter((method) => supportedVerificationMethods.includes(method) || (allowPublicKey && method === 'publickey')));
   let selected = $state<string | null>(untrack(() => available.length === 1 ? available[0] : null));
   let password = $state('');
@@ -67,7 +70,7 @@
       <form class="flex flex-col gap-5 p-5" onsubmit={verifyPassword}>
         <p class="text-sm text-md3-on-surface-variant">{$t('authentication.passwordPrompt')}</p>
         <MdOutlinedField inputId="authentication-password" label={$t('login.password')}>
-          <input bind:this={passwordInput} id="authentication-password" data-focus-ring="delegated" type="password" bind:value={password} autocomplete="current-password" disabled={busy} class="w-full bg-transparent px-4 py-3 text-md3-on-surface outline-none" />
+          <input bind:this={passwordInput} id="authentication-password" data-focus-ring="delegated" type="password" bind:value={password} autocomplete="current-password" disabled={busy} class="cfms-native-field w-full px-4 py-3 text-md3-on-surface" />
         </MdOutlinedField>
         {#if error}<p role="alert" class="text-sm text-md3-error">{error}</p>{/if}
         <div class="flex justify-end gap-2">
@@ -86,7 +89,10 @@
         <p class="text-sm text-md3-on-surface-variant">{$t(available.length ? 'authentication.chooseMethod' : 'authentication.unsupported', { values: { methods: methods.join(', ') || '—' } })}</p>
         <div class="flex flex-wrap gap-2">
           {#each available as method}
-            <DialogActionButton onclick={() => { selected = method; }}>{$t(`authentication.${method}`)}</DialogActionButton>
+            <DialogActionButton onclick={() => { selected = method; }}>
+              <Icon name={methodIcons[method] ?? 'more'} size="20px" />
+              {$t(`authentication.${method}`)}
+            </DialogActionButton>
           {/each}
         </div>
         <div class="flex justify-end"><DialogActionButton onclick={onCancel}>{$t('common.cancel')}</DialogActionButton></div>

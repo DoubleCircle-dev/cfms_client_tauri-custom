@@ -1,4 +1,6 @@
 <script lang="ts">
+  import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import { sendDeveloperRequest, type JsonValue, type ServerResponse } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
@@ -235,6 +237,7 @@
       second: '2-digit',
     });
   }
+  const outlinedId = $props.id();
 </script>
 
 {#if open}
@@ -264,16 +267,18 @@
               <span class="pane-kicker">{$t('developerConsole.session')}</span>
               <h3>{$t('developerConsole.history')}</h3>
             </div>
-            <button
+            <FluentButton data-fluent-owner="lib-components-developer-request-console"
               type="button"
-              class="icon-action"
               aria-label={$t('developerConsole.clearHistory')}
               title={$t('developerConsole.clearHistory')}
               disabled={history.length === 0}
               onclick={clearHistory}
+              appearance="subtle"
+              class="icon-action"
+              iconOnly
             >
               <Icon name="deleteSweep" size="18px" />
-            </button>
+            </FluentButton>
           </div>
 
           {#if history.length === 0}
@@ -284,7 +289,7 @@
           {:else}
             <div class="history-list">
               {#each history as entry (entry.id)}
-                <button
+                <button data-fluent-owner="lib-components-developer-request-console"
                   type="button"
                   class="history-entry"
                   class:selected={entry.id === selectedId}
@@ -315,33 +320,39 @@
               <span class="shortcut-hint">Ctrl+Enter</span>
             </div>
 
-            <label class="field-group">
-              <span>{$t('developerConsole.businessName')}</span>
-              <input
-                type="text"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="get_document"
-                aria-invalid={actionError ? 'true' : undefined}
-                aria-describedby={actionError ? 'developer-business-error' : undefined}
-                bind:value={action}
-                oninput={() => { if (actionError) validateAction(); }}
-              />
-            </label>
+            <div class="field-group">
+              <MdOutlinedField inputId={`${outlinedId}-1`} label={$t('developerConsole.businessName')}>
+                <input id={`${outlinedId}-1`} data-focus-ring="delegated" class="cfms-native-field"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="get_document"
+                  aria-invalid={actionError ? 'true' : undefined}
+                  aria-describedby={actionError ? 'developer-business-error' : undefined}
+                  bind:value={action}
+                  oninput={() => { if (actionError) validateAction(); }}
+                />
+              </MdOutlinedField>
+            </div>
             {#if actionError}
               <p id="developer-business-error" class="field-error">{actionError}</p>
             {/if}
 
             <div class="payload-heading">
               <label for="developer-payload">{$t('developerConsole.payload')}</label>
-              <button type="button" class="text-action" onclick={formatPayload}>
+              <FluentButton data-fluent-owner="lib-components-developer-request-console"
+                type="button"
+                onclick={formatPayload}
+                appearance="subtle"
+                class="text-action"
+              >
                 <Icon name="code" size="16px" />
                 {$t('developerConsole.formatJson')}
-              </button>
+              </FluentButton>
             </div>
             <textarea
               id="developer-payload"
-              class="payload-editor allow-native-context-menu"
+              class="cfms-native-field payload-editor allow-native-context-menu"
               spellcheck="false"
               autocapitalize="off"
               aria-invalid={payloadError ? 'true' : undefined}
@@ -355,10 +366,15 @@
 
             <div class="request-actions">
               <p>{$t('developerConsole.sendHint')}</p>
-              <button type="submit" class="send-action" disabled={busy}>
+              <FluentButton data-fluent-owner="lib-components-developer-request-console"
+                type="submit"
+                disabled={busy}
+                appearance="subtle"
+                class="send-action"
+              >
                 <Icon name={busy ? 'refresh' : 'resume'} size="18px" />
                 {busy ? $t('developerConsole.sending') : $t('developerConsole.send')}
-              </button>
+              </FluentButton>
             </div>
           </form>
 
@@ -374,15 +390,16 @@
                 {#if selectedEntry}
                   <span class="result-duration">{formatDuration(selectedEntry.durationMs)}</span>
                 {/if}
-                <button
+                <FluentButton data-fluent-owner="lib-components-developer-request-console"
                   type="button"
-                  class="text-action"
                   disabled={!selectedEntry || selectedEntry.status === 'pending'}
                   onclick={() => { void copyResult(); }}
+                  appearance="subtle"
+                  class="text-action"
                 >
                   <Icon name={copyState === 'copied' ? 'done' : 'filePresent'} size="16px" />
                   {copyState === 'copied' ? $t('developerConsole.copied') : $t('developerConsole.copyResult')}
-                </button>
+                </FluentButton>
               </div>
             </div>
 
@@ -407,7 +424,7 @@
                   <span>{selectedEntry.response ? selectedEntry.response.message : $t('developerConsole.transportFailure')}</span>
                 </div>
                 <textarea
-                  class="response-output allow-native-context-menu"
+                  class="cfms-native-field response-output allow-native-context-menu"
                   class:error-result={selectedEntry.status === 'error'}
                   readonly
                   wrap={selectedEntry.status === 'error' ? 'soft' : 'off'}
@@ -439,7 +456,7 @@
   .risk-strip {
     display: flex;
     align-items: flex-start;
-    gap: 0.7rem;
+    gap: 12px;
     border-bottom: 1px solid color-mix(in srgb, var(--color-md3-warning) 38%, var(--color-md3-outline));
     padding: 0.72rem 1rem;
     color: var(--color-md3-warning);
@@ -452,14 +469,14 @@
   }
 
   .risk-strip strong {
-    font-size: 0.79rem;
+    font-size: 12px;
     font-weight: 700;
   }
 
   .risk-strip p {
     margin-top: 0.14rem;
     color: color-mix(in srgb, var(--color-md3-warning) 78%, var(--color-md3-on-surface));
-    font-size: 0.74rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -486,7 +503,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
+    gap: 12px;
   }
 
   .pane-heading {
@@ -498,8 +515,8 @@
   .pane-kicker {
     display: block;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.65rem;
-    font-weight: 650;
+    font-size: 12px;
+    font-weight: 600;
     line-height: 1.2;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -508,23 +525,29 @@
   h3 {
     margin: 0.16rem 0 0;
     color: var(--color-md3-on-surface);
-    font-size: 0.88rem;
+    font-size: 14px;
     font-weight: 680;
     line-height: 1.3;
   }
 
-  button {
+  :global(:is(button[data-fluent-owner="lib-components-developer-request-console"], .cfms-button[data-fluent-owner="lib-components-developer-request-console"])) {
     font-family: var(--font-md3-sans);
   }
 
-  .icon-action,
-  .text-action,
-  .send-action {
+  :global(.icon-action[data-fluent-owner="lib-components-developer-request-console"]),
+  .payload-heading label {
+    color: var(--color-md3-on-surface-variant);
+    font-size: 12px;
+    font-weight: 620;
+  }
+
+  :global(.text-action[data-fluent-owner="lib-components-developer-request-console"]),
+  :global(.send-action[data-fluent-owner="lib-components-developer-request-console"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid transparent;
-    border-radius: var(--explorer-radius-small, 5px);
+    border-radius: var(--borderRadiusMedium);
     transition:
       background-color var(--motion-duration-short3) var(--motion-easing-standard),
       border-color var(--motion-duration-short3) var(--motion-easing-standard),
@@ -532,27 +555,27 @@
       transform var(--motion-duration-short3) var(--motion-easing-standard);
   }
 
-  .icon-action {
+  :global(.icon-action[data-fluent-owner="lib-components-developer-request-console"]) {
     width: 32px;
     height: 32px;
     color: var(--color-md3-on-surface-variant);
     background: transparent;
   }
 
-  .icon-action:hover:not(:disabled),
-  .text-action:hover:not(:disabled) {
+  :global(.icon-action[data-fluent-owner="lib-components-developer-request-console"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.text-action[data-fluent-owner="lib-components-developer-request-console"]:hover:not(:is(:disabled, [disabled]))) {
     border-color: var(--color-md3-outline);
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-highest);
   }
 
-  .icon-action:active:not(:disabled),
-  .text-action:active:not(:disabled),
-  .send-action:active:not(:disabled) {
-    transform: scale(0.96);
+  :global(.icon-action[data-fluent-owner="lib-components-developer-request-console"]:active:not(:is(:disabled, [disabled]))),
+  :global(.text-action[data-fluent-owner="lib-components-developer-request-console"]:active:not(:is(:disabled, [disabled]))),
+  :global(.send-action[data-fluent-owner="lib-components-developer-request-console"]:active:not(:is(:disabled, [disabled]))) {
+    transform: none;
   }
 
-  button:disabled {
+  :global(:is(button[data-fluent-owner="lib-components-developer-request-console"], .cfms-button[data-fluent-owner="lib-components-developer-request-console"]):is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.42;
   }
@@ -566,7 +589,7 @@
   .history-entry {
     display: grid;
     width: 100%;
-    gap: 0.38rem;
+    gap: 8px;
     border: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
     padding: 0.7rem 0.85rem 0.68rem 1rem;
@@ -591,12 +614,12 @@
     min-width: 0;
     align-items: center;
     justify-content: space-between;
-    gap: 0.55rem;
+    gap: 8px;
   }
 
   .history-entry__topline strong {
     overflow: hidden;
-    font: 550 0.76rem/1.35 var(--font-md3-mono);
+    font: 550 12px/16px var(--font-md3-mono);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -617,7 +640,7 @@
     padding: 0.1rem 0.4rem;
     color: var(--color-md3-on-surface-variant);
     background: var(--color-md3-surface-container-highest);
-    font: 650 0.65rem/1 var(--font-md3-mono);
+    font: 600 12px/16px var(--font-md3-mono);
   }
 
   .status-code[data-tone='success'] {
@@ -642,7 +665,7 @@
     min-height: 0;
     place-content: center;
     justify-items: center;
-    gap: 0.6rem;
+    gap: 8px;
     padding: 1.2rem;
     color: var(--color-md3-on-surface-variant);
     text-align: center;
@@ -652,7 +675,7 @@
   .result-empty p {
     max-width: 30ch;
     margin: 0;
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.5;
   }
 
@@ -667,7 +690,7 @@
     display: flex;
     min-height: 0;
     flex-direction: column;
-    gap: 0.55rem;
+    gap: 8px;
     overflow: auto;
     border-bottom: 1px solid var(--color-md3-outline);
     padding: 1rem 1.1rem;
@@ -686,45 +709,42 @@
 
   .field-group {
     display: grid;
-    gap: 0.3rem;
+    gap: 4px;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.71rem;
+    font-size: 12px;
     font-weight: 620;
   }
 
   .field-group input,
   .payload-editor {
     width: 100%;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--explorer-radius-medium, 8px);
     color: var(--color-md3-on-surface);
-    background: var(--color-md3-field);
     font-family: var(--font-md3-mono);
+  }
+
+  .payload-editor {
+    border: 1px solid var(--color-md3-outline);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--color-md3-field);
   }
 
   .field-group input {
     height: 2.5rem;
     padding: 0 0.75rem;
-    font-size: 0.78rem;
+    font-size: 12px;
   }
 
   .payload-heading {
     margin-top: 0.18rem;
   }
 
-  .payload-heading label {
-    color: var(--color-md3-on-surface-variant);
-    font-size: 0.71rem;
-    font-weight: 620;
-  }
-
-  .text-action {
+  :global(.text-action[data-fluent-owner="lib-components-developer-request-console"]) {
     min-height: 1.85rem;
-    gap: 0.34rem;
+    gap: 4px;
     padding: 0.25rem 0.48rem;
     color: var(--color-md3-on-surface-variant);
     background: transparent;
-    font-size: 0.7rem;
+    font-size: 12px;
     font-weight: 620;
   }
 
@@ -734,7 +754,7 @@
     flex: 1 1 8.5rem;
     resize: vertical;
     padding: 0.65rem 0.75rem;
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.5;
     tab-size: 2;
   }
@@ -746,7 +766,7 @@
   .field-error {
     margin: -0.12rem 0 0;
     color: var(--color-md3-error);
-    font-size: 0.69rem;
+    font-size: 12px;
     line-height: 1.4;
   }
 
@@ -759,27 +779,27 @@
     max-width: 56ch;
     margin: 0;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.68rem;
+    font-size: 12px;
     line-height: 1.45;
   }
 
-  .send-action {
+  :global(.send-action[data-fluent-owner="lib-components-developer-request-console"]) {
     min-width: 6.5rem;
     min-height: 2rem;
-    gap: 0.4rem;
+    gap: 8px;
     padding: 0.35rem 0.78rem;
     color: var(--color-md3-on-primary);
     background: var(--color-md3-primary);
-    font-size: 0.72rem;
+    font-size: 12px;
     font-weight: 700;
   }
 
-  .send-action :global(.material-symbols-outlined) {
+  :global(.send-action[data-fluent-owner="lib-components-developer-request-console"]) :global(.cfms-icon) {
     font-variation-settings: 'FILL' 1;
   }
 
-  .send-action:disabled :global(.material-symbols-outlined),
-  .result-pending :global(.material-symbols-outlined) {
+  :global(.send-action[data-fluent-owner="lib-components-developer-request-console"]:is(:disabled, [disabled])) :global(.cfms-icon),
+  .result-pending :global(.cfms-icon) {
     animation: developer-console-spin 1.1s linear infinite;
   }
 
@@ -809,7 +829,7 @@
     overflow: hidden;
     max-width: 42ch;
     font-family: var(--font-md3-mono);
-    font-size: 0.78rem;
+    font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -817,7 +837,7 @@
   .result-actions {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 8px;
   }
 
   .result-summary {
@@ -825,7 +845,7 @@
     border-bottom: 1px solid color-mix(in srgb, var(--color-md3-outline) 70%, transparent);
     padding: 0.52rem 1.1rem;
     color: var(--color-md3-on-surface-variant);
-    font-size: 0.72rem;
+    font-size: 12px;
   }
 
   .response-output {
@@ -926,7 +946,7 @@
       flex-direction: column;
     }
 
-    .send-action {
+    :global(.send-action[data-fluent-owner="lib-components-developer-request-console"]) {
       width: 100%;
       min-height: 2.5rem;
     }

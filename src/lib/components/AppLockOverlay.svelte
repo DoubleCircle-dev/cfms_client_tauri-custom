@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   import { fade } from 'svelte/transition';
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
@@ -281,14 +282,15 @@
         {#if hasSecondaryUnlocks}
           <div class:app-lock-auth-actions={true} class:app-lock-auth-actions--compact={compactSecondaryUnlocks}>
             {#if appLockStore.hasBiometric}
-              <button
+              <FluentButton data-fluent-owner="lib-components-app-lock-overlay"
                 type="button"
-                class={compactSecondaryUnlocks ? 'app-lock-icon-button' : 'app-lock-auth-button'}
                 style="font-family: var(--font-md3-sans);"
                 aria-label={$t('appLock.unlock.biometricButton')}
                 title={$t('appLock.unlock.biometricButton')}
                 onclick={verifyBiometric}
                 disabled={!canUseBiometric}
+                appearance="subtle"
+                class={(compactSecondaryUnlocks ? 'app-lock-icon-button' : 'app-lock-auth-button')}
               >
                 {#if verificationMethod === 'biometric'}
                   <ProgressRing size={18} strokeWidth={2.5} label={$t('common.verifying')} />
@@ -298,18 +300,19 @@
                 {#if !compactSecondaryUnlocks}
                   <span>{$t('appLock.unlock.biometricButton')}</span>
                 {/if}
-              </button>
+              </FluentButton>
             {/if}
 
             {#if appLockStore.hasPlatformCredential}
-              <button
+              <FluentButton data-fluent-owner="lib-components-app-lock-overlay"
                 type="button"
-                class={compactSecondaryUnlocks ? 'app-lock-icon-button' : 'app-lock-auth-button'}
                 style="font-family: var(--font-md3-sans);"
                 aria-label={$t('appLock.unlock.platformButton')}
                 title={$t('appLock.unlock.platformButton')}
                 onclick={verifyPlatform}
                 disabled={!canUsePlatform}
+                appearance="subtle"
+                class={(compactSecondaryUnlocks ? 'app-lock-icon-button' : 'app-lock-auth-button')}
               >
                 {#if verificationMethod === 'platform'}
                   <ProgressRing size={18} strokeWidth={2.5} label={$t('common.verifying')} />
@@ -319,7 +322,7 @@
                 {#if !compactSecondaryUnlocks}
                   <span>{$t('appLock.unlock.platformButton')}</span>
                 {/if}
-              </button>
+              </FluentButton>
             {/if}
           </div>
         {/if}
@@ -337,15 +340,16 @@
         {/if}
 
         <div class="app-lock-flat-actions mt-7">
-          <button
+          <FluentButton data-fluent-owner="lib-components-app-lock-overlay"
             type="button"
-            class="app-lock-flat-button"
             onclick={() => logoutAndDisconnect()}
             disabled={busy}
+            appearance="subtle"
+            class="app-lock-flat-button"
           >
             <Icon name="logout" size="20px" />
             {$t('appLock.unlock.logoutAndDisconnect')}
-          </button>
+          </FluentButton>
         </div>
       </div>
     </ViewportScaleFrame>
@@ -386,12 +390,12 @@
   .app-lock-auth-actions {
     display: flex;
     justify-content: center;
-    gap: 0.7rem;
+    gap: 12px;
     margin-top: 1.25rem;
   }
 
-  .app-lock-auth-button,
-  .app-lock-icon-button {
+  :global(.app-lock-auth-button[data-fluent-owner="lib-components-app-lock-overlay"]),
+  :global(.app-lock-icon-button[data-fluent-owner="lib-components-app-lock-overlay"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -405,30 +409,30 @@
       opacity 160ms var(--motion-easing-standard);
   }
 
-  .app-lock-auth-button {
+  :global(.app-lock-auth-button[data-fluent-owner="lib-components-app-lock-overlay"]) {
     min-block-size: 44px;
-    gap: 0.5rem;
-    border-radius: 9999px;
+    gap: 8px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.55rem 1.15rem;
-    font-size: 0.875rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
   }
 
-  .app-lock-icon-button {
+  :global(.app-lock-icon-button[data-fluent-owner="lib-components-app-lock-overlay"]) {
     inline-size: 48px;
     block-size: 48px;
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0;
   }
 
-  .app-lock-auth-button:hover:not(:disabled),
-  .app-lock-icon-button:hover:not(:disabled) {
+  :global(.app-lock-auth-button[data-fluent-owner="lib-components-app-lock-overlay"]:hover:not(:is(:disabled, [disabled]))),
+  :global(.app-lock-icon-button[data-fluent-owner="lib-components-app-lock-overlay"]:hover:not(:is(:disabled, [disabled]))) {
     background: rgba(255, 255, 255, 0.18);
     transform: translateY(-1px);
   }
 
-  .app-lock-auth-button:disabled,
-  .app-lock-icon-button:disabled {
+  :global(.app-lock-auth-button[data-fluent-owner="lib-components-app-lock-overlay"]:is(:disabled, [disabled])),
+  :global(.app-lock-icon-button[data-fluent-owner="lib-components-app-lock-overlay"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.45;
     transform: none;
@@ -438,51 +442,51 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 8px;
   }
 
-  .app-lock-flat-button {
+  :global(.app-lock-flat-button[data-fluent-owner="lib-components-app-lock-overlay"]) {
     display: inline-flex;
     min-block-size: 44px;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 8px;
     border: 0;
-    border-radius: 9999px;
+    border-radius: var(--borderRadiusMedium);
     background: transparent;
     color: rgba(255, 255, 255, 0.88);
     padding: 0.55rem 1rem;
-    font-size: 0.9375rem;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
     transition:
       background-color 160ms var(--motion-easing-standard),
       color 160ms var(--motion-easing-standard),
       opacity 160ms var(--motion-easing-standard);
   }
 
-  .app-lock-flat-button:hover:not(:disabled) {
+  :global(.app-lock-flat-button[data-fluent-owner="lib-components-app-lock-overlay"]:hover:not(:is(:disabled, [disabled]))) {
     background: rgba(255, 255, 255, 0.1);
     color: white;
   }
 
-  .app-lock-flat-button:disabled {
+  :global(.app-lock-flat-button[data-fluent-owner="lib-components-app-lock-overlay"]:is(:disabled, [disabled])) {
     cursor: not-allowed;
     opacity: 0.45;
   }
 
-  :global(html[data-theme='light']) :where(.app-lock-auth-button, .app-lock-icon-button) {
+  :global(html[data-theme='light']) :global(:where(.app-lock-auth-button[data-fluent-owner="lib-components-app-lock-overlay"], .app-lock-icon-button[data-fluent-owner="lib-components-app-lock-overlay"])) {
     border-color: var(--color-md3-outline);
     color: var(--color-md3-on-surface);
     background: color-mix(in srgb, var(--color-md3-surface-container-high) 82%, transparent);
   }
 
-  :global(html[data-theme='light']) :where(.app-lock-auth-button, .app-lock-icon-button):hover:not(:disabled),
-  :global(html[data-theme='light']) .app-lock-flat-button:hover:not(:disabled) {
+  :global(html[data-theme='light']) :global(:where(.app-lock-auth-button[data-fluent-owner="lib-components-app-lock-overlay"], .app-lock-icon-button[data-fluent-owner="lib-components-app-lock-overlay"]):hover:not(:is(:disabled, [disabled]))),
+  :global(html[data-theme='light']) :global(.app-lock-flat-button[data-fluent-owner="lib-components-app-lock-overlay"]:hover:not(:is(:disabled, [disabled]))) {
     color: var(--color-md3-on-surface);
     background: var(--color-md3-surface-container-highest);
   }
 
-  :global(html[data-theme='light']) .app-lock-flat-button {
+  :global(html[data-theme='light']) :global(.app-lock-flat-button[data-fluent-owner="lib-components-app-lock-overlay"]) {
     color: var(--color-md3-on-surface-variant);
   }
 

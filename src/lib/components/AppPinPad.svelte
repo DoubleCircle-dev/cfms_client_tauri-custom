@@ -146,7 +146,7 @@
     block-size: 28px;
     align-items: center;
     justify-content: center;
-    gap: 1.75rem;
+    gap: 28px;
   }
 
   .app-pin-pad__dot {
@@ -199,7 +199,7 @@
   }
 
   .app-pin-key:active:not(:disabled) {
-    transform: scale(0.95);
+    transform: none;
   }
 
   .app-pin-key:disabled,
@@ -216,7 +216,7 @@
 
   .app-pin-key__letters {
     min-block-size: 1.1rem;
-    font-size: 0.9rem;
+    font-size: 14px;
     font-weight: 800;
     letter-spacing: 0.22em;
     opacity: 0.95;
@@ -230,7 +230,7 @@
     border-radius: 9999px;
     color: var(--app-pin-muted);
     background: transparent;
-    font-size: 1.05rem;
+    font-size: 16px;
     font-weight: 500;
     transition:
       background-color 160ms var(--motion-easing-standard),

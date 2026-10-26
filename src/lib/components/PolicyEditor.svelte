@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   // JSON policy editor with validation and save — MD3 styled.
   //
   // Props:
@@ -66,23 +67,22 @@
         </span>
       {/if}
       <!-- MD3 filled button: 20px radius -->
-      <button
-        class="px-4 py-1.5 text-xs font-medium rounded-full
-               bg-md3-primary text-md3-on-primary
-               hover:brightness-110
-               disabled:opacity-50 transition-all"
+      <FluentButton data-fluent-owner="lib-components-policy-editor"
         style="font-family: var(--font-md3-sans);"
         onclick={handleSave}
         disabled={saving}
+        type="button"
+        appearance="primary"
+        class="px-4 py-1.5 text-xs font-medium rounded\n               bg-md3-primary text-md3-on-primary\n               \n               disabled:opacity-50 transition-all"
       >
         {saving ? $t('common.saving') : $t('common.save')}
-      </button>
+      </FluentButton>
     </div>
   </div>
 
   <!-- MD3 textarea field -->
   <textarea
-    class="w-full h-64 p-3 text-sm rounded-xl border
+    class="cfms-native-field w-full h-64 p-3 text-sm rounded-xl border
            {error ? 'border-md3-error' : 'border-md3-outline'}
            bg-md3-field text-md3-on-surface
            placeholder:text-md3-on-surface-variant

@@ -48,9 +48,9 @@
 </script>
 
 <div class="flex min-h-full items-center justify-center p-6">
-  <main class="w-full max-w-xl overflow-hidden rounded-2xl border border-md3-error/40 bg-md3-surface-container/90 shadow-2xl backdrop-blur-xl">
+  <main class="w-full max-w-xl overflow-hidden rounded-xl border border-md3-error/40 bg-md3-surface-container shadow-2xl ">
     <div class="space-y-4 p-6 sm:p-8">
-      <span class="grid size-14 place-items-center rounded-2xl bg-md3-error-container text-md3-on-error-container">
+      <span class="grid size-14 place-items-center rounded-xl bg-md3-error-container text-md3-on-error-container">
         <Icon name="warningAmber" size="32px" />
       </span>
       <div>
@@ -62,7 +62,7 @@
         <div class="flex justify-center py-6"><ProgressRing size={30} label={$t('common.loading')} /></div>
       {:else}
         {#if failures.length > 0}
-          <section class="overflow-hidden rounded-xl border border-md3-outline bg-md3-surface-container-high/60">
+          <section class="overflow-hidden rounded-xl border border-md3-outline bg-md3-surface-container-high">
             <h2 class="border-b border-md3-outline px-4 py-3 text-xs font-semibold uppercase tracking-wide text-md3-on-surface-variant">
               {$t('settings.localData.recoveryFailures')}
             </h2>
@@ -85,7 +85,7 @@
       {/if}
     </div>
 
-    <div class="flex flex-col-reverse gap-2 border-t border-md3-outline bg-md3-surface-container-high/45 px-6 py-4 sm:flex-row sm:justify-end">
+    <div class="flex flex-col-reverse gap-2 border-t border-md3-outline bg-md3-surface-container-high px-6 py-4 sm:flex-row sm:justify-end">
       <DialogActionButton disabled={retrying} onclick={() => void quitApplication()}>
         {$t('settings.localData.exitAction')}
       </DialogActionButton>

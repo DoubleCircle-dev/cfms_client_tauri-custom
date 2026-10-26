@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FluentButton from '$lib/components/FluentButton.svelte';
   // File Manager page
   //
   // Browses files and folders on the CFMS server via the `list_directory`
@@ -7,6 +8,7 @@
   // Reference: get_directory / get_document in reference/src/include/ui/util/path.py
 
   import { onMount, tick, untrack } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -67,7 +69,6 @@
     ServerDocumentEntry,
     ServerObjectType,
   } from '$lib/api';
-  import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import FileAddressBar from '$lib/components/FileAddressBar.svelte';
   import AccessDeniedDialog from '$lib/components/AccessDeniedDialog.svelte';
   import AccessDeniedNotice from '$lib/components/AccessDeniedNotice.svelte';
@@ -94,6 +95,7 @@
     type FileTableViewportAnchor,
   } from '$lib/components/files/FileTable.svelte';
   import ExplorerCommandBar from '$lib/components/explorer/ExplorerCommandBar.svelte';
+  import ExplorerNavigationBar from '$lib/components/explorer/ExplorerNavigationBar.svelte';
   import ExplorerDetailsPane from '$lib/components/explorer/ExplorerDetailsPane.svelte';
   import ExplorerStatusBar from '$lib/components/explorer/ExplorerStatusBar.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -129,6 +131,10 @@
   import { graphWidth, laneX, buildRevisionRows } from '$lib/files/revision-graph';
   import {
     fileManagerNavigationStore,
+    recordDirectoryVisit,
+    resolveDirectoryVisit,
+    directoryHistoryTarget,
+    type DirectoryNavigationTimeline,
     type DirectoryNavigationSnapshot,
   } from '$lib/files/file-manager-navigation';
   import type { SortDirection, SortField } from '$lib/files/sorting';
@@ -260,11 +266,16 @@
   let searchQuery = $state('');
   let searchInput = $state<HTMLInputElement | null>(null);
   let searchDialogInput = $state<HTMLInputElement | null>(null);
+  const searchCoarsePointer = new MediaQuery('(pointer: coarse)', false);
+  const searchRowHeight = $derived(searchCoarsePointer.current ? 48 : 40);
   let searchPreviewRoot = $state<HTMLDivElement | null>(null);
   let searchPreviewPanelStyle = $state('');
   let navigationRootId = $state<string | null>(null);
   let navigationRootLabel = $state<string | null>(null);
   let navigationStateReady = $state(false);
+  let navigationScope = $state<FilePreferenceScope | null>(null);
+  let navigationTimeline = $state<DirectoryNavigationTimeline>({ entries: [], cursor: -1 });
+  let navigationBusy = $state(false);
   let userPreference = $state<UserPreference | null>(null);
   let batchBusy = $state(false);
   let dropMoveBusy = $state(false);
@@ -539,6 +550,9 @@
     return buildSearchResultRows(searchPreview.results);
   });
   const searchPreviewHasQuery = $derived(searchQuery.trim().length > 0);
+  const directorySearchPlaceholder = $derived(
+    $t('files.directorySearchPlaceholder', { values: { directory: currentDirectoryName() } }),
+  );
   const hasSearchPermission = $derived(canSearchFiles(authStore.permissions));
   /**
    * Listing a directory was refused, so `view` is the capability the server
@@ -642,11 +656,11 @@
   });
 
   $effect(() => {
-    if (!navigationStateReady) return;
-    fileManagerNavigationStore.remember(
-      serverStateStore.remoteAddress,
-      authStore.username,
-      captureDirectoryNavigation(),
+    if (!navigationStateReady || !navigationScope) return;
+    fileManagerNavigationStore.rememberTimeline(
+      navigationScope.serverAddress,
+      navigationScope.username,
+      navigationTimeline,
     );
   });
 
@@ -871,8 +885,6 @@
       markFilePerformance('files:list-request-start');
       const resp = await directoryLoader.requestPage(generation, normalizedFolderId, null, DIRECTORY_PAGE_SIZE);
       if (!resp || generation !== directoryGeneration) return false;
-      currentFolderId = normalizedFolderId;
-      parentId = normalizeDirectoryId(resp.parent_id);
       directoryNextCursor = resp.next_cursor;
       const firstSnapshot = new Promise<boolean>((resolve) => {
         firstDirectorySnapshotGeneration = generation;
@@ -881,6 +893,8 @@
       directorySorter?.append(generation, revision, resp.folders, resp.documents, !resp.has_more);
       const firstVisible = await firstSnapshot;
       if (!firstVisible || generation !== directoryGeneration) return false;
+      currentFolderId = normalizedFolderId;
+      parentId = normalizeDirectoryId(resp.parent_id);
       if (resp.has_more) {
         if (!resp.next_cursor) throw new Error('Directory page reported more items without a cursor.');
         void continueDirectoryLoad(generation, resp.next_cursor);
@@ -907,6 +921,44 @@
   }
 
   // --- Navigation ---
+
+  const navigationUnavailable = $derived(navigationBusy || addressLookupBusy || directoryLoadPhase === 'initial-loading');
+  const canGoBack = $derived(navigationTimeline.cursor > 0);
+  const canGoForward = $derived(navigationTimeline.cursor + 1 < navigationTimeline.entries.length);
+
+  // All location changes commit their breadcrumb and timeline together. Reloads
+  // remain loadDirectory calls, so file operations never create history entries.
+  async function navigateDirectory(snapshot: DirectoryNavigationSnapshot, historyCursor?: number): Promise<boolean> {
+    if (navigationBusy) return false;
+    navigationBusy = true;
+    closeSearchPreview();
+    const previous = captureDirectoryNavigation();
+    try {
+      const request = loadDirectory(snapshot.folderId, true, previous);
+      const generation = directoryGeneration;
+      const visit = await resolveDirectoryVisit(
+        navigationTimeline, snapshot,
+        async () => await request ? 'loaded' : isDeniedDirectory(snapshot.folderId) ? 'denied' : 'failed',
+        () => generation === directoryGeneration,
+        historyCursor,
+      );
+      if (!visit) {
+        if (generation === directoryGeneration) applyDirectoryNavigation(previous);
+        return false;
+      }
+      applyDirectoryNavigation(visit.snapshot);
+      navigationTimeline = visit.timeline;
+      return visit.loaded;
+    } finally {
+      navigationBusy = false;
+    }
+  }
+
+  async function handleHistoryNavigate(direction: -1 | 1) {
+    if (navigationUnavailable) return;
+    const target = directoryHistoryTarget(navigationTimeline, direction);
+    if (target) await navigateDirectory(target.snapshot, target.cursor);
+  }
 
   function handleAddressBeginEdit() {
     addressLookupError = null;
@@ -953,6 +1005,7 @@
   }
 
   async function handleAddressSubmit(rawPath: string) {
+    if (navigationUnavailable) return;
     const path = rawPath.trim();
     if (!path) {
       addressLookupError = $t('files.addressRequired');
@@ -968,18 +1021,15 @@
       const resolvedSegments = decodeResolvedNodePath(path, response.node_ids);
 
       if (resolvedSegments.length === 0) {
-        const ok = await loadDirectory(null, true, undefined, false);
+        const ok = await navigateDirectory({ folderId: null, navigationRootId: null, navigationRootLabel: null, navHistory: [] });
         if (runId !== addressLookupRunId) return;
-        if (!ok) {
+        if (!ok && !isDeniedDirectory(null)) {
           error = null;
           addressLookupError = $t('files.addressRequestFailed');
           return;
         }
-        navigationRootId = null;
-        navigationRootLabel = null;
-        navHistory = [];
         addressBar?.finishEdit();
-        status = $t('files.addressDirectoryOpened');
+        if (ok) status = $t('files.addressDirectoryOpened');
         return;
       }
 
@@ -995,31 +1045,35 @@
       if (runId !== addressLookupRunId) return;
 
       if (target.kind === 'directory') {
-        const ok = await loadDirectory(terminal.id, true, undefined, false);
+        const ok = await navigateDirectory({
+          folderId: terminal.id, navigationRootId: null, navigationRootLabel: null,
+          navHistory: resolvedDirectoryHistory(resolvedSegments),
+        });
         if (runId !== addressLookupRunId) return;
-        if (!ok) {
+        if (!ok && !isDeniedDirectory(terminal.id)) {
           error = null;
           addressLookupError = $t('files.addressRequestFailed');
           return;
         }
-        navigationRootId = null;
-        navigationRootLabel = null;
-        navHistory = resolvedDirectoryHistory(resolvedSegments);
         addressBar?.finishEdit();
-        status = $t('files.addressDirectoryOpened');
+        if (ok) status = $t('files.addressDirectoryOpened');
         return;
       }
 
-      const ok = await loadDirectory(expectedParentId, true, undefined, false);
+      const ok = await navigateDirectory({
+        folderId: expectedParentId, navigationRootId: null, navigationRootLabel: null,
+        navHistory: resolvedDirectoryHistory(resolvedSegments.slice(0, -1)),
+      });
       if (runId !== addressLookupRunId) return;
-      if (!ok) {
+      if (!ok && !isDeniedDirectory(expectedParentId)) {
         error = null;
         addressLookupError = $t('files.addressRequestFailed');
         return;
       }
-      navigationRootId = null;
-      navigationRootLabel = null;
-      navHistory = resolvedDirectoryHistory(resolvedSegments.slice(0, -1));
+      if (!ok) {
+        addressBar?.finishEdit();
+        return;
+      }
       pendingAddressDocument = {
         id: target.id,
         label: target.label,
@@ -1036,74 +1090,50 @@
   }
 
   async function handleNavigate(folderId: string, folderName: string) {
+    if (navigationUnavailable) return;
     const previousFolderId = currentFolderId;
-    const ok = await loadDirectory(folderId);
-    if (ok || isDeniedDirectory(folderId)) {
-      navHistory = [...navHistory, { label: folderName, id: folderId }];
-    }
+    const ok = await navigateDirectory({
+      ...captureDirectoryNavigation(),
+      folderId,
+      navHistory: [...navHistory, { label: folderName, id: folderId }],
+    });
     if (ok) {
-      await rememberVisit(
-        currentFilePreferenceScope(),
-        {
-          type: 'directory',
-          id: folderId,
-          name: folderName,
-          parentId: previousFolderId,
-        },
-      );
+      await rememberVisit(currentFilePreferenceScope(), {
+        type: 'directory', id: folderId, name: folderName, parentId: previousFolderId,
+      });
     }
   }
 
   async function handleBreadcrumbNavigate(targetId: string) {
-    // ROOT_DIRECTORY_ID means root
+    if (navigationUnavailable) return;
     if (targetId === ROOT_DIRECTORY_ID) {
-      const returnNavigation = captureDirectoryNavigation();
-      navigationRootId = null;
-      navigationRootLabel = null;
-      navHistory = [];
-      await loadDirectory(null, false, returnNavigation);
+      await navigateDirectory({ folderId: null, navigationRootId: null, navigationRootLabel: null, navHistory: [] });
       return;
     }
-    if (sameDirectoryId(targetId, navigationRootId)) {
-      const ok = await loadDirectory(navigationRootId);
-      if (ok || isDeniedDirectory(navigationRootId)) navHistory = [];
-      return;
-    }
-    // Truncate history to the clicked segment
-    const idx = navHistory.findIndex((h) => h.id === targetId);
-    if (idx >= 0) {
-      const ok = await loadDirectory(targetId);
-      if (ok || isDeniedDirectory(targetId)) navHistory = navHistory.slice(0, idx + 1);
-      return;
-    }
-    await loadDirectory(targetId);
+    const idx = navHistory.findIndex((entry) => entry.id === targetId);
+    await navigateDirectory({
+      ...captureDirectoryNavigation(),
+      folderId: targetId,
+      navHistory: sameDirectoryId(targetId, navigationRootId) ? [] : idx >= 0 ? navHistory.slice(0, idx + 1) : navHistory,
+    });
   }
 
   async function handleGoToParent() {
+    if (navigationUnavailable) return;
     if (directoryAccessDenied) {
       await handleReturnFromDeniedDirectory();
       return;
     }
     if (parentTargetId === undefined) return;
-    const targetParentId = parentTargetId;
-
-    const ok = await loadDirectory(targetParentId);
-    if (ok && navHistory.length > 0) {
-      navHistory = navHistory.slice(0, -1);
-    }
+    await navigateDirectory({ ...captureDirectoryNavigation(), folderId: parentTargetId, navHistory: navHistory.slice(0, -1) });
   }
 
   async function handleReturnFromDeniedDirectory() {
-    const deniedState = directoryAccessDenied;
-    if (!deniedState) return;
-
-    const previous = deniedState.returnNavigation;
-    const ok = await loadDirectory(previous.folderId);
-    if (!ok) return;
-    applyDirectoryNavigation(previous);
+    if (directoryAccessDenied) await navigateDirectory(directoryAccessDenied.returnNavigation);
   }
 
   async function handleJumpToDirectory() {
+    if (navigationUnavailable) return;
     const value = await dialogStore.prompt({
       title: $t('files.jumpToDirectory'),
       message: $t('files.jumpToDirectoryPrompt'),
@@ -1113,14 +1143,11 @@
       selectOnOpen: true,
     });
     if (value === null) return;
-
     const target = normalizeDirectoryId(value);
-    const ok = await loadDirectory(target, true);
-    if (!ok && !isDeniedDirectory(target)) return;
-
-    navigationRootId = target;
-    navigationRootLabel = target === null ? null : shortIdentifier(target);
-    navHistory = [];
+    const ok = await navigateDirectory({
+      folderId: target, navigationRootId: target,
+      navigationRootLabel: target === null ? null : shortIdentifier(target), navHistory: [],
+    });
     if (ok) status = $t('files.jumpToDirectorySuccess');
   }
 
@@ -2087,10 +2114,10 @@
   function executeFileManagerShortcut(shortcut: FileManagerShortcut, event: KeyboardEvent) {
     if (shortcut === 'go-parent') {
       event.preventDefault();
-      if (canGoToParent && !loading) void handleGoToParent();
+      if (canGoToParent && !navigationUnavailable) void handleGoToParent();
     } else if (shortcut === 'refresh') {
       event.preventDefault();
-      if (!loading) void loadDirectory(currentFolderId, true);
+      if (!navigationUnavailable) void loadDirectory(currentFolderId, true);
     } else if (shortcut === 'create-folder') {
       event.preventDefault();
       if (!loading && !batchBusy) void handleCreateFolder();
@@ -2321,16 +2348,16 @@
           onSelect: handleCreateFolder,
         },
         {
-          id: 'upload-files-here',
-          label: $t('files.uploadFiles'),
-          icon: 'uploadFile',
-          onSelect: handleUploadFiles,
-        },
-        {
           id: 'upload-folder-here',
           label: $t('files.uploadFolder'),
           icon: 'folderUpload',
           onSelect: handleUploadFolder,
+        },
+        {
+          id: 'upload-files-here',
+          label: $t('files.uploadFiles'),
+          icon: 'uploadFile',
+          onSelect: handleUploadFiles,
         },
         { type: 'divider' },
         {
@@ -2381,6 +2408,7 @@
           id: 'favorite-document',
           label: favorite ? $t('files.removeFavorite') : $t('files.addFavorite'),
           icon: favorite ? 'star' : 'starOutline',
+          iconFilled: favorite,
           onSelect: () => handleToggleFavorite(record, !favorite),
         },
         { type: 'divider' },
@@ -2480,6 +2508,7 @@
         id: 'favorite-folder',
         label: favorite ? $t('files.removeFavorite') : $t('files.addFavorite'),
         icon: favorite ? 'star' : 'starOutline',
+        iconFilled: favorite,
         onSelect: () => handleToggleFavorite(record, !favorite),
       },
       { type: 'divider' },
@@ -4172,14 +4201,6 @@
     return field === 'modified' ? 'last_modified' : field;
   }
 
-  function searchSortIndex(field: SortField) {
-    return field === 'name' ? 0 : field === 'size' ? 1 : 2;
-  }
-
-  function searchSortIndicatorStyle(field: SortField) {
-    return `width: calc((100% - 4px) / 3); transform: translateX(${searchSortIndex(field) * 100}%);`;
-  }
-
   function searchResultDate(row: SearchResultRow) {
     return row.kind === 'directory'
       ? formatDate(row.directory.created_time)
@@ -4295,14 +4316,12 @@
   }
 
   async function navigateToSearchDirectory(directory: { id: string; name: string }) {
+    if (navigationUnavailable) return;
     closeSearchPreview();
     closeSearchDialog();
-    const ok = await loadDirectory(directory.id);
-    if (ok || isDeniedDirectory(directory.id)) {
-      navigationRootId = directory.id;
-      navigationRootLabel = directory.name;
-      navHistory = [];
-    }
+    const ok = await navigateDirectory({
+      folderId: directory.id, navigationRootId: directory.id, navigationRootLabel: directory.name, navHistory: [],
+    });
     if (ok) {
       await rememberVisit(currentFilePreferenceScope(), directoryToRecord(directory, null));
     }
@@ -4316,14 +4335,15 @@
   }
 
   async function navigateToSearchDocument(document: { parent_id?: string | null; name?: string; title?: string }) {
+    if (navigationUnavailable) return;
     closeSearchPreview();
     closeSearchDialog();
     const parent = normalizeDirectoryId(document.parent_id);
-    const ok = await loadDirectory(parent);
+    const ok = await navigateDirectory({
+      folderId: parent, navigationRootId: parent,
+      navigationRootLabel: parent === null ? null : shortIdentifier(parent), navHistory: [],
+    });
     if (ok) {
-      navigationRootId = parent;
-      navigationRootLabel = parent === null ? null : shortIdentifier(parent);
-      navHistory = [];
       status = $t('files.searchOpenedParent', { values: { name: document.name ?? document.title ?? '' } });
     }
   }
@@ -4408,6 +4428,15 @@
     let disposed = false;
     directorySorter = createProgressiveDirectorySorter(handleDirectorySnapshot, handleDirectorySorterError);
     const unregisterKeyboardCommands = registerKeyboardCommands([
+      ...([-1, 1] as const).map((direction) => ({
+        id: direction === -1 ? 'files.back' : 'files.forward',
+        label: () => $t(direction === -1 ? 'files.goBack' : 'files.goForward'),
+        group: () => $t('files.title'),
+        shortcuts: [{ key: direction === -1 ? 'ArrowLeft' : 'ArrowRight', alt: true }],
+        scope: 'page' as const,
+        enabled: () => (direction === -1 ? canGoBack : canGoForward) && !navigationUnavailable && !hasBlockingFilesDialog(),
+        handler: () => handleHistoryNavigate(direction),
+      })),
       {
         id: 'files.find',
         label: () => $t('files.search'),
@@ -4424,7 +4453,7 @@
         group: () => $t('files.title'),
         shortcuts: [{ key: 'd', alt: true }, { key: 'F4' }],
         scope: 'page',
-        enabled: () => nodeLookupEnabled && !addressLookupBusy && !hasBlockingFilesDialog(),
+        enabled: () => nodeLookupEnabled && !navigationUnavailable && !hasBlockingFilesDialog(),
         allowInEditable: true,
         handler: () => { void addressBar?.beginEdit(); },
       },
@@ -4434,7 +4463,7 @@
         group: () => $t('files.title'),
         shortcuts: [{ key: 'Backspace' }, { key: 'ArrowUp', alt: true }],
         scope: 'page',
-        enabled: () => canGoToParent && !loading && !hasBlockingFilesDialog(),
+        enabled: () => canGoToParent && !navigationUnavailable && !hasBlockingFilesDialog(),
         handler: (event) => executeFileManagerShortcut('go-parent', event),
       },
       {
@@ -4443,7 +4472,7 @@
         group: () => $t('files.title'),
         shortcuts: [{ key: 'F5' }, { key: 'r', primary: true }],
         scope: 'page',
-        enabled: () => !loading && !hasBlockingFilesDialog(),
+        enabled: () => !navigationUnavailable && !hasBlockingFilesDialog(),
         handler: (event) => executeFileManagerShortcut('refresh', event),
       },
       {
@@ -4553,21 +4582,32 @@
     const hasRequestedFolder = page.url.searchParams.has('folder');
     const requestedFolder = normalizeDirectoryId(page.url.searchParams.get('folder'));
     const requestedName = page.url.searchParams.get('name');
-    const initialReturnNavigation = hasRequestedFolder ? captureDirectoryNavigation() : undefined;
-    const rememberedNavigation = hasRequestedFolder
-      ? null
-      : fileManagerNavigationStore.restore(serverStateStore.remoteAddress, authStore.username);
-    const initialNavigation = rememberedNavigation ?? {
-      folderId: requestedFolder,
-      navigationRootId: requestedFolder,
-      navigationRootLabel: requestedFolder
-        ? requestedName || shortIdentifier(requestedFolder)
-        : null,
-      navHistory: [],
+    navigationScope = currentFilePreferenceScope();
+    const rememberedTimeline = fileManagerNavigationStore.restoreTimeline(navigationScope.serverAddress, navigationScope.username);
+    const initialNavigation = rememberedTimeline?.entries[rememberedTimeline.cursor] ?? {
+      folderId: null, navigationRootId: null, navigationRootLabel: null, navHistory: [],
     };
     applyDirectoryNavigation(initialNavigation);
+    navigationTimeline = rememberedTimeline ?? { entries: [], cursor: -1 };
     navigationStateReady = true;
-    loadDirectory(initialNavigation.folderId, false, initialReturnNavigation);
+    if (hasRequestedFolder) {
+      const visit = navigateDirectory({
+        folderId: requestedFolder, navigationRootId: requestedFolder,
+        navigationRootLabel: requestedFolder ? requestedName || shortIdentifier(requestedFolder) : null,
+        navHistory: [],
+      });
+      const generation = directoryGeneration;
+      void visit.then((ok) => {
+        if (ok || disposed || generation !== directoryGeneration || isDeniedDirectory(requestedFolder)) return;
+        // This route has no cached rows yet. Reload the previous location when
+        // an explicit URL/favorite cannot be opened, without recording a visit.
+        if (navigationTimeline.entries.length === 0) navigationTimeline = recordDirectoryVisit(navigationTimeline, initialNavigation);
+        if (!sameDirectoryId(requestedFolder, initialNavigation.folderId)) void loadDirectory(initialNavigation.folderId, true);
+      });
+    } else {
+      navigationTimeline = recordDirectoryVisit(navigationTimeline, initialNavigation);
+      void loadDirectory(initialNavigation.folderId);
+    }
     reloadUserPreference();
     void refreshDownloadedFileIds();
 
@@ -4638,7 +4678,7 @@
   ondrop={handleHtmlDrop}
 >
   {#if dragUploadActive}
-    <div class="drop-upload-overlay pointer-events-none absolute inset-3 z-30 grid place-items-center border border-dashed border-md3-primary bg-md3-surface/72 text-center backdrop-blur-md">
+    <div class="drop-upload-overlay pointer-events-none absolute inset-3 z-30 grid place-items-center border border-dashed border-md3-primary bg-md3-surface text-center ">
       <div class="grid gap-2 px-6 py-5">
         <span class="text-md3-primary-emphasis">
           <Icon name="uploadFile" size="36px" />
@@ -4653,53 +4693,45 @@
     </div>
   {/if}
 
-  <div class="files-navigation-row">
-    <IconButton
-      icon="arrowUpward"
-      label={$t('files.parentDirectory')}
-      disabled={!canGoToParent}
-      onclick={handleGoToParent}
-    />
-    <div
-      class="files-address-bar"
-      class:files-address-bar--editable={nodeLookupEnabled}
-    >
-      {#if nodeLookupEnabled}
-        <FileAddressBar
-          bind:this={addressBar}
-          segments={breadcrumbSegments}
-          lookupEnabled={nodeLookupEnabled}
-          knownPath={knownAddressPath}
-          busy={addressLookupBusy}
-          error={addressLookupError}
-          onNavigate={handleBreadcrumbNavigate}
-          onSubmit={handleAddressSubmit}
-          onCancel={handleAddressCancel}
-          onBeginEdit={handleAddressBeginEdit}
-        />
-      {:else}
-        <Breadcrumb segments={breadcrumbSegments} onNavigate={handleBreadcrumbNavigate} />
-      {/if}
-    </div>
-    <span class="files-navigation-spacer" aria-hidden="true"></span>
+  <ExplorerNavigationBar
+    {canGoBack} {canGoForward} {canGoToParent}
+    search={canUseServerSearch ? serverSearch : undefined}
+    busy={navigationUnavailable}
+    onBack={() => { void handleHistoryNavigate(-1); }}
+    onForward={() => { void handleHistoryNavigate(1); }}
+    onParent={() => { void handleGoToParent(); }}
+    onRefresh={() => { void loadDirectory(currentFolderId, true); }}
+  >
+    {#snippet address()}
+      <FileAddressBar
+        bind:this={addressBar}
+        segments={breadcrumbSegments}
+        lookupEnabled={nodeLookupEnabled}
+        knownPath={knownAddressPath}
+        busy={navigationUnavailable}
+        error={addressLookupError}
+        onNavigate={handleBreadcrumbNavigate}
+        onSubmit={handleAddressSubmit}
+        onCancel={handleAddressCancel}
+        onBeginEdit={handleAddressBeginEdit}
+      />
+    {/snippet}
+  </ExplorerNavigationBar>
 
+  {#snippet serverSearch()}
     <!-- Search -->
     {#if canUseServerSearch}
       <div bind:this={searchPreviewRoot} class="files-search relative">
       <form
-        class="flex gap-2"
+        class="files-search-field cfms-field-surface"
+        data-search-box
         onsubmit={(e) => { e.preventDefault(); openSearchDialog(true); }}
       >
-        <div class="relative">
-          <span class="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center justify-center leading-none text-md3-on-surface-variant">
-            <Icon name="search" size="17px" class="shrink-0" />
-          </span>
           <input
             type="text"
-            class="h-9 w-48 rounded-full border border-md3-outline bg-md3-field py-1.5 pl-9 pr-9 text-sm leading-5 text-md3-on-surface
-                   placeholder:text-md3-on-surface-variant
-                   transition-all"
-            placeholder={$t('files.search')}
+            class="files-search-input cfms-native-field"
+            data-focus-ring="delegated"
+            placeholder={directorySearchPlaceholder}
             bind:value={searchQuery}
             bind:this={searchInput}
             onfocus={openSearchPreview}
@@ -4708,7 +4740,7 @@
             role="combobox"
             aria-expanded={searchPreview.open}
             aria-controls="files-search-preview-list"
-            aria-label={$t('files.searchPlaceholder')}
+            aria-label={directorySearchPlaceholder}
             aria-keyshortcuts="Control+F Meta+F"
             aria-autocomplete="list"
             aria-activedescendant={searchPreview.open && searchPreviewActiveIndex >= 0
@@ -4716,40 +4748,42 @@
               : undefined}
           />
           {#if searchQuery}
-            <button
+            <FluentButton data-fluent-owner="routes-home-files-page"
               type="button"
-              class="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface"
               aria-label={$t('common.clear')}
               onclick={() => {
                 searchQuery = '';
                 handleSearchInput();
+                searchInput?.focus({ preventScroll: true });
               }}
+              appearance="subtle"
+              class="files-search-clear"
+              iconOnly
             >
               <Icon name="close" size="16px" />
-            </button>
+            </FluentButton>
           {/if}
-        </div>
-        <button
+        <FluentButton data-fluent-owner="routes-home-files-page"
           type="submit"
-          class="inline-flex h-9 w-9 items-center justify-center rounded-full
-                 bg-md3-primary-container text-md3-on-primary-container
-                 transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
           title={$t('files.serverSearch')}
           aria-label={$t('files.serverSearch')}
           disabled={!searchPreviewHasQuery}
+          appearance="subtle"
+          class="files-search-submit"
+          iconOnly
         >
           <Icon name="search" size="16px" />
-        </button>
+        </FluentButton>
       </form>
 
       {#if searchPreview.open}
         <div
           id="files-search-preview-panel"
-          class="search-preview-panel fixed z-40 overflow-hidden rounded-2xl border border-md3-outline bg-md3-surface-container shadow-2xl"
+          class="search-preview-panel cfms-acrylic-surface fixed z-40 overflow-hidden"
           style={searchPreviewPanelStyle}
         >
-          <div class="border-b border-md3-outline bg-md3-surface-container-high/45 px-4 py-3">
-            <div class="flex flex-wrap items-center gap-3">
+          <div class="border-b border-md3-outline px-4 py-3">
+            <div class="search-preview-controls">
               <label class="inline-flex items-center gap-1.5 text-sm text-md3-on-surface-variant">
                 <MdCheckbox
                   bind:checked={searchPreview.searchDocuments}
@@ -4767,20 +4801,13 @@
                 {$t('files.searchDirectories')}
               </label>
 
-              <span class="mx-1 hidden h-6 w-px bg-md3-outline sm:block"></span>
-
-              <div class="relative grid grid-cols-3 overflow-hidden rounded-full border border-md3-outline bg-md3-field p-0.5" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
-                <span
-                  class="search-sort-indicator absolute bottom-0.5 left-0.5 top-0.5 rounded-full bg-md3-primary"
-                  style={searchSortIndicatorStyle(searchPreview.sortBy)}
-                  aria-hidden="true"
-                ></span>
+              <div class="search-sort" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
                 {#each ['name', 'size', 'modified'] as field}
-                  <button
+                  <button data-fluent-owner="routes-home-files-page"
                     data-search-sort
                     tabindex={searchPreview.sortBy === field ? 0 : -1}
                     type="button"
-                    class="relative z-10 min-w-16 rounded-full px-3 py-1 text-xs font-medium transition-colors {searchPreview.sortBy === field ? 'text-md3-on-primary' : 'text-md3-on-surface-variant hover:text-md3-on-surface'}"
+                    class="search-sort-option"
                     aria-pressed={searchPreview.sortBy === field}
                     onclick={() => setSearchPreviewSort(field as SortField)}
                   >
@@ -4788,19 +4815,20 @@
                   </button>
                 {/each}
               </div>
-              <button
+              <FluentButton data-fluent-owner="routes-home-files-page"
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-full border border-md3-outline px-2.5 text-xs font-medium text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface"
                 title={searchPreview.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
                 onclick={toggleSearchPreviewSortOrder}
+                appearance="outline"
+                class="search-preview-action"
               >
                 <Icon name={searchPreview.sortOrder === 'asc' ? 'arrowUpward' : 'arrowDownward'} size="16px" />
                 {searchPreview.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
-              </button>
+              </FluentButton>
             </div>
           </div>
 
-          <div class="flex items-center justify-between gap-3 px-4 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
+          <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-xs text-md3-on-surface-variant">
             <span>{$t('files.searchPreviewResults')}</span>
             {#if searchPreview.loading || searchPreview.loadingMore}
               <span class="inline-flex items-center gap-2 normal-case">
@@ -4838,7 +4866,7 @@
                 onScroll={handleSearchPreviewScroll}
               >
                 {#snippet children(row, index)}
-                  <button
+                  <button data-fluent-owner="routes-home-files-page"
                     id={`files-search-preview-option-${index}`}
                     type="button"
                     class="grid min-h-12 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-md3-outline/45 px-4 py-2 text-left transition-colors hover:bg-md3-primary-container/15 {searchPreviewActiveIndex === index ? 'bg-md3-primary-container/15' : ''}"
@@ -4874,32 +4902,33 @@
             {/if}
           </div>
 
-          <div class="flex items-center justify-between gap-3 px-4 py-3">
-            <button
+          <div class="search-preview-footer">
+            <FluentButton data-fluent-owner="routes-home-files-page"
               type="button"
-              class="text-sm font-semibold text-md3-primary-emphasis transition hover:brightness-125 disabled:opacity-50"
               disabled={!searchPreviewCanSearch}
               onclick={() => openSearchDialog(true)}
+              appearance="subtle"
+              class="search-preview-action"
             >
               {$t('files.advancedSearch')}
-            </button>
-            <button
+            </FluentButton>
+            <FluentButton data-fluent-owner="routes-home-files-page"
               type="button"
-              class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-md3-primary-emphasis transition hover:bg-md3-primary-container/20 disabled:opacity-50"
               disabled={!searchPreviewCanSearch}
               onclick={() => openSearchDialog(true)}
+              appearance="outline"
+              class="search-preview-action"
             >
               <Icon name="search" size="16px" />
               {$t('files.allResults')}
-            </button>
+            </FluentButton>
           </div>
         </div>
       {/if}
       </div>
     {/if}
 
-    <IconButton icon="refresh" label={$t('common.refresh')} onclick={() => loadDirectory(currentFolderId)} />
-  </div>
+  {/snippet}
 
   <div class="files-command-row">
     <div class="files-primary-actions">
@@ -4922,16 +4951,18 @@
       })}
     >
       {#each SORT_FIELDS as field}
-        <button
+        <FluentButton data-fluent-owner="routes-home-files-page"
           data-sort-item
+          iconOnly
           type="button"
-          class="explorer-command-button explorer-command-button--compact files-sort-button"
           data-active={sortField === field ? 'true' : undefined}
           title={sortTitle(field as SortField)}
           aria-label={sortTitle(field as SortField)}
           aria-pressed={sortField === field}
           tabindex={sortField === field ? 0 : -1}
           onclick={() => setSort(field as SortField)}
+          appearance="subtle"
+          class="explorer-command-button explorer-command-button--compact files-sort-button"
         >
           <Icon name={sortFieldIcon(field)} size="17px" />
           {#if sortField === field}
@@ -4939,7 +4970,7 @@
               <Icon name={sortDirection === 'asc' ? 'arrowUpward' : 'arrowDownward'} size="10px" />
             </span>
           {/if}
-        </button>
+        </FluentButton>
       {/each}
     </div>
   </div>
@@ -5044,76 +5075,65 @@
     flex-direction: column;
     overflow: hidden;
     color: var(--explorer-text);
-    background: var(--explorer-background);
   }
 
-  .files-navigation-row {
-    position: relative;
-    z-index: 24;
+  .files-search { min-width: 0; width: 100%; }
+
+  .files-search-field {
     display: flex;
-    min-height: 58px;
-    align-items: center;
-    gap: 0.45rem;
-    border-bottom: 1px solid var(--explorer-border);
-    padding: 0.55rem 0.7rem;
-    background: var(--explorer-surface-raised);
-  }
-
-  .files-address-bar {
-    display: flex;
-    min-width: 180px;
-    width: fit-content;
-    flex: 0 1 auto;
-    align-items: center;
-    min-height: 36px;
-    overflow-x: auto;
-    border: 1px solid var(--explorer-border);
-    border-radius: var(--explorer-radius-small);
-    padding: 0.35rem 2.5rem 0.35rem 0.7rem;
-    background: var(--explorer-surface);
-  }
-
-  .files-address-bar--editable {
-    width: min(620px, 50vw);
-    max-width: none;
-    flex: 1 1 320px;
-    overflow: visible;
-    padding: 0;
-  }
-
-  .files-navigation-spacer {
     min-width: 0;
-    flex: 1 1 0;
+    box-sizing: border-box;
+    height: var(--files-field-height);
+    align-items: center;
+    gap: 2px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-bottom-color: var(--colorNeutralStrokeAccessible);
+    border-radius: var(--borderRadiusMedium);
+    padding: 0;
+    color: var(--colorNeutralForeground1);
+    background: transparent;
   }
-
-  .files-search {
+  .files-search-field:hover { border-color: var(--colorNeutralStroke1Hover); }
+  [data-search-box]:has([data-focus-ring="delegated"]:focus) {
+    border-color: var(--colorStrokeFocus2);
+    box-shadow: inset 0 -1px var(--colorStrokeFocus2);
+  }
+  .files-search-input {
+    width: 0;
+    min-width: 0;
+    flex: 1;
+    align-self: stretch;
+    border: 0;
+    padding: 5px 10px;
+    text-overflow: ellipsis;
+    color: inherit;
+    background: transparent;
+    font: 400 14px/20px var(--fontFamilyBase);
+  }
+  .files-search-input::placeholder { color: var(--colorNeutralForeground3); opacity: 1; }
+  :global(.files-search-clear[data-fluent-owner="routes-home-files-page"]),
+  :global(.files-search-submit[data-fluent-owner="routes-home-files-page"]) {
     flex: none;
+    inline-size: calc(var(--files-field-height) - 2px);
+    block-size: calc(var(--files-field-height) - 2px);
+    min-block-size: 0;
+    min-inline-size: 0;
+    padding: 0;
+    color: var(--colorNeutralForeground2);
   }
-
-  .files-navigation-row :global(.md-icon-button) {
-    border-radius: var(--explorer-radius-small);
-    color: var(--explorer-text-muted);
-  }
-
-  .files-navigation-row :global(input:not(.file-address__input)) {
-    width: min(260px, 22vw);
-    border-color: var(--explorer-border) !important;
-    border-radius: var(--explorer-radius-small) !important;
-    color: var(--explorer-text) !important;
-    background: var(--explorer-surface) !important;
-  }
+  :global(.files-search-submit[data-fluent-owner="routes-home-files-page"][disabled]) { color: var(--colorNeutralForegroundDisabled); }
 
   .files-command-row {
     position: relative;
     z-index: 20;
     display: flex;
     min-height: 48px;
+    flex-shrink: 0;
     align-items: center;
-    gap: 0.7rem;
+    gap: 12px;
     overflow: hidden;
     border-bottom: 1px solid var(--explorer-border);
     padding: 0.35rem 0.7rem;
-    background: var(--explorer-surface);
   }
 
   .files-primary-actions {
@@ -5139,13 +5159,13 @@
     display: flex;
     flex: none;
     align-items: center;
-    gap: 0.1rem;
+    gap: 4px;
     margin-left: auto;
     overflow: hidden;
     white-space: nowrap;
   }
 
-  .files-sort-button {
+  :global(.files-sort-button[data-fluent-owner="routes-home-files-page"]) {
     position: relative;
     width: 34px;
     height: 34px;
@@ -5153,6 +5173,10 @@
     overflow: hidden;
     padding: 0;
     white-space: nowrap;
+  }
+
+  @media (pointer: coarse) {
+    :global(.files-sort-button[data-fluent-owner="routes-home-files-page"]) { width: 44px; height: 44px; }
   }
 
   .files-sort-direction {
@@ -5199,6 +5223,85 @@
     overscroll-behavior: contain;
   }
 
+  .server-search-form {
+    --files-field-height: 32px;
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+    color: var(--colorNeutralForeground1);
+  }
+  .server-search-query {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    flex: none;
+  }
+  .server-search-controls {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+    color: var(--colorNeutralForeground2);
+    font: 400 14px/20px var(--fontFamilyBase);
+  }
+  :global(.server-search-action[data-fluent-owner="routes-home-files-page"]) { font-weight: 400; }
+  .server-search-results {
+    container-type: inline-size;
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+  }
+  .server-search-summary {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    padding: 8px 12px;
+    color: var(--colorNeutralForeground2);
+    font: 400 12px/16px var(--fontFamilyBase);
+  }
+  .server-search-result {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: var(--search-row-height);
+    border: 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    border-radius: 0;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    text-align: left;
+    font: 400 14px/20px var(--fontFamilyBase);
+    transition: background-color var(--durationFaster) var(--curveEasyEase);
+  }
+  .server-search-result:hover { background: var(--colorNeutralBackground1Hover); }
+  .server-search-result:active { background: var(--colorNeutralBackground1Pressed); }
+  .server-search-result:focus-visible { outline-offset: -2px; }
+  .server-search-result--last { border-bottom: 0; }
+  .server-search-result-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .server-search-result-detail { color: var(--colorNeutralForeground2); text-align: right; font: 400 12px/16px var(--fontFamilyBase); }
+
+  @container (max-width: 480px) {
+    .server-search-result { gap: 4px 12px; }
+    .server-search-result > :first-child { grid-row: span 2; }
+    .server-search-result-name { grid-column: 2 / -1; }
+    .server-search-result-detail { grid-column: 2 / -1; text-align: left; }
+  }
+
   :global(.modal-positioner--sized .server-search-list-viewport),
   :global(.modal-positioner--maximized .server-search-list-viewport) {
     max-height: none;
@@ -5211,16 +5314,30 @@
   }
 
   .search-preview-panel {
-    border-color: var(--explorer-border-strong);
-    background: color-mix(in srgb, var(--explorer-surface-raised) 96%, transparent);
-    box-shadow: var(--explorer-shadow);
     animation: search-preview-in 180ms var(--motion-easing-emphasized-decelerate) both;
-    -webkit-backdrop-filter: blur(24px) saturate(1.12);
-    backdrop-filter: blur(24px) saturate(1.12);
   }
 
-  .search-sort-indicator {
-    transition: transform var(--motion-duration-medium1) var(--motion-easing-emphasized-decelerate);
+  .search-preview-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .search-sort { display: flex; max-width: 100%; flex-wrap: wrap; gap: 2px; border: 1px solid var(--colorNeutralStroke1); border-radius: var(--borderRadiusMedium); padding: 2px; }
+  .search-sort-option { min-height: 32px; border-radius: var(--borderRadiusMedium); padding: 4px 12px; color: var(--colorNeutralForeground2); font: 400 14px/20px var(--fontFamilyBase); transition: background-color var(--durationFaster) var(--curveEasyEase); }
+  .search-sort-option:hover:not(:disabled) { background: var(--colorNeutralBackground1Hover); }
+  .search-sort-option[aria-pressed="true"] { color: var(--colorBrandForeground1); background: var(--colorBrandBackground2); box-shadow: inset 0 -2px var(--colorBrandStroke1); }
+  .search-sort-option:disabled { color: var(--colorNeutralForegroundDisabled); }
+  :global(.search-preview-action[data-fluent-owner="routes-home-files-page"]) { font-weight: 400; }
+  .search-preview-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+
+  @media (pointer: coarse) {
+    .files-search-input { font-size: 16px; }
+    .server-search-form { --files-field-height: 44px; }
+    .search-sort-option { min-height: 44px; }
+  }
+  @media (forced-colors: active) {
+    :global(html[data-window-backdrop]) .files-page,
+    :global(html[data-window-backdrop]) .files-command-row,
+    :global(html[data-window-backdrop]) .files-page :global(.explorer-status-bar) { background: Canvas; }
+    .files-search-field { color: FieldText; background: Field; border-color: ButtonText; }
+    [data-search-box]:has([data-focus-ring="delegated"]:focus) { outline: 2px solid Highlight; outline-offset: -2px; box-shadow: none; }
+    .search-sort-option[aria-pressed="true"] { color: HighlightText; background: Highlight; box-shadow: none; outline: 1px solid Highlight; }
   }
 
   .revision-graph-path {
@@ -5268,28 +5385,6 @@
   }
 
   @media (max-width: 720px) {
-    .files-navigation-row {
-      min-height: 52px;
-      flex-wrap: nowrap;
-      padding: 0.4rem;
-    }
-
-    .files-address-bar {
-      min-width: 0;
-      width: auto;
-      max-width: none;
-      flex: 1 1 auto;
-      padding-inline: 0.45rem;
-    }
-
-    .files-address-bar--editable {
-      padding-inline: 0;
-    }
-
-    .files-navigation-spacer {
-      display: none;
-    }
-
     .files-command-row {
       min-height: 44px;
       padding-inline: 0.4rem;
@@ -5377,25 +5472,46 @@
     closeLabel={$t('common.close')}
     onClose={closeSearchDialog}
   >
-    <form class="flex h-full min-h-0 flex-col gap-4 p-5" onsubmit={(e) => { e.preventDefault(); runServerSearch(); }}>
-      <div class="grid gap-3 md:grid-cols-[1fr_auto]">
+    <form class="server-search-form" style:--search-row-height={`${searchRowHeight}px`} onsubmit={(e) => { e.preventDefault(); runServerSearch(); }}>
+      <div class="server-search-query">
+        <div class="files-search-field cfms-field-surface" data-search-box>
         <input
-          class="rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
+          class="files-search-input cfms-native-field"
+          data-focus-ring="delegated"
           bind:value={searchDialog.query}
           bind:this={searchDialogInput}
           placeholder={$t('files.searchPlaceholder')}
+          aria-label={$t('files.searchPlaceholder')}
           disabled={searchDialog.loading}
         />
-        <button
+        {#if searchDialog.query}
+          <FluentButton data-fluent-owner="routes-home-files-page"
+            type="button"
+            appearance="subtle"
+            class="files-search-clear"
+            iconOnly
+            aria-label={$t('common.clear')}
+            disabled={searchDialog.loading}
+            onclick={() => {
+              searchDialog.query = '';
+              searchDialogInput?.focus({ preventScroll: true });
+            }}
+          >
+            <Icon name="close" size="16px" />
+          </FluentButton>
+        {/if}
+        </div>
+        <FluentButton data-fluent-owner="routes-home-files-page"
           type="submit"
-          class="rounded-full bg-md3-primary px-4 py-2 text-sm font-medium text-md3-on-primary transition-all hover:brightness-110 disabled:opacity-50"
           disabled={searchDialog.loading}
+          appearance="primary"
+          class="server-search-action"
         >
           {$t('files.serverSearch')}
-        </button>
+        </FluentButton>
       </div>
 
-      <div class="flex flex-wrap items-center gap-4 text-sm text-md3-on-surface-variant">
+      <div class="server-search-controls">
         <label class="flex items-center gap-2">
           <MdCheckbox
             bind:checked={searchDialog.searchDocuments}
@@ -5413,18 +5529,13 @@
           {$t('files.searchDirectories')}
         </label>
 
-        <div class="relative grid grid-cols-3 overflow-hidden rounded-full border border-md3-outline bg-md3-field p-0.5" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
-          <span
-            class="search-sort-indicator absolute bottom-0.5 left-0.5 top-0.5 rounded-full bg-md3-primary"
-            style={searchSortIndicatorStyle(searchDialog.sortBy)}
-            aria-hidden="true"
-          ></span>
+        <div class="search-sort" role="toolbar" tabindex="-1" aria-label={$t('workspace.sort')} onkeydown={(event) => focusRovingItem(event, event.currentTarget as HTMLElement, { selector: '[data-search-sort]', orientation: 'horizontal' })}>
           {#each ['name', 'size', 'modified'] as field}
-            <button
+            <button data-fluent-owner="routes-home-files-page"
               data-search-sort
               tabindex={searchDialog.sortBy === field ? 0 : -1}
               type="button"
-              class="relative z-10 min-w-16 rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 {searchDialog.sortBy === field ? 'text-md3-on-primary' : 'text-md3-on-surface-variant hover:text-md3-on-surface'}"
+              class="search-sort-option"
               aria-pressed={searchDialog.sortBy === field}
               disabled={searchDialog.loading}
               onclick={() => setSearchDialogSort(field as SortField)}
@@ -5433,21 +5544,22 @@
             </button>
           {/each}
         </div>
-        <button
+        <FluentButton data-fluent-owner="routes-home-files-page"
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-full border border-md3-outline px-2.5 text-xs font-medium text-md3-on-surface-variant transition hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:opacity-50"
           disabled={searchDialog.loading}
           title={searchDialog.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
           onclick={toggleSearchDialogSortOrder}
+          appearance="outline"
+          class="server-search-action"
         >
           <Icon name={searchDialog.sortOrder === 'asc' ? 'arrowUpward' : 'arrowDownward'} size="16px" />
           {searchDialog.sortOrder === 'asc' ? $t('files.ascending') : $t('files.descending')}
-        </button>
+        </FluentButton>
       </div>
 
       {#if searchDialog.results}
-        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-md3-outline">
-          <div class="flex items-center justify-between gap-3 border-b border-md3-outline bg-md3-surface-container-high/50 px-3 py-2 text-xs font-medium uppercase text-md3-on-surface-variant">
+        <div class="server-search-results">
+          <div class="server-search-summary" role="status">
             <span>
               {searchDialog.results.total_count === 0 && !searchDialog.loading
                 ? $t('files.searchNoResults', { values: { query: searchDialog.resultQuery } })
@@ -5465,7 +5577,7 @@
             keyOf={(row) => row.kind === 'directory'
               ? `directory:${row.directory.id}`
               : `document:${row.document.id}`}
-            estimateSize={37}
+            estimateSize={searchRowHeight}
             overscan={10}
             threshold={120}
             resetKey={searchDialogResetKey}
@@ -5477,24 +5589,24 @@
               {#if row.kind === 'directory'}
                 <button
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors hover:bg-md3-primary-container/20"
-                  class:border-b-0={index === searchResultRows.length - 1}
                   onclick={() => navigateToSearchDirectory(row.directory)}
+                  class="server-search-result"
+                  class:server-search-result--last={index === searchResultRows.length - 1}
                 >
                   <span class="text-md3-primary-emphasis"><Icon name="folder" size="20px" /></span>
-                  <span class="min-w-0 truncate text-sm font-medium text-md3-primary-emphasis">{row.directory.name}</span>
-                  <span class="text-xs text-md3-on-surface-variant">{formatDate(row.directory.created_time)}</span>
+                  <span class="server-search-result-name">{row.directory.name}</span>
+                  <span class="server-search-result-detail">{formatDate(row.directory.created_time)}</span>
                 </button>
               {:else}
                 <button
                   type="button"
-                  class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-md3-outline/50 px-3 py-2 text-left transition-colors hover:bg-md3-surface-container-high/40"
-                  class:border-b-0={index === searchResultRows.length - 1}
                   onclick={() => navigateToSearchDocument(row.document)}
+                  class="server-search-result"
+                  class:server-search-result--last={index === searchResultRows.length - 1}
                 >
                   <span class="text-md3-on-surface-variant"><Icon name="filePresent" size="20px" /></span>
-                  <span class="min-w-0 truncate text-sm text-md3-on-surface">{row.document.name ?? row.document.title}</span>
-                  <span class="text-xs text-md3-on-surface-variant">{formatBytes(row.document.size)}</span>
+                  <span class="server-search-result-name">{row.document.name ?? row.document.title}</span>
+                  <span class="server-search-result-detail">{formatBytes(row.document.size)}</span>
                 </button>
               {/if}
             {/snippet}
@@ -5616,14 +5728,18 @@
                   <td class="px-3 py-2 whitespace-nowrap">{formatDate(entry.start_time)}</td>
                   <td class="px-3 py-2 whitespace-nowrap">{formatDate(entry.end_time)}</td>
                   <td class="px-3 py-2 text-right">
-                    <button
-                      class="rounded-full bg-md3-error-container p-2 text-md3-on-error-container transition-all hover:brightness-110"
+                    <FluentButton data-fluent-owner="routes-home-files-page"
                       title={$t('files.revoke')}
                       aria-label={$t('files.revoke')}
                       onclick={() => handleRevokeAccess(entry.id)}
+                      type="button"
+                      appearance="subtle"
+                      tone="danger"
+                      class="rounded bg-md3-error-container p-2 text-md3-on-error-container transition-all "
+                      iconOnly
                     >
                       <Icon name="delete" size="17px" />
-                    </button>
+                    </FluentButton>
                   </td>
                 </tr>
               {/each}
@@ -5822,28 +5938,41 @@
                 </div>
 
                 <div class="flex items-center gap-1 py-3">
-                  <button
-                    class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface"
+                  <FluentButton data-fluent-owner="routes-home-files-page"
                     title={$t('common.download')}
                     onclick={() => handleDownloadRevision(row.revision)}
+                    type="button"
+                    appearance="subtle"
+                    class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface"
+                    iconOnly
+                    aria-label={$t('common.download')}
                   >
                     <Icon name="download" size="18px" />
-                  </button>
+                  </FluentButton>
                   {#if !row.revision.is_current}
-                    <button
-                      class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-primary-container hover:text-md3-on-primary-container"
+                    <FluentButton data-fluent-owner="routes-home-files-page"
                       title={$t('files.setCurrentRevision')}
                       onclick={() => handleSetCurrentRevision(row.revision)}
+                      type="button"
+                      appearance="subtle"
+                      class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-primary-container hover:text-md3-on-primary-container"
+                      iconOnly
+                      aria-label={$t('files.setCurrentRevision')}
                     >
                       <Icon name="verified" size="18px" />
-                    </button>
-                    <button
-                      class="rounded-full p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-error-container hover:text-md3-on-error-container"
+                    </FluentButton>
+                    <FluentButton data-fluent-owner="routes-home-files-page"
                       title={$t('files.deleteRevision')}
                       onclick={() => handleDeleteRevision(row.revision)}
+                      type="button"
+                      appearance="subtle"
+                      tone="danger"
+                      class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-error-container hover:text-md3-on-error-container"
+                      iconOnly
+                      aria-label={$t('files.deleteRevision')}
                     >
                       <Icon name="delete" size="18px" />
-                    </button>
+                    </FluentButton>
                   {/if}
                 </div>
               </div>
