@@ -7,9 +7,11 @@ pub async fn check_app_update(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppHandleState>,
     channel: Option<String>,
+    source: Option<String>,
 ) -> Result<Option<AppUpdateMetadata>, String> {
     let channel = UpdateChannel::parse(channel.as_deref());
-    check_android_app_update(&app, state, channel).await
+    let source = UpdateSource::parse(source.as_deref());
+    check_android_app_update(&app, state, channel, source).await
 }
 
 #[cfg(not(target_os = "android"))]
@@ -18,11 +20,14 @@ pub async fn check_app_update(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppHandleState>,
     channel: Option<String>,
+    source: Option<String>,
 ) -> Result<Option<AppUpdateMetadata>, String> {
     let channel = UpdateChannel::parse(channel.as_deref());
+    let source = UpdateSource::parse(source.as_deref());
     let proxy_url = updater_proxy_url(&state)?;
     tracing::info!(
-        "Checking for app updates (proxy={})",
+        "Checking for app updates (source={}, proxy={})",
+        source.as_str(),
         describe_update_proxy(proxy_url.as_ref())
     );
     let client = update_api_http_client(proxy_url.as_ref())?;
@@ -30,6 +35,7 @@ pub async fn check_app_update(
         &client,
         &app.state::<crate::github_credentials::GithubCredentialState>(),
         channel,
+        source,
         UpdateAssetKind::DesktopManifest,
     )
     .await?
@@ -230,11 +236,13 @@ async fn check_android_app_update(
     app: &tauri::AppHandle,
     state: tauri::State<'_, AppHandleState>,
     channel: UpdateChannel,
+    source: UpdateSource,
 ) -> Result<Option<AppUpdateMetadata>, String> {
     let architecture = AndroidApkArchitecture::from_rust_arch(std::env::consts::ARCH)?;
     let proxy_url = updater_proxy_url(&state)?;
     tracing::info!(
-        "Checking for Android app updates (architecture={}, proxy={})",
+        "Checking for Android app updates (source={}, architecture={}, proxy={})",
+        source.as_str(),
         architecture.as_str(),
         describe_update_proxy(proxy_url.as_ref())
     );
@@ -243,6 +251,7 @@ async fn check_android_app_update(
         &client,
         &app.state::<crate::github_credentials::GithubCredentialState>(),
         channel,
+        source,
         UpdateAssetKind::AndroidApk { architecture },
     )
     .await?;
@@ -619,13 +628,18 @@ async fn find_update_release(
     client: &reqwest::Client,
     credentials: &crate::github_credentials::GithubCredentialState,
     channel: UpdateChannel,
+    source: UpdateSource,
     asset_kind: UpdateAssetKind,
 ) -> Result<Option<GithubReleaseDto>, String> {
-    let releases = github_api_get(client, GithubApiEndpoint::UpdateReleases, credentials)
-        .await?
-        .json::<Vec<GithubReleaseDto>>()
-        .await
-        .map_err(|e| format!("Failed to parse release list: {e}"))?;
+    let releases = github_api_get(
+        client,
+        GithubApiEndpoint::UpdateReleases(source),
+        credentials,
+    )
+    .await?
+    .json::<Vec<GithubReleaseDto>>()
+    .await
+    .map_err(|e| format!("Failed to parse release list: {e}"))?;
 
     let mut candidates = releases
         .into_iter()

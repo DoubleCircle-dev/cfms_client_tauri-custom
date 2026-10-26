@@ -2,6 +2,7 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { relaunch } from '@tauri-apps/plugin-process';
 
 export type UpdateChannel = 'stable' | 'beta' | 'alpha';
+export type UpdateSource = 'official' | 'custom';
 
 export interface AppUpdateMetadata {
   currentVersion: string;
@@ -27,8 +28,9 @@ export interface UpdateProgressSnapshot {
 
 export async function checkAppUpdate(
   channel: UpdateChannel,
+  source: UpdateSource,
 ): Promise<AppUpdateMetadata | null> {
-  return invoke<AppUpdateMetadata | null>('check_app_update', { channel });
+  return invoke<AppUpdateMetadata | null>('check_app_update', { channel, source });
 }
 
 export async function installAppUpdate(

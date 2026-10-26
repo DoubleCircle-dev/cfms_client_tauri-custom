@@ -22,12 +22,14 @@ const mocks = vi.hoisted(() => ({
   notificationError: vi.fn(),
   appUpdateState: {
     channel: 'stable',
+    source: 'custom',
     automaticCheckPause: { mode: 'active' } as UpdateCheckPause,
     isAutomaticCheckPaused: false,
     ensureAutomaticCheckPause: vi.fn(),
     setAutomaticCheckPause: vi.fn(),
     resumeAutomaticChecks: vi.fn(),
     setChannel: vi.fn(),
+    setUpdateSource: vi.fn(),
   },
 }));
 
@@ -54,6 +56,7 @@ beforeEach(() => {
   locale.set('en');
   vi.spyOn(Date, 'now').mockReturnValue(now);
   mocks.appUpdateState.channel = 'stable';
+  mocks.appUpdateState.source = 'custom';
   mocks.appUpdateState.automaticCheckPause = { mode: 'active' };
   mocks.appUpdateState.isAutomaticCheckPaused = false;
   mocks.getSetting.mockResolvedValue('stable');
@@ -63,6 +66,9 @@ beforeEach(() => {
   mocks.appUpdateState.resumeAutomaticChecks.mockResolvedValue(undefined);
   mocks.appUpdateState.setChannel.mockImplementation((channel: string) => {
     mocks.appUpdateState.channel = channel;
+  });
+  mocks.appUpdateState.setUpdateSource.mockImplementation((source: string) => {
+    mocks.appUpdateState.source = source;
   });
   mocks.choose.mockResolvedValue(null);
   mocks.confirm.mockResolvedValue(false);
@@ -94,6 +100,34 @@ describe('update settings pause controls', () => {
 
     await waitFor(() => expect(mocks.setSetting).toHaveBeenCalledWith('update_channel', 'alpha'));
     expect(mocks.appUpdateState.setChannel).toHaveBeenCalledWith('alpha');
+  });
+
+  it('persists update source changes', async () => {
+    render(UpdatesSettingsPage);
+
+    const official = await screen.findByRole('radio', { name: /Original CFMS Client/ }) as HTMLButtonElement;
+    await waitFor(() => expect(official.disabled).toBe(false));
+    mocks.confirm.mockResolvedValue(true);
+    await fireEvent.click(official);
+
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Switch to the original update source?',
+      message: expect.stringContaining('will not automatically update back to the DoubleCircle Custom version'),
+    })));
+    await waitFor(() => expect(mocks.setSetting).toHaveBeenCalledWith('update_source', 'official'));
+    expect(mocks.appUpdateState.setUpdateSource).toHaveBeenCalledWith('official');
+  });
+
+  it('does not change update source when original-source warning is declined', async () => {
+    render(UpdatesSettingsPage);
+
+    const official = await screen.findByRole('radio', { name: /Original CFMS Client/ }) as HTMLButtonElement;
+    await waitFor(() => expect(official.disabled).toBe(false));
+    await fireEvent.click(official);
+
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledOnce());
+    expect(mocks.setSetting).not.toHaveBeenCalledWith('update_source', 'official');
+    expect(mocks.appUpdateState.setUpdateSource).not.toHaveBeenCalledWith('official');
   });
 
   it('moves and selects release channels with arrow keys', async () => {
@@ -172,9 +206,10 @@ describe('update settings pause controls', () => {
     expect(screen.getByText('Automatic checks are active')).toBeTruthy();
   });
 
-  it('resets both the release channel and a paused policy', async () => {
+  it('resets release channel, update source, and a paused policy', async () => {
     mocks.getSetting.mockResolvedValue('beta');
     mocks.appUpdateState.channel = 'beta';
+    mocks.appUpdateState.source = 'official';
     mocks.appUpdateState.automaticCheckPause = { mode: 'indefinite' };
     mocks.appUpdateState.isAutomaticCheckPaused = true;
     mocks.appUpdateState.ensureAutomaticCheckPause.mockResolvedValue({ mode: 'indefinite' });
@@ -185,7 +220,9 @@ describe('update settings pause controls', () => {
     await fireEvent.click(reset);
 
     await waitFor(() => expect(mocks.setSetting).toHaveBeenCalledWith('update_channel', 'stable'));
+    await waitFor(() => expect(mocks.setSetting).toHaveBeenCalledWith('update_source', 'custom'));
     expect(mocks.appUpdateState.setChannel).toHaveBeenCalledWith('stable');
+    expect(mocks.appUpdateState.setUpdateSource).toHaveBeenCalledWith('custom');
     expect(mocks.appUpdateState.resumeAutomaticChecks).toHaveBeenCalledOnce();
   });
 });

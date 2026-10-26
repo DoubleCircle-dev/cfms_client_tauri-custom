@@ -6,6 +6,7 @@ import {
   type AppUpdateMetadata,
   type UpdateChannel,
   type UpdateProgressSnapshot,
+  type UpdateSource,
 } from '$lib/updater';
 import {
   updateNotificationReporter,
@@ -28,6 +29,7 @@ interface CheckOptions {
 
 export class AppUpdateState {
   channel = $state<UpdateChannel>('stable');
+  source = $state<UpdateSource>('custom');
   automaticCheckPause = $state<UpdateCheckPause>(ACTIVE_UPDATE_CHECK_PAUSE);
   automaticCheckSettled = $state(false);
   checked = $state(false);
@@ -46,6 +48,7 @@ export class AppUpdateState {
   });
 
   private channelLoaded = false;
+  private sourceLoaded = false;
   private automaticCheckPauseLoaded = false;
   private automaticChecksInitialized = false;
   private pendingCheck: Promise<AppUpdateMetadata | null> | null = null;
@@ -71,6 +74,21 @@ export class AppUpdateState {
     }
 
     return this.channel;
+  }
+
+  async ensureUpdateSource(force = false): Promise<UpdateSource> {
+    if (this.sourceLoaded && !force) return this.source;
+
+    try {
+      const saved = await getSetting('update_source');
+      if (isUpdateSource(saved)) {
+        this.source = saved;
+      }
+    } finally {
+      this.sourceLoaded = true;
+    }
+
+    return this.source;
   }
 
   async ensureAutomaticCheckPause(force = false): Promise<UpdateCheckPause> {
@@ -144,6 +162,16 @@ export class AppUpdateState {
     this.resetInstallState();
   }
 
+  setUpdateSource(source: UpdateSource) {
+    this.source = source;
+    this.sourceLoaded = true;
+    this.checked = false;
+    this.update = null;
+    this.error = null;
+    this.checkedAt = null;
+    this.resetInstallState();
+  }
+
   async check(options: CheckOptions = {}): Promise<AppUpdateMetadata | null> {
     if (this.pendingCheck) return this.pendingCheck;
     if (this.checked && !options.force) return this.update;
@@ -162,9 +190,12 @@ export class AppUpdateState {
     this.error = null;
 
     try {
-      const channel = await this.ensureChannel(forceChannelReload);
+      const [channel, source] = await Promise.all([
+        this.ensureChannel(forceChannelReload),
+        this.ensureUpdateSource(forceChannelReload),
+      ]);
       const previousVersion = this.update?.version ?? null;
-      const found = await checkAppUpdate(channel);
+      const found = await checkAppUpdate(channel, source);
       this.update = found;
       this.checked = true;
       this.checkedAt = Date.now();
@@ -293,6 +324,10 @@ export class AppUpdateState {
 
 function isUpdateChannel(value: string | null): value is UpdateChannel {
   return value === 'stable' || value === 'beta' || value === 'alpha';
+}
+
+function isUpdateSource(value: string | null): value is UpdateSource {
+  return value === 'official' || value === 'custom';
 }
 
 export const appUpdateState = new AppUpdateState();
