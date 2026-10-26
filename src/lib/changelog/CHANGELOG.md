@@ -4,6 +4,18 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.55.1
+**Released on:** 2026-10-26
+
+**Title:** Bugfix
+
+### Fixed
+- Enhance BatchAccessRulesDialog for multi-selection handling and improve test coverage for language support
+- Add iconFilled property to ContextMenuActionItem and update context menu items for favorite actions
+- Update animation purpose and improve AuthScene component styles for better clarity and consistency
+
+--- 
+
 ## v0.55.0
 **Released on:** 2026-10-25
 
