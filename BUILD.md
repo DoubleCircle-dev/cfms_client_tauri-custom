@@ -103,7 +103,8 @@ From `android-custom`, after syncing the code changes to publish:
 pnpm app:version set 0.55.2-custom-alpha
 pnpm app:version:check
 pnpm test
-pnpm check
+pnpm exec svelte-check --tsconfig ./tsconfig.json
+pnpm check:fluent
 git add -A
 git commit -m "Release v0.55.2-custom-alpha"
 git push origin android-custom
