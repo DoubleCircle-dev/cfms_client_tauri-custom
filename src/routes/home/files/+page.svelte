@@ -1423,8 +1423,8 @@
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
-      // Cancelling the overwrite prompt writes nothing, so keep the queue.
-      if (!result.cancelled) fileUpdateTracker.clearPendingUpdates();
+      // Keep the queue when the overwrite prompt is cancelled or a transfer fails.
+      if (!result.cancelled && !result.failed) fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);
     }
@@ -1520,8 +1520,8 @@
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
       });
-      // Cancelling the overwrite prompt writes nothing, so keep the queue.
-      if (!result.cancelled) fileUpdateTracker.clearPendingUpdates();
+      // Keep the queue when the overwrite prompt is cancelled or a transfer fails.
+      if (!result.cancelled && !result.failed) fileUpdateTracker.clearPendingUpdates();
     } catch (err) {
       error = formatError(err);
     } finally {
