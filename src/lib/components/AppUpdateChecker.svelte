@@ -667,6 +667,10 @@
       gap: 12px;
     }
 
+    .runtime-status {
+      flex: none;
+    }
+
     .runtime-summary > div {
       display: grid;
       grid-template-columns: minmax(6.5rem, auto) minmax(0, 1fr);

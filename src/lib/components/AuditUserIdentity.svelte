@@ -39,15 +39,12 @@
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   let pressTimer: ReturnType<typeof setTimeout> | undefined;
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
-  let pointerType = '';
   let pointerFocusing = false;
   let keyboardFocus = false;
   let restoringFocus = false;
-  let suppressClick = false;
+  let suppressCopy = false;
   let touchStart: { x: number; y: number } | null = null;
 
-  const supportsHover = () => typeof window.matchMedia !== 'function'
-    || window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
   const contains = (target: EventTarget | null) => target instanceof Node
     && Boolean(trigger?.contains(target) || panel?.contains(target));
 
@@ -86,8 +83,7 @@
     activeKey = previewKey;
   }
 
-  function enter(event: PointerEvent) {
-    if (event.pointerType === 'touch' || !supportsHover()) return;
+  function enter() {
     clearTimeout(closeTimer);
     clearTimeout(openTimer);
     if (!open) openTimer = setTimeout(show, 300);
@@ -218,12 +214,11 @@
     onpointerleave={() => {
       clearTimeout(pressTimer);
       pointerFocusing = false;
-      if (touchStart) { touchStart = null; suppressClick = true; }
+      if (touchStart) { touchStart = null; suppressCopy = true; }
       scheduleClose();
     }}
     onfocus={() => {
-      if (restoringFocus || pointerFocusing || !supportsHover()) return;
-      pointerType = '';
+      if (restoringFocus || pointerFocusing) return;
       keyboardFocus = true;
       show();
     }}
@@ -232,47 +227,33 @@
       if (event.key === 'Tab' && !event.shiftKey && open) {
         event.preventDefault();
         actions()[0]?.focus();
-      } else if ((event.key === 'Enter' || event.key === ' ') && !supportsHover()) {
-        event.preventDefault();
-        if (value) void onViewDetails(value);
       }
     }}
     onpointerdown={(event) => {
       if (event.button !== 0) return;
       clearTimeout(pressTimer);
-      pointerType = event.pointerType;
       pointerFocusing = true;
       keyboardFocus = false;
-      suppressClick = false;
+      suppressCopy = false;
       touchStart = event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : null;
       if (touchStart) {
-        close();
-        pressTimer = setTimeout(() => { suppressClick = true; void copy(); }, 550);
+        pressTimer = setTimeout(() => { suppressCopy = true; void copy(); }, 550);
       }
     }}
     onpointermove={(event) => {
       if (touchStart && Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y) > 10) {
         clearTimeout(pressTimer);
-        suppressClick = true;
+        suppressCopy = true;
       }
     }}
     onpointerup={() => { clearTimeout(pressTimer); touchStart = null; pointerFocusing = false; }}
-    onpointercancel={() => { clearTimeout(pressTimer); touchStart = null; pointerFocusing = false; suppressClick = true; }}
+    onpointercancel={() => { clearTimeout(pressTimer); touchStart = null; pointerFocusing = false; suppressCopy = true; }}
     oncontextmenu={(event) => {
       event.preventDefault();
       event.stopPropagation();
       clearTimeout(pressTimer);
-      if (!suppressClick) void copy();
-      suppressClick = true;
-    }}
-    onclick={() => {
-      const touch = pointerType === 'touch' || !supportsHover();
-      pointerType = '';
-      if (suppressClick) { suppressClick = false; return; }
-      if (value && touch) {
-        close();
-        void onViewDetails(value);
-      }
+      if (!suppressCopy) void copy();
+      suppressCopy = true;
     }}
   >{value.length > 7 ? `${value.slice(0, 7)}…` : value}</button>
 {:else}

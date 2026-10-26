@@ -252,16 +252,27 @@ describe('management audit logs', () => {
     expect(mocks.getUserInfo).toHaveBeenCalledTimes(2);
   });
 
-  it('opens the same user details modal on touch without a preview', async () => {
+  it('uses the preview before opening user details on touch', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {} })));
     mocks.viewAuditLogs.mockResolvedValue(auditPage([auditEntry('log-1', 'login')]));
     await openAuditLogs();
     const trigger = screen.getByRole('button', { name: /^Preview user / });
+    vi.useFakeTimers();
+    const enter = new Event('pointerenter', { bubbles: true });
+    Object.assign(enter, { pointerType: 'touch' });
+    await fireEvent(trigger, enter);
     const press = new Event('pointerdown', { bubbles: true });
     Object.assign(press, { pointerType: 'touch', button: 0 });
     await fireEvent(trigger, press);
     await fireEvent.pointerUp(trigger);
     await fireEvent.click(trigger);
-    expect(await screen.findByRole('dialog', { name: 'User Details: alice' })).toBeTruthy();
+    expect(mocks.getUserInfo).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(screen.getByRole('dialog', { name: 'User preview' })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'User Details: alice' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'View user details' }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByRole('dialog', { name: 'User Details: alice' })).toBeTruthy();
     expect(screen.queryByRole('dialog', { name: 'User preview' })).toBeNull();
     expect(mocks.getUserInfo).toHaveBeenCalledWith({ userId: auditEntry('', '').user_id });
   });

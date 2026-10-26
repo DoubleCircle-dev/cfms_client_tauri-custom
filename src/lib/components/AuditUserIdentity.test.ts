@@ -162,30 +162,37 @@ describe('audit user preview', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('opens details on touch tap without hovering, including hybrid devices', async () => {
+  it.each([false, true])('uses the same delayed preview for touch with hover support=%s', async (supportsHover) => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: supportsHover })));
     mount();
     const trigger = screen.getByRole('button');
     await pointer(trigger, 'pointerenter', 'touch');
-    await vi.advanceTimersByTimeAsync(400);
     await pointer(trigger, 'pointerdown', 'touch');
+    trigger.focus();
     await pointer(trigger, 'pointerup', 'touch');
     await fireEvent.click(trigger);
-    expect(details).toHaveBeenCalledWith(user.user_id);
+    await vi.advanceTimersByTimeAsync(299);
     expect(cache.info).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(screen.getByRole('dialog', { name: 'User preview' })).toBeTruthy();
+    expect(details).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole('button', { name: 'View user details' }));
+    expect(details).toHaveBeenCalledExactlyOnceWith(user.user_id, user);
   });
 
-  it('uses direct details on devices without hover even for keyboard activation', async () => {
+  it('supports the same keyboard preview on devices without hover', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
     mount();
     const trigger = screen.getByRole('button');
-    await pointer(trigger, 'pointerenter');
     trigger.focus();
-    await vi.advanceTimersByTimeAsync(400);
-    expect(cache.info).not.toHaveBeenCalled();
-    expect(screen.queryByRole('dialog')).toBeNull();
-    await fireEvent.keyDown(trigger, { key: 'Enter' });
-    expect(details).toHaveBeenCalledExactlyOnceWith(user.user_id);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByRole('dialog', { name: 'User preview' })).toBeTruthy();
+    await fireEvent.keyDown(trigger, { key: 'Tab' });
+    const action = screen.getByRole('button', { name: 'View user details' });
+    expect(document.activeElement).toBe(action);
+    await fireEvent.click(action);
+    expect(details).toHaveBeenCalledExactlyOnceWith(user.user_id, user);
   });
 
   it('copies on long press without opening details or duplicating the context menu copy', async () => {
