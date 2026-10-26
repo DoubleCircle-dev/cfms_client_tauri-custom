@@ -30,6 +30,7 @@
   } = $props();
 
   const roots = untrack(() => targets.map((target) => ({ ...target })));
+  const isMultiSelection = roots.length > 1;
   const progressId = 'files:batch-access-rules:' + crypto.randomUUID();
   let stage = $state<'edit' | 'scan' | 'results'>('edit');
   let recursive = $state(false);
@@ -356,24 +357,26 @@
       <p>{roots.length === 1 ? roots[0].name : $t('files.batchRules.selection', { values: { count: roots.length } })}</p>
       {#if guardIssue}<p class="batch-rules-warning" role="alert">{problemText(guardIssue)}</p>{/if}
       {#if stage === 'edit'}
-        <p class="batch-rules-muted">{$t('files.batchRules.overwrite')}</p>
-        {#if canReadTemplate}
+        {#if isMultiSelection}<p class="batch-rules-muted">{$t('files.batchRules.overwrite')}</p>{/if}
+        {#if canReadTemplate && isMultiSelection}
           <div class="batch-rules-template">
-            {#if roots.length > 1}
-              <select class="cfms-native-field" bind:value={templateKey} aria-label={$t('files.batchRules.templateObject')} disabled={templateLoading}>
-                {#each roots as target (batchRulesTargetKey(target))}
-                  <option value={batchRulesTargetKey(target)}>{$t('files.' + target.objectType)} · {target.name}</option>
-                {/each}
-              </select>
-            {/if}
+            <select class="cfms-native-field" bind:value={templateKey} aria-label={$t('files.batchRules.templateObject')} disabled={templateLoading}>
+              {#each roots as target (batchRulesTargetKey(target))}
+                <option value={batchRulesTargetKey(target)}>{$t('files.' + target.objectType)} · {target.name}</option>
+              {/each}
+            </select>
             <DialogActionButton onclick={loadTemplate} disabled={templateLoading || !!guardIssue}>
               {#if templateLoading}<ProgressRing size={16} label={$t('common.loadingEllipsis')} />{/if}
               {$t(templateError ? 'common.retry' : 'files.batchRules.loadTemplate')}
             </DialogActionButton>
           </div>
+        {:else if canReadTemplate && templateLoading}
+          <div class="batch-rules-status"><ProgressRing size={16} label={$t('common.loadingEllipsis')} /><span>{$t('common.loadingEllipsis')}</span></div>
+        {:else if canReadTemplate && templateError}
+          <DialogActionButton onclick={loadTemplate} disabled={!!guardIssue}>{$t('common.retry')}</DialogActionButton>
         {/if}
-        {#if templateSource}<p class="batch-rules-muted">{$t('files.batchRules.templateSource', { values: { name: templateSource } })}</p>
-        {:else if initialized}<p class="batch-rules-muted">{$t('files.batchRules.newDraft')}</p>{/if}
+        {#if isMultiSelection && templateSource}<p class="batch-rules-muted">{$t('files.batchRules.templateSource', { values: { name: templateSource } })}</p>{/if}
+        {#if !templateSource && initialized}<p class="batch-rules-muted">{$t('files.batchRules.newDraft')}</p>{/if}
         {#if templateError}<p class="batch-rules-warning" role="alert">{templateError}</p>{/if}
         {#if !initialized && !templateLoading}
           <DialogActionButton onclick={createBlank}>{$t('files.batchRules.createBlank')}</DialogActionButton>
