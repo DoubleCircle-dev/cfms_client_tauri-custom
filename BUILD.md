@@ -117,6 +117,9 @@ strictly higher than the upstream build at the same base. Because Android
 requires increasing version codes, switching an installed Custom build back
 to the upstream source may not install until the upstream release has a higher
 version code.
+Windows MSI packages use a numeric four-part installer version derived from
+the base version and Custom iteration; the app and updater continue to use the
+full `-custom-X.Y` version.
 
 Custom prerelease tags are classified into the existing **Alpha** update
 channel by the release workflow, even though `alpha` is not part of the version
