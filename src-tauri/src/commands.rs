@@ -35,8 +35,10 @@ use crate::{
 };
 use crate::{AppHandleState, UploadInterruption};
 
-const UPDATE_RELEASES_API: &str =
+const OFFICIAL_UPDATE_RELEASES_API: &str =
     "https://api.github.com/repos/cfms-dev/cfms_client_tauri/releases";
+const CUSTOM_UPDATE_RELEASES_API: &str =
+    "https://api.github.com/repos/DoubleCircle-dev/cfms_client_tauri-custom/releases";
 const UPDATE_USER_AGENT: &str = "cfms-client-tauri-updater";
 const UPDATE_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 const UPDATE_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);

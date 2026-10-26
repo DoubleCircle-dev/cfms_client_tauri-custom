@@ -119,6 +119,15 @@ git push origin v0.16.0
 
 The `release.yml` workflow builds, signs (Windows EV + macOS notarization),
 and publishes all artifacts as a GitHub Release.
+In **Settings → Updates**, users can choose whether to get releases from the
+upstream `cfms-dev/cfms_client_tauri` repository or the
+`DoubleCircle-dev/cfms_client_tauri-custom` repository. Desktop builds use the
+selected repository's updater manifest, while Android builds select the APK
+matching the device architecture. Custom builds default to their Custom
+repository. Switching to the upstream source requires confirmation because
+updates from that source will not automatically switch the installation back
+to the Custom version. The release channel (`stable`, `beta`, or `alpha`) is
+selected independently.
 
 ### 4. Manual release
 

@@ -5,7 +5,7 @@
   import { _ as t } from 'svelte-i18n';
   import { getSetting, setSetting } from '$lib/api';
   import { appUpdateState } from '$lib/app-update-state.svelte';
-  import type { UpdateChannel } from '$lib/updater';
+  import type { UpdateChannel, UpdateSource } from '$lib/updater';
   import {
     ACTIVE_UPDATE_CHECK_PAUSE,
     createUpdateCheckPause,
@@ -19,18 +19,22 @@
   import { focusRovingItem } from '$lib/keyboard';
 
   const channels: UpdateChannel[] = ['stable', 'beta', 'alpha'];
+  const sources: UpdateSource[] = ['official', 'custom'];
 
   let channel = $state<UpdateChannel>('stable');
+  let source = $state<UpdateSource>('custom');
   let loading = $state(true);
   let error = $state<string | null>(null);
   const autoSave = createAutoSave({
     onError: (message) => {
       channel = appUpdateState.channel;
+      source = appUpdateState.source;
       error = message;
     },
   });
 
   const channelDescription = $derived($t(`settings.updates.${channel}Description`));
+  const sourceDescription = $derived($t(`settings.updates.${source}Description`));
   const pause = $derived(appUpdateState.automaticCheckPause);
   const automaticChecksPaused = $derived(appUpdateState.isAutomaticCheckPaused);
   const automaticCheckStatus = $derived.by(() => {
@@ -51,15 +55,22 @@
 
   onMount(async () => {
     try {
-      const [saved] = await Promise.all([
+      const [savedChannel, savedSource] = await Promise.all([
         getSetting('update_channel'),
+        getSetting('update_source'),
         appUpdateState.ensureAutomaticCheckPause(),
       ]);
-      if (saved === 'stable' || saved === 'beta' || saved === 'alpha') {
-        channel = saved;
-        if (appUpdateState.channel !== saved) appUpdateState.setChannel(saved);
+      if (savedChannel === 'stable' || savedChannel === 'beta' || savedChannel === 'alpha') {
+        channel = savedChannel;
+        if (appUpdateState.channel !== savedChannel) appUpdateState.setChannel(savedChannel);
       } else {
         channel = appUpdateState.channel;
+      }
+      if (savedSource === 'official' || savedSource === 'custom') {
+        source = savedSource;
+        if (appUpdateState.source !== savedSource) appUpdateState.setUpdateSource(savedSource);
+      } else {
+        source = appUpdateState.source;
       }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -75,6 +86,26 @@
     void autoSave.run(async () => {
       await setSetting('update_channel', nextChannel);
       appUpdateState.setChannel(nextChannel);
+    });
+  }
+
+  async function applySource(nextSource: UpdateSource) {
+    if (loading || autoSave.saving || nextSource === source) return;
+    if (nextSource === 'official') {
+      const confirmed = await dialogStore.confirm({
+        title: $t('settings.updates.officialSourceWarningTitle'),
+        message: $t('settings.updates.officialSourceWarningMessage'),
+        confirmLabel: $t('settings.updates.officialSourceWarningConfirm'),
+        cancelLabel: $t('common.cancel'),
+      });
+      if (!confirmed) return;
+    }
+
+    source = nextSource;
+    error = null;
+    void autoSave.run(async () => {
+      await setSetting('update_source', nextSource);
+      appUpdateState.setUpdateSource(nextSource);
     });
   }
 
@@ -141,6 +172,11 @@
         channel = 'stable';
         appUpdateState.setChannel('stable');
       }
+      if (source !== 'custom') {
+        await setSetting('update_source', 'custom');
+        source = 'custom';
+        appUpdateState.setUpdateSource('custom');
+      }
       if (appUpdateState.isAutomaticCheckPaused) {
         await appUpdateState.resumeAutomaticChecks();
       } else {
@@ -149,7 +185,7 @@
     });
   }
 
-  function handleChannelKeydown(event: KeyboardEvent) {
+  function handleRadioKeydown(event: KeyboardEvent) {
     const next = focusRovingItem(event, event.currentTarget as HTMLElement, {
       selector: '[data-radio-item]',
       orientation: 'both',
@@ -251,7 +287,7 @@
         role="radiogroup"
         tabindex="-1"
         aria-label={$t('settings.updates.updateChannel')}
-        onkeydown={handleChannelKeydown}
+        onkeydown={handleRadioKeydown}
       >
         {#each channels as item}
           <button data-fluent-owner="routes-home-settings-updates-page"
@@ -285,6 +321,43 @@
           <Icon name="update" size="18px" />
           {$t('settings.updates.checkInAbout')}
         </FluentButton>
+      </div>
+    </section>
+
+    <section class="update-section settings-section" aria-labelledby="update-source-heading">
+      <div class="settings-section-heading">
+        <h2 id="update-source-heading">{$t('settings.updates.updateSource')}</h2>
+        <p>{sourceDescription}</p>
+      </div>
+
+      <div
+        class="channel-list"
+        role="radiogroup"
+        tabindex="-1"
+        aria-label={$t('settings.updates.updateSource')}
+        onkeydown={handleRadioKeydown}
+      >
+        {#each sources as item}
+          <button data-fluent-owner="routes-home-settings-updates-page"
+            data-radio-item
+            type="button"
+            class="channel-row"
+            class:active={source === item}
+            role="radio"
+            aria-checked={source === item}
+            tabindex={source === item ? 0 : -1}
+            disabled={loading || autoSave.saving}
+            onclick={() => applySource(item)}
+          >
+            <span class="channel-icon" aria-hidden="true">
+              <Icon name={source === item ? 'radioChecked' : 'radioUnchecked'} filled={source === item} size="20px" />
+            </span>
+            <span class="channel-copy">
+              <span class="channel-name">{$t(`settings.updates.${item}`)}</span>
+              <span class="channel-description">{$t(`settings.updates.${item}Description`)}</span>
+            </span>
+          </button>
+        {/each}
       </div>
     </section>
   </div>

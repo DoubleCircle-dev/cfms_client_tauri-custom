@@ -2,14 +2,15 @@
 // Asset and certificate downloads use separate clients without this header.
 #[derive(Clone, Copy)]
 enum GithubApiEndpoint {
-    UpdateReleases,
+    UpdateReleases(UpdateSource),
     CaCertificates,
 }
 
 impl GithubApiEndpoint {
     const fn url(self) -> &'static str {
         match self {
-            Self::UpdateReleases => UPDATE_RELEASES_API,
+            Self::UpdateReleases(UpdateSource::Official) => OFFICIAL_UPDATE_RELEASES_API,
+            Self::UpdateReleases(UpdateSource::Custom) => CUSTOM_UPDATE_RELEASES_API,
             Self::CaCertificates => CA_CERT_API_URL,
         }
     }
@@ -279,7 +280,8 @@ mod github_api_tests {
     fn bearer_auth_is_scoped_to_api_requests() {
         let client = update_api_http_client(None).unwrap();
         for endpoint in [
-            GithubApiEndpoint::UpdateReleases,
+            GithubApiEndpoint::UpdateReleases(UpdateSource::Official),
+            GithubApiEndpoint::UpdateReleases(UpdateSource::Custom),
             GithubApiEndpoint::CaCertificates,
         ] {
             let request = github_api_request(&client, endpoint.url(), Some("private-token"))
@@ -309,6 +311,29 @@ mod github_api_tests {
                     .is_none()
             );
         }
+    }
+
+    #[test]
+    fn update_release_endpoint_matches_selected_source() {
+        assert_eq!(
+            GithubApiEndpoint::UpdateReleases(UpdateSource::Official).url(),
+            "https://api.github.com/repos/cfms-dev/cfms_client_tauri/releases"
+        );
+        assert_eq!(
+            GithubApiEndpoint::UpdateReleases(UpdateSource::Custom).url(),
+            "https://api.github.com/repos/DoubleCircle-dev/cfms_client_tauri-custom/releases"
+        );
+    }
+
+    #[test]
+    fn update_source_defaults_to_custom_and_accepts_official() {
+        assert_eq!(UpdateSource::parse(None), UpdateSource::Custom);
+        assert_eq!(
+            UpdateSource::parse(Some("official")),
+            UpdateSource::Official
+        );
+        assert_eq!(UpdateSource::parse(Some("custom")), UpdateSource::Custom);
+        assert_eq!(UpdateSource::parse(Some("unknown")), UpdateSource::Custom);
     }
 
     #[test]
