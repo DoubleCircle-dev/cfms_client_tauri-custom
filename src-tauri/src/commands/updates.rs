@@ -66,6 +66,9 @@ pub async fn check_app_update(
         .updater_builder()
         .endpoints(vec![endpoint])
         .map_err(|e| format!("Failed to configure updater endpoint: {e}"))?;
+    if let Some(pubkey) = official_updater_pubkey(source) {
+        updater_builder = updater_builder.pubkey(pubkey);
+    }
     updater_builder = updater_builder.version_comparator(move |current, update| {
         is_release_newer_for_source(&update.version.to_string(), &current.to_string(), source)
     });
@@ -911,6 +914,14 @@ fn is_custom_iteration(version: &semver::Version) -> bool {
     major <= 9 && minor <= 99 && (major > 0 || minor > 0)
 }
 
+#[cfg(not(target_os = "android"))]
+fn official_updater_pubkey(source: UpdateSource) -> Option<&'static str> {
+    match source {
+        UpdateSource::Official => Some(OFFICIAL_UPDATER_PUBLIC_KEY),
+        UpdateSource::Custom => None,
+    }
+}
+
 #[cfg(test)]
 mod app_update_tests {
     use super::*;
@@ -954,6 +965,16 @@ mod app_update_tests {
             "0.55.1-custom-0.1",
             UpdateSource::Custom
         ));
+    }
+
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn updater_public_key_follows_the_selected_release_source() {
+        assert_eq!(
+            official_updater_pubkey(UpdateSource::Official),
+            Some(OFFICIAL_UPDATER_PUBLIC_KEY)
+        );
+        assert_eq!(official_updater_pubkey(UpdateSource::Custom), None);
     }
 
     #[test]

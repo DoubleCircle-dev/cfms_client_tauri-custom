@@ -24,6 +24,10 @@ Configure these in **Settings → Secrets and variables → Actions**:
 | `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater private key (generated with `cargo tauri signer generate`) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for the Tauri updater private key |
 
+The configured updater public key is reserved for Custom releases. Official-source
+desktop updates continue to use the upstream updater public key selected by the
+update source at runtime. Keep the Custom private key separate from upstream keys.
+
 ### Extension signing key ring
 
 Official `.cfmsext` packages use a separate Ed25519 trust domain from full client updates. Set the
