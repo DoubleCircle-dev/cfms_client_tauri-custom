@@ -13,7 +13,9 @@
 import { cleanup, render, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { page } from '$app/state';
 import type { DownloadTaskDto } from '$lib/api/types';
+import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
 import { downloadStore } from '$lib/stores.svelte';
 import FilesPage from './+page.svelte';
 
@@ -126,6 +128,10 @@ vi.mock('svelte-i18n', () => ({
 
 afterEach(() => {
   cleanup();
+  Object.defineProperty(page, 'url', {
+    configurable: true,
+    value: new URL('http://localhost/home/files'),
+  });
   // The store is a module singleton, so a task seeded by one test would
   // otherwise leak into the next one.
   downloadStore.setAll([]);
@@ -204,6 +210,31 @@ describe('files page', () => {
     // The server's listing reached the table.
     expect(container.textContent).toContain('readme-document');
     expect(container.textContent).toContain('documents-folder');
+  });
+
+  it('compares a requested child directory against its own snapshot', async () => {
+    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
+    mocks.loadUserPreference.mockResolvedValue(null);
+    mocks.getDownloadTasks.mockResolvedValue([]);
+    Object.defineProperty(page, 'url', {
+      configurable: true,
+      value: new URL('http://localhost/home/files?folder=folder-target&name=Target'),
+    });
+    const compareSnapshot = vi.spyOn(fileUpdateTracker, 'compareSnapshot');
+
+    const { container } = render(FilesPage);
+    flushSync();
+
+    await waitFor(() => {
+      expect(container.querySelector('.file-table-loading')).toBeNull();
+    });
+
+    expect(compareSnapshot).toHaveBeenCalledWith(
+      'folder-target',
+      expect.any(Array),
+      expect.any(Array),
+    );
+    compareSnapshot.mockRestore();
   });
 
   it('reports a running download on the document row itself', async () => {

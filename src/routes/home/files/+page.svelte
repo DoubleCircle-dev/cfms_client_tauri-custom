@@ -290,6 +290,7 @@
   let sortDirection = $state<SortDirection>('asc');
   let sortRevision = 0;
   let directoryGeneration = 0;
+  let activeDirectoryId: string | null = null;
   let activeDirectoryReturnNavigation: DirectoryNavigationSnapshot | null = null;
   const directoryLoader = new DirectoryLoadController(listDirectoryPage);
   let directorySorter: ProgressiveDirectorySorter | null = null;
@@ -721,7 +722,7 @@
       markFilePerformance('files:list-complete');
       // Compare with previous server snapshot to detect changes
       const changeResult = fileUpdateTracker.compareSnapshot(
-        currentFolderId,
+        activeDirectoryId,
         snapshot.folders,
         snapshot.documents,
       );
@@ -790,7 +791,7 @@
     directoryNextCursor = cursor;
     const result = await directoryLoader.continue(
       generation,
-      currentFolderId,
+      activeDirectoryId,
       cursor,
       DIRECTORY_PAGE_SIZE,
       (pageResponse) => {
@@ -808,7 +809,7 @@
     if (result.status !== 'partial-error' || generation !== directoryGeneration) return;
     if (isAccessDeniedError(result.error)) {
       showDirectoryAccessDenied(
-        currentFolderId,
+        activeDirectoryId,
         activeDirectoryReturnNavigation ?? captureDirectoryNavigation(),
       );
       return;
@@ -869,6 +870,7 @@
         : captureDeniedReturnNavigation(normalizedFolderId));
     const generation = directoryLoader.begin();
     directoryGeneration = generation;
+    activeDirectoryId = normalizedFolderId;
     activeDirectoryReturnNavigation = deniedReturnNavigation;
     const revision = ++sortRevision;
     loading = true;
