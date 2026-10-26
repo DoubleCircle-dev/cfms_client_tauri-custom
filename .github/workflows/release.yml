@@ -92,7 +92,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: tauri-cli
+          tool: tauri-cli,sccache
 
       - name: Build release installer
         run: cargo tauri build --ci
@@ -275,7 +275,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: tauri-cli
+          tool: tauri-cli,sccache
 
       - name: Build release packages
         run: cargo tauri build --ci
@@ -337,6 +337,10 @@ jobs:
           targets: >-
             aarch64-linux-android,
             x86_64-linux-android
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: sccache
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
