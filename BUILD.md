@@ -81,6 +81,42 @@ No additional secrets are required beyond the Tauri updater keys.
 
 ## Release Process
 
+### DoubleCircle custom releases
+
+Custom releases follow the upstream numeric version and append the
+`-custom-alpha` prerelease suffix. For example, when the upstream base version
+is `0.55.2`, publish the custom build as `0.55.2-custom-alpha`, not as an
+independent custom version. This suffix is classified as the `alpha` update
+channel, so users need **Custom** as the update source and **Alpha** as the
+channel to receive it.
+
+The first custom release must also be newer than the version already installed.
+For example, `0.55.1-custom-alpha` is older than the upstream stable
+`0.55.1`; use `0.55.2-custom-alpha` to update an installation at `0.55.1`.
+The version helper derives Android's `versionCode` from the numeric part of
+the version, so using the next upstream patch also gives the Android package a
+higher build number.
+
+From `android-custom`, after syncing the code changes to publish:
+
+```powershell
+pnpm app:version set 0.55.2-custom-alpha
+pnpm app:version:check
+pnpm test
+pnpm check
+git add -A
+git commit -m "Release v0.55.2-custom-alpha"
+git push origin android-custom
+git tag -a v0.55.2-custom-alpha -m "Release v0.55.2-custom-alpha"
+git push origin v0.55.2-custom-alpha
+```
+
+Pushing the tag triggers `.github/workflows/release.yml`, which publishes the
+release and its desktop updater manifest and Android APKs to the Custom
+repository. Review CI and confirm the GitHub Release assets after the workflow
+completes. Do not push the tag until the version, changelog, tests, and signing
+secrets are ready.
+
 ### 1. Prepare the version
 
 Use the version helper to update all client build metadata together:
