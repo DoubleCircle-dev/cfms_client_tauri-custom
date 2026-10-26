@@ -477,6 +477,10 @@ import svg474 from '@fluentui/svg-icons/icons/laptop_briefcase_20_regular.svg?ra
 import svg475 from '@fluentui/svg-icons/icons/laptop_briefcase_20_filled.svg?raw';
 import svg476 from '@fluentui/svg-icons/icons/password_reset_48_regular.svg?raw';
 import svg477 from '@fluentui/svg-icons/icons/password_reset_48_filled.svg?raw';
+import svg478 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
+import svg479 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
+import svg480 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
+import svg481 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
 import duotone0 from './assets/duotone/person_circle_24.svg?raw';
 import duotone1 from './assets/duotone/person_circle_20.svg?raw';
 import duotone2 from './assets/duotone/folder_add_24.svg?raw';
@@ -632,4 +636,5 @@ export const ICON_VARIANTS = {
   personPasskey: { regular: svg468, filled: svg469, small: svg470, smallFilled: svg471 },
   laptopBriefcase: { regular: svg472, filled: svg473, small: svg474, smallFilled: svg475 },
   passwordReset: { regular: svg476, filled: svg477, small: svg476, smallFilled: svg477, duotone: duotone12, smallDuotone: duotone13 },
+  pushPin: { regular: svg478, filled: svg479, small: svg480, smallFilled: svg481 },
 } as const;

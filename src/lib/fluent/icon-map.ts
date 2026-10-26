@@ -139,4 +139,5 @@ export const ICON_MAP = {
   "personPasskey": "person_passkey",
   "laptopBriefcase": "laptop_briefcase",
   "passwordReset": "password_reset",
+  "pushPin": "pin",
 } as const;

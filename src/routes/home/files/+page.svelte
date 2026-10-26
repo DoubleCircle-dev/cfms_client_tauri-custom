@@ -490,6 +490,9 @@
   const revisionRows = $derived(
     revisionsDialog ? buildRevisionRows(revisionsDialog.entries) : [],
   );
+  const revisionGraphWidth = $derived(
+    revisionRows.reduce((width, row) => Math.max(width, graphWidth(row)), 40),
+  );
   const searchResultRows = $derived.by<SearchResultRow[]>(() => {
     if (!searchDialog.results) return [];
 
@@ -4453,6 +4456,30 @@
     .search-sort-option[aria-pressed="true"] { color: HighlightText; background: Highlight; box-shadow: none; outline: 1px solid Highlight; }
   }
 
+  .revision-graph-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--revision-graph-width) minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 12px;
+    min-height: 64px;
+  }
+
+  .revision-graph-row:not(:last-child)::after {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: calc(var(--revision-graph-width) + 12px);
+    height: 1px;
+    background: var(--colorNeutralStroke2);
+    content: '';
+    pointer-events: none;
+  }
+
+  .revision-graph-track {
+    position: relative;
+  }
+
   .revision-graph-path {
     stroke: var(--color-md3-on-surface-variant);
     stroke-width: 1.75;
@@ -4905,78 +4932,79 @@
               {$t('files.currentRevisionLineage')}
             </div>
           </div>
-          <div class="space-y-0">
+          <div style={`--revision-graph-width: ${revisionGraphWidth}px`}>
             {#each revisionRows as row (row.revision.id)}
-              <div class="relative grid grid-cols-[auto_1fr_auto] items-stretch gap-3 border-b border-md3-outline/45 last:border-b-0">
-                <svg
-                  class="h-full min-h-16 shrink-0 self-stretch overflow-visible"
-                  style={`width: ${graphWidth(row)}px`}
-                  viewBox={`0 0 ${graphWidth(row)} 64`}
-                  preserveAspectRatio="none"
-                  aria-hidden="true"
-                >
-                  {#each row.before as lane, index}
-                    {#if lane !== null && (index !== row.lane || row.hasChildren)}
-                      <line
+              <div class="revision-graph-row">
+                <div class="revision-graph-track" aria-hidden="true">
+                  <svg
+                    class="absolute inset-0 h-full w-full"
+                    viewBox={`0 0 ${revisionGraphWidth} 64`}
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    {#each row.before as lane, index}
+                      {#if lane !== null && (index !== row.lane || row.hasChildren)}
+                        <line
+                          class="revision-graph-path"
+                          class:revision-graph-path--active={lane.isCurrentLineage}
+                          x1={laneX(index)}
+                          y1="0"
+                          x2={laneX(index)}
+                          y2="32"
+                          stroke-linecap="round"
+                          vector-effect="non-scaling-stroke"
+                        />
+                      {/if}
+                    {/each}
+                    {#if row.parentLane !== null}
+                      <path
                         class="revision-graph-path"
-                        class:revision-graph-path--active={lane.isCurrentLineage}
-                        x1={laneX(index)}
-                        y1="0"
-                        x2={laneX(index)}
-                        y2="30"
+                        class:revision-graph-path--active={row.parentPathInCurrentLineage}
+                        d={row.parentLane === row.lane
+                          ? `M ${laneX(row.lane)} 32 L ${laneX(row.lane)} 64`
+                          : `M ${laneX(row.lane)} 32 C ${laneX(row.lane)} 48, ${laneX(row.parentLane)} 48, ${laneX(row.parentLane)} 64`}
+                        fill="none"
                         stroke-linecap="round"
                         vector-effect="non-scaling-stroke"
                       />
                     {/if}
-                  {/each}
-                  {#if row.parentLane !== null}
-                    <path
-                      class="revision-graph-path"
-                      class:revision-graph-path--active={row.parentPathInCurrentLineage}
-                      d={row.parentLane === row.lane
-                        ? `M ${laneX(row.lane)} 32 L ${laneX(row.lane)} 64`
-                        : `M ${laneX(row.lane)} 32 C ${laneX(row.lane)} 48, ${laneX(row.parentLane)} 48, ${laneX(row.parentLane)} 64`}
-                      fill="none"
-                      stroke-linecap="round"
-                      vector-effect="non-scaling-stroke"
-                    />
-                  {/if}
-                  {#if row.parentLaneContinuation}
-                    <path
-                      class="revision-graph-path"
-                      class:revision-graph-path--active={row.parentLaneContinuation.isCurrentLineage}
-                      d={row.parentLaneContinuation.fromLane === row.parentLaneContinuation.toLane
-                        ? `M ${laneX(row.parentLaneContinuation.fromLane)} 30 L ${laneX(row.parentLaneContinuation.toLane)} 64`
-                        : `M ${laneX(row.parentLaneContinuation.fromLane)} 30 C ${laneX(row.parentLaneContinuation.fromLane)} 46, ${laneX(row.parentLaneContinuation.toLane)} 48, ${laneX(row.parentLaneContinuation.toLane)} 64`}
-                      fill="none"
-                      stroke-linecap="round"
-                      vector-effect="non-scaling-stroke"
-                    />
-                  {/if}
-                  {#each row.after as lane, index}
-                    {#if lane !== null && index !== row.parentLane}
-                      <line
+                    {#if row.parentLaneContinuation}
+                      <path
                         class="revision-graph-path"
-                        class:revision-graph-path--active={lane.isCurrentLineage}
-                        x1={laneX(index)}
-                        y1="32"
-                        x2={laneX(index)}
-                        y2="64"
+                        class:revision-graph-path--active={row.parentLaneContinuation.isCurrentLineage}
+                        d={row.parentLaneContinuation.fromLane === row.parentLaneContinuation.toLane
+                          ? `M ${laneX(row.parentLaneContinuation.fromLane)} 32 L ${laneX(row.parentLaneContinuation.toLane)} 64`
+                          : `M ${laneX(row.parentLaneContinuation.fromLane)} 32 C ${laneX(row.parentLaneContinuation.fromLane)} 48, ${laneX(row.parentLaneContinuation.toLane)} 48, ${laneX(row.parentLaneContinuation.toLane)} 64`}
+                        fill="none"
                         stroke-linecap="round"
                         vector-effect="non-scaling-stroke"
                       />
                     {/if}
-                  {/each}
-                </svg>
-                <span
-                  class="revision-graph-node"
-                  class:revision-graph-node--lineage={row.isCurrentLineage}
-                  class:revision-graph-node--current={row.isCurrentRevision}
-                  style={`left: ${laneX(row.lane)}px;`}
-                  aria-hidden="true"
-                ></span>
+                    {#each row.after as lane, index}
+                      {#if lane !== null && index !== row.parentLane}
+                        <line
+                          class="revision-graph-path"
+                          class:revision-graph-path--active={lane.isCurrentLineage}
+                          x1={laneX(index)}
+                          y1="32"
+                          x2={laneX(index)}
+                          y2="64"
+                          stroke-linecap="round"
+                          vector-effect="non-scaling-stroke"
+                        />
+                      {/if}
+                    {/each}
+                  </svg>
+                  <span
+                    class="revision-graph-node"
+                    class:revision-graph-node--lineage={row.isCurrentLineage}
+                    class:revision-graph-node--current={row.isCurrentRevision}
+                    style={`left: ${laneX(row.lane)}px;`}
+                    aria-hidden="true"
+                  ></span>
+                </div>
 
-                <div class="min-w-0 py-3">
+                <div class="min-w-0 break-words py-3">
                   <div class="flex flex-wrap items-center gap-2">
                     <p class="text-sm font-semibold text-md3-on-surface" title={row.revision.id}>
                       {$t('files.revision')} #{shortIdentifier(row.revision.id)}
@@ -5021,7 +5049,7 @@
                       iconOnly
                       aria-label={$t('files.setCurrentRevision')}
                     >
-                      <Icon name="verified" size="18px" />
+                      <Icon name="pushPin" size="18px" />
                     </FluentButton>
                     <FluentButton data-fluent-owner="routes-home-files-page"
                       title={$t('files.deleteRevision')}
