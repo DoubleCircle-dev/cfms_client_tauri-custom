@@ -150,7 +150,7 @@
           onclick={() => handleItemSelect(item)}
           disabled={item.disabled}
         >
-          <Icon name={item.icon} size="20px" duotone={!item.danger && !item.disabled} />
+          <Icon name={item.icon} size="20px" filled={item.iconFilled} duotone={!item.iconFilled && !item.danger && !item.disabled} />
           <span class="context-menu-label">{item.label}</span>
         </button>
       {/if}
