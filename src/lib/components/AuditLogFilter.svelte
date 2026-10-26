@@ -26,13 +26,13 @@
   let query = $state('');
   let draftActions = $state<string[]>([]);
   let panelPlacement = $state<'above' | 'below'>('below');
-  let panelOffsetX = $state(-272);
-  let panelWidth = $state(352);
+  let panelOffsetX = $state(-320);
+  let panelWidth = $state(400);
   let panelMaxHeight = $state(544);
 
   const PANEL_GAP = 8;
   const VIEWPORT_PADDING = 16;
-  const PANEL_MAX_WIDTH = 352;
+  const PANEL_MAX_WIDTH = 400;
   const PANEL_MAX_HEIGHT = 544;
   const PANEL_PREFERRED_MIN_HEIGHT = 360;
 
@@ -289,22 +289,27 @@
       </div>
 
       <footer class="filter-panel__footer">
-        <FluentButton data-fluent-owner="lib-components-audit-log-filter"
-          type="button"
-          disabled={draftActions.length === 0}
-          onclick={() => {
-            draftActions = [];
-            query = '';
-          }}
-          appearance="subtle"
-          class="filter-reset"
-        >
-          {$t('common.reset')}
-        </FluentButton>
-        <div class="filter-panel__actions">
+        <div class="filter-panel__selection">
+          <FluentButton data-fluent-owner="lib-components-audit-log-filter"
+            type="button"
+            disabled={draftActions.length === 0}
+            aria-label={$t('common.reset')}
+            title={$t('common.reset')}
+            onclick={() => {
+              draftActions = [];
+              query = '';
+            }}
+            appearance="subtle"
+            class="filter-reset"
+            iconOnly
+          >
+            <Icon name="resetSettings" size="20px" />
+          </FluentButton>
           <span class="filter-selection-summary">
             {$t('manage.auditFilterSelected', { values: { count: draftActions.length } })}
           </span>
+        </div>
+        <div class="filter-panel__actions">
           <FluentButton data-fluent-owner="lib-components-audit-log-filter"
             type="button"
             onclick={() => closePanel()}
@@ -571,34 +576,66 @@
   .filter-panel__footer {
     display: flex;
     flex: none;
-    min-height: 3.4rem;
+    flex-wrap: wrap;
+    min-height: 56px;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 0.65rem 0.8rem;
+    gap: 8px 12px;
+    padding: 12px 16px;
+  }
+
+  .filter-panel__selection {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
   }
 
   .filter-panel__actions {
     display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    max-width: 100%;
     align-items: center;
+    justify-content: flex-end;
     gap: 8px;
+    margin-inline-start: auto;
   }
 
   .filter-selection-summary {
     color: var(--color-md3-on-surface-variant);
     font-size: 12px;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
 
   :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]),
   :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]),
   :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]) {
     min-height: 2rem;
-    border-radius: 5px;
+    border-radius: var(--borderRadiusMedium);
     padding: 0.35rem 0.65rem;
     font-size: 12px;
     font-weight: 600;
     transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+  }
+
+  :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]) {
+    display: inline-flex;
+    flex: none;
+    inline-size: 32px;
+    min-inline-size: 32px;
+    max-inline-size: 32px;
+    block-size: 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]),
+  :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]) {
+    flex: none;
+    min-inline-size: 0;
   }
 
   :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]),
@@ -633,18 +670,6 @@
     transform: none;
   }
 
-  @media (max-width: 520px) {
-    .filter-panel__footer,
-    .filter-panel__actions {
-      flex-wrap: wrap;
-    }
-
-    .filter-selection-summary {
-      width: 100%;
-      text-align: right;
-    }
-  }
-
   @media (pointer: coarse) {
     .filter-trigger,
     .filter-option,
@@ -652,6 +677,13 @@
     :global(.filter-cancel[data-fluent-owner="lib-components-audit-log-filter"]),
     :global(.filter-apply[data-fluent-owner="lib-components-audit-log-filter"]) {
       min-height: 2.75rem;
+    }
+
+    :global(.filter-reset[data-fluent-owner="lib-components-audit-log-filter"]) {
+      inline-size: 44px;
+      min-inline-size: 44px;
+      max-inline-size: 44px;
+      block-size: 44px;
     }
 
     :global(.filter-close[data-fluent-owner="lib-components-audit-log-filter"]),

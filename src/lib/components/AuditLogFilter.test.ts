@@ -20,6 +20,8 @@ vi.mock('$lib/motion/transitions', () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('AuditLogFilter', () => {
@@ -104,10 +106,8 @@ describe('AuditLogFilter', () => {
   });
 
   it('opens above the trigger and constrains its height when space below is limited', async () => {
-    const originalWidth = window.innerWidth;
-    const originalHeight = window.innerHeight;
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+    vi.stubGlobal('innerWidth', 800);
+    vi.stubGlobal('innerHeight', 600);
 
     render(AuditLogFilter, {
       props: {
@@ -132,11 +132,86 @@ describe('AuditLogFilter', () => {
     await fireEvent.click(trigger);
     const panel = screen.getByRole('dialog') as HTMLElement;
     expect(panel.classList.contains('filter-panel--above')).toBe(true);
-    expect(panel.style.left).toBe('-272px');
+    expect(panel.style.left).toBe('-320px');
+    expect(panel.style.width).toBe('400px');
     expect(panel.style.maxHeight).toBe('376px');
     expect(screen.getAllByRole('option')).toHaveLength(40);
+  });
 
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalHeight });
+  it.each([
+    { viewportWidth: 320, triggerLeft: 0, expectedWidth: 288 },
+    { viewportWidth: 360, triggerLeft: 280, expectedWidth: 328 },
+    { viewportWidth: 540, triggerLeft: 460, expectedWidth: 400 },
+    { viewportWidth: 1280, triggerLeft: 0, expectedWidth: 400 },
+  ])('keeps the panel inside a $viewportWidth px viewport near either edge', async ({
+    viewportWidth, triggerLeft, expectedWidth,
+  }) => {
+    vi.stubGlobal('innerWidth', viewportWidth);
+    vi.stubGlobal('innerHeight', 900);
+    render(AuditLogFilter, {
+      availableActions: ['login'], selectedActions: [], onApply: vi.fn(),
+    });
+    const trigger = screen.getByRole('button', { name: 'manage.auditFilterButton' });
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      x: triggerLeft, y: 80, top: 80, right: triggerLeft + 80, bottom: 112,
+      left: triggerLeft, width: 80, height: 32, toJSON: () => ({}),
+    });
+
+    await fireEvent.click(trigger);
+    const panel = screen.getByRole('dialog');
+    const panelLeft = triggerLeft + parseFloat(panel.style.left);
+    expect(parseFloat(panel.style.width)).toBe(expectedWidth);
+    expect(panelLeft).toBeGreaterThanOrEqual(16);
+    expect(panelLeft + expectedWidth).toBeLessThanOrEqual(viewportWidth - 16);
+  });
+
+  it('repositions an open panel when resizing or zooming reduces the viewport', async () => {
+    vi.stubGlobal('innerWidth', 800);
+    vi.stubGlobal('innerHeight', 600);
+    render(AuditLogFilter, {
+      availableActions: ['login'], selectedActions: [], onApply: vi.fn(),
+    });
+    const trigger = screen.getByRole('button', { name: 'manage.auditFilterButton' });
+    const triggerBounds = vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      x: 620, y: 400, top: 400, right: 700, bottom: 432, left: 620,
+      width: 80, height: 32, toJSON: () => ({}),
+    });
+    await fireEvent.click(trigger);
+    expect(screen.getByRole('dialog').style.width).toBe('400px');
+
+    vi.stubGlobal('innerWidth', 320);
+    triggerBounds.mockReturnValue({
+      x: 224, y: 400, top: 400, right: 304, bottom: 432, left: 224,
+      width: 80, height: 32, toJSON: () => ({}),
+    });
+    await fireEvent(window, new Event('resize'));
+    const panel = screen.getByRole('dialog');
+    expect(panel.style.width).toBe('288px');
+    expect(panel.style.left).toBe('-208px');
+    expect(panel.classList.contains('filter-panel--above')).toBe(true);
+  });
+
+  it('exposes a labelled reset icon that stages clearing without applying it', async () => {
+    const onApply = vi.fn();
+    render(AuditLogFilter, {
+      availableActions: ['login'], selectedActions: ['login'], onApply,
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'manage.auditFilterButton' }));
+    const reset = screen.getByRole('button', { name: 'common.reset' });
+    expect(reset.hasAttribute('icon-only')).toBe(true);
+    expect(reset.getAttribute('title')).toBe('common.reset');
+    expect(reset.hasAttribute('disabled')).toBe(false);
+
+    await fireEvent.input(screen.getByLabelText('manage.auditFilterSearch'), {
+      target: { value: 'login' },
+    });
+    await fireEvent.click(reset);
+    expect(reset.hasAttribute('disabled')).toBe(true);
+    expect((screen.getByLabelText('manage.auditFilterSearch') as HTMLInputElement).value).toBe('');
+    expect(screen.getByRole('option', { name: 'login' }).getAttribute('aria-selected')).toBe('false');
+    expect(onApply).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'manage.auditFilterApply' }));
+    await waitFor(() => expect(onApply).toHaveBeenCalledWith([]));
   });
 });

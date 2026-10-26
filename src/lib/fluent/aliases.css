@@ -85,7 +85,7 @@
   :root {
     --cfms-content-background: color-mix(in srgb, var(--colorNeutralBackground1) 60%, transparent);
     --cfms-field-background: color-mix(in srgb, var(--colorNeutralBackground1) 55%, transparent);
-    --cfms-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 72%, transparent);
+    --cfms-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 94%, transparent);
     --cfms-account-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 84%, transparent);
     --cfms-menu-acrylic: color-mix(in srgb, var(--colorNeutralBackground1) 94%, transparent);
     --cfms-menu-noise-opacity: 0.025;
