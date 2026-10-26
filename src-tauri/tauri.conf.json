@@ -29,7 +29,9 @@
       },
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/avatars/**"]
+        "scope": [
+          "$APPDATA/avatars/**"
+        ]
       }
     }
   },
@@ -59,6 +61,11 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "wix": {
+        "version": "0.55.1.1"
+      }
+    }
   }
 }

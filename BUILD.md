@@ -121,7 +121,9 @@ version code.
 Custom prerelease tags are classified into the existing **Alpha** update
 channel by the release workflow, even though `alpha` is not part of the version
 string. Users need **Custom** as the update source and **Alpha** as the channel
-to receive these releases.
+to receive these releases. Linux prereleases publish AppImage and Debian
+packages; RPM does not support the hyphenated Custom version string and is
+omitted for prereleases. Stable releases continue to include RPM packages.
 
 Pushing the tag triggers `.github/workflows/release.yml`, which publishes the
 release and its desktop updater manifest and Android APKs to the Custom

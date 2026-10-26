@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   nextCustomIteration,
   versionBuildNumber,
+  wixMsiVersion,
 } from "./client-version.mjs";
 
 describe("custom version iteration", () => {
@@ -43,5 +44,11 @@ describe("custom version iteration", () => {
       () => versionBuildNumber("0.55.1-custom-0.0"),
       /between 0\.1 and 9\.99/,
     );
+  });
+
+  it("maps prerelease versions to numeric MSI product versions", () => {
+    assert.equal(wixMsiVersion("0.55.1"), "0.55.1");
+    assert.equal(wixMsiVersion("0.55.1-custom-0.1"), "0.55.1.1");
+    assert.equal(wixMsiVersion("0.55.1-custom-1.0"), "0.55.1.100");
   });
 });
