@@ -119,7 +119,7 @@ async fn try_refresh(
         for attempt in 1..=super::retry::MAX_BACKGROUND_RETRIES {
             match super::rpc::send_action_request(
                 &conn,
-                "refresh_token",
+                "core.auth.token.refresh",
                 serde_json::json!({}),
                 username,
                 token,

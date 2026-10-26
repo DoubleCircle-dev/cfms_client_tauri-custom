@@ -1,13 +1,14 @@
 <script lang="ts">
   // Methods explain what the account owns; flows explain when and how to use it.
-  // The diagram and editor share one draft in the established Material workspace.
+  // The diagram and editor share one policy draft.
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   import { beforeNavigate, goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
-  import { getUserAuthentication, setUserAuthPolicies, registerUserAuthPublicKey, updateUserAuthPublicKey, deleteUserAuthPublicKey, changePassword, clearAuthSession, resetUserPassword, getManagedTwoFactorStatus, disableManagedTwoFactor, serverErrorData, type AuthPolicyStep, type AuthPurpose, type UserAuthentication } from '$lib/api';
-  import { AUTH_PURPOSES, changedAuthPolicies, canCompleteChain, invalidPolicyDraft, type AuthCredential } from '$lib/auth-policy-editor';
+  import { getUserAuthentication, setUserAuthPolicies, registerUserAuthPublicKey, updateUserAuthPublicKey, deleteUserAuthPublicKey, changePassword, clearAuthSession, resetUserPassword, disableManagedTwoFactor, serverErrorData, type AuthPolicyStep, type AuthPurpose, type UserAuthentication } from '$lib/api';
+  import { AUTH_PURPOSES, changedAuthPolicies, canCompleteChain, invalidPolicyDraft, hasDuplicateAuthChains, type AuthCredential } from '$lib/auth-policy-editor';
   import { authStore, notificationStore } from '$lib/stores.svelte';
+  import { canReadAuthentication, canConfigureAuthentication } from '$lib/auth-permissions';
   import { dialogStore } from '$lib/dialogs.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import DialogActionButton from './DialogActionButton.svelte';
@@ -44,10 +45,11 @@
   const managed = $derived(Boolean(userId && userId !== authStore.userId));
   const elevated = $derived((authStore.escalationExp ?? 0) * 1000 > now);
   const changed = $derived(inventory ? changedAuthPolicies(inventory.policies, draft) : []);
-  const writable = $derived(elevated && !busy && !methodBusy && !loading);
+  const canConfigure = $derived(canConfigureAuthentication(authStore.permissions, managed));
+  const writable = $derived(canConfigure && elevated && !busy && !methodBusy && !loading);
   const invalid = $derived(inventory ? changed.some((policy) => invalidPolicyDraft(policy.chains, inventory!.credentials)) : true);
   const canSave = $derived(writable && changed.length > 0 && !conflict && !invalid);
-  const canPassword = $derived(authStore.permissions.includes(managed ? 'super_set_passwd' : 'set_passwd'));
+  const canPassword = $derived(canConfigure && elevated);
   const selected = $derived(draft[purpose][selectedChain]);
   const loginAvailable = $derived.by(() => {
     if (!inventory) return true;
@@ -72,6 +74,11 @@
 
   async function load() {
     error = '';
+    if (!canReadAuthentication(authStore.permissions, managed)) {
+      inventory = null;
+      loading = false;
+      return;
+    }
     try {
       const result = await getUserAuthentication(userId);
       inventory = result;
@@ -178,26 +185,29 @@
     await write(async () => { const result = await updateUserAuthPublicKey(credential.credential_id, next.trim() || null, userId); credential.label = result.label; });
   }
   async function deleteKey(credential: AuthCredential) {
+    if (!writable || !(await beforeMethodChange())) return;
     if (!(await dialogStore.confirm({ title: $t('authManagement.deleteKey'), message: $t('authManagement.deleteKeyConfirm'), danger: true }))) return;
-    await write(async () => { await deleteUserAuthPublicKey(credential.credential_id, userId); if (inventory) inventory.credentials = inventory.credentials.filter((c) => c.credential_id !== credential.credential_id); });
+    await write(async () => { await deleteUserAuthPublicKey(credential.credential_id, userId); await load(); });
   }
   async function beginPassword() {
     if (!canPassword || busy || methodBusy || !(await beforeMethodChange())) return;
     if (!(await authenticatorSettings?.canLeave() ?? true)) return;
     showPassword = true;
   }
-  async function updatePassword(oldPassword: string, newPassword: string) {
-    await changePassword(authStore.username!, oldPassword, newPassword);
+  async function updatePassword(newPassword: string) {
+    if (!canPassword) throw new Error($t('authManagement.elevationRequired'));
+    await changePassword(authStore.username!, newPassword);
     showPassword = false;
     await clearAuthSession(); authStore.clear();
     notificationStore.success($t('more.passwordChanged'));
     allowNavigation = true; await goto('/login', { replaceState: true });
   }
   async function resetPassword(password: string, bypass: boolean, force: boolean, disableTotp: boolean) {
+    if (!canPassword) throw new Error($t('authManagement.elevationRequired'));
     await resetUserPassword(userId!, password, bypass, force);
     showPassword = false;
-    if (disableTotp && authStore.permissions.includes('manage_2fa')) {
-      try { if ((await getManagedTwoFactorStatus(userId!)).enabled) await disableManagedTwoFactor(userId!); }
+    if (disableTotp && canConfigure) {
+      try { await disableManagedTwoFactor(userId!); }
       catch (e) { notificationStore.error($t('manage.passwordChangedTwoFactorFailed', { values: { username: username ?? userId!, error: formatUserFacingError(e) } })); await load(); return; }
     }
     notificationStore.success($t('authManagement.saved')); await load(); await authenticatorSettings?.refreshStatus();
@@ -218,9 +228,11 @@
   {/if}
   {#if managed}<p>{$t('authManagement.adminAccount', { values: { username: username ?? userId! } })}</p>{/if}
   {#if error}<p role="alert" class="auth-error auth-feedback">{error}</p>{/if}
+  {#if !canReadAuthentication(authStore.permissions, managed)}<p role="status">{$t('authManagement.inventoryPermissionRequired')}</p>{/if}
   {#if loading}<ProgressRing label={$t('common.loading')} />
   {:else if inventory}
-    {#if !elevated}<p role="status" class="auth-notice auth-feedback">{$t('authManagement.elevationRequired')}</p>{/if}
+    {#if !canConfigure}<p role="status" class="auth-notice auth-feedback">{$t('authManagement.readOnly')}</p>
+    {:else if !elevated}<p role="status" class="auth-notice auth-feedback">{$t('authManagement.elevationRequired')}</p>{/if}
     <div class="auth-tabs" role="tablist" aria-label={$t('authManagement.title')}>
       {#each ['methods', 'flows'] as value}
         <button id={`auth-tab-${value}`} type="button" role="tab" aria-selected={tab === value} aria-controls={`auth-panel-${value}`} tabindex={tab === value ? 0 : -1} onclick={() => { tab = value as typeof tab; }} onkeydown={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); tab = event.key === 'Home' ? 'methods' : event.key === 'End' ? 'flows' : tab === 'methods' ? 'flows' : 'methods'; document.getElementById(`auth-tab-${tab}`)?.focus(); } }}>{$t(`authManagement.${value}Tab`)}</button>
@@ -238,6 +250,7 @@
         {#each AUTH_PURPOSES as key}<DialogActionButton variant={purpose === key ? 'tonal' : 'secondary'} aria-pressed={purpose === key} onclick={() => { purpose = key; selectedChain = 0; selectedStep = 0; }}>{$t(`authManagement.purposes.${key}`)}</DialogActionButton>{/each}
       </div>
       <p>{$t(`authManagement.purposeHelp.${purpose}`)}</p>
+      {#if hasDuplicateAuthChains(draft[purpose])}<p role="alert" class="auth-error">{$t('authManagement.duplicateAlternatives')}</p>{/if}
       {#if purpose === 'mfa'}<p>{$t('authManagement.mfaMethodHint')}</p>{/if}
       {#if !loginAvailable}<p class="auth-notice">{$t('authManagement.noCompleteLogin')}</p>{/if}
       <div class="auth-flow-layout">
@@ -264,6 +277,6 @@
 </div>
 
 {#if showPassword}
-  {#if managed}<ResetUserPasswordDialog username={username ?? userId!} canDisableTwoFactor={authStore.permissions.includes('manage_2fa')} onSave={resetPassword} onClose={() => { showPassword = false; }} />
+  {#if managed}<ResetUserPasswordDialog username={username ?? userId!} canDisableTwoFactor={canConfigure} onSave={resetPassword} onClose={() => { showPassword = false; }} />
   {:else}<ChangePasswordDialog username={authStore.username!} tip={$t('more.passwordTip')} onSubmit={updatePassword} onCancel={() => { showPassword = false; }} />{/if}
 {/if}

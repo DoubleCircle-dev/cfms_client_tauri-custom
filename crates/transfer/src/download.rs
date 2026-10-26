@@ -525,7 +525,7 @@ fn parse_metadata_response(raw: &[u8]) -> Result<FileMetadataResponse> {
 
 fn download_request(task_id: &str, offset: u64, max_chunk_size: u32) -> serde_json::Value {
     serde_json::json!({
-        "action": "download_file",
+        "action": "core.file.download",
         "data": {
             "task_id": task_id,
             "offset": offset,
@@ -709,7 +709,7 @@ mod tests {
         assert_eq!(
             download_request("task-1", 131_072, 65_536),
             serde_json::json!({
-                "action": "download_file",
+                "action": "core.file.download",
                 "data": {
                     "task_id": "task-1",
                     "offset": 131_072,

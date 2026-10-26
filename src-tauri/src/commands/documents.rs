@@ -15,7 +15,7 @@ pub async fn create_directory(
 
     let resp = send_action_request(
         &conn,
-        "create_directory",
+        "core.directory.create",
         serde_json::json!({"parent_id": parent_id, "name": name, "exists_ok": exists_ok.unwrap_or(false)}),
         &username,
         &token,
@@ -46,7 +46,7 @@ pub async fn delete_directory(
 
     let resp = send_action_request(
         &conn,
-        "delete_directory",
+        "core.directory.delete",
         serde_json::json!({"folder_id": folder_id}),
         &username,
         &token,
@@ -72,7 +72,7 @@ pub async fn delete_document(
 
     let resp = send_action_request(
         &conn,
-        "delete_document",
+        "core.document.delete",
         serde_json::json!({"document_id": document_id}),
         &username,
         &token,
@@ -95,7 +95,7 @@ pub async fn rename_directory(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "rename_directory",
+        "core.directory.rename",
         serde_json::json!({ "folder_id": folder_id, "new_name": new_name }),
     )
     .await
@@ -110,7 +110,7 @@ pub async fn rename_document(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "rename_document",
+        "core.document.rename",
         serde_json::json!({ "document_id": document_id, "new_title": new_title }),
     )
     .await
@@ -125,7 +125,7 @@ pub async fn move_directory(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "move_directory",
+        "core.directory.move",
         serde_json::json!({
             "folder_id": folder_id,
             "target_folder_id": non_empty_optional(target_folder_id),
@@ -143,7 +143,7 @@ pub async fn move_document(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "move_document",
+        "core.document.move",
         serde_json::json!({
             "document_id": document_id,
             "target_folder_id": non_empty_optional(target_folder_id),
@@ -160,7 +160,7 @@ pub async fn get_document_info(
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
-        "get_document_info",
+        "core.document.info.get",
         serde_json::json!({ "document_id": document_id }),
     )
     .await
@@ -175,7 +175,7 @@ pub async fn set_document_tags(
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
-        "set_document_tags",
+        "core.document.tag.set",
         serde_json::json!({ "document_id": document_id, "tags": tags }),
     )
     .await
@@ -189,7 +189,7 @@ pub async fn get_directory_info(
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
-        "get_directory_info",
+        "core.directory.info.get",
         serde_json::json!({ "directory_id": directory_id }),
     )
     .await
@@ -204,7 +204,7 @@ pub async fn view_access_entries(
 ) -> Result<serde_json::Value, String> {
     let items = fetch_all_cursor_items(
         &state,
-        "view_access_entries",
+        "core.access.entry.list",
         serde_json::json!({
             "object_type": object_type,
             "object_identifier": object_identifier,
@@ -223,7 +223,7 @@ pub async fn revoke_access(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "revoke_access",
+        "core.access.entry.revoke",
         serde_json::json!({ "entry_id": entry_id }),
     )
     .await
@@ -243,7 +243,7 @@ pub async fn grant_access(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "grant_access",
+        "core.access.entry.grant",
         serde_json::json!({
             "entity_identifier": entity_identifier,
             "entity_type": entity_type,
@@ -268,7 +268,7 @@ pub async fn get_access_rules(
         "document" => {
             server_action_json(
                 &state,
-                "get_document_access_rules",
+                "core.document.access_rule.get",
                 serde_json::json!({ "document_id": object_id }),
             )
             .await
@@ -276,7 +276,7 @@ pub async fn get_access_rules(
         "directory" => {
             server_action_json(
                 &state,
-                "get_directory_access_rules",
+                "core.directory.access_rule.get",
                 serde_json::json!({ "directory_id": object_id }),
             )
             .await
@@ -298,7 +298,7 @@ pub async fn set_access_rules(
         "document" => {
             server_action_bool(
                 &state,
-                "set_document_rules",
+                "core.document.access_rule.set",
                 serde_json::json!({
                     "document_id": object_id,
                     "access_rules": access_rules,
@@ -310,7 +310,7 @@ pub async fn set_access_rules(
         "directory" => {
             server_action_bool(
                 &state,
-                "set_directory_rules",
+                "core.directory.access_rule.set",
                 serde_json::json!({
                     "directory_id": object_id,
                     "access_rules": access_rules,
@@ -331,7 +331,7 @@ pub async fn list_revisions(
 ) -> Result<serde_json::Value, String> {
     let items = fetch_all_cursor_items(
         &state,
-        "list_revisions",
+        "core.document.revision.list",
         serde_json::json!({ "document_id": document_id }),
     )
     .await?;
@@ -347,7 +347,7 @@ pub async fn delete_revision(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "delete_revision",
+        "core.document.revision.delete",
         serde_json::json!({ "id": revision_id }),
     )
     .await
@@ -366,7 +366,7 @@ pub async fn get_revision(
 
     let resp = send_action_request(
         &conn,
-        "get_revision",
+        "core.document.revision.get",
         serde_json::json!({ "id": revision_id.clone() }),
         &username,
         &token,
@@ -457,7 +457,7 @@ pub async fn set_current_revision(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "set_current_revision",
+        "core.document.revision.current.set",
         serde_json::json!({
             "document_id": document_id,
             "revision_id": revision_id,
@@ -479,7 +479,7 @@ pub async fn upload_new_revision<R: Runtime>(
     let (conn, username, token) = get_connection_auth(&state).await?;
     let resp = send_action_request(
         &conn,
-        "upload_document",
+        "core.document.upload",
         serde_json::json!({ "document_id": document_id }),
         &username,
         &token,
@@ -632,7 +632,7 @@ pub async fn inspect_upload_directory_conflicts<R: Runtime>(
 
     let parent_listing = fetch_all_listing_pages(
         &state,
-        "list_directory",
+        "core.directory.list",
         serde_json::json!({ "folder_id": non_empty_optional(parent_id) }),
     )
     .await?;
@@ -652,7 +652,7 @@ pub async fn inspect_upload_directory_conflicts<R: Runtime>(
     while let Some((local_relative, remote_id)) = stack.pop() {
         let listing = fetch_all_listing_pages(
             &state,
-            "list_directory",
+            "core.directory.list",
             serde_json::json!({ "folder_id": remote_id }),
         )
         .await?;
@@ -939,7 +939,7 @@ pub async fn search_files(
 
     let raw = server_action_json(
         &state,
-        "search",
+        "core.search.query",
         serde_json::json!({
             "query": trimmed,
             "page_size": page_size.unwrap_or(SERVER_CURSOR_PAGE_SIZE).clamp(1, SERVER_CURSOR_PAGE_SIZE),
@@ -972,7 +972,7 @@ pub async fn list_deleted_items(
 ) -> Result<serde_json::Value, String> {
     let listing = fetch_all_listing_pages(
         &state,
-        "list_deleted_items",
+        "core.directory.deleted_item.list",
         serde_json::json!({ "folder_id": folder_id }),
     )
     .await?;
@@ -1000,7 +1000,7 @@ pub async fn restore_document(
         data["target_folder_id"] = serde_json::Value::String(value);
     }
 
-    server_action_bool(&state, "restore_document", data).await
+    server_action_bool(&state, "core.document.restore", data).await
 }
 
 /// Restore a deleted directory, optionally with a new name or destination.
@@ -1019,7 +1019,7 @@ pub async fn restore_directory(
         data["target_parent_id"] = serde_json::Value::String(value);
     }
 
-    server_action_bool(&state, "restore_directory", data).await
+    server_action_bool(&state, "core.directory.restore", data).await
 }
 
 /// Permanently delete a document already marked as deleted.
@@ -1030,7 +1030,7 @@ pub async fn purge_document(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "purge_document",
+        "core.document.purge",
         serde_json::json!({ "document_id": document_id }),
     )
     .await
@@ -1044,7 +1044,7 @@ pub async fn purge_directory(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "purge_directory",
+        "core.directory.purge",
         serde_json::json!({ "folder_id": folder_id }),
     )
     .await

@@ -134,7 +134,7 @@ fn upload_request(
     restart: bool,
 ) -> serde_json::Value {
     serde_json::json!({
-        "action": "upload_file",
+        "action": "core.file.upload",
         "data": {
             "task_id": task_id,
             "file_size": file_size,
@@ -238,7 +238,7 @@ mod tests {
         assert_eq!(
             request,
             serde_json::json!({
-                "action": "upload_file",
+                "action": "core.file.upload",
                 "data": {
                     "task_id": "task-1",
                     "file_size": 42,

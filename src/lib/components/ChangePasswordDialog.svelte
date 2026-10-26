@@ -1,17 +1,8 @@
 <script lang="ts">
   import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
-  // ChangePasswordDialog — MD3 modal for the self-change password flow.
-  //
-  // Shown when the server rejects a login with code 4001/4002 ("password must
-  // be changed before login").  The user supplies their current (expired)
-  // password and a new one; on success they can sign in again.
-  //
-  // Mirrors the Python reference `PasswdUserDialog` (passwd_other = False):
-  // reference/cfms_client_next/src/include/ui/controls/dialogs/admin/accounts.py
-  // and PasswdDialogController in controllers/dialogs/passwd.py.
-
-  import { onDestroy, untrack } from 'svelte';
+  // Shared password change dialog for elevated self-service and POST_AUTH.
+  import { onDestroy } from 'svelte';
   import DialogActionButton from './DialogActionButton.svelte';
   import Icon from './Icon.svelte';
   import ModalFrame from './ModalFrame.svelte';
@@ -23,38 +14,27 @@
   interface Props {
     /** The username whose password is being changed. */
     username: string;
-    /** Pre-fill the "old password" field (e.g. the password just attempted). */
-    initialOldPassword?: string;
-    requireOldPassword?: boolean;
     /** Optional tip shown under the fields (e.g. why the change is required). */
     tip?: string;
     /** Submit handler. Should throw with a message on failure. */
-    onSubmit: (oldPassword: string, newPassword: string) => Promise<void>;
+    onSubmit: (newPassword: string) => Promise<void>;
     /** Cancel handler. */
     onCancel: () => void;
   }
 
   let {
     username,
-    initialOldPassword = '',
-    requireOldPassword = true,
     tip = '',
     onSubmit,
     onCancel,
   }: Props = $props();
 
-  // Seed the field from the prop's initial value once (the password the user
-  // just attempted); `untrack` makes the "capture initial value only" intent
-  // explicit and silences the state_referenced_locally warning.
-  let oldPassword = $state(untrack(() => initialOldPassword));
   let newPassword = $state('');
-  let oldVisible = $state(false);
   let newVisible = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
 
   onDestroy(() => {
-    oldPassword = '';
     newPassword = '';
   });
 
@@ -121,23 +101,14 @@
   }
 
   async function handleSubmit() {
-    if (requireOldPassword && !oldPassword) {
-      error = $t('dialog.changePassword.currentRequired');
-      return;
-    }
     if (!newPassword) {
       error = $t('dialog.changePassword.newRequired');
       return;
     }
-    if (newPassword === oldPassword) {
-      error = $t('dialog.changePassword.mustDiffer');
-      return;
-    }
-
     error = null;
     busy = true;
     try {
-      await onSubmit(oldPassword, newPassword);
+      await onSubmit(newPassword);
       // On success the parent closes the dialog.
     } catch (e) {
       notificationStore.error(formatError(e));
@@ -177,42 +148,6 @@
         </p>
       </div>
 
-      <!-- Old password -->
-      {#if requireOldPassword}
-      <div>
-        <MdOutlinedField inputId="cp-old" label={$t('dialog.changePassword.currentPassword')} disabled={busy}>
-          <div data-outlined-content class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
-              <Icon name="password" size="18px" />
-            </span>
-            <input data-focus-ring="delegated"
-              id="cp-old"
-              type={oldVisible ? 'text' : 'password'}
-              class="w-full pl-10 pr-10 py-2.5
-                     text-md3-on-surface text-sm
-                     placeholder:text-md3-on-surface-variant
-                     transition-colors"
-              placeholder={$t('dialog.changePassword.currentPasswordPlaceholder')}
-              bind:value={oldPassword}
-              disabled={busy}
-              autocomplete="current-password"
-            />
-            <FluentButton data-fluent-owner="lib-components-change-password-dialog"
-              type="button"
-              onclick={() => (oldVisible = !oldVisible)}
-              aria-label={oldVisible ? $t('login.hidePassword') : $t('login.showPassword')}
-              appearance="subtle"
-              class="absolute right-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant\r\n                   hover:text-md3-on-surface transition-colors"
-              iconOnly
-            >
-              <Icon name="visibility" size="18px" />
-            </FluentButton>
-          </div>
-        </MdOutlinedField>
-      </div>
-
-      <!-- New password -->
-      {/if}
       <div>
         <MdOutlinedField inputId="cp-new" label={$t('dialog.changePassword.newPassword')} disabled={busy}>
           <div data-outlined-content class="relative">
@@ -302,7 +237,7 @@
         <DialogActionButton
           type="submit"
           variant="primary"
-          disabled={busy || (requireOldPassword && !oldPassword) || !newPassword}
+          disabled={busy || !newPassword}
         >
           {#if busy}
             <ProgressRing size={16} strokeWidth={2.4} label={$t('common.changing')} />

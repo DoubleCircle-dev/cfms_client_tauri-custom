@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import '$lib/i18n';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { locale } from 'svelte-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
+import { dialogStore } from '$lib/dialogs.svelte';
 import ManagePage from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   getUserInfo: vi.fn(),
   getUserAvatar: vi.fn(),
   listUsers: vi.fn(),
+  resetUserPassword: vi.fn(),
+  getUserAuthentication: vi.fn(),
+  getManagedTwoFactorStatus: vi.fn(),
+  disableManagedTwoFactor: vi.fn(),
 }));
 const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
 
@@ -21,6 +26,10 @@ vi.mock('$lib/api', async (importOriginal) => ({
   getUserInfo: mocks.getUserInfo,
   getUserAvatar: mocks.getUserAvatar,
   listUsers: mocks.listUsers,
+  resetUserPassword: mocks.resetUserPassword,
+  getUserAuthentication: mocks.getUserAuthentication,
+  getManagedTwoFactorStatus: mocks.getManagedTwoFactorStatus,
+  disableManagedTwoFactor: mocks.disableManagedTwoFactor,
 }));
 
 vi.mock('$lib/motion/transitions', () => ({
@@ -97,6 +106,37 @@ afterEach(() => {
 });
 
 describe('management account context menu', () => {
+  it('resets another account with configuration permission without reading authentication inventory', async () => {
+    authStore.permissions = ['list_users', 'super_configure_auth_methods'];
+    authStore.escalationExp = Date.now() / 1000 + 300;
+    mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);
+    mocks.resetUserPassword.mockResolvedValue(true);
+    render(ManagePage);
+    await fireEvent.contextMenu((await screen.findAllByRole('listitem'))[0]);
+    expect(screen.queryByRole('menuitem', { name: 'Authentication' })).toBeNull();
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Reset password' }));
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.input(within(dialog).getByLabelText('New Password'), { target: { value: 'new-password' } });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Reset password' }));
+    await waitFor(() => expect(mocks.resetUserPassword).toHaveBeenCalledWith('other-id', 'new-password', false, false));
+    expect(mocks.getUserAuthentication).not.toHaveBeenCalled();
+    expect(mocks.getManagedTwoFactorStatus).not.toHaveBeenCalled();
+    expect(authStore.isLoggedIn).toBe(true);
+  });
+  it('deletes a TOTP credential without requiring cross-user inventory permission or elevation', async () => {
+    authStore.permissions = ['list_users', 'super_configure_auth_methods'];
+    mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);
+    mocks.disableManagedTwoFactor.mockResolvedValue(true);
+    const confirm = vi.spyOn(dialogStore, 'confirm').mockResolvedValue(true);
+    render(ManagePage);
+    await fireEvent.contextMenu((await screen.findAllByRole('listitem'))[0]);
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Account management' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Delete TOTP credential' }));
+    await waitFor(() => expect(mocks.disableManagedTwoFactor).toHaveBeenCalledWith('other-id'));
+    expect(mocks.getManagedTwoFactorStatus).not.toHaveBeenCalled();
+    expect(mocks.getUserAuthentication).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
   it.each([false, true])('copies the selected account ID and reports clipboard failure=%s', async (fails) => {
     authStore.permissions = ['list_users'];
     const users = ['alice', 'bob'].map((username) => ({

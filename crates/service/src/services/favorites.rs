@@ -165,7 +165,7 @@ async fn tick(
         validate_item(
             &conn,
             &snapshot,
-            "get_document_info",
+            "core.document.info.get",
             serde_json::json!({ "document_id": &file_id }),
             &file_id,
             invalid_files,
@@ -178,7 +178,7 @@ async fn tick(
         validate_item(
             &conn,
             &snapshot,
-            "get_directory_info",
+            "core.directory.info.get",
             serde_json::json!({ "directory_id": &dir_id }),
             &dir_id,
             invalid_directories,

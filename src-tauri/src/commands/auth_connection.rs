@@ -75,39 +75,34 @@ async fn apply_successful_login_response(
     Ok(())
 }
 
-/// Change a password with GENERAL + old password, or POST_AUTH + new password only.
-/// POST_AUTH success invalidates the continuation and requires a fresh login.
+/// Change a password using an elevated session, or restricted POST_AUTH.
 #[tauri::command]
 pub async fn change_password(
     state: tauri::State<'_, AppHandleState>,
     username: String,
-    old_password: String,
     new_password: String,
 ) -> Result<(), String> {
-    let old_password = zeroize::Zeroizing::new(old_password);
     let new_password = zeroize::Zeroizing::new(new_password);
-
-    // --- Obtain the active connection ---
-    let conn = {
-        let c = state.inner.conn.read().await;
-        c.clone()
-    }
-    .ok_or_else(|| "Not connected to a server".to_string())?;
-
-    let post_auth = {
-        let pending = state.inner.pending_auth.read().await;
-        pending
-            .as_ref()
-            .filter(|p| p.username == username && p.issued.claims.purpose == POST_AUTH)
-            .map(|p| p.issued.secret.clone())
-    };
+    let conn = state
+        .inner
+        .conn
+        .read()
+        .await
+        .clone()
+        .ok_or_else(|| "Not connected to a server".to_string())?;
+    let post_auth = state
+        .inner
+        .pending_auth
+        .read()
+        .await
+        .as_ref()
+        .filter(|p| p.username == username && p.issued.claims.purpose == POST_AUTH)
+        .map(|p| p.issued.secret.clone());
     if let Some(token) = post_auth {
         let response = send_action_request(
             &conn,
-            "set_passwd",
-            serde_json::json!({
-                "new_passwd":new_password.as_str(),
-            }),
+            "core.user.password.set",
+            serde_json::json!({"new_passwd":new_password.as_str()}),
             &username,
             &token,
         )
@@ -119,101 +114,300 @@ pub async fn change_password(
         return Ok(());
     }
 
-    let local_only = state.inner.preference_dek_local_only.load(std::sync::atomic::Ordering::SeqCst);
-    let server_key = if local_only {
-        if let Some(envelope) = state.inner.server_preference_dek.read().await.clone() {
-            decrypt_preference_dek(&envelope, &old_password).await.ok()
-        } else { None }
-    } else { state.inner.dek.read().await.clone() };
-    let mut prepared_dek_rewrap = if let Some(existing_dek) = server_key {
-        match get_connection_auth(&state).await {
-            Ok((auth_conn, auth_username, auth_token)) if auth_username == username => {
-                let encrypted = rewrap_and_upload_preference_dek(
-                    &auth_conn,
-                    existing_dek.clone(),
-                    &new_password,
-                    &auth_username,
-                    &auth_token,
-                )
-                .await
-                .map_err(|e| {
-                    format!("Failed to prepare preference DEK rewrap before password change: {e}")
-                })?;
-                Some((
-                    existing_dek,
-                    encrypted,
-                    auth_conn,
-                    auth_username,
-                    auth_token,
-                ))
-            }
-            Ok(_) | Err(_) => None,
-        }
-    } else {
+    let (conn, auth_username, token) = get_connection_auth(&state).await?;
+    if auth_username != username {
+        return Err("Password change account does not match the session".into());
+    }
+    let claims = cfms_service::authentication::decode_claims(&token)?;
+    if claims.purpose != ESCALATED || claims.exp <= cfms_service::authentication::unix_now() {
+        return Err(format_server_error_parts(
+            403,
+            "Authentication elevation required",
+            &serde_json::json!({}),
+        ));
+    }
+    let original_envelope = state.inner.server_preference_dek.read().await.clone();
+    let server_key = if state
+        .inner
+        .preference_dek_local_only
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
         None
+    } else {
+        state.inner.dek.read().await.clone()
     };
-
-    let (_, auth_username, token) = get_connection_auth(&state).await?;
-    let response = send_action_request(
+    change_password_and_rewrap_preferences(
         &conn,
-        "set_passwd",
-        serde_json::json!({
-            "username": &username,
-            "old_passwd": old_password.as_str(),
-            "new_passwd": new_password.as_str(),
-            "bypass_passwd_requirements": false,
-            "force_update_after_login": false,
-        }),
         &auth_username,
         &token,
+        &new_password,
+        server_key,
+        original_envelope,
     )
     .await?;
+    clear_auth_state(&state).await;
+    Ok(())
+}
 
-    tracing::info!("set_passwd response received with code={}", response.code);
-
+/// Prepare recovery data before key rotation; restore the original ciphertext on a definite rejection.
+async fn change_password_and_rewrap_preferences(
+    conn: &cfms_transport::Connection,
+    username: &str,
+    token: &str,
+    new_password: &str,
+    server_key: Option<cfms_service::sensitive::SecretKey>,
+    original_envelope: Option<String>,
+) -> Result<(), String> {
+    let prepared = if let (Some(key), Some(_)) = (server_key, original_envelope.as_ref()) {
+        rewrap_and_upload_preference_dek(conn, key, new_password, username, token).await?;
+        true
+    } else {
+        false
+    };
+    let response = send_action_request(
+        conn,
+        "core.user.password.set",
+        serde_json::json!({"new_passwd":new_password}),
+        username,
+        token,
+    )
+    .await?;
     if response.code != 200 {
-        if let Some((dek, _, auth_conn, auth_username, auth_token)) = prepared_dek_rewrap.take() {
-            match rewrap_and_upload_preference_dek(
-                &auth_conn,
-                dek.clone(),
-                &old_password,
-                &auth_username,
-                &auth_token,
+        if prepared {
+            if let Err(error) = upload_and_select_preference_dek(
+                conn,
+                original_envelope.as_deref().unwrap(),
+                username,
+                token,
             )
             .await
             {
-                Ok(encrypted) => {
-                    remember_server_preference_dek(&state.inner, Some(encrypted)).await
-                }
-                Err(error) => {
-                    tracing::warn!(
-                        "Failed to roll back prepared preference DEK after password change rejection: {error}"
-                    );
-                    return Err(format_server_error_parts(
-                        response.code,
-                        &format!(
-                            "{}; additionally failed to restore the previous preference DEK: {error}",
-                            response.message
-                        ),
-                        &response.data,
-                    ));
-                }
+                return Err(format_server_error_parts(
+                    response.code,
+                    &format!(
+                        "{}; additionally failed to restore the previous preference DEK: {error}",
+                        response.message,
+                    ),
+                    &response.data,
+                ));
             }
         }
         return Err(format_server_response_error(&response));
     }
+    Ok(())
+}
 
-    if let Some((dek, encrypted, _, _, _)) = prepared_dek_rewrap.take() {
-        {
-            if !local_only {
-                let mut stored_dek = state.inner.dek.write().await;
-                *stored_dek = Some(dek);
-            }
-        }
-        remember_server_preference_dek(&state.inner, Some(encrypted)).await;
+#[cfg(test)]
+mod password_change_protocol_tests {
+    use super::*;
+    use cfms_transport::frame::{self, FrameHeader, FrameKind};
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message;
+
+    #[tokio::test]
+    async fn handshake_uses_protocol_twenty_nine_action_without_authentication() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(socket).await.unwrap();
+            let bytes = websocket.next().await.unwrap().unwrap().into_data();
+            let (header, payload) = frame::decode(&bytes).unwrap();
+            let request: serde_json::Value = serde_json::from_slice(payload).unwrap();
+            assert_eq!(request["action"], "core.server.info.get");
+            assert_eq!(request["data"], serde_json::json!({}));
+            assert!(request["username"].is_null());
+            assert!(request["token"].is_null());
+            websocket.send(Message::Binary(frame::encode(&FrameHeader {
+                id: header.id, kind: FrameKind::Conclusion,
+            }, &serde_json::to_vec(&serde_json::json!({
+                "code":200, "message":"", "timestamp":0.0,
+                "data":{"server_name":"protocol-29", "protocol_version":29, "lockdown":false, "lockdown_reason":null, "extension_flags":[]},
+            })).unwrap()).into())).await.unwrap();
+        });
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let tls = rustls::ClientConfig::builder()
+            .with_root_certificates(rustls::RootCertStore::empty())
+            .with_no_client_auth();
+        let connection =
+            cfms_transport::Connection::connect(&format!("ws://{address}"), tls, None, true)
+                .await
+                .unwrap();
+        let info = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            request_server_info(&connection),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(info.protocol_version, 29);
+        server.await.unwrap();
+        connection.close().await;
     }
 
-    Ok(())
+    async fn check_change(unlocked: bool, code: u16) {
+        let key = cfms_crypto::generate_dek();
+        let original = cfms_crypto::dek::encrypt_dek(&key, "historical-password").unwrap();
+        let expected_original = original.clone();
+        let expected_key = key.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server =
+            tokio::spawn(async move {
+                let (socket, _) = listener.accept().await.unwrap();
+                let mut websocket = tokio_tungstenite::accept_async(socket).await.unwrap();
+                let mut expected = Vec::new();
+                if unlocked {
+                    expected.extend(["core.user.key.upload", "core.user.preferred_dek.set"]);
+                }
+                expected.push("core.user.password.set");
+                if unlocked && code != 200 {
+                    expected.extend(["core.user.key.upload", "core.user.preferred_dek.set"]);
+                }
+                for (index, action) in expected.iter().enumerate() {
+                    let bytes = websocket.next().await.unwrap().unwrap().into_data();
+                    let (header, payload) = frame::decode(&bytes).unwrap();
+                    assert_eq!(header.kind, FrameKind::Process);
+                    let request: serde_json::Value = serde_json::from_slice(payload).unwrap();
+                    assert_eq!(request["action"], *action);
+                    assert_eq!(request["username"], "alice");
+                    assert_eq!(request["token"], "native-only-token");
+                    assert!(request["nonce"].is_string());
+                    assert!(request["timestamp"].is_number());
+                    let mut data = serde_json::json!({});
+                    let response_code = if *action == "core.user.password.set" {
+                        assert_eq!(
+                            request["data"],
+                            serde_json::json!({"new_passwd":"new-password"})
+                        );
+                        data = serde_json::json!({"reason":"password_policy"});
+                        code
+                    } else {
+                        if *action == "core.user.key.upload" {
+                            let content = request["data"]["content"].as_str().unwrap();
+                            if index == 0 {
+                                let decoded =
+                                    cfms_crypto::dek::decrypt_dek(content, "new-password").unwrap();
+                                assert_eq!(*decoded, *expected_key);
+                            } else {
+                                assert_eq!(content, expected_original);
+                            }
+                            data = serde_json::json!({"id":"prepared-key"});
+                        } else {
+                            assert_eq!(request["data"], serde_json::json!({"id":"prepared-key"}));
+                        }
+                        200
+                    };
+                    websocket.send(Message::Binary(frame::encode(&FrameHeader {
+                    id: header.id, kind: FrameKind::Conclusion,
+                }, &serde_json::to_vec(&serde_json::json!({
+                    "code":response_code, "data":data, "message":"", "timestamp":0.0,
+                })).unwrap()).into())).await.unwrap();
+                }
+            });
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let tls = rustls::ClientConfig::builder()
+            .with_root_certificates(rustls::RootCertStore::empty())
+            .with_no_client_auth();
+        let connection =
+            cfms_transport::Connection::connect(&format!("ws://{address}"), tls, None, true)
+                .await
+                .unwrap();
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            change_password_and_rewrap_preferences(
+                &connection,
+                "alice",
+                "native-only-token",
+                "new-password",
+                unlocked.then_some(key),
+                Some(original),
+            ),
+        )
+        .await
+        .unwrap();
+        if code == 200 {
+            assert!(result.is_ok(), "{result:?}");
+        } else {
+            let error = result.unwrap_err();
+            assert!(error.starts_with(&format!("Server returned {code}:")));
+            assert!(error.contains("CFMS_ERROR_DATA:{\"reason\":\"password_policy\"}"));
+        }
+        server.await.unwrap();
+        connection.close().await;
+    }
+
+    #[tokio::test]
+    async fn elevated_password_change_rewraps_an_unlocked_preference_key() {
+        check_change(true, 200).await;
+    }
+
+    #[tokio::test]
+    async fn rejected_password_change_restores_the_original_ciphertext() {
+        check_change(true, 400).await;
+    }
+
+    #[tokio::test]
+    async fn locked_preference_keys_are_preserved_without_blocking_password_changes() {
+        check_change(false, 200).await;
+    }
+
+    #[tokio::test]
+    async fn permission_rejections_preserve_their_status_without_reauthentication() {
+        check_change(false, 403).await;
+    }
+}
+
+async fn request_server_info(conn: &cfms_transport::Connection) -> Result<ServerInfo, String> {
+    let random_bytes: [u8; 16] = rand::rng().random();
+    let nonce = hex::encode(random_bytes);
+
+    let request = serde_json::json!({
+        "action": "core.server.info.get",
+        "data": {},
+        "username": null,
+        "token": null,
+        "timestamp": unix_now(),
+        "nonce": nonce,
+    });
+
+    let request_bytes = serde_json::to_vec(&request)
+        .map_err(|e| format!("Failed to encode server_info request: {e}"))?;
+
+    let mut stream = conn
+        .create_stream()
+        .await
+        .map_err(|e| format!("Failed to create stream for server_info: {e}"))?;
+
+    stream
+        .send(conn, request_bytes)
+        .await
+        .map_err(|e| format!("Failed to send server_info request: {e}"))?;
+
+    let response_bytes = match stream.recv().await {
+        Some(response) => response,
+        None => {
+            if let Some(close) = conn.close_info()
+                && close.code == 1013
+            {
+                return Err(format_server_error_parts(
+                    503,
+                    &close.reason,
+                    &serde_json::json!({ "close_code": close.code }),
+                ));
+            }
+            return Err("Connection closed before server_info response".to_string());
+        }
+    };
+
+    let response: cfms_core::Response = serde_json::from_slice(&response_bytes)
+        .map_err(|e| format!("Invalid server_info response: {e}"))?;
+
+    if response.code != 200 {
+        return Err(format_server_response_error(&response));
+    }
+
+    serde_json::from_value(response.data).map_err(|e| format!("Invalid server_info data: {e}"))
 }
 
 /// Recover a server-returned preference DEK with a previous password, then
@@ -439,59 +633,8 @@ pub async fn connect(
         _ = wait_for_connect_cancellation(&mut cancel_rx) => {
             Err(CONNECT_CANCELLED_ERROR.to_string())
         }
-        result = async {
-        let random_bytes: [u8; 16] = rand::rng().random();
-        let nonce = hex::encode(random_bytes);
-
-        let request = serde_json::json!({
-            "action": "server_info",
-            "data": {},
-            "username": null,
-            "token": null,
-            "timestamp": unix_now(),
-            "nonce": nonce,
-        });
-
-        let request_bytes = serde_json::to_vec(&request)
-            .map_err(|e| format!("Failed to encode server_info request: {e}"))?;
-
-        let mut stream = conn
-            .create_stream()
-            .await
-            .map_err(|e| format!("Failed to create stream for server_info: {e}"))?;
-
-        stream
-            .send(&conn, request_bytes)
-            .await
-            .map_err(|e| format!("Failed to send server_info request: {e}"))?;
-
-        let response_bytes = match stream.recv().await {
-            Some(response) => response,
-            None => {
-                if let Some(close) = conn.close_info()
-                    && close.code == 1013
-                {
-                    return Err(format_server_error_parts(
-                        503,
-                        &close.reason,
-                        &serde_json::json!({ "close_code": close.code }),
-                    ));
-                }
-                return Err("Connection closed before server_info response".to_string());
-            }
-        };
-
-        let response: cfms_core::Response = serde_json::from_slice(&response_bytes)
-            .map_err(|e| format!("Invalid server_info response: {e}"))?;
-
-        if response.code != 200 {
-            return Err(format_server_response_error(&response));
-        }
-
-        serde_json::from_value(response.data)
-            .map_err(|e| format!("Invalid server_info data: {e}"))
-        } => result,
-    };
+        result = request_server_info(&conn) => result,
+   };
     let server_info: ServerInfo = match server_info_result {
         Ok(server_info) => server_info,
         Err(error) => {
@@ -826,7 +969,7 @@ pub async fn get_2fa_status(
 
     let resp = send_action_request(
         &conn,
-        "get_2fa_status",
+        "core.user.authentication.totp.status.get",
         serde_json::json!({}),
         &username,
         &token,
@@ -849,7 +992,7 @@ pub async fn setup_2fa(
 
     let resp = send_action_request(
         &conn,
-        "setup_2fa",
+        "core.user.authentication.totp.setup",
         serde_json::json!({"method": "totp"}),
         &username,
         &token,
@@ -874,7 +1017,7 @@ pub async fn validate_2fa(
 
     let resp = send_action_request(
         &conn,
-        "validate_2fa",
+        "core.user.authentication.totp.setup.confirm",
         serde_json::json!({"token": token.as_str()}),
         &username,
         &auth_token,
@@ -895,7 +1038,7 @@ pub async fn cancel_2fa_setup(state: tauri::State<'_, AppHandleState>) -> Result
 
     let resp = send_action_request(
         &conn,
-        "cancel_2fa_setup",
+        "core.user.authentication.totp.setup.cancel",
         serde_json::json!({}),
         &username,
         &token,
@@ -920,7 +1063,7 @@ pub async fn disable_2fa(
 
     let resp = send_action_request(
         &conn,
-        "disable_2fa",
+        "core.user.authentication.totp.delete",
         serde_json::json!({"password": password.as_str()}),
         &username,
         &token,

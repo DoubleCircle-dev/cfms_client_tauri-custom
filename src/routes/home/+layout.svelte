@@ -61,7 +61,7 @@
   );
   const isAdmin = $derived(
     authStore.permissions.some((permission) =>
-      ['manage_system', 'view_audit_logs', 'list_users', 'list_groups'].includes(permission),
+      ['manage_system', 'view_audit_logs', 'list_users', 'list_groups', 'super_configure_auth_methods', 'super_list_user_auth_methods'].includes(permission),
     ),
   );
   const canApplyLockdown = $derived(

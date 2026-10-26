@@ -163,7 +163,7 @@ async fn create_server_directory(
     let (conn, username, token) = get_connection_auth(state).await?;
     let resp = send_action_request(
         &conn,
-        "create_directory",
+        "core.directory.create",
         serde_json::json!({
             "parent_id": non_empty_optional(parent_id),
             "name": name,
@@ -364,7 +364,7 @@ async fn upload_local_file<R: Runtime>(
     };
     let mut create_resp = match send_action_request(
         &conn,
-        "create_document",
+        "core.document.create",
         serde_json::json!({
             "title": file_name,
             "folder_id": non_empty_optional(parent_id.clone()),
@@ -387,7 +387,7 @@ async fn upload_local_file<R: Runtime>(
             let candidate = suffixed_upload_name(&file_name, suffix);
             create_resp = match send_action_request(
                 &conn,
-                "create_document",
+                "core.document.create",
                 serde_json::json!({
                     "title": candidate,
                     "folder_id": non_empty_optional(parent_id.clone()),
@@ -448,7 +448,7 @@ async fn upload_local_file<R: Runtime>(
             (UploadConflictStrategy::Overwrite, Some("document"), Some(document_id)) => {
                 let upload_resp = match send_action_request(
                     &conn,
-                    "upload_document",
+                    "core.document.upload",
                     serde_json::json!({ "document_id": document_id }),
                     &username,
                     &token,

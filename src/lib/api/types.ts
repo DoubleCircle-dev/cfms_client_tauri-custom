@@ -583,8 +583,9 @@ export interface ServerState {
 }
 
 export interface TwoFactorStatus {
+  /** TOTP credential registration, independent of the account's MFA policy. */
+  configured: boolean;
   enabled: boolean;
-  method: string | null;
   backup_codes_count: number;
 }
 

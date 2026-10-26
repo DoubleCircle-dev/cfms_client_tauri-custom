@@ -297,7 +297,7 @@ pub async fn execute_extension_host_call(
             let folder_id = arguments.get("folderId").and_then(serde_json::Value::as_str).map(str::to_string);
             let listing = fetch_all_listing_pages(
                 &state,
-                "list_directory",
+                "core.directory.list",
                 serde_json::json!({ "folder_id": folder_id }),
             ).await?;
             serde_json::to_value(listing).map_err(|e| format!("Failed to serialize directory listing: {e}"))
@@ -306,7 +306,7 @@ pub async fn execute_extension_host_call(
             let query = arguments.get("query").and_then(serde_json::Value::as_str)
                 .ok_or_else(|| "files.search requires a query".to_string())?;
             if query.trim().is_empty() { return Err("Search query cannot be empty".into()); }
-            server_action_json(&state, "search", serde_json::json!({
+            server_action_json(&state, "core.search.query", serde_json::json!({
                 "query": query.trim(), "page_size": 128, "sort_by": "name", "sort_order": "asc",
                 "search_documents": true, "search_directories": true
             })).await
@@ -314,7 +314,7 @@ pub async fn execute_extension_host_call(
         "files.metadata.read" => {
             let document_id = arguments.get("documentId").and_then(serde_json::Value::as_str)
                 .ok_or_else(|| "files.metadata.read requires documentId".to_string())?;
-            server_action_json(&state, "get_document_info", serde_json::json!({ "document_id": document_id })).await
+            server_action_json(&state, "core.document.info.get", serde_json::json!({ "document_id": document_id })).await
         }
         "preferences.read" => {
             let (_, preferences) = load_current_user_preferences(&state).await?;

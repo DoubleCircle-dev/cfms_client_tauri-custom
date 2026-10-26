@@ -58,7 +58,7 @@ beforeEach(() => {
   mocks.getAuthStatus.mockResolvedValue(authStatus);
   mocks.getTwoFactorStatus.mockResolvedValue({
     enabled: false,
-    method: null,
+    configured: false,
     backup_codes_count: 0,
   });
   mocks.renameUser.mockResolvedValue(true);
