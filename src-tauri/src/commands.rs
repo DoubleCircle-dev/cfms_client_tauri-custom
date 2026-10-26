@@ -39,6 +39,8 @@ const OFFICIAL_UPDATE_RELEASES_API: &str =
     "https://api.github.com/repos/cfms-dev/cfms_client_tauri/releases";
 const CUSTOM_UPDATE_RELEASES_API: &str =
     "https://api.github.com/repos/DoubleCircle-dev/cfms_client_tauri-custom/releases";
+#[cfg(not(target_os = "android"))]
+const OFFICIAL_UPDATER_PUBLIC_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5MkZFRTVFRTI3OEJGOEUKUldTT3YzamlYdTR2R1pzTjk5dU0zSVQ1RWR3OHExOEJ4dFcrT1ZMVnFrdXA2YjFCRk5udkQ3M2IK";
 const UPDATE_USER_AGENT: &str = "cfms-client-tauri-updater";
 const UPDATE_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 const UPDATE_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
