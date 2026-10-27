@@ -240,46 +240,9 @@ async fn download_document_to(
     document_id: &str,
     dest: &Path,
 ) -> Result<(), String> {
-    let (conn, username, token) = get_connection_auth(state).await?;
-
-    let resp = send_action_request(
-        &conn,
-        "get_document",
-        serde_json::json!({"document_id": document_id}),
-        &username,
-        &token,
-    )
-    .await?;
-
-    if resp.code == 403 {
-        // Keep the status, the server's wording and any structured payload:
-        // when the server names the permission it refused on, the denial panel
-        // can explain the refusal instead of only repeating it. The
-        // "Access denied" prefix is only added when the server did not say it
-        // itself, so the panel does not end up reading "Access denied: Access
-        // denied"; the status above is what the frontend classifies on.
-        let message = if resp.message.to_lowercase().contains("denied") {
-            resp.message.clone()
-        } else {
-            format!("Access denied: {}", resp.message)
-        };
-        return Err(format_server_error_parts(
-            403,
-            &message,
-            &resp.data,
-        ));
-    }
-    if resp.code == 404 {
-        return Err("Document not found on server".to_string());
-    }
-    if resp.code != 200 {
-        return Err(format!("Server returned {}: {}", resp.code, resp.message));
-    }
-
-    let task_id = resp.data["task_data"]["task_id"]
-        .as_str()
-        .ok_or_else(|| "Server response missing task_id".to_string())?
-        .to_string();
+    let task = download_queue::request_server_download_task(&state.inner, document_id)
+        .await
+        .map_err(|error| error.to_string())?;
 
     let transfer_conn = create_transfer_connection(&state.inner).await?;
     let progress = |_phase: cfms_core::DownloadPhase,
@@ -294,7 +257,7 @@ async fn download_document_to(
 
     let result = cfms_transfer::download::receive(
         &transfer_conn,
-        &task_id,
+        &task.task_id,
         dest,
         max_chunk_size,
         &progress,
