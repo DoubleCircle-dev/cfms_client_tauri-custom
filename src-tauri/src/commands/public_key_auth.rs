@@ -167,7 +167,7 @@ pub async fn login_with_public_key(
         (
             pending.username.clone(),
             cfms_service::sensitive::SensitiveJson::new(serde_json::json!({
-                "action":"exchange_token", "data":{"method":"publickey", "data":{"fingerprint":fingerprint}, "target_purpose":GENERAL},
+                "action":"core.auth.token.exchange", "data":{"method":"publickey", "data":{"fingerprint":fingerprint}, "target_purpose":GENERAL},
                 "username":pending.username,"token":pending.issued.secret.as_str(),
                 "timestamp":unix_now(),"nonce":crate::public_key_auth::random_id(),
             })),
@@ -176,7 +176,7 @@ pub async fn login_with_public_key(
         (
             username.clone(),
             cfms_service::sensitive::SensitiveJson::new(serde_json::json!({
-                "action":"login", "data":{"method":"publickey", "credential":{"username":username,"fingerprint":fingerprint}},
+                "action":"core.auth.login", "data":{"method":"publickey", "credential":{"username":username,"fingerprint":fingerprint}},
             })),
         )
     };
@@ -371,9 +371,9 @@ mod public_key_stream_tests {
             assert_eq!(
                 request["action"],
                 if stage == "mfa" {
-                    "exchange_token"
+                    "core.auth.token.exchange"
                 } else {
-                    "login"
+                    "core.auth.login"
                 }
             );
             observed.send(()).unwrap();
@@ -466,14 +466,14 @@ mod public_key_stream_tests {
         let (control, mut cancellation) = tokio::sync::watch::channel(false);
         let request = cfms_service::sensitive::SensitiveJson::new(if stage == "mfa" {
             serde_json::json!({
-                "action":"exchange_token", "data":{
+                "action":"core.auth.token.exchange", "data":{
                     "method":"publickey", "data":{"fingerprint":fingerprint},
                     "target_purpose":GENERAL,
                 },
             })
         } else {
             serde_json::json!({
-                "action":"login", "data":{
+                "action":"core.auth.login", "data":{
                     "method":"publickey", "credential":{"username":"test", "fingerprint":fingerprint},
                 },
             })

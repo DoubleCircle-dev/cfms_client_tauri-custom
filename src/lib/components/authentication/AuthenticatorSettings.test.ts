@@ -11,9 +11,9 @@ vi.mock('qrcode', () => ({ toDataURL: async () => 'data:image/png;base64,AA==' }
 vi.mock('svelte-i18n', () => ({ _: { subscribe(run: (t: (key: string) => string) => void) { run((key) => key); return () => {}; } } }));
 const userId = 'aabbccdd-0000-4000-8000-000000000001';
 beforeEach(() => {
-  authStore.apply({ user_id: userId, username: 'alice', nickname: null, has_token: true, token_exp: 2e9, permissions: [], groups: [] });
-  mocks.status.mockResolvedValue({ enabled: false, method: null, backup_codes_count: 0 });
-  mocks.managedStatus.mockResolvedValue({ enabled: true, method: 'totp', backup_codes_count: 6 });
+  authStore.apply({ user_id: userId, username: 'alice', nickname: null, has_token: true, token_exp: 2e9, permissions: ['configure_auth_methods'], groups: [] });
+  mocks.status.mockResolvedValue({ configured: false, enabled: false, backup_codes_count: 0 });
+  mocks.managedStatus.mockResolvedValue({ configured: true, enabled: true, backup_codes_count: 6 });
   mocks.setup.mockResolvedValue({ secret: 'SECRET', provisioning_uri: 'otpauth://totp/account', backup_codes: ['recovery-one', 'recovery-two'] });
   mocks.before.mockResolvedValue(true);
   mocks.verify.mockResolvedValue(undefined); mocks.cancel.mockResolvedValue(undefined);
@@ -59,7 +59,7 @@ describe('authenticator settings', () => {
     expect(mocks.verify).not.toHaveBeenCalled();
   });
   it('never uses self-service setup or status APIs for another account', async () => {
-    authStore.permissions = ['manage_2fa'];
+    authStore.permissions = ['super_configure_auth_methods', 'super_list_user_auth_methods'];
     mount('other-account');
     await screen.findByRole('button', { name: 'authManagement.disableAuthenticator' });
     expect(mocks.managedStatus).toHaveBeenCalledWith('other-account');
@@ -74,7 +74,7 @@ describe('authenticator settings', () => {
     expect(screen.queryByRole('button', { name: 'settings.twofa.enable' })).toBeNull();
   });
   it('uses the managed disable API and preserves the target account', async () => {
-    authStore.permissions = ['manage_2fa'];
+    authStore.permissions = ['super_configure_auth_methods', 'super_list_user_auth_methods'];
     vi.spyOn(dialogStore, 'confirm').mockResolvedValue(true);
     mocks.managedDisable.mockResolvedValue(true);
     mount('other-account');
@@ -82,5 +82,35 @@ describe('authenticator settings', () => {
     await waitFor(() => expect(mocks.managedDisable).toHaveBeenCalledWith('other-account'));
     expect(mocks.disable).not.toHaveBeenCalled();
     await waitFor(() => expect(mocks.changed).toHaveBeenCalledTimes(1));
+  });
+  it('shows and cancels a pending registration from a previous session', async () => {
+    mocks.status.mockResolvedValueOnce({ configured: true, enabled: false, backup_codes_count: 10 });
+    mount();
+    expect(await screen.findByText('authManagement.pendingTotp')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'settings.twofa.enable' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.cancelPendingTotp' }));
+    await waitFor(() => expect(mocks.cancel).toHaveBeenCalledTimes(1));
+    await screen.findByRole('button', { name: 'settings.twofa.enable' });
+  });
+  it('allows cross-user inventory without granting configuration', async () => {
+    authStore.permissions = ['super_list_user_auth_methods'];
+    mount('other-account');
+    await screen.findByText('common.enabled');
+    expect(mocks.managedStatus).toHaveBeenCalledWith('other-account');
+    expect(screen.queryByRole('button', { name: 'authManagement.disableAuthenticator' })).toBeNull();
+  });
+  it('does not read cross-user inventory with configuration permission alone', async () => {
+    authStore.permissions = ['super_configure_auth_methods'];
+    mount('other-account');
+    await screen.findByText('authManagement.managedAuthenticator');
+    expect(mocks.managedStatus).not.toHaveBeenCalled();
+    expect(mocks.status).not.toHaveBeenCalled();
+  });
+  it('allows self inventory without configuration permission', async () => {
+    authStore.permissions = [];
+    mount();
+    await screen.findByText('authManagement.notRegistered');
+    expect(mocks.status).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'settings.twofa.enable' })).toBeNull();
   });
 });

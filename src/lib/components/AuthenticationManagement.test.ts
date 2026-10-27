@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authStore } from '$lib/stores.svelte';
+import { authStore, notificationStore } from '$lib/stores.svelte';
 import type { AuthPolicy } from '$lib/api';
 import AuthenticationManagement from './AuthenticationManagement.svelte';
 import { dialogStore } from '$lib/dialogs.svelte';
@@ -31,9 +31,9 @@ const inventory = (escalation: AuthPolicy = { revision: 0, chains: [] }) => ({
 });
 
 beforeEach(() => {
-  authStore.apply({ user_id: userId, username: 'alice', nickname: 'Alice', has_token: true, token_exp: 2e9, escalation_exp: Date.now() / 1000 + 300, permissions: [], groups: [] });
+  authStore.apply({ user_id: userId, username: 'alice', nickname: 'Alice', has_token: true, token_exp: 2e9, escalation_exp: Date.now() / 1000 + 300, permissions: ['super_configure_auth_methods', 'super_list_user_auth_methods'], groups: [] });
   mocks.inventory.mockResolvedValue(inventory());
-  mocks.totp.mockResolvedValue({ enabled: false, method: null, backup_codes_count: 0 });
+  mocks.totp.mockResolvedValue({ configured: false, enabled: false, backup_codes_count: 0 });
   mocks.setup.mockResolvedValue({ secret: 'SECRET', provisioning_uri: 'otpauth://totp/account', backup_codes: ['recovery-code'] });
   mocks.verify.mockResolvedValue(undefined);
   mocks.policies.mockResolvedValue({ policies: { mfa: { revision: 1, chains: [[{ method: 'password', credential_ids: ['password-id'] }]] } } });
@@ -41,6 +41,44 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); authStore.clear(); });
 
 describe('authentication management', () => {
+  it('explains duplicate alternatives and prevents submitting them', async () => {
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.addAlternative' }));
+    expect(screen.getByText('authManagement.duplicateAlternatives')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'authManagement.savePolicies' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(mocks.policies).not.toHaveBeenCalled();
+  });
+  it('keeps self inventory read-only without configuration permission', async () => {
+    authStore.permissions = [];
+    render(AuthenticationManagement);
+    await screen.findByText('authManagement.readOnly');
+    expect((screen.getByRole('button', { name: 'authManagement.addKey' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'settings.password.action' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'settings.twofa.enable' })).toBeNull();
+  });
+  it('does not read another account with configuration permission alone', async () => {
+    authStore.permissions = ['super_configure_auth_methods'];
+    render(AuthenticationManagement, { userId: 'other-account' });
+    await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+    expect(mocks.inventory).not.toHaveBeenCalled();
+  });
+  it('reloads server-pruned policies and revisions after deleting a public key', async () => {
+    const original = inventory();
+    const credential = { method: 'publickey', credential_id: 'key-id', active: true, label: 'Work key', key_identity: null };
+    original.credentials.push(credential);
+    original.policies.escalation = { revision: 4, chains: [[{ method: 'publickey', credential_ids: ['key-id'] }]] };
+    mocks.inventory.mockResolvedValueOnce(original).mockResolvedValue(inventory({ revision: 5, chains: [] }));
+    mocks.remove.mockResolvedValue({ credential_id: 'key-id' });
+    vi.spyOn(dialogStore, 'confirm').mockResolvedValue(true);
+    render(AuthenticationManagement);
+    await fireEvent.click(await screen.findByRole('button', { name: 'common.delete' }));
+    await waitFor(() => expect(mocks.inventory).toHaveBeenCalledTimes(2));
+    await fireEvent.click(screen.getByRole('tab', { name: 'authManagement.flowsTab' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'authManagement.purposes.escalation' }));
+    expect(screen.getByText('authManagement.empty.escalation')).toBeTruthy();
+    expect(screen.queryByText('authManagement.unsaved')).toBeNull();
+  });
   it('keeps unsaved policy edits until refresh is confirmed', async () => {
     const confirm = vi.spyOn(dialogStore, 'confirm').mockResolvedValue(false);
     render(AuthenticationManagement);
@@ -230,17 +268,20 @@ describe('authentication management', () => {
   });
 
   it('uses the existing password dialog and returns to login after a self-service change', async () => {
-    authStore.permissions = ['set_passwd'];
+    const success = vi.spyOn(notificationStore, 'success');
+    authStore.permissions = ['configure_auth_methods'];
     mocks.changePassword.mockResolvedValue(undefined); mocks.clear.mockResolvedValue(undefined); mocks.goto.mockResolvedValue(undefined);
     render(AuthenticationManagement);
     await fireEvent.click(await screen.findByRole('button', { name: 'settings.password.action' }));
-    await fireEvent.input(await screen.findByLabelText('dialog.changePassword.currentPassword'), { target: { value: 'old-password' } });
+    expect(screen.getByText('settings.password.tip')).toBeTruthy();
+    expect(screen.queryByLabelText('dialog.changePassword.currentPassword')).toBeNull();
     await fireEvent.input(screen.getByLabelText('dialog.changePassword.newPassword'), { target: { value: 'new-password' } });
     await fireEvent.click(screen.getByRole('button', { name: /dialog.changePassword.title/ }));
-    await waitFor(() => expect(mocks.changePassword).toHaveBeenCalledWith('alice', 'old-password', 'new-password'));
+    await waitFor(() => expect(mocks.changePassword).toHaveBeenCalledWith('alice', 'new-password'));
     await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith('/login', { replaceState: true }));
     expect(mocks.clear).toHaveBeenCalled();
     expect(authStore.isLoggedIn).toBe(false);
+    expect(success).toHaveBeenCalledWith('settings.password.changed');
   });
 
   it.each(['setup', 'recovery'])('preserves the policy draft when the second leave confirmation is cancelled (%s)', async (phase) => {
@@ -263,7 +304,7 @@ describe('authentication management', () => {
   });
 
   it('resets the selected account password without signing out the administrator', async () => {
-    authStore.permissions = ['super_set_passwd'];
+    authStore.permissions = ['super_configure_auth_methods', 'super_list_user_auth_methods'];
     mocks.reset.mockResolvedValue(true);
     mocks.inventory.mockResolvedValue({ ...inventory(), user_id: 'other-account' });
     render(AuthenticationManagement, { userId: 'other-account', username: 'bob' });

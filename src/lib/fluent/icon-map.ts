@@ -143,4 +143,9 @@ export const ICON_MAP = {
   "chat": "chat",
   "attachment": "attach",
   "gridOn": "grid",
+  // Desktop shell: window chrome and the close-button prompt.
+  "window": "window",
+  "minimizeToTray": "arrow_minimize",
+  "quit": "power",
+  "pushPin": "pin",
 } as const;

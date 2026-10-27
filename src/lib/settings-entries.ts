@@ -2,7 +2,7 @@ import type { IconName } from '$lib/icons';
 import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
 import { isMobilePlatform } from '$lib/platform';
 
-type SettingsPlatformScope = 'all' | 'mobile';
+type SettingsPlatformScope = 'all' | 'mobile' | 'desktop';
 
 export type SettingsGroupId =
   | 'personalization'
@@ -67,6 +67,17 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: 'personalization',
     requiresAuth: true,
     platformScope: 'mobile',
+  },
+  {
+    // Desktop keep-alive: the close button and the tray icon. Device-scoped, so
+    // it is reachable before signing in and never synced with the account.
+    labelKey: 'settings.window.title',
+    descriptionKey: 'settings.window.description',
+    icon: 'window',
+    href: '/home/settings/window',
+    group: 'personalization',
+    requiresAuth: false,
+    platformScope: 'desktop',
   },
   {
     labelKey: 'settings.fileSync.title',
@@ -203,6 +214,8 @@ export function isSettingsEntryVisible(
 ): boolean {
   if (entry.feature === 'extensions' && !USER_EXTENSIONS_ENABLED) return false;
   if (entry.requiresAuth && !context.isLoggedIn) return false;
-  if (entry.platformScope === 'mobile') return context.isMobile ?? isMobilePlatform();
+  const isMobile = context.isMobile ?? isMobilePlatform();
+  if (entry.platformScope === 'mobile') return isMobile;
+  if (entry.platformScope === 'desktop') return !isMobile;
   return true;
 }

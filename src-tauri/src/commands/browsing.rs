@@ -42,7 +42,7 @@ pub(crate) async fn list_directory_full(
 ) -> Result<ListDirectoryResponse, String> {
     fetch_all_listing_pages(
         state,
-        "list_directory",
+        "core.directory.list",
         serde_json::json!({"folder_id": folder_id}),
     )
     .await
@@ -62,7 +62,7 @@ pub async fn list_directory_page(
 ) -> Result<ListDirectoryPageDto, String> {
     let raw = server_action_json(
         &state,
-        "list_directory",
+        "core.directory.list",
         serde_json::json!({
             "folder_id": folder_id,
             "cursor": cursor,
@@ -90,7 +90,7 @@ pub async fn resolve_node_path(
 
     let raw = server_action_json(
         &state,
-        "node_lookup",
+        "node_lookup.node.resolve",
         serde_json::json!({ "path": path }),
     )
     .await?;

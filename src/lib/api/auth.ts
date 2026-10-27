@@ -70,19 +70,9 @@ export async function requestEscalation(method?: string, data?: Record<string, J
   return invoke('request_escalation', { method: method ?? null, data: data ?? null });
 }
 
-/** Change the current user's password via the server `set_passwd` action.
- *
- * Used for the self-change flow when the server rejects login with code
- * 4001/4002 (password must be changed before login), using the native POST_AUTH
- * token. Authenticated self-service uses GENERAL and `oldPassword`. Throws with the
- * server's `(code) message` on failure (e.g. password-rule violations).
- */
-export async function changePassword(
-  username: string,
-  oldPassword: string,
-  newPassword: string,
-): Promise<void> {
-  return invoke("change_password", { username, oldPassword, newPassword });
+/** Change the current account's password using elevation or native POST_AUTH. */
+export async function changePassword(username: string, newPassword: string): Promise<void> {
+  return invoke('change_password', { username, newPassword });
 }
 
 /** Recover a server-returned encrypted preference DEK with a previous password,
@@ -148,7 +138,7 @@ export async function getServerState(): Promise<ServerState> {
   return invoke("get_server_state");
 }
 
-/** Get the authenticated user's two-factor authentication status. */
+/** Get the authenticated user's TOTP credential status. */
 export async function getTwoFactorStatus(): Promise<TwoFactorStatus> {
   return invoke("get_2fa_status");
 }
@@ -158,7 +148,7 @@ export async function setupTwoFactor(): Promise<TwoFactorSetup> {
   return invoke("setup_2fa");
 }
 
-/** Verify the TOTP setup code and enable two-factor authentication. */
+/** Activate the TOTP credential without changing authentication policies. */
 export async function validateTwoFactor(token: string): Promise<void> {
   return invoke("validate_2fa", { token });
 }
@@ -168,7 +158,7 @@ export async function cancelTwoFactorSetup(): Promise<void> {
   return invoke("cancel_2fa_setup");
 }
 
-/** Disable two-factor authentication for the authenticated user. */
+/** Delete the authenticated user's TOTP credential and prune its policy references. */
 export async function disableTwoFactor(password: string): Promise<void> {
   return invoke("disable_2fa", { password });
 }

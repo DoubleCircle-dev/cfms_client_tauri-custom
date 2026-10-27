@@ -1,4 +1,4 @@
-// Protocol 28 authentication. Continuation and elevated tokens remain native-only.
+// Protocol 29 authentication. Continuation and elevated tokens remain native-only.
 use cfms_service::authentication::{
     AUTH, ESCALATED, GENERAL, IssuedToken, POST_AUTH, PendingAuthentication,
 };
@@ -24,7 +24,7 @@ pub async fn login(
         .clone()
         .ok_or("Not connected to a server")?;
     let request = cfms_service::sensitive::SensitiveJson::new(serde_json::json!({
-        "action": "login",
+        "action": "core.auth.login",
         "data": {"method": "password", "credential": {"username": &username, "password": password.as_str()}},
     }));
     let response = send_auth_request(&conn, request).await?;
@@ -145,7 +145,7 @@ pub async fn complete_login_mfa(
         .ok_or("Not connected to a server")?;
     let response = send_action_request(
         &conn,
-        "exchange_token",
+        "core.auth.token.exchange",
         serde_json::json!({
             "method":method, "data":data.as_value(), "target_purpose":GENERAL,
         }),
@@ -164,7 +164,7 @@ pub async fn get_user_authentication(
     let (conn, username, token) = get_connection_auth(&state).await?;
     let response = send_action_request(
         &conn,
-        "get_user_authentication",
+        "core.user.authentication.get",
         authentication_target(serde_json::json!({}), user_id),
         &username,
         &token,
@@ -204,7 +204,7 @@ pub async fn set_user_auth_policies(
     user_id: Option<String>,
     policies: Vec<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    server_action_json(&state, "set_user_auth_policies", authentication_target(
+    server_action_json(&state, "core.user.authentication.policy.set", authentication_target(
         serde_json::json!({"policies": policies}), user_id,
     )).await
 }
@@ -216,7 +216,7 @@ pub async fn register_user_auth_public_key(
     public_key: String,
     label: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    server_action_json(&state, "register_user_auth_public_key", authentication_target(
+    server_action_json(&state, "core.user.authentication.public_key.register", authentication_target(
         serde_json::json!({"public_key": public_key, "label": label}), user_id,
     )).await
 }
@@ -228,7 +228,7 @@ pub async fn update_user_auth_public_key(
     credential_id: String,
     label: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    server_action_json(&state, "update_user_auth_public_key", authentication_target(
+    server_action_json(&state, "core.user.authentication.public_key.update", authentication_target(
         serde_json::json!({"credential_id": credential_id, "label": label}), user_id,
     )).await
 }
@@ -239,7 +239,7 @@ pub async fn delete_user_auth_public_key(
     user_id: Option<String>,
     credential_id: String,
 ) -> Result<serde_json::Value, String> {
-    server_action_json(&state, "delete_user_auth_public_key", authentication_target(
+    server_action_json(&state, "core.user.authentication.public_key.delete", authentication_target(
         serde_json::json!({"credential_id": credential_id}), user_id,
     )).await
 }
@@ -277,7 +277,7 @@ pub async fn request_escalation(
         payload["data"] = data;
     }
     let mut response =
-        send_action_request(&conn, "exchange_token", payload, &username, &source).await?;
+        send_action_request(&conn, "core.auth.token.exchange", payload, &username, &source).await?;
     if response.code != 200 {
         return Err(format_server_response_error(&response));
     }

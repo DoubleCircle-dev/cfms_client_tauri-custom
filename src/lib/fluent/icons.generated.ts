@@ -493,6 +493,22 @@ import svg490 from '@fluentui/svg-icons/icons/grid_24_regular.svg?raw';
 import svg491 from '@fluentui/svg-icons/icons/grid_24_filled.svg?raw';
 import svg492 from '@fluentui/svg-icons/icons/grid_20_regular.svg?raw';
 import svg493 from '@fluentui/svg-icons/icons/grid_20_filled.svg?raw';
+import svg494 from '@fluentui/svg-icons/icons/window_24_regular.svg?raw';
+import svg495 from '@fluentui/svg-icons/icons/window_24_filled.svg?raw';
+import svg496 from '@fluentui/svg-icons/icons/window_20_regular.svg?raw';
+import svg497 from '@fluentui/svg-icons/icons/window_20_filled.svg?raw';
+import svg498 from '@fluentui/svg-icons/icons/arrow_minimize_24_regular.svg?raw';
+import svg499 from '@fluentui/svg-icons/icons/arrow_minimize_24_filled.svg?raw';
+import svg500 from '@fluentui/svg-icons/icons/arrow_minimize_20_regular.svg?raw';
+import svg501 from '@fluentui/svg-icons/icons/arrow_minimize_20_filled.svg?raw';
+import svg502 from '@fluentui/svg-icons/icons/power_24_regular.svg?raw';
+import svg503 from '@fluentui/svg-icons/icons/power_24_filled.svg?raw';
+import svg504 from '@fluentui/svg-icons/icons/power_20_regular.svg?raw';
+import svg505 from '@fluentui/svg-icons/icons/power_20_filled.svg?raw';
+import svg506 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
+import svg507 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
+import svg508 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
+import svg509 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
 import duotone0 from './assets/duotone/person_circle_24.svg?raw';
 import duotone1 from './assets/duotone/person_circle_20.svg?raw';
 import duotone2 from './assets/duotone/folder_add_24.svg?raw';
@@ -652,4 +668,8 @@ export const ICON_VARIANTS = {
   chat: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
   attachment: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
   gridOn: { regular: svg490, filled: svg491, small: svg492, smallFilled: svg493 },
+  window: { regular: svg494, filled: svg495, small: svg496, smallFilled: svg497 },
+  minimizeToTray: { regular: svg498, filled: svg499, small: svg500, smallFilled: svg501 },
+  quit: { regular: svg502, filled: svg503, small: svg504, smallFilled: svg505 },
+  pushPin: { regular: svg506, filled: svg507, small: svg508, smallFilled: svg509 },
 } as const;

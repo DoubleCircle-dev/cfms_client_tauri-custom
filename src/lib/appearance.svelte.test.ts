@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/svelte';
 import { appearanceStore } from './appearance.svelte';
 
@@ -13,6 +13,9 @@ vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ setTheme: mocks.nativeTheme }) }));
 vi.mock('./fluent/runtime', () => ({ applyFluentTheme: mocks.fluent }));
 
+// The store gates the native path on `isTauriRuntime()`, which probes
+// `window.__TAURI_INTERNALS__` directly instead of the mocked `isTauri()`.
+beforeEach(() => vi.stubGlobal('__TAURI_INTERNALS__', {}));
 afterEach(() => vi.unstubAllGlobals());
 
 it('serializes native theme changes, ignores stale Mica acknowledgements, and disables material in forced colors', async () => {

@@ -1,10 +1,9 @@
 // Dev-only: raw request command for security testing.
 // ---------------------------------------------------------------------------
 //
-// This command is only compiled in debug builds and provides a low-level
-// escape hatch for sending arbitrary JSON frames through the existing
-// WebSocket connection.  It is intended exclusively for authorized security
-// audits during development.
+// This command provides a low-level escape hatch for sending arbitrary JSON
+// frames through the existing WebSocket connection. It is intended exclusively
+// for authorized security audits during development and rejects release builds.
 //
 // # Safety
 //
@@ -16,7 +15,8 @@
 /// The payload is sent as a Process frame on a fresh client stream.
 /// If `authenticated` is true, the current username/token are injected
 /// into the payload automatically (adding `username`, `token`, `timestamp`,
-/// `nonce` fields).  When false, the payload is sent as-is — this is
+/// `nonce` fields). An optional token override replaces the current token for
+/// authenticated requests. When false, the payload is sent as-is — this is
 /// necessary to reproduce the unauthenticated-access vulnerabilities.
 #[tauri::command]
 #[allow(unused)]
@@ -24,10 +24,25 @@ pub async fn send_raw_request(
     state: tauri::State<'_, AppHandleState>,
     payload: String,
     authenticated: bool,
+    token_override: Option<String>,
 ) -> Result<String, String> {
+    if !cfg!(debug_assertions) {
+        return Err("Raw requests are only available in development builds".into());
+    }
+
     // --- Parse the caller-supplied JSON ---
     let mut value: serde_json::Value =
         serde_json::from_str(&payload).map_err(|e| format!("Invalid JSON: {e}"))?;
+
+    if !authenticated && token_override.is_some() {
+        return Err("A token override requires an authenticated request".into());
+    }
+    if token_override
+        .as_deref()
+        .is_some_and(|token| token.trim().is_empty())
+    {
+        return Err("Token override cannot be empty".into());
+    }
 
     // --- Get the active connection (no auth required) ---
     let conn = {
@@ -45,13 +60,17 @@ pub async fn send_raw_request(
             .await
             .clone()
             .ok_or_else(|| "Not logged in — use authenticated=false".to_string())?;
-        let token = state
-            .inner
-            .token
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| "Not logged in — use authenticated=false".to_string())?;
+        let token = match token_override {
+            Some(token) => token,
+            None => state
+                .inner
+                .token
+                .read()
+                .await
+                .clone()
+                .ok_or_else(|| "Not logged in — use authenticated=false".to_string())?
+                .to_string(),
+        };
 
         let random_bytes: [u8; 16] = rand::rng().random();
         let nonce = hex::encode(random_bytes);
@@ -59,7 +78,7 @@ pub async fn send_raw_request(
 
         if let serde_json::Value::Object(ref mut map) = value {
             map.insert("username".into(), serde_json::Value::String(username));
-            map.insert("token".into(), serde_json::Value::String(token.to_string()));
+            map.insert("token".into(), serde_json::Value::String(token));
             map.insert("timestamp".into(), serde_json::Value::Number(timestamp.into()));
             map.insert("nonce".into(), serde_json::Value::String(nonce));
         }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy, untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import {
     downloadAvatar,
@@ -9,7 +10,7 @@
   import { serverErrorMessage, serverErrorStatus } from '$lib/api/server-errors';
   import { canSetAvatarFor, canSetOtherUserAvatar } from '$lib/avatar-permissions';
   import { isImageDocumentName } from '$lib/image-documents';
-  import { authStore, notificationStore } from '$lib/stores.svelte';
+  import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
   import ServerDocumentPicker from '$lib/components/ServerDocumentPicker.svelte';
 
   let {
@@ -25,6 +26,25 @@
   } = $props();
 
   let saving = $state(false);
+  const owner = untrack(() => ({
+    userId: authStore.userId,
+    username: authStore.username,
+    server: serverStateStore.remoteAddress,
+  }));
+  let closed = false;
+  onDestroy(() => { closed = true; });
+
+  function sessionIsCurrent() {
+    return !closed && authStore.isLoggedIn && serverStateStore.connected
+      && authStore.userId === owner.userId && authStore.username === owner.username
+      && serverStateStore.remoteAddress === owner.server;
+  }
+
+  function close() {
+    if (closed) return;
+    closed = true;
+    onClose();
+  }
   const isCurrentUser = $derived(userId === authStore.userId);
   const hasPermission = $derived(
     requireSuperPermission
@@ -43,39 +63,46 @@
   );
 
   $effect(() => {
-    if (!hasPermission) onClose();
+    if (!hasPermission || !sessionIsCurrent()) close();
   });
 
   async function selectAvatar(document: ServerDocumentEntry) {
-    if (!userId || saving) return;
+    if (!userId || saving || !sessionIsCurrent()) return;
     if (!hasPermission) {
-      onClose();
+      close();
       return;
     }
     saving = true;
+    const targetUserId = userId;
+    const targetUsername = username;
+    const updatingSelf = isCurrentUser;
 
     try {
-      const success = await setUserAvatar(userId, document.id);
+      const success = await setUserAvatar(targetUserId, document.id);
+      if (!sessionIsCurrent()) return;
       if (!success) throw new Error($t('avatar.setFailed'));
 
-      if (isCurrentUser) {
-        const taskData = await getUserAvatar(userId);
-        if (taskData) {
-          const path = await downloadAvatar(taskData, username, true);
-          if (path) authStore.avatarPath = path;
-        }
+      if (updatingSelf) {
+        const taskData = await getUserAvatar(targetUserId);
+        if (!sessionIsCurrent()) return;
+        if (!taskData) throw new Error($t('avatar.previewRefreshFailed'));
+        const path = await downloadAvatar(taskData, targetUsername, true);
+        if (!sessionIsCurrent()) return;
+        if (!path) throw new Error($t('avatar.previewRefreshFailed'));
+        authStore.avatarPath = path;
       }
 
       notificationStore.success(
-        isCurrentUser
+        updatingSelf
           ? $t('avatar.updated')
-          : $t('avatar.updatedFor', { values: { username } }),
+          : $t('avatar.updatedFor', { values: { username: targetUsername } }),
       );
-      onClose();
+      close();
     } catch (error) {
+      if (!sessionIsCurrent()) return;
       notificationStore.error(
         serverErrorStatus(error) === 403
-          ? $t('avatar.accessOrPermissionDenied', { values: { username } })
+          ? $t('avatar.accessOrPermissionDenied', { values: { username: targetUsername } })
           : serverErrorMessage(error) || $t('avatar.setFailed'),
       );
     } finally {
@@ -87,9 +114,10 @@
 <ServerDocumentPicker
   {title}
   {description}
+  selectionBusy={saving}
   documentFilter={(document) => isImageDocumentName(document.title)}
   onSelect={selectAvatar}
   onCancel={() => {
-    if (!saving) onClose();
+    if (!saving) close();
   }}
 />

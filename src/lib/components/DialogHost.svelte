@@ -233,10 +233,13 @@
               class="peer sr-only"
               bind:checked={applyChoiceToAll}
             />
-            <span class={`choice-checkbox ${applyChoiceToAll
-              ? 'border-md3-primary bg-md3-primary text-md3-on-primary'
-              : ''
-            }`} aria-hidden="true">
+            <span
+              class="choice-checkbox"
+              aria-hidden="true"
+              style={applyChoiceToAll
+                ? 'border-color: var(--color-md3-primary); background: var(--color-md3-primary); color: var(--color-md3-on-primary);'
+                : undefined}
+            >
               {#if applyChoiceToAll}
                 <Icon name="check" size="14px" />
               {/if}
@@ -520,6 +523,11 @@
   .choice-apply-all:hover .choice-checkbox {
     border-color: var(--color-md3-primary);
   }
+
+  /* The checked look is applied through an inline style in the template: a
+     conditional component class gets pruned by Svelte's CSS tree-shaking
+     (it cannot see classes built inside a template literal), and Tailwind
+     utilities would lose to this file's unlayered rules anyway. */
 
   .choice-apply-all input:focus-visible + .choice-checkbox {
     box-shadow: 0 0 0 2px var(--color-md3-surface-container), 0 0 0 4px var(--color-md3-primary);

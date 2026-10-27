@@ -196,7 +196,7 @@ async fn upload_and_select_preference_dek(
 ) -> Result<(), String> {
     let upload_resp = send_action_request(
         conn,
-        "upload_user_key",
+        "core.user.key.upload",
         serde_json::json!({"content": encrypted_dek, "label": "preference_dek"}),
         username,
         token,
@@ -214,7 +214,7 @@ async fn upload_and_select_preference_dek(
 
     let set_resp = send_action_request(
         conn,
-        "set_user_preference_dek",
+        "core.user.preferred_dek.set",
         serde_json::json!({"id": key_id}),
         username,
         token,

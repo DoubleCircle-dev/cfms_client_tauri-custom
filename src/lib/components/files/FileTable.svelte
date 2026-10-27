@@ -1090,7 +1090,7 @@
   /* Scrollable: the empty state can be taller than the viewport once it
      carries a permission breakdown, and clipping it would hide the very
      explanation the user came for. */
-  .file-table-empty-overlay { position: absolute; z-index: 6; inset: 36px 0 0; display: flex; min-height: 0; align-items: stretch; justify-content: stretch; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; background: var(--explorer-background); }
+  .file-table-empty-overlay { position: absolute; z-index: 6; inset: 36px 0 0; display: flex; min-height: 0; align-items: stretch; justify-content: stretch; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; background: transparent; }
 
   /* Visible scroll affordance: the 4px workspace scrollbar is easy to miss on
      a full-page message that no longer fits. */

@@ -49,7 +49,7 @@ pub async fn list_users(
     loop {
         let page = server_action_json(
             &state,
-            "list_users",
+            "core.user.list",
             serde_json::json!({ "offset": offset, "count": SERVER_CURSOR_PAGE_SIZE }),
         )
         .await?;
@@ -91,7 +91,7 @@ pub async fn create_user(
     let password = zeroize::Zeroizing::new(password);
     server_action_json(
         &state,
-        "create_user",
+        "core.user.create",
         serde_json::json!({
             "username": username,
             "password": password.as_str(),
@@ -112,7 +112,7 @@ pub async fn rename_user(
     let nickname = normalize_nickname(nickname)?;
     let renamed = server_action_bool(
         &state,
-        "rename_user",
+        "core.user.rename",
         serde_json::json!({ "user_id": &user_id, "nickname": &nickname }),
     )
     .await?;
@@ -175,7 +175,7 @@ pub async fn delete_user(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "delete_user",
+        "core.user.delete",
         serde_json::json!({ "user_id": user_id }),
     )
     .await
@@ -192,7 +192,7 @@ pub async fn get_user_info(
         (None, Some(user_id)) => serde_json::json!({ "user_id": user_id }),
         _ => return Err("Provide exactly one of username or user_id".into()),
     };
-    server_action_json(&state, "get_user_info", data).await
+    server_action_json(&state, "core.user.info.get", data).await
 }
 
 #[tauri::command]
@@ -203,7 +203,7 @@ pub async fn change_user_groups(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "change_user_groups",
+        "core.user.group.change",
         serde_json::json!({ "user_id": user_id, "groups": groups }),
     )
     .await
@@ -217,7 +217,7 @@ pub async fn change_user_permissions(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "change_user_permissions",
+        "core.user.permission.change",
         serde_json::json!({ "user_id": user_id, "permissions": permissions }),
     )
     .await
@@ -248,7 +248,7 @@ pub async fn reset_user_password(
     let new_password = zeroize::Zeroizing::new(new_password);
     server_action_bool(
         &state,
-        "set_passwd",
+        "core.user.password.set",
         admin_password_reset_data(
             &user_id,
             new_password.as_str(),
@@ -291,7 +291,7 @@ pub async fn manage_user_status(
     if status == "disabled" {
         data["reason"] = operation_reason_value(reason);
     }
-    server_action_json(&state, "manage_user_status", data).await
+    server_action_json(&state, "core.user.status.set", data).await
 }
 
 #[tauri::command]
@@ -304,7 +304,7 @@ pub async fn set_lockdown(
     if status {
         data["reason"] = operation_reason_value(reason);
     }
-    let response = server_action_json(&state, "lockdown", data).await?;
+    let response = server_action_json(&state, "core.server.lockdown.set", data).await?;
     let applied_status = response
         .get("status")
         .and_then(serde_json::Value::as_bool)
@@ -349,7 +349,7 @@ pub async fn block_user(
         data["not_after"] = serde_json::json!(value);
     }
 
-    server_action_json(&state, "block_user", data).await
+    server_action_json(&state, "core.user.block.create", data).await
 }
 
 #[tauri::command]
@@ -359,7 +359,7 @@ pub async fn list_user_blocks(
 ) -> Result<serde_json::Value, String> {
     let items = fetch_all_cursor_items(
         &state,
-        "list_user_blocks",
+        "core.user.block.list",
         serde_json::json!({ "user_id": user_id }),
     )
     .await?;
@@ -374,7 +374,7 @@ pub async fn get_managed_2fa_status(
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
-        "get_2fa_status",
+        "core.user.authentication.totp.status.get",
         serde_json::json!({ "user_id": user_id }),
     )
     .await
@@ -387,7 +387,7 @@ pub async fn disable_managed_2fa(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "disable_2fa",
+        "core.user.authentication.totp.delete",
         serde_json::json!({ "user_id": user_id }),
     )
     .await
@@ -402,7 +402,7 @@ pub async fn list_banned_subnets(
     if let Some(value) = non_empty_optional(status) {
         data["status"] = serde_json::Value::String(value);
     }
-    let items = fetch_all_cursor_items(&state, "list_banned_subnets", data).await?;
+    let items = fetch_all_cursor_items(&state, "core.security.banned_subnet.list", data).await?;
     Ok(serde_json::json!({ "subnets": items }))
 }
 
@@ -424,7 +424,7 @@ pub async fn create_banned_subnet(
     if let Some(value) = starts_at {
         data["starts_at"] = serde_json::json!(value);
     }
-    server_action_json(&state, "create_banned_subnet", data).await
+    server_action_json(&state, "core.security.banned_subnet.create", data).await
 }
 
 #[tauri::command]
@@ -438,7 +438,7 @@ pub async fn update_banned_subnet(
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
-        "update_banned_subnet",
+        "core.security.banned_subnet.update",
         serde_json::json!({
             "subnet": subnet,
             "reason": operation_reason_value(reason),
@@ -457,7 +457,7 @@ pub async fn delete_banned_subnet(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "delete_banned_subnet",
+        "core.security.banned_subnet.delete",
         serde_json::json!({ "subnet": subnet }),
     )
     .await
@@ -469,7 +469,7 @@ pub async fn list_auth_lockouts(
 ) -> Result<serde_json::Value, String> {
     let items = fetch_all_cursor_items(
         &state,
-        "list_auth_lockouts",
+        "core.security.auth_lockout.list",
         serde_json::json!({}),
     )
     .await?;
@@ -484,7 +484,7 @@ pub async fn unlock_auth_lockouts(
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
-        "unlock_auth_lockouts",
+        "core.security.auth_lockout.unlock",
         serde_json::json!({ "locks": locks, "reason": reason }),
     )
     .await
@@ -497,7 +497,7 @@ pub async fn unblock_user(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "unblock_user",
+        "core.user.block.delete",
         serde_json::json!({ "block_id": block_id }),
     )
     .await
@@ -511,7 +511,7 @@ pub async fn update_user_block(
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
-        "update_user_block",
+        "core.user.block.update",
         serde_json::json!({
             "block_id": block_id,
             "reason": operation_reason_value(reason),
@@ -550,7 +550,7 @@ pub async fn list_groups(
     loop {
         let page = server_action_json(
             &state,
-            "list_groups",
+            "core.group.list",
             serde_json::json!({ "offset": offset, "count": SERVER_CURSOR_PAGE_SIZE }),
         )
         .await?;
@@ -590,7 +590,7 @@ pub async fn create_group(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "create_group",
+        "core.group.create",
         serde_json::json!({
             "group_name": group_name,
             "display_name": display_name,
@@ -608,7 +608,7 @@ pub async fn rename_group(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "rename_group",
+        "core.group.rename",
         serde_json::json!({ "group_name": group_name, "display_name": display_name }),
     )
     .await
@@ -621,7 +621,7 @@ pub async fn delete_group(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "delete_group",
+        "core.group.delete",
         serde_json::json!({ "group_name": group_name }),
     )
     .await
@@ -634,7 +634,7 @@ pub async fn get_group_info(
 ) -> Result<serde_json::Value, String> {
     server_action_json(
         &state,
-        "get_group_info",
+        "core.group.info.get",
         serde_json::json!({ "group_name": group_name }),
     )
     .await
@@ -648,7 +648,7 @@ pub async fn change_group_permissions(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "change_group_permissions",
+        "core.group.permission.change",
         serde_json::json!({ "group_name": group_name, "permissions": permissions }),
     )
     .await
@@ -663,7 +663,7 @@ pub async fn view_audit_logs(
 ) -> Result<serde_json::Value, String> {
     let raw = server_action_json(
         &state,
-        "view_audit_logs",
+        "core.audit.entry.list",
         serde_json::json!({
             "cursor": cursor,
             "page_size": page_size.unwrap_or(SERVER_CURSOR_PAGE_SIZE).clamp(1, SERVER_CURSOR_PAGE_SIZE),
@@ -687,7 +687,7 @@ pub async fn view_audit_logs(
 pub async fn server_diagnostics(
     state: tauri::State<'_, AppHandleState>,
 ) -> Result<ServerDiagnostics, String> {
-    let raw = server_action_json(&state, "diagnostics", serde_json::json!({})).await?;
+    let raw = server_action_json(&state, "core.server.diagnostics.get", serde_json::json!({})).await?;
     let diagnostics: ServerDiagnostics = serde_json::from_value(raw)
         .map_err(|e| format!("Invalid server diagnostics response: {e}"))?;
     if diagnostics.schema_version != 1 {
@@ -717,7 +717,7 @@ pub async fn list_user_keys(
             data["user_id"] = serde_json::Value::String(user_id.to_string());
         }
 
-        let page = server_action_json(&state, "list_user_keys", data).await?;
+        let page = server_action_json(&state, "core.user.key.list", data).await?;
         total = page.get("total").and_then(|value| value.as_u64()).unwrap_or(total as u64) as u32;
         let page_keys = page
             .get("keys")
@@ -751,7 +751,7 @@ pub async fn get_user_key(
     state: tauri::State<'_, AppHandleState>,
     id: String,
 ) -> Result<serde_json::Value, String> {
-    server_action_json(&state, "get_user_key", serde_json::json!({ "id": id })).await
+    server_action_json(&state, "core.user.key.get", serde_json::json!({ "id": id })).await
 }
 
 #[tauri::command]
@@ -759,7 +759,7 @@ pub async fn delete_user_key(
     state: tauri::State<'_, AppHandleState>,
     id: String,
 ) -> Result<bool, String> {
-    server_action_bool(&state, "delete_user_key", serde_json::json!({ "id": id })).await
+    server_action_bool(&state, "core.user.key.delete", serde_json::json!({ "id": id })).await
 }
 
 // ---------------------------------------------------------------------------

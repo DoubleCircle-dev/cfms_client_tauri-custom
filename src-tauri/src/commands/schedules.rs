@@ -6,7 +6,7 @@ pub async fn list_scheduled_task_types(
 ) -> Result<Vec<cfms_core::ScheduledTaskType>, String> {
     let raw = server_action_json(
         &state,
-        "list_scheduled_task_types",
+        "core.schedule.task_type.list",
         serde_json::json!({}),
     )
     .await?;
@@ -23,7 +23,7 @@ pub async fn list_schedules(
 ) -> Result<cfms_core::CursorPage<cfms_core::Schedule>, String> {
     let raw = server_action_json(
         &state,
-        "list_schedules",
+        "core.schedule.list",
         serde_json::json!({
             "cursor": cursor,
             "page_size": page_size
@@ -41,7 +41,7 @@ pub async fn get_schedule(
     state: tauri::State<'_, AppHandleState>,
     id: String,
 ) -> Result<cfms_core::Schedule, String> {
-    let raw = server_action_json(&state, "get_schedule", serde_json::json!({ "id": id })).await?;
+    let raw = server_action_json(&state, "core.schedule.get", serde_json::json!({ "id": id })).await?;
     serde_json::from_value(raw).map_err(|error| format!("Invalid schedule response: {error}"))
 }
 
@@ -55,7 +55,7 @@ pub async fn create_schedule(
 ) -> Result<cfms_core::Schedule, String> {
     let raw = server_action_json(
         &state,
-        "create_schedule",
+        "core.schedule.create",
         serde_json::json!({
             "task_name": task_name,
             "payload": payload,
@@ -95,7 +95,7 @@ pub async fn update_schedule(
         object.insert("enabled".to_string(), serde_json::json!(enabled));
     }
 
-    let raw = server_action_json(&state, "update_schedule", data).await?;
+    let raw = server_action_json(&state, "core.schedule.update", data).await?;
     serde_json::from_value(raw)
         .map_err(|error| format!("Invalid updated schedule response: {error}"))
 }
@@ -108,7 +108,7 @@ pub async fn delete_schedule(
 ) -> Result<bool, String> {
     server_action_bool(
         &state,
-        "delete_schedule",
+        "core.schedule.delete",
         serde_json::json!({ "id": id, "revision": revision }),
     )
     .await
