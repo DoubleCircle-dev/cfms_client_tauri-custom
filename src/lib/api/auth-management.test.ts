@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { deleteUserAuthPublicKey, dropEscalation, getUserAuthentication, registerUserAuthPublicKey, setUserAuthPolicies, updateUserAuthPublicKey } from './auth';
+import { changePassword, deleteUserAuthPublicKey, dropEscalation, getUserAuthentication, registerUserAuthPublicKey, setUserAuthPolicies, updateUserAuthPublicKey } from './auth';
 import { blockUser, changeUserGroups, deleteUser, getManagedTwoFactorStatus, getUserInfo, listUserBlocks, listUserKeys, resetUserPassword } from './admin';
 import { getUserAvatar, setUserAvatar } from './avatars';
 
@@ -9,7 +9,7 @@ const ipc = vi.mocked(invoke);
 const userId = 'aabbccdd-0000-4000-8000-000000000001';
 beforeEach(() => { ipc.mockReset(); ipc.mockResolvedValue({ blocks: [], keys: [] }); });
 
-describe('protocol 28 account selectors', () => {
+describe('protocol 29 account selectors', () => {
   it('uses the same immutable ID across management, 2FA, keys and avatars', async () => {
     await deleteUser(userId);
     expect(ipc).toHaveBeenLastCalledWith('delete_user', { userId });
@@ -38,6 +38,11 @@ describe('protocol 28 account selectors', () => {
     await getUserInfo({ userId });
     expect(ipc).toHaveBeenLastCalledWith('get_user_info', { userId });
   });
+});
+
+it('submits password changes without the old password', async () => {
+  await changePassword('alice', 'new-password');
+  expect(ipc).toHaveBeenLastCalledWith('change_password', { username: 'alice', newPassword: 'new-password' });
 });
 
 describe('authentication management IPC', () => {

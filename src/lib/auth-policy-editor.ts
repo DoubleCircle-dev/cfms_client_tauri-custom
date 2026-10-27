@@ -52,7 +52,15 @@ export function canCompleteChain(chain: AuthPolicyStep[], credentials: AuthCrede
   return chain.every((_, position) => assign(position, new Set()));
 }
 
+export function hasDuplicateAuthChains(chains: AuthPolicyStep[][]): boolean {
+  const identities = chains.map((chain) => JSON.stringify(chain.map((step) => ({
+    method: step.method, credential_ids: [...new Set(step.credential_ids)].sort(),
+  }))));
+  return new Set(identities).size !== identities.length;
+}
+
 export function invalidPolicyDraft(chains: AuthPolicyStep[][], credentials: AuthCredential[]): boolean {
-  return chains.some((chain) => !chain.length || chain.some((step) => !step.credential_ids.length
+  return hasDuplicateAuthChains(chains)
+    || chains.some((chain) => !chain.length || chain.some((step) => !step.credential_ids.length
     || step.credential_ids.some((id) => !credentials.some((credential) => credential.credential_id === id && credential.method === step.method))));
 }

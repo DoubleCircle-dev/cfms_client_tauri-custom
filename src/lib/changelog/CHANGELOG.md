@@ -4,6 +4,20 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.56.0
+**Released on:** 2026-10-26
+
+**Title:** Protocol Version 29
+
+### Added
+- Enhance authentication management and permissions
+
+### Fixed
+- Update acrylic transparency values in design files for improved visual consistency
+- Update AppUpdateChecker styles and improve AuditUserIdentity component behavior for touch interactions
+
+---
+
 ## v0.55.1-custom-0.1
 **Released on:** 2026-10-26
 
@@ -157,8 +171,6 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 - Confirm updates from the cached check instead of re-scanning the tree
 - Use sccache via build.rustc-wrapper and tune [profile.dev] for faster tauri dev builds
 - Remove file auto-update controls from mobile-only behavior page
-
----
 
 ## v0.55.1
 **Released on:** 2026-10-26

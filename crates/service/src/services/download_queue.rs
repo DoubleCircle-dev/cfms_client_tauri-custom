@@ -674,7 +674,7 @@ pub async fn request_server_download_task(
 
     let response = super::rpc::send_action_request(
         &conn,
-        "get_document",
+        "core.document.get",
         serde_json::json!({ "document_id": document_id }),
         &username,
         token.as_str(),

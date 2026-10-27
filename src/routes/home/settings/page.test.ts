@@ -9,14 +9,14 @@ import SettingsOverviewPage from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
   goto: vi.fn(),
-  getTwoFactorStatus: vi.fn(),
+  getUserAuthentication: vi.fn(),
 }));
 
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$lib/platform', () => ({ isMobilePlatform: () => false }));
 vi.mock('$lib/api', async (importOriginal) => ({
   ...await importOriginal<typeof import('$lib/api')>(),
-  getTwoFactorStatus: mocks.getTwoFactorStatus,
+  getUserAuthentication: mocks.getUserAuthentication,
 }));
 vi.mock('svelte-i18n', () => ({
   _: {
@@ -49,7 +49,7 @@ beforeEach(() => {
   screenProtectionStore.initializationFailed = false;
   screenProtectionStore.supported = true;
   screenProtectionStore.userEnabled = true;
-  mocks.getTwoFactorStatus.mockResolvedValue({ enabled: true, method: 'totp', backup_codes_count: 8 });
+  mocks.getUserAuthentication.mockResolvedValue({ credentials: [], policies: { mfa: { chains: [[{ method: 'publickey', credential_ids: ['key'] }]] } } });
 });
 
 afterEach(() => {
@@ -93,7 +93,7 @@ describe('settings overview', () => {
   it('uses an advisory summary when optional protections are disabled', async () => {
     appLockStore.settings = { ...appLockStore.settings, enabled: false };
     screenProtectionStore.userEnabled = false;
-    mocks.getTwoFactorStatus.mockResolvedValue({ enabled: false, method: null, backup_codes_count: 0 });
+    mocks.getUserAuthentication.mockResolvedValue({ policies: { mfa: { chains: [] } } });
 
     render(SettingsOverviewPage);
 
@@ -107,7 +107,7 @@ describe('settings overview', () => {
 
   it('does not misreport failed protection reads as enabled', async () => {
     screenProtectionStore.initializationFailed = true;
-    mocks.getTwoFactorStatus.mockRejectedValue(new Error('offline'));
+    mocks.getUserAuthentication.mockRejectedValue(new Error('offline'));
 
     render(SettingsOverviewPage);
 

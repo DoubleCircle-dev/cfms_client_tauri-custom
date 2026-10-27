@@ -27,4 +27,10 @@ describe('authentication flow availability', () => {
     expect(invalidPolicyDraft([[step('a')]], [key('a', 'a', false)])).toBe(false);
     expect(invalidPolicyDraft([], [])).toBe(false);
   });
+  it('rejects duplicate alternatives irrespective of credential pool order, preserving step order', () => {
+    const credentials = [key('a'), key('b')];
+    expect(invalidPolicyDraft([[step('a', 'b')], [step('b', 'a')]], credentials)).toBe(true);
+    expect(invalidPolicyDraft([[step('a'), step('b')], [step('b'), step('a')]], credentials)).toBe(false);
+    expect(invalidPolicyDraft([[step('a')], [step('b')]], credentials)).toBe(false);
+  });
 });

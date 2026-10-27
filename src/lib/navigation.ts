@@ -13,14 +13,13 @@ const HOME_ROOT_ROUTES = new Set([
   '/home/overview',
   '/home/files',
   '/home/tasks',
-  '/home/more',
 ]);
 
 const HOME_SECONDARY_PARENT_ROUTES = new Map([
-  ['/home/about', '/home/more'],
-  ['/home/manage', '/home/more'],
-  ['/home/settings', '/home/more'],
-  ['/home/trash', '/home/more'],
+  ['/home/about', '/home/overview'],
+  ['/home/manage', '/home/overview'],
+  ['/home/settings', '/home/overview'],
+  ['/home/trash', '/home/overview'],
   ['/home/extensions/view', '/home/overview'],
 ]);
 

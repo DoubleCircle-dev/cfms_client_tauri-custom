@@ -6,7 +6,7 @@
 
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
-  import { getTwoFactorStatus } from '$lib/api';
+  import { getUserAuthentication } from '$lib/api';
   import { appLockStore } from '$lib/app-lock.svelte';
   import { screenProtectionStore } from '$lib/screen-protection.svelte';
   import { authStore, serverStateStore } from '$lib/stores.svelte';
@@ -105,10 +105,10 @@
     }
 
     twoFactorState = 'loading';
-    void getTwoFactorStatus()
+    void getUserAuthentication()
       .then((status) => {
         if (requestId !== twoFactorRequestId) return;
-        twoFactorState = status.enabled ? 'enabled' : 'attention';
+        twoFactorState = status.policies.mfa.chains.length > 0 ? 'enabled' : 'attention';
       })
       .catch(() => {
         if (requestId !== twoFactorRequestId) return;

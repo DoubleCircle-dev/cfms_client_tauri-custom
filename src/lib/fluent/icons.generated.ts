@@ -505,6 +505,10 @@ import svg502 from '@fluentui/svg-icons/icons/power_24_regular.svg?raw';
 import svg503 from '@fluentui/svg-icons/icons/power_24_filled.svg?raw';
 import svg504 from '@fluentui/svg-icons/icons/power_20_regular.svg?raw';
 import svg505 from '@fluentui/svg-icons/icons/power_20_filled.svg?raw';
+import svg506 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
+import svg507 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
+import svg508 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
+import svg509 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
 import duotone0 from './assets/duotone/person_circle_24.svg?raw';
 import duotone1 from './assets/duotone/person_circle_20.svg?raw';
 import duotone2 from './assets/duotone/folder_add_24.svg?raw';
@@ -667,4 +671,5 @@ export const ICON_VARIANTS = {
   window: { regular: svg494, filled: svg495, small: svg496, smallFilled: svg497 },
   minimizeToTray: { regular: svg498, filled: svg499, small: svg500, smallFilled: svg501 },
   quit: { regular: svg502, filled: svg503, small: svg504, smallFilled: svg505 },
+  pushPin: { regular: svg506, filled: svg507, small: svg508, smallFilled: svg509 },
 } as const;

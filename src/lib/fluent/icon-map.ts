@@ -147,4 +147,5 @@ export const ICON_MAP = {
   "window": "window",
   "minimizeToTray": "arrow_minimize",
   "quit": "power",
+  "pushPin": "pin",
 } as const;

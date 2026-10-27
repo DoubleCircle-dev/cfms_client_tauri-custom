@@ -818,10 +818,9 @@
    *  Throws on failure so the dialog can surface the server's message
    *  (e.g. password-rule violations); resolves on success. */
   async function handleChangePassword(
-    oldPassword: string,
     newPassword: string,
   ): Promise<void> {
-    await changePassword(username, oldPassword, newPassword);
+    await changePassword(username, newPassword);
     authStore.clear();
     pendingPassword = '';
     // Success: close the dialog and let the user sign in with the new password.
@@ -1672,8 +1671,6 @@
 {#if showChangePassword}
   <ChangePasswordDialog
     {username}
-    initialOldPassword={password}
-    requireOldPassword={false}
     onSubmit={handleChangePassword}
     onCancel={handleChangePasswordCancel}
   />

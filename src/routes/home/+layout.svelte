@@ -63,7 +63,7 @@
   );
   const isAdmin = $derived(
     authStore.permissions.some((permission) =>
-      ['manage_system', 'view_audit_logs', 'list_users', 'list_groups'].includes(permission),
+      ['manage_system', 'view_audit_logs', 'list_users', 'list_groups', 'super_configure_auth_methods', 'super_list_user_auth_methods'].includes(permission),
     ),
   );
   const canApplyLockdown = $derived(
@@ -158,7 +158,6 @@
     if (path === '/home/chat') return $t('chat.title');
     if (path === '/home/manage') return $t('workspace.administration');
     if (path === '/home/schedules') return $t('workspace.schedules');
-    if (path === '/home/more') return $t('workspace.account');
     if (path === '/home/diagnostics') return $t('workspace.diagnostics');
     if (path === '/home/about') return $t('workspace.about');
     if (path.startsWith('/home/settings')) return $t('workspace.settings');
@@ -529,6 +528,9 @@
               {/if}
             </div>
             <span class="explorer-menu-separator"></span>
+            <button data-menu-item role="menuitem" tabindex="-1" onclick={() => { closeAccountMenu(); void goto('/home/settings/account'); }}>
+              <Icon name="accountCircle" size="18px" /><span>{$t('settings.account.title')}</span>
+            </button>
             <button data-menu-item role="menuitem" tabindex="-1" disabled={accountActionBusy} onclick={handleLogout}>
               <Icon name="logout" size="18px" /><span>{$t('lockdown.logout')}</span>
             </button>

@@ -105,7 +105,11 @@ export function collectSourceFacts(sources) {
 
   for (const source of sources) {
     for (const match of source.matchAll(quotedString)) {
-      literals.add(unescapeSimpleString(match[2]));
+      const value = unescapeSimpleString(match[2]);
+      literals.add(value);
+      if (/^\s*\+/.test(source.slice(match.index + match[0].length))) {
+        templates.push([value, '']);
+      }
     }
 
     for (const match of source.matchAll(templateLiteral)) {
@@ -203,16 +207,14 @@ export function run() {
     ...listSourceFiles(resolve(ROOT, 'crates')),
   ];
 
-  const frontendFacts = collectSourceFacts(
-    frontendFiles.map((path) => readFileSync(path, 'utf8')),
-  );
-  const backendFacts = collectSourceFacts(
+  // Backend errors can carry frontend translation keys across the IPC boundary.
+  const facts = collectSourceFacts(
     backendFiles.map((path) => readFileSync(path, 'utf8')),
   );
   const frontendCatalogs = loadCatalogs(FRONTEND_CATALOGS, extractTypeScriptCatalogKeys);
   const backendCatalogs = loadCatalogs(BACKEND_CATALOGS, extractFluentCatalogKeys);
-  const frontendUnused = findUnused(frontendCatalogs, frontendFacts);
-  const backendUnused = findUnused(backendCatalogs, backendFacts);
+  const frontendUnused = findUnused(frontendCatalogs, facts);
+  const backendUnused = findUnused(backendCatalogs, facts);
   const warnOnly = process.argv.includes('--warn-only');
   const listLimit = warnOnly ? WARN_ONLY_LIST_LIMIT : Number.POSITIVE_INFINITY;
 

@@ -7,7 +7,8 @@ const managementPermissions = [
   'create_user',
   'delete_user',
   'set_user_permissions',
-  'manage_2fa',
+  'super_configure_auth_methods',
+  'super_list_user_auth_methods',
 ] as const;
 
 export const releaseTours: readonly ReleaseTour[] = [

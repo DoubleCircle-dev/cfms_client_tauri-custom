@@ -38,6 +38,7 @@
   } from '$lib/api';
   import { dialogStore } from '$lib/dialogs.svelte';
   import { copyText } from '$lib/clipboard';
+  import { canReadAuthentication, canConfigureAuthentication } from '$lib/auth-permissions';
   import { canSetOtherUserAvatar } from '$lib/avatar-permissions';
   import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
   import { createAuditUserPreviewCache } from '$lib/audit-user-preview';
@@ -187,7 +188,8 @@
         'create_group',
         'delete_user',
         'delete_group',
-        'manage_2fa',
+        'super_configure_auth_methods',
+        'super_list_user_auth_methods',
         'list_banned_subnets',
         'manage_banned_subnets',
         'list_auth_lockouts',
@@ -203,7 +205,16 @@
   const canSetUserPermissions = $derived(hasAnyPermission('set_user_permissions'));
   const canManageUserAvatars = $derived(canSetOtherUserAvatar(authStore.permissions));
   const canManageUserStatus = $derived(hasAnyPermission('manage_user_status', 'manage_system'));
-  const canManage2fa = $derived(hasAnyPermission('manage_2fa'));
+  const canManage2fa = $derived(hasAnyPermission('super_configure_auth_methods'));
+  let now = $state(Date.now());
+  const elevated = $derived((authStore.escalationExp ?? 0) * 1000 > now);
+  onMount(() => { const timer = window.setInterval(() => { now = Date.now(); }, 1000); return () => window.clearInterval(timer); });
+  function canReadUserAuthentication(user: ManagedUser) {
+    return canReadAuthentication(authStore.permissions, user.user_id !== authStore.userId);
+  }
+  function canResetPassword(user: ManagedUser) {
+    return elevated && canConfigureAuthentication(authStore.permissions, user.user_id !== authStore.userId);
+  }
   const canListBannedSubnets = $derived(hasAnyPermission('list_banned_subnets'));
   const canManageBannedSubnets = $derived(hasAnyPermission('manage_banned_subnets'));
   const canListAuthLockouts = $derived(hasAnyPermission('list_auth_lockouts'));
@@ -447,7 +458,7 @@
         label: $t('manage.resetPassword'),
         icon: 'passwordReset',
         onSelect: () => handleResetPassword(user),
-        disabled,
+        disabled: disabled || !canResetPassword(user),
       },
       {
         id: 'change-user-avatar',
@@ -463,7 +474,7 @@
         icon: 'manageAccounts',
         onSelect: () => handleManageAccount(user),
         disabled,
-        hidden: !canManageUserStatus && !canManage2fa,
+        hidden: !canManageUserStatus && !canManage2fa && !canReadUserAuthentication(user),
       },
       {
         id: 'user-authentication',
@@ -471,7 +482,7 @@
         icon: 'passkey',
         onSelect: () => { activeDialog = { kind: 'user-authentication', user }; },
         disabled,
-        hidden: user.user_id !== authStore.userId && !hasAnyPermission('manage_user_authentication'),
+        hidden: !canReadUserAuthentication(user),
       },
       { type: 'divider', hidden: !canBlock && !canListBlocks },
       {
@@ -663,6 +674,8 @@
   }
 
   async function handleResetPassword(user: ManagedUser) {
+    if (!canResetPassword(user)) return;
+    if (user.user_id === authStore.userId) { activeDialog = { kind: 'user-authentication', user }; return; }
     activeDialog = { kind: 'reset-password', user };
   }
 
@@ -670,7 +683,7 @@
     await runBusy(`account-management:${user.username}`, async () => {
       const [info, twoFactor] = await Promise.all([
         canManageUserStatus ? getUserInfo({ userId: user.user_id }) : Promise.resolve(null),
-        canManage2fa ? getManagedTwoFactorStatus(user.user_id) : Promise.resolve(null),
+        canReadUserAuthentication(user) ? getManagedTwoFactorStatus(user.user_id) : Promise.resolve(null),
       ]);
       accountDisableReason = '';
       activeDialog = { kind: 'account-management', user, info, twoFactor };
@@ -678,7 +691,7 @@
   }
 
   async function disableActiveUserTwoFactor() {
-    if (activeDialog?.kind !== 'account-management' || !activeDialog.twoFactor?.enabled) return;
+    if (activeDialog?.kind !== 'account-management' || (activeDialog.twoFactor && !activeDialog.twoFactor.enabled) || !canManage2fa || activeDialog.user.user_id === authStore.userId) return;
     const user = activeDialog.user;
     const confirmed = await dialogStore.confirm({
       title: $t('manage.disableUserTwoFactorTitle'),
@@ -694,7 +707,7 @@
       if (activeDialog?.kind === 'account-management' && activeDialog.user.user_id === user.user_id) {
         activeDialog = {
           ...activeDialog,
-          twoFactor: { enabled: false, method: null, backup_codes_count: 0 },
+          twoFactor: { configured: false, enabled: false, backup_codes_count: 0 },
         };
       }
       status = $t('manage.userTwoFactorDisabled', { values: { username: user.username } });
@@ -878,18 +891,16 @@
     forceUpdateAfterLogin: boolean,
     disableTwoFactorAfterReset: boolean,
   ) {
+    if (!canResetPassword(user)) throw new Error($t('authManagement.elevationRequired'));
     await resetUserPassword(user.user_id, password, bypassRequirements, forceUpdateAfterLogin);
     let successMessage = $t('manage.passwordChanged', { values: { username: user.username } });
 
     if (disableTwoFactorAfterReset && canManage2fa) {
       try {
-        const twoFactor = await getManagedTwoFactorStatus(user.user_id);
-        if (twoFactor.enabled) {
-          await disableManagedTwoFactor(user.user_id);
-          successMessage = $t('manage.passwordChangedAndTwoFactorDisabled', {
-            values: { username: user.username },
-          });
-        }
+        await disableManagedTwoFactor(user.user_id);
+        successMessage = $t('manage.passwordChangedAndTwoFactorDisabled', {
+          values: { username: user.username },
+        });
       } catch (err) {
         activeDialog = null;
         notificationStore.error($t('manage.passwordChangedTwoFactorFailed', {
@@ -1209,9 +1220,9 @@
                   {@render ActionButton('formatListBulleted', $t('manage.editGroups'), () => handleEditUserGroups(user), busyKey !== null)}
                   {@render ActionButton('accountCircle', canManageUserAvatars ? $t('manage.changeUserAvatar') : $t('manage.avatarPermissionRequired'), () => handleChangeUserAvatar(user), !canManageUserAvatars || busyKey !== null)}
                   {@render ActionButton('adminPanelSettings', $t('manage.editPermissions'), () => handleEditUserPermissions(user), !canSetUserPermissions || busyKey !== null)}
-                  {@render ActionButton('passwordReset', $t('manage.resetPassword'), () => handleResetPassword(user), busyKey !== null)}
-                  {#if user.user_id === authStore.userId || hasAnyPermission('manage_user_authentication')}{@render ActionButton('passkey', $t('authManagement.title'), () => { activeDialog = { kind: 'user-authentication', user }; }, busyKey !== null)}{/if}
-                  {@render ActionButton('manageAccounts', $t('manage.accountManagement'), () => handleManageAccount(user), (!canManageUserStatus && !canManage2fa) || busyKey !== null)}
+                  {@render ActionButton('passwordReset', $t('manage.resetPassword'), () => handleResetPassword(user), !canResetPassword(user) || busyKey !== null)}
+                  {#if canReadUserAuthentication(user)}{@render ActionButton('passkey', $t('authManagement.title'), () => { activeDialog = { kind: 'user-authentication', user }; }, busyKey !== null)}{/if}
+                  {@render ActionButton('manageAccounts', $t('manage.accountManagement'), () => handleManageAccount(user), (!canManageUserStatus && !canManage2fa && !canReadUserAuthentication(user)) || busyKey !== null)}
                   {@render ActionButton('block', $t('manage.blockUser'), () => handleBlockUser(user), !canBlock || busyKey !== null)}
                   {@render ActionButton('manageAccounts', $t('manage.viewBlocks'), () => handleListBlocks(user), !canListBlocks || busyKey !== null)}
                   {@render ActionButton('delete', $t('common.delete'), () => handleDeleteUser(user), busyKey !== null, true)}
@@ -1224,9 +1235,9 @@
                       {@render ActionButton('formatListBulleted', $t('manage.editGroups'), () => handleEditUserGroups(user), busyKey !== null)}
                       {@render ActionButton('accountCircle', canManageUserAvatars ? $t('manage.changeUserAvatar') : $t('manage.avatarPermissionRequired'), () => handleChangeUserAvatar(user), !canManageUserAvatars || busyKey !== null)}
                       {@render ActionButton('adminPanelSettings', $t('manage.editPermissions'), () => handleEditUserPermissions(user), !canSetUserPermissions || busyKey !== null)}
-                      {@render ActionButton('passwordReset', $t('manage.resetPassword'), () => handleResetPassword(user), busyKey !== null)}
-                      {#if user.user_id === authStore.userId || hasAnyPermission('manage_user_authentication')}{@render ActionButton('passkey', $t('authManagement.title'), () => { activeDialog = { kind: 'user-authentication', user }; }, busyKey !== null)}{/if}
-                      {@render ActionButton('manageAccounts', $t('manage.accountManagement'), () => handleManageAccount(user), (!canManageUserStatus && !canManage2fa) || busyKey !== null)}
+                      {@render ActionButton('passwordReset', $t('manage.resetPassword'), () => handleResetPassword(user), !canResetPassword(user) || busyKey !== null)}
+                      {#if canReadUserAuthentication(user)}{@render ActionButton('passkey', $t('authManagement.title'), () => { activeDialog = { kind: 'user-authentication', user }; }, busyKey !== null)}{/if}
+                      {@render ActionButton('manageAccounts', $t('manage.accountManagement'), () => handleManageAccount(user), (!canManageUserStatus && !canManage2fa && !canReadUserAuthentication(user)) || busyKey !== null)}
                       {@render ActionButton('block', $t('manage.blockUser'), () => handleBlockUser(user), !canBlock || busyKey !== null)}
                       {@render ActionButton('manageAccounts', $t('manage.viewBlocks'), () => handleListBlocks(user), !canListBlocks || busyKey !== null)}
                       {@render ActionButton('delete', $t('common.delete'), () => handleDeleteUser(user), busyKey !== null, true)}
@@ -1613,28 +1624,30 @@
         </section>
       {/if}
 
-      {#if activeDialog.twoFactor}
+      {#if activeDialog.twoFactor || (canManage2fa && activeDialog.user.user_id !== authStore.userId)}
         <section class="space-y-4 p-5" aria-labelledby="managed-twofa-title">
           <div>
             <h3 id="managed-twofa-title" class="text-sm font-semibold text-md3-on-surface">{$t('manage.twoFactorManagement')}</h3>
             <p class="mt-1 text-xs leading-5 text-md3-on-surface-variant">{$t('manage.twoFactorManagementDescription')}</p>
           </div>
+          {#if activeDialog.twoFactor}
           <div class="flex items-center justify-between gap-4">
             <span class="text-sm text-md3-on-surface-variant">{$t('manage.twoFactorStatus')}</span>
             <span class={`rounded-full px-3 py-1 text-xs font-semibold ${activeDialog.twoFactor.enabled ? 'bg-md3-primary-container text-md3-on-primary-container' : 'bg-md3-surface-container-high text-md3-on-surface-variant'}`}>
-              {activeDialog.twoFactor.enabled ? $t('common.enabled') : $t('common.disabled')}
+              {activeDialog.twoFactor.enabled ? $t('common.enabled') : activeDialog.twoFactor.configured ? $t('authManagement.pendingTotp') : $t('authManagement.notRegistered')}
             </span>
           </div>
           {#if activeDialog.twoFactor.enabled}
             <dl class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 text-sm">
-              <dt class="text-md3-on-surface-variant">{$t('manage.twoFactorMethod')}</dt>
-              <dd class="uppercase text-md3-on-surface">{activeDialog.twoFactor.method ?? '-'}</dd>
               <dt class="text-md3-on-surface-variant">{$t('manage.backupCodesRemaining')}</dt>
               <dd class="text-md3-on-surface">{activeDialog.twoFactor.backup_codes_count}</dd>
             </dl>
+          {/if}
+          {:else}<p class="text-sm text-md3-on-surface-variant">{$t('authManagement.inventoryPermissionRequired')}</p>{/if}
+          {#if activeDialog.twoFactor?.enabled || !activeDialog.twoFactor}
             <FluentButton data-fluent-owner="routes-home-manage-page"
               type="button"
-              disabled={busyKey !== null}
+              disabled={busyKey !== null || !canManage2fa || activeDialog.user.user_id === authStore.userId}
               onclick={disableActiveUserTwoFactor}
               appearance="subtle"
               tone="danger"
