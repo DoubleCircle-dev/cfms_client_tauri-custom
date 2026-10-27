@@ -4,6 +4,43 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.56.0-custom-0.1
+**Released on:** 2026-10-27
+
+**Title:** Account management, desktop shell, and sync improvements
+
+### Improved
+- Update account terminology and enhance permissions display in account settings
+- Clean up unused translation keys and enhance i18n handling in frontend and backend
+- Remove unused AccountBadge component and update navigation routes
+- Restyle tools and chat viewer pages for the Fluent theme
+
+### Added
+- Enhance account settings page with user info and permissions management
+- Add system tray with close-to-tray behavior on desktop
+- Enhance authentication management and permissions
+
+### Changed
+- Add escalation token option to dev tester
+- Use source-specific updater signing keys
+- Skip RPM for custom prereleases
+- Document custom MSI version mapping
+- Handle custom prerelease bundle versions
+- Install sccache for release builds
+- Use focused checks in custom release guide
+- Document custom alpha release process
+- Add selectable update source
+
+### Fixed
+- Enhance revision graph rendering and add push pin icon
+- Update node lookup action identifier for resolve_node_path function
+- Update acrylic transparency values in design files for improved visual consistency
+
+### Maintenance
+- Stub __TAURI_INTERNALS__ so appearance store tests reach the native path
+
+---
+
 ## v0.56.0
 **Released on:** 2026-10-26
 
