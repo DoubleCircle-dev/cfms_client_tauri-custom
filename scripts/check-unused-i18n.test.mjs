@@ -40,3 +40,28 @@ test('recognizes exact and resolvable template-literal usages', () => {
   assert.equal(isTranslationKeyUsed('settings.updates.stableDescription', facts), true);
   assert.equal(isTranslationKeyUsed('settings.updates.alphaDescription', facts), false);
 });
+
+test('recognizes concatenated keys in conditional expressions', () => {
+  const facts = collectSourceFacts([
+    "translate(scanning ? 'files.batchRules.scanDenied' : 'files.batchRules.problem.' + problem.kind);",
+    "const kinds = ['denied', 'missing'];",
+    "translate('files.batchRules.item.' + (busy ? 'working' : item.status));",
+    "const statuses = ['success', 'failed'];",
+  ]);
+
+  assert.equal(isTranslationKeyUsed('files.batchRules.scanDenied', facts), true);
+  assert.equal(isTranslationKeyUsed('files.batchRules.problem.denied', facts), true);
+  assert.equal(isTranslationKeyUsed('files.batchRules.problem.missing', facts), true);
+  assert.equal(isTranslationKeyUsed('files.batchRules.problem.unused', facts), false);
+  assert.equal(isTranslationKeyUsed('files.batchRules.item.working', facts), true);
+  assert.equal(isTranslationKeyUsed('files.batchRules.item.success', facts), true);
+});
+
+test('recognizes frontend translation keys returned by Rust', () => {
+  const facts = collectSourceFacts([
+    'return Err("publicKey.storageUnavailable".into());',
+  ]);
+
+  assert.equal(isTranslationKeyUsed('publicKey.storageUnavailable', facts), true);
+  assert.equal(isTranslationKeyUsed('publicKey.unused', facts), false);
+});
