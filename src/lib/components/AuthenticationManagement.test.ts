@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authStore } from '$lib/stores.svelte';
+import { authStore, notificationStore } from '$lib/stores.svelte';
 import type { AuthPolicy } from '$lib/api';
 import AuthenticationManagement from './AuthenticationManagement.svelte';
 import { dialogStore } from '$lib/dialogs.svelte';
@@ -268,10 +268,12 @@ describe('authentication management', () => {
   });
 
   it('uses the existing password dialog and returns to login after a self-service change', async () => {
+    const success = vi.spyOn(notificationStore, 'success');
     authStore.permissions = ['configure_auth_methods'];
     mocks.changePassword.mockResolvedValue(undefined); mocks.clear.mockResolvedValue(undefined); mocks.goto.mockResolvedValue(undefined);
     render(AuthenticationManagement);
     await fireEvent.click(await screen.findByRole('button', { name: 'settings.password.action' }));
+    expect(screen.getByText('settings.password.tip')).toBeTruthy();
     expect(screen.queryByLabelText('dialog.changePassword.currentPassword')).toBeNull();
     await fireEvent.input(screen.getByLabelText('dialog.changePassword.newPassword'), { target: { value: 'new-password' } });
     await fireEvent.click(screen.getByRole('button', { name: /dialog.changePassword.title/ }));
@@ -279,6 +281,7 @@ describe('authentication management', () => {
     await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith('/login', { replaceState: true }));
     expect(mocks.clear).toHaveBeenCalled();
     expect(authStore.isLoggedIn).toBe(false);
+    expect(success).toHaveBeenCalledWith('settings.password.changed');
   });
 
   it.each(['setup', 'recovery'])('preserves the policy draft when the second leave confirmation is cancelled (%s)', async (phase) => {

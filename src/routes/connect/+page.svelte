@@ -278,8 +278,8 @@
       <FluentButton appearance="subtle" iconOnly
         type="button"
         class="relative inline-flex h-9 w-9 items-center justify-center rounded-full text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high/70 hover:text-md3-on-surface"
-        title={$t('more.about')}
-        aria-label={$t('more.about')}
+        title={$t('workspace.about')}
+        aria-label={$t('workspace.about')}
         onclick={() => openUtilityFromToolbar('/home/about')}
       >
         <Icon name="info" size="18px" />

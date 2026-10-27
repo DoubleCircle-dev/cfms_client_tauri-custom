@@ -199,7 +199,7 @@
     await changePassword(authStore.username!, newPassword);
     showPassword = false;
     await clearAuthSession(); authStore.clear();
-    notificationStore.success($t('more.passwordChanged'));
+    notificationStore.success($t('settings.password.changed'));
     allowNavigation = true; await goto('/login', { replaceState: true });
   }
   async function resetPassword(password: string, bypass: boolean, force: boolean, disableTotp: boolean) {
@@ -278,5 +278,5 @@
 
 {#if showPassword}
   {#if managed}<ResetUserPasswordDialog username={username ?? userId!} canDisableTwoFactor={canConfigure} onSave={resetPassword} onClose={() => { showPassword = false; }} />
-  {:else}<ChangePasswordDialog username={authStore.username!} tip={$t('more.passwordTip')} onSubmit={updatePassword} onCancel={() => { showPassword = false; }} />{/if}
+  {:else}<ChangePasswordDialog username={authStore.username!} tip={$t('settings.password.tip')} onSubmit={updatePassword} onCancel={() => { showPassword = false; }} />{/if}
 {/if}
