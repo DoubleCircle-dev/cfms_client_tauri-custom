@@ -4,6 +4,36 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.57.0-custom-0.1
+**Released on:** 2026-10-28
+
+**Title:** Faster and more reliable desktop updates
+
+### Fixed
+- Refresh source on fallback
+- 删除重复的联系人和人员图标导入
+- Update input components and styles for improved consistency and usability
+- Update icons in EscalationControl and settings to improve consistency
+- Enhance MdOutlinedField component with control size and end content support
+- Update styling for password reset dialog options to improve layout and readability
+
+### Changed
+- Unify file sync confirmation workflows
+- Cargo update
+- CI分支设置为custom
+
+### Added
+- Expand mirror pool with ghfast.top, github.moeyy.xyz, gh.ddlc.top and ghproxy.cc
+- Refactor theme management and introduce palette system
+- Probe GitHub mirrors and download from the fastest one
+- Update theme colors and improve accessibility for elevated actions
+- Implement keyboard shortcut display on context menus
+
+### Improved
+- Enhance context menu layout and shortcut display for improved usability
+
+---
+
 ## v0.57.0
 
 **Released on:** 2026-10-27
