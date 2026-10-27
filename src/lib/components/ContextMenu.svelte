@@ -42,6 +42,7 @@
   let reasonHideTimer: ReturnType<typeof setTimeout> | undefined;
 
   const visibleItems = $derived(filterContextMenuItems(items, userPermissions));
+  const hasShortcuts = $derived(visibleItems.some((item) => !isContextMenuDivider(item) && !!item.shortcuts?.length));
   const menuOpen = $derived(open);
 
   $effect(() => {
@@ -224,6 +225,7 @@
     bind:this={menuEl}
     use:portal
     class="context-menu-surface cfms-acrylic-surface cfms-menu-surface fixed z-50"
+    class:has-shortcuts={hasShortcuts}
     style="left: {menuX}px; top: {menuY}px; transform-origin: {originX} {originY};"
     transition:menuScale={{ duration: 140 }}
     role="menu"
@@ -259,10 +261,10 @@
             if (event.pointerType === 'touch') showReason(item, index, event.currentTarget, true);
           }}
         >
-          <Icon name={item.icon} size="20px" filled={item.iconFilled} duotone={!item.iconFilled && !item.danger && !item.disabled} />
+          <Icon class="context-menu-icon" name={item.icon} size="20px" filled={item.iconFilled} duotone={!item.iconFilled && !item.danger && !item.disabled} />
           <span class="context-menu-label">{item.label}</span>
           {#if item.shortcuts?.length}
-            <ShortcutKeys shortcuts={item.shortcuts} variant="menu" />
+            <ShortcutKeys class="context-menu-shortcut" shortcuts={item.shortcuts} variant="menu" />
           {/if}
         </button>
         {#if item.disabled && item.disabledReason}
@@ -285,6 +287,9 @@
 
 <style>
   .context-menu-surface {
+    display: grid;
+    /* Include row insets as tracks so full-width buttons share content columns. */
+    grid-template-columns: 8px [icon] 20px 8px [label] minmax(0, 1fr) 8px;
     width: max-content;
     min-width: min(190px, calc(100vw - 16px));
     max-width: min(320px, calc(100vw - 16px));
@@ -295,14 +300,17 @@
     overscroll-behavior: contain;
     font: 400 14px/20px var(--fontFamilyBase);
   }
+  .context-menu-surface.has-shortcuts {
+    grid-template-columns: 8px [icon] 20px 8px [label] minmax(0, 1fr) 16px [shortcut] max-content 8px;
+  }
   .context-menu-item {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) auto;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
     align-items: center;
-    gap: 8px;
     width: 100%;
     min-block-size: 32px;
-    padding: 6px 8px;
+    padding: 6px 0;
     border-radius: var(--borderRadiusMedium);
     color: var(--colorNeutralForeground1);
     text-align: start;
@@ -313,8 +321,10 @@
   .context-menu-item:active:not(:disabled):not([aria-disabled='true']) { background: var(--colorSubtleBackgroundPressed); }
   .context-menu-item.danger { color: var(--colorStatusDangerForeground1); }
   .context-menu-item:is(:disabled, [aria-disabled='true']) { color: var(--colorNeutralForegroundDisabled); cursor: not-allowed; }
-  .context-menu-label { min-width: 0; overflow-wrap: anywhere; }
-  .context-menu-separator { margin-block: 4px; border-top: 1px solid var(--colorNeutralStroke2); }
+  .context-menu-item :global(.context-menu-icon) { grid-column: icon; }
+  .context-menu-label { grid-column: label; min-width: 0; overflow-wrap: anywhere; }
+  .context-menu-item :global(.context-menu-shortcut) { grid-column: shortcut; }
+  .context-menu-separator { grid-column: 1 / -1; margin-block: 4px; border-top: 1px solid var(--colorNeutralStroke2); }
   .context-menu-reason {
     position: fixed;
     z-index: 60;
