@@ -1,13 +1,13 @@
 name: CI
 
-# Runs on every push and PR to main.
+# Runs on every push and PR to custom.
 # Fast checks: Rust tests, clippy, frontend type-check, and format validation.
 
 on:
   push:
-    branches: [main]
+    branches: [custom]
   pull_request:
-    branches: [main]
+    branches: [custom]
 
 env:
   CARGO_TERM_COLOR: always

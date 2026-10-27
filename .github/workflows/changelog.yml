@@ -16,7 +16,7 @@ on:
       target_branch:
         description: "Branch to update"
         required: true
-        default: main
+        default: custom
         type: string
       commit_changes:
         description: "Commit the generated changelog entry"
