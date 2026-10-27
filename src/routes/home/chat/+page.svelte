@@ -15,10 +15,11 @@
     readServerDocument,
     resolveNodePath,
     scanLocalChatbox,
+    uploadChatRecord,
     type LocalChatboxReadError,
   } from '$lib/api/files';
   import { isAccessDeniedError } from '$lib/api/server-errors';
-  import { notificationStore } from '$lib/stores.svelte';
+  import { authStore, notificationStore } from '$lib/stores.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
   const ROOM_NAMES_KEY = 'cfms:chatbox:roomNames';
@@ -120,6 +121,13 @@
   let loadingRoomId = $state<string | null>(null);
   let error = $state<string | null>(null);
   let showNonformat = $state(false);
+  let composeSpeakerName = $state(authStore.username ?? '');
+  let hashSpeakerName = $state(true);
+  let composeMessage = $state('');
+  let composeValidationError = $state<string | null>(null);
+  let uploadingChatRecord = $state(false);
+  let speakerLocked = $state(false);
+  let overwriteApprovedFor: string | null = null;
   let mode = $state<ChatMode>(loadMode());
   let localPath = $state<string | null>(loadLocalPath());
   let chatboxSource = $state<ChatboxSourceId>(loadChatboxSource());
@@ -207,9 +215,9 @@
   }
 
   function displayName(userId: string): string {
-    return (
-      userNames[userId] ?? DEFAULT_USER_NAMES[userId] ?? `${userId.slice(0, 8)}…`
-    );
+    return userNames[userId]
+      ?? DEFAULT_USER_NAMES[userId]
+      ?? (userId.length > 32 ? `${userId.slice(0, 8)}…` : userId);
   }
 
   function roomDisplayName(roomId: string): string {
@@ -302,6 +310,7 @@
     rooms = [];
     error = null;
     showNonformat = false;
+    resetComposer();
     if (mode === 'online') await refresh();
   }
 
@@ -419,6 +428,7 @@
     rooms = [];
     error = null;
     showNonformat = false;
+    resetComposer();
     if (next === 'local') {
       if (localPath) await scanLocal();
     } else {
@@ -538,10 +548,134 @@
   }
 
   function selectRoom(roomId: string) {
+    if (roomId !== selectedRoomId) {
+      resetComposer();
+    }
     selectedRoomId = roomId;
     showNonformat = false;
     const room = rooms.find((item) => item.roomId === roomId);
     if (room && !room.loaded) void loadRoomDetails(roomId);
+  }
+
+  function resetComposer() {
+    composeMessage = '';
+    composeSpeakerName = authStore.username ?? '';
+    hashSpeakerName = true;
+    composeValidationError = null;
+    speakerLocked = false;
+    overwriteApprovedFor = null;
+  }
+
+  async function accountNameHash(username: string): Promise<string> {
+    const digest = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(username.trim()),
+    );
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('')
+      .slice(0, 7);
+  }
+
+  function normalizedSpeakerName(): string {
+    return composeSpeakerName.trim().replace(/\.txt$/i, '').trim();
+  }
+
+  async function effectiveSpeakerName(): Promise<string> {
+    const name = normalizedSpeakerName();
+    return hashSpeakerName ? accountNameHash(name) : name;
+  }
+
+  function isValidSpeakerName(name: string): boolean {
+    return Boolean(name)
+      && name !== '.'
+      && name !== '..'
+      && !name.endsWith('.')
+      && !name.endsWith(' ')
+      && new TextEncoder().encode(name).length <= 128
+      && !/[\/\\:*?"<>|\u0000-\u001f]/.test(name);
+  }
+
+  function formatChatTimestamp(date: Date): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+      + ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  async function appendComposeMessage() {
+    const speakerName = normalizedSpeakerName();
+    if (!isValidSpeakerName(speakerName)) {
+      composeValidationError = $t('chat.invalidSpeakerName');
+      return;
+    }
+    const content = composeMessage.trim();
+    if (!content) {
+      composeValidationError = $t('chat.emptyMessage');
+      return;
+    }
+    const targetRoom = selectedRoom;
+    if (!targetRoom || mode !== 'online' || !targetRoom.loaded || uploadingChatRecord) return;
+    uploadingChatRecord = true;
+    try {
+      const user = await effectiveSpeakerName();
+      const time = formatChatTimestamp(new Date());
+      const filename = `${user}.txt`;
+      const targetKey = `${targetRoom.roomId}:${filename.toLowerCase()}`;
+      const listing = await listDirectory(targetRoom.id);
+      const existingDocument = listing.documents.find(
+        (document) => document.title.toLowerCase() === filename.toLowerCase(),
+      );
+      if (existingDocument && overwriteApprovedFor !== targetKey) {
+        if (!window.confirm($t('chat.appendRecordConfirm', { values: { name: filename } }))) {
+          return;
+        }
+        overwriteApprovedFor = targetKey;
+      }
+
+      const newMessage: ChatMessage = { user, time, content, replyRef: null };
+      let existingContent = '';
+      if (existingDocument) {
+        const existingRecord = await readServerDocument(existingDocument.id);
+        if (existingRecord.truncated) {
+          throw new Error($t('chat.recordTooLargeToAppend'));
+        }
+        existingContent = existingRecord.content;
+      }
+      const messageLines = content
+        .split(/\r?\n/)
+        .map((line) => `${time} | ${line}`)
+        .join('\n');
+      const recordContent = existingContent
+        ? `${existingContent}${existingContent.endsWith('\n') ? '' : '\n'}${messageLines}\n`
+        : `# time | msg\n${messageLines}\n`;
+      await uploadChatRecord(targetRoom.id, user, recordContent, crypto.randomUUID());
+
+      const updatedRoom: ChatRoom = {
+        ...targetRoom,
+        messages: [...targetRoom.messages, newMessage]
+          .sort((a, b) => a.time.localeCompare(b.time)),
+        unreadableRecords: targetRoom.unreadableRecords.filter(
+          (record) => record.file.toLowerCase() !== filename.toLowerCase(),
+        ),
+      };
+      rooms = rooms.map((room) => room.roomId === updatedRoom.roomId ? updatedRoom : room);
+      if (selectedRoomId === targetRoom.roomId) {
+        speakerLocked = true;
+        composeMessage = '';
+        composeValidationError = null;
+      }
+    } catch (err) {
+      notificationStore.error(formatUserFacingError(err));
+    } finally {
+      uploadingChatRecord = false;
+    }
+  }
+
+  function handleComposeMessageKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      void appendComposeMessage();
+    }
   }
 
   function unreadableRecordReason(record: UnreadableRecord): string {
@@ -832,13 +966,14 @@
             <Icon name="chat" size="28px" />
             <p>{$t('chat.loadingRoom')}</p>
           </div>
-        {:else if selectedRoom.messages.length === 0 && selectedRoom.unreadableRecords.length === 0}
-          <div class="chat-state">
-            <Icon name="chat" size="28px" />
-            <p>{$t('chat.noMessages')}</p>
-          </div>
-        {:else if selectedRoom.messages.length > 0}
+        {:else}
           <div class="chat-messages">
+            {#if selectedRoom.messages.length === 0 && selectedRoom.unreadableRecords.length === 0}
+              <div class="chat-state">
+                <Icon name="chat" size="28px" />
+                <p>{$t('chat.noMessages')}</p>
+              </div>
+            {/if}
             {#each selectedRoom.messages as message, index (index)}
               {@const colors = selectedColorMap.get(message.user) ?? { bg: BUBBLE_COLORS[0], strip: STRIP_COLORS[0] }}
               <article class="chat-msg">
@@ -934,6 +1069,77 @@
               </div>
             {/each}
           </section>
+        {/if}
+
+        {#if mode === 'online' && selectedRoom.loaded && authStore.username}
+          <form
+            class="chat-composer"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void appendComposeMessage();
+            }}
+          >
+            <div class="chat-composer-settings">
+              <label class="chat-compose-field chat-composer-name">
+                <span>{$t('chat.speakerName')}</span>
+                <input
+                  type="text"
+                  class="cfms-native-field"
+                  data-focus-ring="delegated"
+                  bind:value={composeSpeakerName}
+                  disabled={uploadingChatRecord || speakerLocked}
+                  maxlength="128"
+                  autocomplete="off"
+                  aria-describedby="chat-record-time-hint"
+                  oninput={() => {
+                    composeValidationError = null;
+                    overwriteApprovedFor = null;
+                  }}
+                />
+              </label>
+              <label class="chat-composer-hash">
+                <input
+                  type="checkbox"
+                  class="cfms-native-checkbox"
+                  data-focus-ring="delegated"
+                  bind:checked={hashSpeakerName}
+                  disabled={uploadingChatRecord || speakerLocked}
+                  onchange={() => {
+                    composeValidationError = null;
+                    overwriteApprovedFor = null;
+                  }}
+                />
+                <span>{$t('chat.hashSpeakerName')}</span>
+              </label>
+            </div>
+            <div class="chat-compose-entry">
+              <label class="chat-compose-field">
+                <span>{$t('chat.message')}</span>
+                <textarea
+                  class="cfms-native-field"
+                  data-focus-ring="delegated"
+                  bind:value={composeMessage}
+                  disabled={uploadingChatRecord}
+                  rows="2"
+                  aria-describedby="chat-record-time-hint"
+                  onkeydown={handleComposeMessageKeydown}
+                  oninput={() => (composeValidationError = null)}
+                ></textarea>
+              </label>
+              <FluentButton
+                type="submit"
+                appearance="primary"
+                disabled={uploadingChatRecord || !composeMessage.trim()}
+              >
+                <Icon name="arrowForward" size="16px" />
+                <span>{$t(uploadingChatRecord ? 'chat.sendingMessage' : 'chat.speak')}</span>
+              </FluentButton>
+            </div>
+            <p id="chat-record-time-hint" class="chat-compose-hint">{$t('chat.recordTimeHint')}</p>
+            {#if composeValidationError}
+              <p class="chat-compose-error" role="alert">{composeValidationError}</p>
+            {/if}
+          </form>
         {/if}
 
         <footer class="chat-attachments">
@@ -1206,6 +1412,107 @@
     gap: 6px;
   }
 
+  .chat-composer {
+    display: grid;
+    flex: none;
+    gap: 8px;
+    border-top: 1px solid var(--explorer-border);
+    padding: 10px 16px;
+    background: var(--explorer-surface);
+  }
+
+  .chat-composer-settings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  .chat-composer-name {
+    width: min(340px, 100%);
+  }
+
+  .chat-composer-hash {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding-bottom: 8px;
+    color: var(--colorNeutralForeground2);
+    font: 400 12px/16px var(--fontFamilyBase);
+    cursor: pointer;
+  }
+
+  .chat-composer-hash input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--colorBrandBackground);
+    cursor: pointer;
+  }
+
+  .chat-composer-hash input:disabled {
+    cursor: not-allowed;
+  }
+
+  .chat-composer-hash:focus-within,
+  .chat-compose-field:focus-within {
+    outline: 2px solid var(--color-md3-primary-emphasis, var(--colorBrandStroke));
+    outline-offset: 2px;
+    border-radius: var(--borderRadiusSmall);
+  }
+
+  @media (forced-colors: active) {
+    .chat-composer-hash:focus-within,
+    .chat-compose-field:focus-within {
+      outline-color: Highlight;
+    }
+  }
+
+  .chat-compose-field {
+    display: grid;
+    gap: 6px;
+    color: var(--colorNeutralForeground1);
+    font: 600 12px/16px var(--fontFamilyBase);
+  }
+
+  .chat-compose-field input,
+  .chat-compose-field textarea {
+    box-sizing: border-box;
+    width: 100%;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    padding: 8px 10px;
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground1);
+    font: 400 13px/20px var(--fontFamilyBase);
+  }
+
+  .chat-compose-entry {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .chat-compose-entry .chat-compose-field {
+    flex: 1;
+  }
+
+  .chat-compose-entry :global(.cfms-button) {
+    flex: none;
+  }
+
+  .chat-compose-hint {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+    font: 400 11px/16px var(--fontFamilyBase);
+  }
+
+  .chat-compose-error {
+    margin: 0;
+    color: var(--colorStatusDangerForeground1);
+    font: 400 12px/16px var(--fontFamilyBase);
+  }
+
   .chat-action {
     display: inline-flex;
     align-items: center;
@@ -1374,7 +1681,8 @@
 
   .chat-unreadable-records {
     min-height: 0;
-    flex: 1;
+    flex: 0 1 32%;
+    max-height: 32%;
     overflow-y: auto;
     border-top: 1px solid var(--explorer-border);
     padding: 12px 16px;

@@ -1,9 +1,21 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import ChatPage from './+page.svelte';
+
+vi.hoisted(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  });
+});
 
 const mocks = vi.hoisted(() => ({
   scanLocalChatbox: vi.fn(),
@@ -12,7 +24,46 @@ const mocks = vi.hoisted(() => ({
   readServerDocument: vi.fn(),
   getDocument: vi.fn(),
   openLocalPath: vi.fn(),
+  uploadChatRecord: vi.fn(),
+  currentUsername: 'alice',
 }));
+
+const originalAnimate = Element.prototype.animate;
+
+beforeAll(() => {
+  Element.prototype.animate = vi.fn(() => {
+    const animation = {
+      cancel: vi.fn(),
+      commitStyles: vi.fn(),
+      currentTime: 0,
+      effect: null,
+      finished: Promise.resolve(),
+      finish: vi.fn(),
+      id: '',
+      oncancel: null,
+      onfinish: null,
+      onremove: null,
+      pending: false,
+      persist: vi.fn(),
+      play: vi.fn(),
+      playbackRate: 1,
+      playState: 'finished',
+      ready: Promise.resolve(),
+      remove: vi.fn(),
+      replaceState: 'active',
+      reverse: vi.fn(),
+      startTime: 0,
+      timeline: null,
+      updatePlaybackRate: vi.fn(),
+    } as unknown as Animation;
+    queueMicrotask(() => animation.onfinish?.(new Event('finish') as AnimationPlaybackEvent));
+    return animation;
+  });
+});
+
+afterAll(() => {
+  Element.prototype.animate = originalAnimate;
+});
 
 vi.mock('$lib/api/files', () => ({
   getDocument: mocks.getDocument,
@@ -21,9 +72,15 @@ vi.mock('$lib/api/files', () => ({
   readServerDocument: mocks.readServerDocument,
   resolveNodePath: mocks.resolveNodePath,
   scanLocalChatbox: mocks.scanLocalChatbox,
+  uploadChatRecord: mocks.uploadChatRecord,
 }));
 
 vi.mock('$lib/stores.svelte', () => ({
+  authStore: {
+    get username() {
+      return mocks.currentUsername;
+    },
+  },
   notificationStore: {
     success: vi.fn(),
     error: vi.fn(),
@@ -174,7 +231,7 @@ describe('chat page online mode', () => {
       }
       return {
         folders: [],
-        documents: [{ id: 'restricted-record-id', title: 'restricted-user.txt' }],
+        documents: [{ id: 'restricted-record-id', title: '6025d18.txt' }],
         parent_id: folderId,
       };
     });
@@ -189,10 +246,12 @@ describe('chat page online mode', () => {
     await fireEvent.click(card);
 
     expect(await screen.findByText('chat.unreadableRecordsTitle')).toBeTruthy();
-    expect(screen.getByText('restricted-user.txt')).toBeTruthy();
+    expect(screen.getByText('6025d18.txt')).toBeTruthy();
     expect(screen.getByText('chat.serverPermissionDenied')).toBeTruthy();
     expect(screen.getByText('chat.serverPermissionAction')).toBeTruthy();
     expect(screen.queryByText('chat.noMessages')).toBeNull();
+    expect(await screen.findByRole('textbox', { name: 'chat.speakerName' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'chat.uploadRecord' })).toBeNull();
   });
 
   it('lists rooms by folder name (room id), includes the public room, and displays the folder name in the header', async () => {
@@ -268,6 +327,118 @@ describe('chat page online mode', () => {
 
     await waitFor(() => {
       expect(mocks.resolveNodePath).toHaveBeenCalledWith('/回响/.reserved/chatbox');
+    });
+  });
+
+  it('defaults to the current account name, hashes it, timestamps, and saves each message when spoken', async () => {
+    const accountHash = createHash('sha256').update('alice').digest('hex').slice(0, 7);
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', '.runtime', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockImplementation(async (folderId: string | null) => {
+      if (folderId === 'chatbox-folder-id') {
+        return {
+          folders: [{ id: 'room-folder-id', name: 'room-id', created_time: 100 }],
+          documents: [],
+          parent_id: null,
+        };
+      }
+      return {
+        folders: [],
+        documents: [{ id: 'record-id', title: `${accountHash}.txt` }],
+        parent_id: folderId,
+      };
+    });
+    mocks.readServerDocument.mockResolvedValue({
+      content: '# time | msg\n2026-08-12 20:15:00 | existing\n',
+      size: 50,
+      truncated: false,
+    });
+    mocks.uploadChatRecord.mockResolvedValue({
+      file_name: `${accountHash}.txt`,
+      overwritten: true,
+    });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(ChatPage);
+    await waitFor(() => expect(roomCards().length).toBe(1));
+    await fireEvent.click(roomCards()[0].closest('.chat-room-card') as HTMLElement);
+
+    const speakerName = screen.getByRole('textbox', { name: 'chat.speakerName' });
+    expect((speakerName as HTMLInputElement).value).toBe('alice');
+    const hashCheckbox = screen.getByRole('checkbox', { name: 'chat.hashSpeakerName' });
+    expect((hashCheckbox as HTMLInputElement).checked).toBe(true);
+    await fireEvent.input(screen.getByRole('textbox', { name: 'chat.message' }), {
+      target: { value: 'new message' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'chat.speak' }));
+
+    await waitFor(() => {
+      expect(mocks.uploadChatRecord).toHaveBeenCalledWith(
+        'room-folder-id',
+        accountHash,
+        expect.stringMatching(
+          /^# time \| msg\n2026-08-12 20:15:00 \| existing\n\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| new message\n$/,
+        ),
+        expect.any(String),
+      );
+    });
+    expect(confirm).toHaveBeenCalledWith(`chat.appendRecordConfirm:${accountHash}.txt`);
+    expect((speakerName as HTMLInputElement).disabled).toBe(true);
+    expect((hashCheckbox as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText('new message')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'chat.uploadRecord' })).toBeNull();
+  });
+
+  it('uses the custom speaker name when hash conversion is unchecked', async () => {
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', '.runtime', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockImplementation(async (folderId: string | null) => {
+      if (folderId === 'chatbox-folder-id') {
+        return {
+          folders: [{ id: 'room-folder-id', name: 'room-id', created_time: 100 }],
+          documents: [],
+          parent_id: null,
+        };
+      }
+      return { folders: [], documents: [], parent_id: folderId };
+    });
+    mocks.readServerDocument.mockResolvedValue({
+      content: '',
+      size: 0,
+      truncated: false,
+    });
+    mocks.uploadChatRecord.mockResolvedValue({
+      file_name: 'custom-speaker.txt',
+      overwritten: false,
+    });
+
+    render(ChatPage);
+    await waitFor(() => expect(roomCards().length).toBe(1));
+    await fireEvent.click(roomCards()[0].closest('.chat-room-card') as HTMLElement);
+
+    const speakerName = await screen.findByRole('textbox', { name: 'chat.speakerName' });
+    await fireEvent.input(speakerName, { target: { value: 'custom-speaker' } });
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'chat.hashSpeakerName' }));
+    await fireEvent.input(screen.getByRole('textbox', { name: 'chat.message' }), {
+      target: { value: 'hello' },
+    });
+    await fireEvent.keyDown(screen.getByRole('textbox', { name: 'chat.message' }), {
+      key: 'Enter',
+      shiftKey: false,
+      isComposing: false,
+    });
+
+    await waitFor(() => {
+      expect(mocks.uploadChatRecord).toHaveBeenCalledWith(
+        'room-folder-id',
+        'custom-speaker',
+        expect.stringMatching(
+          /^# time \| msg\n\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| hello\n$/,
+        ),
+        expect.any(String),
+      );
     });
   });
 });

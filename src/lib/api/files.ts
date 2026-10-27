@@ -394,6 +394,22 @@ export async function uploadDocumentFile(
   });
 }
 
+export async function uploadChatRecord(
+  parentId: string,
+  speakerName: string,
+  content: string,
+  uploadId: string,
+): Promise<{
+  upload_id: string;
+  task_id: string | null;
+  document_id: string | null;
+  file_name: string;
+  skipped: boolean;
+  overwritten: boolean;
+}> {
+  return invoke('upload_chat_record', { parentId, speakerName, content, uploadId });
+}
+
 export async function uploadDirectory(
   parentId: string | null,
   directoryPath: string,

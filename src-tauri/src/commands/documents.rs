@@ -605,6 +605,94 @@ pub async fn upload_document_file<R: Runtime>(
     }))
 }
 
+#[tauri::command]
+pub async fn upload_chat_record<R: Runtime>(
+    app_handle: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppHandleState>,
+    parent_id: String,
+    speaker_name: String,
+    content: String,
+    upload_id: String,
+) -> Result<serde_json::Value, String> {
+    if parent_id.trim().is_empty() {
+        return Err("Chat room folder is required.".into());
+    }
+    let speaker_name = speaker_name.trim();
+    if speaker_name.is_empty()
+        || speaker_name.len() > 128
+        || matches!(speaker_name, "." | "..")
+        || speaker_name.ends_with(' ')
+        || speaker_name.ends_with('.')
+        || speaker_name
+            .chars()
+            .any(|character| character.is_control() || r#"/\:*?"<>|"#.contains(character))
+    {
+        return Err("Chat record speaker name is not a valid file name.".into());
+    }
+    validate_chat_record_content(&content)?;
+
+    let file_name = if speaker_name.to_lowercase().ends_with(".txt") {
+        speaker_name.to_string()
+    } else {
+        format!("{speaker_name}.txt")
+    };
+    let temporary_file = tempfile::Builder::new()
+        .prefix("cfms-chat-record-")
+        .suffix(".txt")
+        .tempfile()
+        .map_err(|error| format!("Failed to create temporary chat record: {error}"))?;
+    std::fs::write(temporary_file.path(), content.as_bytes())
+        .map_err(|error| format!("Failed to write temporary chat record: {error}"))?;
+
+    let mut transfer_session = UploadTransferSession::new();
+    let result = upload_local_file(
+        &app_handle,
+        &state,
+        Some(parent_id),
+        temporary_file.path().to_path_buf(),
+        Some(file_name),
+        upload_id,
+        UploadConflictStrategy::Overwrite,
+        &mut transfer_session,
+    )
+    .await;
+    transfer_session.close().await;
+    let result = result?;
+
+    Ok(serde_json::json!({
+        "upload_id": result.upload_id,
+        "task_id": result.task_id,
+        "document_id": result.document_id,
+        "file_name": result.file_name,
+        "skipped": result.skipped,
+        "overwritten": result.overwritten,
+    }))
+}
+
+fn validate_chat_record_content(content: &str) -> Result<(), String> {
+    let mut message_count = 0;
+    for line in content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if line == "# time | msg" && message_count == 0 {
+            continue;
+        }
+        let Some((timestamp, message)) = line.split_once(" | ") else {
+            return Err("Each chat record line must use the format “time | message”.".into());
+        };
+        if timestamp.trim().is_empty() || message.trim().is_empty() {
+            return Err("Chat record timestamps and messages cannot be empty.".into());
+        }
+        message_count += 1;
+    }
+    if message_count == 0 {
+        return Err("Enter at least one chat message.".into());
+    }
+    Ok(())
+}
+
 /// Inspect file-level conflicts that would occur while merging a local directory.
 #[tauri::command]
 pub async fn inspect_upload_directory_conflicts<R: Runtime>(
