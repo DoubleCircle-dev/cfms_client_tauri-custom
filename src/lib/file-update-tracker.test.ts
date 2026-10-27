@@ -35,6 +35,7 @@ vi.mock('$lib/sync-all.svelte', () => ({
 
 import { deniedDocuments } from './denied-documents.svelte';
 import { fileUpdateTracker } from './file-update-tracker.svelte';
+import type { FileAutoCheckReport } from './file-auto-check';
 import { readLocalDocumentStates } from '$lib/sync-all.svelte';
 
 const HISTORY_KEY_PREFIX = 'cfms:file-check-history:v1';
@@ -569,5 +570,81 @@ describe('what a check reports', () => {
 
     expect(deniedDocuments.isDenied('locked')).toBe(false);
     expect(fileUpdateTracker.checkHistory.at(-1)).toMatchObject({ changed: 1, denied: 0 });
+  });
+});
+
+describe('background check reports', () => {
+  function report(overrides: Partial<FileAutoCheckReport> = {}): FileAutoCheckReport {
+    return {
+      account: 'alice',
+      checkedAt: 1_000,
+      nextCheckAt: 2_000,
+      outdated: 1,
+      denied: 0,
+      dirs: 1,
+      docs: 1,
+      items: [
+        { id: 'doc-1', title: 'a.txt', path: 'a.txt', sha256: 'HASH', existedLocally: false },
+      ],
+      autoDownload: false,
+      downloaded: 0,
+      downloadFailed: 0,
+      skipped: 0,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    fileUpdateTracker.useAccountScope(scopeFor('wss://server.example', 'alice'));
+    // Each case starts from a clean queue and timer: both are module state that
+    // the previous case populated.
+    fileUpdateTracker.clearPendingUpdates();
+    fileUpdateTracker.clearSchedule();
+  });
+
+  it('mirrors the schedule the service publishes', () => {
+    fileUpdateTracker.applySchedule({ lastCheckAt: 1_000, nextCheckAt: 2_000 });
+
+    expect(fileUpdateTracker.lastCheckTime).toBe(1_000);
+    expect(fileUpdateTracker.nextCheckTime).toBe(2_000);
+    expect(fileUpdateTracker.isPolling).toBe(true);
+
+    fileUpdateTracker.clearSchedule();
+
+    expect(fileUpdateTracker.isPolling).toBe(false);
+  });
+
+  it('records the report and queues its updates when auto-download is off', () => {
+    const applied = fileUpdateTracker.applyAutoCheckReport(report());
+
+    expect(applied).toBe(true);
+    expect(fileUpdateTracker.checkHistory.at(-1)).toMatchObject({ changed: 1, docs: 1 });
+    expect([...fileUpdateTracker.pendingUpdates].map((item) => item.id)).toEqual(['doc-1']);
+    expect(fileUpdateTracker.nextCheckTime).toBe(2_000);
+  });
+
+  it('does not re-queue updates the service already downloaded', () => {
+    fileUpdateTracker.applyAutoCheckReport(report({
+      autoDownload: true,
+      downloaded: 1,
+      items: [{ id: 'doc-2', title: 'b.txt', path: 'b.txt', sha256: 'HASH', existedLocally: true }],
+    }));
+
+    expect(fileUpdateTracker.pendingUpdates).toEqual([]);
+  });
+
+  it('applies each report once', () => {
+    expect(fileUpdateTracker.applyAutoCheckReport(report())).toBe(true);
+    expect(fileUpdateTracker.applyAutoCheckReport(report())).toBe(false);
+    expect(fileUpdateTracker.checkHistory).toHaveLength(1);
+  });
+
+  it('only shows the schedule for another account, never its history', () => {
+    const applied = fileUpdateTracker.applyAutoCheckReport(report({ account: 'bob' }));
+
+    expect(applied).toBe(false);
+    expect(fileUpdateTracker.checkHistory).toHaveLength(0);
+    expect(fileUpdateTracker.pendingUpdates).toEqual([]);
+    expect(fileUpdateTracker.nextCheckTime).toBe(2_000);
   });
 });

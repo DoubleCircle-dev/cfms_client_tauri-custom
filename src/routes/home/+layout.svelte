@@ -18,6 +18,7 @@
   import { favoriteRecordsFromPreference, type FileRecord } from '$lib/file-preferences';
   import { deniedDocuments } from '$lib/denied-documents.svelte';
   import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
+  import { refreshFileAutoCheckState } from '$lib/file-auto-check-events';
   import Icon from '$lib/components/Icon.svelte';
   import AvatarPreview from '$lib/components/AvatarPreview.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
@@ -194,6 +195,9 @@
     const scope = authStore.isLoggedIn && username ? { serverAddress, username } : null;
     fileUpdateTracker.useAccountScope(scope);
     deniedDocuments.useAccountScope(scope);
+    // The background checker only runs for a signed-in account, so its published
+    // report and countdown have to be re-read whenever the session changes.
+    void refreshFileAutoCheckState();
   });
 
   onMount(() => {

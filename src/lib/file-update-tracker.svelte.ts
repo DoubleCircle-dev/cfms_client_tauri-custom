@@ -11,6 +11,7 @@ import { checkDownloadsExist, deleteDownloadFile } from '$lib/api/files';
 import { getSetting, setSetting } from '$lib/api/settings';
 import { isDocumentAccessDenied } from '$lib/api/server-errors';
 import { browserPreviewMode, isTauriRuntime } from '$lib/tauri-runtime';
+import { rebaseFileAutoCheckSchedule, type FileAutoCheckReport } from '$lib/file-auto-check';
 import { deniedDocuments } from '$lib/denied-documents.svelte';
 import {
   DENIED_FOLDER_MARKER_FILENAME,
@@ -25,9 +26,6 @@ import {
 
 /** How long (in ms) an item stays flagged as "recently updated" before the indicator fades. */
 const UPDATE_VISIBILITY_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-/** Default polling interval: 1 hour. */
-const DEFAULT_POLL_INTERVAL_MS = 60 * 60 * 1000;
 
 /** Default number of check history records to retain for each account. */
 export const DEFAULT_CHECK_HISTORY_LIMIT = 500;
@@ -168,20 +166,13 @@ class FileUpdateTracker {
   private staleFolderIds = $state<Set<string>>(new Set());
   private foldersWithStaleChildren = $state<Set<string>>(new Set());
 
-  // --- polling state ---
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private pollCallback: (() => Promise<void>) | null = null;
-  private pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
+  // --- background schedule (owned by the Rust service) ---
+  /** When the last completed check ran (Unix ms). */
   lastCheckTime = $state<number>(0);
+  /** When the next scheduled check is due (Unix ms), `0` when none. */
   nextCheckTime = $state<number>(0);
-  /**
-   * Whether the account's one post-login check has already been spent.
-   *
-   * Scoped to the account rather than to the process: the option promises a
-   * check at start *and* at login, and signing in as somebody else within the
-   * same run is a new session for them.
-   */
-  initialScanDone = $state(false);
+  /** `checkedAt` of the last applied background report, for de-duplication. */
+  private appliedReportAt = 0;
 
   // --- check history ---
   /** Storage key of the account whose history is currently loaded. */
@@ -213,80 +204,99 @@ class FileUpdateTracker {
   pendingUpdateQueue = $state<Map<string, PendingUpdateItem>>(new Map());
 
   // =========================================================================
-  // Snapshot & polling
+  // Background schedule
+  //
+  // The interval and the check live in the Rust service so they keep running
+  // while the app is backgrounded. The Webview only mirrors what the service
+  // publishes, which also means navigation cannot reset the countdown.
   // =========================================================================
 
-  /**
-   * Start periodic polling for server changes on a directory.
-   * `pollFn` should re-fetch the directory listing and call `compareSnapshot`.
-   *
-   * The countdown is anchored at start (or at the last manual reset). Normal
-   * poll ticks fire every `intervalMs` from that anchor — they never rebase it.
-   */
-  startPolling(pollFn: () => Promise<void>, intervalMs = DEFAULT_POLL_INTERVAL_MS) {
-    this.stopPolling();
-    this.pollCallback = pollFn;
-    this.pollIntervalMs = intervalMs;
-    // Show countdown immediately — first poll fires after intervalMs
-    this.lastCheckTime = Date.now();
-    this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
-    this.scheduleNext();
+  /** Mirror the scheduler state published by the backend. */
+  applySchedule(schedule: { lastCheckAt: number; nextCheckAt: number }) {
+    this.lastCheckTime = schedule.lastCheckAt;
+    this.nextCheckTime = schedule.nextCheckAt;
+  }
+
+  /** Forget the schedule (sign-out, feature disabled). */
+  clearSchedule() {
+    this.lastCheckTime = 0;
+    this.nextCheckTime = 0;
+    this.appliedReportAt = 0;
   }
 
   /**
-   * Keep an existing poll schedule running with the same interval, only
-   * swapping in a fresh callback (used when a page remounts after navigation).
-   * Returns true when the existing schedule was preserved.
+   * Rebase the countdown after a manual check.
+   *
+   * A manual check runs here, not in the service, so the timer has to be told —
+   * otherwise it would fire its own check moments later. The new schedule comes
+   * back through `FILE_AUTO_CHECK_SCHEDULE_EVENT`.
    */
-  adoptPolling(pollFn: () => Promise<void>, intervalMs: number): boolean {
-    if (!this.isPolling || this.pollIntervalMs !== intervalMs) return false;
-    this.pollCallback = pollFn;
+  resetPollingCountdown() {
+    if (!isTauriRuntime()) {
+      this.lastCheckTime = Date.now();
+      return;
+    }
+    void rebaseFileAutoCheckSchedule();
+  }
+
+  /** Whether a background schedule is active. */
+  get isPolling(): boolean {
+    return this.nextCheckTime > 0;
+  }
+
+  /**
+   * Apply a check the background service completed.
+   *
+   * Returns whether it was recorded for the current account: a report from a
+   * previous session is only used to show the schedule, never to write another
+   * account's history or pending list.
+   */
+  applyAutoCheckReport(report: FileAutoCheckReport): boolean {
+    this.applySchedule({ lastCheckAt: report.checkedAt, nextCheckAt: report.nextCheckAt });
+
+    if (!this.historyKey || !this.historyKey.endsWith(`:${encodeURIComponent(report.account)}`)) {
+      return false;
+    }
+    if (report.checkedAt <= this.appliedReportAt) return false;
+    this.appliedReportAt = report.checkedAt;
+
+    for (const item of report.items) {
+      this.markUpdated(item.id, 'document');
+    }
+
+    this.addCheckHistory({
+      outdated: report.outdated,
+      denied: report.denied,
+      dirs: report.dirs,
+      docs: report.docs,
+      items: report.items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        path: item.path,
+        kind: item.existedLocally ? 'modified' : 'added',
+      })),
+      hidden: Math.max(0, report.items.length - CHECK_HISTORY_ITEM_MAX),
+      revoked: 0,
+      restored: 0,
+    });
+
+    // With automatic downloads the service has already applied the changes;
+    // queueing them again would offer the same files for a second download.
+    if (!report.autoDownload) {
+      this.enqueuePendingUpdates(report.items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        path: item.path,
+        downloadPath: item.path,
+        sha256: item.sha256,
+      })));
+    }
+
     return true;
   }
 
-  /** Rebase polling countdown from "now" (used by manual checks). */
-  resetPollingCountdown() {
-    this.lastCheckTime = Date.now();
-    this.nextCheckTime = this.lastCheckTime + this.pollIntervalMs;
-    // Reschedule so the next tick actually fires a full interval from now —
-    // without this the pending fixed-delay timer would fire early.
-    if (this.pollTimer !== null) {
-      clearTimeout(this.pollTimer);
-      this.pollTimer = null;
-      this.scheduleNext();
-    }
-  }
-
-  private scheduleNext() {
-    // Fixed-rate anchored to nextCheckTime: if a tick ran late (heavy scan),
-    // the following tick fires sooner to stay on schedule instead of drifting.
-    const delay = Math.max(0, this.nextCheckTime - Date.now());
-    this.pollTimer = setTimeout(() => {
-      void this.pollCallback?.().then(() => {
-        this.lastCheckTime = Date.now();
-        this.nextCheckTime += this.pollIntervalMs;
-        this.scheduleNext();
-      });
-    }, delay);
-  }
-
-  /** Stop periodic polling. */
-  stopPolling() {
-    if (this.pollTimer !== null) {
-      clearTimeout(this.pollTimer);
-      this.pollTimer = null;
-    }
-    this.pollCallback = null;
-    this.nextCheckTime = 0;
-  }
-
-  /** Whether polling is active. */
-  get isPolling(): boolean {
-    return this.pollCallback !== null;
-  }
-
   // =========================================================================
-  // Shared recursive check (used by auto-poll, manual button, devtool)
+  // Shared recursive check (manual button, devtool)
   // =========================================================================
 
   /**
@@ -839,7 +849,6 @@ class FileUpdateTracker {
     this.checkHistoryLimit = key
       ? this.historyLimitByKey.get(key) ?? DEFAULT_CHECK_HISTORY_LIMIT
       : DEFAULT_CHECK_HISTORY_LIMIT;
-    this.initialScanDone = false;
     if (!key) return;
 
     if (usesSharedHistoryStorage()) {
@@ -1205,7 +1214,7 @@ class FileUpdateTracker {
     this.foldersWithStaleChildren = new Set();
     this.clearPendingUpdates();
     this.clearSnapshots();
-    this.stopPolling();
+    this.clearSchedule();
     if (this.expiryTimer !== null) {
       clearTimeout(this.expiryTimer);
       this.expiryTimer = null;

@@ -28,8 +28,20 @@ pub async fn list_directory(
     state: tauri::State<'_, AppHandleState>,
     folder_id: Option<String>,
 ) -> Result<ListDirectoryResponse, String> {
+    list_directory_full(&state, folder_id).await
+}
+
+/// [`list_directory`] without the Tauri command wrapper.
+///
+/// Background work (the automatic file-update check service) walks the server
+/// tree from a plain [`AppHandleState`] reference, so the command and the
+/// service share this one implementation instead of duplicating the request.
+pub(crate) async fn list_directory_full(
+    state: &AppHandleState,
+    folder_id: Option<String>,
+) -> Result<ListDirectoryResponse, String> {
     fetch_all_listing_pages(
-        &state,
+        state,
         "core.directory.list",
         serde_json::json!({"folder_id": folder_id}),
     )
@@ -179,7 +191,40 @@ pub async fn get_document(
     batch_created_at: Option<i64>,
     batch_estimated_total: Option<u32>,
 ) -> Result<serde_json::Value, String> {
-    let server_task = download_queue::request_server_download_task(&state.inner, &document_id)
+    let batch = DownloadBatchMeta {
+        batch_id: non_empty_optional(batch_id),
+        batch_name: non_empty_optional(batch_name),
+        batch_root_id: non_empty_optional(batch_root_id),
+        batch_created_at,
+        batch_estimated_total,
+    };
+    enqueue_document_download(&app_handle, &state, &document_id, &filename, batch).await
+}
+
+/// Batch bookkeeping attached to a queued download, as accepted by
+/// [`get_document`]. Background downloads carry none of it.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct DownloadBatchMeta {
+    pub batch_id: Option<String>,
+    pub batch_name: Option<String>,
+    pub batch_root_id: Option<String>,
+    pub batch_created_at: Option<i64>,
+    pub batch_estimated_total: Option<u32>,
+}
+
+/// Queue one document download, as [`get_document`] does.
+///
+/// Shared with the automatic file-update service: its background downloads are
+/// ordinary queue entries, so they show up in the download list and survive a
+/// restart exactly like a user-initiated one.
+pub(crate) async fn enqueue_document_download(
+    app_handle: &tauri::AppHandle,
+    state: &AppHandleState,
+    document_id: &str,
+    filename: &str,
+    batch: DownloadBatchMeta,
+) -> Result<serde_json::Value, String> {
+    let server_task = download_queue::request_server_download_task(&state.inner, document_id)
         .await
         .map_err(format_download_task_request_error)?;
     let task_id = server_task.task_id;
@@ -188,18 +233,18 @@ pub async fn get_document(
     // Build a local download path from the same download root the local file
     // checks and the "open downloaded file" command use, so a configured
     // external storage location stays consistent across all of them.
-    let download_root = resolve_download_root(&app_handle, &state).await?;
+    let download_root = resolve_download_root(app_handle, state).await?;
 
     // Ensure the download directory exists.
     let _ = std::fs::create_dir_all(&download_root);
 
-    let file_path = download_root.join(&filename);
-    let display_filename = download_display_filename(&filename);
+    let file_path = download_root.join(filename);
+    let display_filename = download_display_filename(filename);
     let now = unix_now();
 
     let task = DownloadTaskDto {
         task_id: task_id.clone(),
-        file_id: document_id.clone(),
+        file_id: document_id.to_string(),
         filename: display_filename.clone(),
         file_path: file_path.to_string_lossy().into_owned(),
         status: DownloadTaskStatus::Pending,
@@ -221,11 +266,11 @@ pub async fn get_document(
         pause_position: None,
         supports_resume,
         server_task_recreate_count: 0,
-        batch_id: non_empty_optional(batch_id),
-        batch_name: non_empty_optional(batch_name),
-        batch_root_id: non_empty_optional(batch_root_id),
-        batch_created_at,
-        batch_estimated_total,
+        batch_id: batch.batch_id,
+        batch_name: batch.batch_name,
+        batch_root_id: batch.batch_root_id,
+        batch_created_at: batch.batch_created_at,
+        batch_estimated_total: batch.batch_estimated_total,
     };
 
     // Persist the download task so the download queue service picks it up.
@@ -308,7 +353,7 @@ pub async fn ensure_download_subdirectory(
     Ok(directory_path.to_string_lossy().into_owned())
 }
 
-fn resolve_download_subdirectory(
+pub(crate) fn resolve_download_subdirectory(
     mut root: std::path::PathBuf,
     relative_path: &str,
 ) -> Result<std::path::PathBuf, String> {
@@ -657,7 +702,7 @@ fn collect_large_files(
 
 /// Compute the SHA-256 hex digest of a file without loading it fully into
 /// memory, so very large files hash safely.
-fn file_sha256(path: &std::path::Path) -> Result<String, String> {
+pub(crate) fn file_sha256(path: &std::path::Path) -> Result<String, String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
     let file =

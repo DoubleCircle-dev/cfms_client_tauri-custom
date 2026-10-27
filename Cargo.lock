@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-core"
-version = "0.57.0"
+version = "0.56.0"
 dependencies = [
  "hex",
  "serde",
@@ -697,7 +697,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-crypto"
-version = "0.57.0"
+version = "0.56.0"
 dependencies = [
  "aes-gcm",
  "base64ct",
@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-service"
-version = "0.57.0"
+version = "0.56.0"
 dependencies = [
  "base64ct",
  "cfms-core",
@@ -746,7 +746,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-transfer"
-version = "0.57.0"
+version = "0.56.0"
 dependencies = [
  "base64ct",
  "cfms-core",
@@ -764,7 +764,7 @@ dependencies = [
 
 [[package]]
 name = "cfms-transport"
-version = "0.57.0"
+version = "0.56.0"
 dependencies = [
  "base64ct",
  "cfms-core",

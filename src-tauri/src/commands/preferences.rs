@@ -96,7 +96,13 @@ pub async fn save_user_preference(
         .map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("Preference save task failed: {e}"))?
+    .map_err(|e| format!("Preference save task failed: {e}"))??;
+
+    // The automatic file-update scheduler caches its settings, so a changed
+    // interval or toggle has to wake it; otherwise the new value would only
+    // apply after its next periodic re-read.
+    state.file_auto_check.notify_settings_changed();
+    Ok(())
 }
 
 /// Set up preference encryption during the post-login loading flow.

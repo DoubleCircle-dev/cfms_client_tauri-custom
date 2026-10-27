@@ -118,6 +118,7 @@ fn main_window<R: Runtime>(app: &AppHandle<R>) -> Option<tauri::WebviewWindow<R>
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     clear_pending_ask();
     if let Some(window) = main_window(app) {
+        #[cfg(desktop)]
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();

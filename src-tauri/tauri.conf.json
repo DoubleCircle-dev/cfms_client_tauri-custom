@@ -36,7 +36,14 @@
     }
   },
   "plugins": {
-    "background-service": {},
+    "background-service": {
+      "androidForegroundServiceTypes": [
+        "dataSync"
+      ],
+      "androidNotificationChannelId": "cfms_background_service",
+      "androidNotificationChannelName": "CFMS Background Service",
+      "androidShowStopAction": false
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg1OTQ1RTE4ODZDRjAyRDkKUldUWkFzK0dHRjZVaFk2aEo5cE9kaVk3UVFBUXAzU2Z0bXdPSVk1VWQrNUlvcG1GT0loSE9wNFcK",
       "windows": {
@@ -64,7 +71,7 @@
     ],
     "windows": {
       "wix": {
-        "version": "0.55.1.1"
+        "version": "0.56.0.1"
       }
     }
   }
