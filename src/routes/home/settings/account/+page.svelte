@@ -195,7 +195,7 @@
   <SettingsPageHeader
     title={$t('settings.account.title')}
     description={$t('settings.account.description')}
-    icon="accountCircle"
+    icon="contactCard"
     onRefresh={refreshProfile}
     refreshDisabled={loading || !serverStateStore.connected || authStore.postLoginPending}
   />

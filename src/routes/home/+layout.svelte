@@ -507,7 +507,7 @@
             </div>
             <span class="explorer-menu-separator"></span>
             <button data-menu-item role="menuitem" tabindex="-1" onclick={() => { closeAccountMenu(); void goto('/home/settings/account'); }}>
-              <Icon name="accountCircle" size="18px" /><span>{$t('settings.account.title')}</span>
+              <Icon name="contactCard" size="18px" /><span>{$t('settings.account.title')}</span>
             </button>
             <button data-menu-item role="menuitem" tabindex="-1" disabled={accountActionBusy} onclick={handleLogout}>
               <Icon name="logout" size="18px" /><span>{$t('lockdown.logout')}</span>

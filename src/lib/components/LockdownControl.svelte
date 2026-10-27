@@ -168,7 +168,7 @@
     {:else if editorMode}
       <Icon name="check" size="19px" />
     {:else}
-      <Icon name="supervisedUserCircleOff" size="18px" />
+      <Icon name="security" size="18px" filled={active} />
     {/if}
   </button>
 </div>

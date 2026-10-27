@@ -31,10 +31,10 @@ import svg28 from '@fluentui/svg-icons/icons/arrow_enter_left_24_regular.svg?raw
 import svg29 from '@fluentui/svg-icons/icons/arrow_enter_left_24_filled.svg?raw';
 import svg30 from '@fluentui/svg-icons/icons/arrow_enter_left_20_regular.svg?raw';
 import svg31 from '@fluentui/svg-icons/icons/arrow_enter_left_20_filled.svg?raw';
-import svg32 from '@fluentui/svg-icons/icons/sign_out_24_regular.svg?raw';
-import svg33 from '@fluentui/svg-icons/icons/sign_out_24_filled.svg?raw';
-import svg34 from '@fluentui/svg-icons/icons/sign_out_20_regular.svg?raw';
-import svg35 from '@fluentui/svg-icons/icons/sign_out_20_filled.svg?raw';
+import svg32 from '@fluentui/svg-icons/icons/arrow_exit_24_regular.svg?raw';
+import svg33 from '@fluentui/svg-icons/icons/arrow_exit_24_filled.svg?raw';
+import svg34 from '@fluentui/svg-icons/icons/arrow_exit_20_regular.svg?raw';
+import svg35 from '@fluentui/svg-icons/icons/arrow_exit_20_filled.svg?raw';
 import svg36 from '@fluentui/svg-icons/icons/chevron_left_24_regular.svg?raw';
 import svg37 from '@fluentui/svg-icons/icons/chevron_left_24_filled.svg?raw';
 import svg38 from '@fluentui/svg-icons/icons/chevron_left_20_regular.svg?raw';
@@ -481,6 +481,14 @@ import svg478 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
 import svg479 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
 import svg480 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
 import svg481 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
+import svg482 from '@fluentui/svg-icons/icons/contact_card_24_regular.svg?raw';
+import svg483 from '@fluentui/svg-icons/icons/contact_card_24_filled.svg?raw';
+import svg484 from '@fluentui/svg-icons/icons/contact_card_20_regular.svg?raw';
+import svg485 from '@fluentui/svg-icons/icons/contact_card_20_filled.svg?raw';
+import svg486 from '@fluentui/svg-icons/icons/person_key_24_regular.svg?raw';
+import svg487 from '@fluentui/svg-icons/icons/person_key_24_filled.svg?raw';
+import svg488 from '@fluentui/svg-icons/icons/person_key_20_regular.svg?raw';
+import svg489 from '@fluentui/svg-icons/icons/person_key_20_filled.svg?raw';
 import duotone0 from './assets/duotone/person_circle_24.svg?raw';
 import duotone1 from './assets/duotone/person_circle_20.svg?raw';
 import duotone2 from './assets/duotone/folder_add_24.svg?raw';
@@ -637,4 +645,6 @@ export const ICON_VARIANTS = {
   laptopBriefcase: { regular: svg472, filled: svg473, small: svg474, smallFilled: svg475 },
   passwordReset: { regular: svg476, filled: svg477, small: svg476, smallFilled: svg477, duotone: duotone12, smallDuotone: duotone13 },
   pushPin: { regular: svg478, filled: svg479, small: svg480, smallFilled: svg481 },
+  contactCard: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
+  personKey: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
 } as const;

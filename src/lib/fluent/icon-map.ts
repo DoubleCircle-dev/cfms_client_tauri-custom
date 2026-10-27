@@ -8,7 +8,7 @@ export const ICON_MAP = {
   "manage": "cloud",
   "schedules": "calendar_clock",
   "login": "arrow_enter_left",
-  "logout": "sign_out",
+  "logout": "arrow_exit",
   "chevronLeft": "chevron_left",
   "password": "password",
   "keyboard": "keyboard",
@@ -140,4 +140,6 @@ export const ICON_MAP = {
   "laptopBriefcase": "laptop_briefcase",
   "passwordReset": "password_reset",
   "pushPin": "pin",
+  "contactCard": "contact_card",
+  "personKey": "person_key",
 } as const;

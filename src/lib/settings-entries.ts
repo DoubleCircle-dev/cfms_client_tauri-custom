@@ -79,7 +79,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
   {
     labelKey: 'settings.account.title',
     descriptionKey: 'settings.account.description',
-    icon: 'accountCircle',
+    icon: 'contactCard',
     href: '/home/settings/account',
     group: 'accessSecurity',
     scopeKey: 'settings.overview.scope.account',

@@ -70,7 +70,7 @@
   {#if busy}
     <ProgressRing size={18} label={$t('common.verifying')} />
   {:else}
-    <Icon name="adminPanelSettings" size="19px" />
+    <Icon name="personKey" size="19px" />
   {/if}
 </FluentButton>
 
