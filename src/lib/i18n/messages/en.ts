@@ -2336,7 +2336,7 @@ export const en = {
     speak: 'Speak',
     sendingMessage: 'Sending…',
     reply: 'Reply',
-    replyUnavailable: 'This speaker does not have a unique 7-character ID required by the chat record format.',
+    replyUnavailable: 'This speaker does not have a unique record filename identifier and cannot be quoted.',
     replyingTo: 'Replying to {name}',
     cancelReply: 'Cancel reply',
     replySingleLine: 'Replies currently support one line only. Remove line breaks before sending.',

@@ -497,4 +497,60 @@ describe('chat page online mode', () => {
       document.querySelector('.chat-msg .chat-reply .chat-reply-text')?.textContent,
     ).toContain('When was Kuroshio Hour?');
   });
+
+  it('uses the complete source filename identifier when replying to a custom speaker', async () => {
+    const accountHash = createHash('sha256').update('alice').digest('hex').slice(0, 7);
+    const customSpeaker = 'custom-speaker-long';
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', '.runtime', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockImplementation(async (folderId: string | null) => {
+      if (folderId === 'chatbox-folder-id') {
+        return {
+          folders: [{ id: 'room-folder-id', name: 'room-id', created_time: 100 }],
+          documents: [],
+          parent_id: null,
+        };
+      }
+      return {
+        folders: [],
+        documents: [{ id: 'custom-record-id', title: `${customSpeaker}.txt` }],
+        parent_id: folderId,
+      };
+    });
+    mocks.readServerDocument.mockResolvedValue({
+      content: '# time | msg\n2025-07-24 20:53:18 | question from custom name\n',
+      size: 66,
+      truncated: false,
+    });
+    mocks.uploadChatRecord.mockResolvedValue({
+      file_name: `${accountHash}.txt`,
+      overwritten: false,
+    });
+
+    render(ChatPage);
+    await waitFor(() => expect(roomCards().length).toBe(1));
+    await fireEvent.click(roomCards()[0].closest('.chat-room-card') as HTMLElement);
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'chat.reply' }));
+    expect(screen.getByText('chat.replyingTo:custom-speaker-long')).toBeTruthy();
+    await fireEvent.input(screen.getByRole('textbox', { name: 'chat.message' }), {
+      target: { value: 'custom reply' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'chat.speak' }));
+
+    await waitFor(() => {
+      expect(mocks.uploadChatRecord).toHaveBeenCalledWith(
+        'room-folder-id',
+        accountHash,
+        expect.stringMatching(
+          /^# time \| msg\n\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| custom reply \/\/ custom-speaker-long -> question from custom name\n$/,
+        ),
+        expect.any(String),
+      );
+    });
+    expect(
+      document.querySelector('.chat-msg .chat-reply .chat-reply-text')?.textContent,
+    ).toContain('question from custom name');
+  });
 });

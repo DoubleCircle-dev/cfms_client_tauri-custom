@@ -65,7 +65,7 @@
     '#40c8c8',
   ];
   const URL_PATTERN = /https?:\/\/[^\s)]+/g;
-  const REPLY_PATTERN = /([\s\S]*)\s*\/\/\s*(\w{7})\s*->\s*(.*)$/;
+  const REPLY_PATTERN = /([\s\S]*)\s*\/\/\s*(.+?)\s*->\s*(.*)$/;
 
   interface ReplyRef {
     user: string;
@@ -608,14 +608,12 @@
   }
 
   function replyUserId(message: ChatMessage): string | null {
-    const userId = message.user.slice(0, 7);
-    if (!/^\w{7}$/.test(userId)) return null;
     const matchingUsers = new Set(
       selectedRoom?.messages
         .map((item) => item.user)
-        .filter((user) => user.slice(0, 7) === userId),
+        .filter((user) => user.toLocaleLowerCase() === message.user.toLocaleLowerCase()),
     );
-    return matchingUsers.size === 1 ? userId : null;
+    return matchingUsers.size === 1 ? message.user : null;
   }
 
   function startReply(message: ChatMessage) {

@@ -2323,7 +2323,7 @@ export const zh_CN = {
     speak: '发言',
     sendingMessage: '发送中…',
     reply: '回复',
-    replyUnavailable: '该发言者没有唯一的 7 位 ID，无法按聊天记录格式引用。',
+    replyUnavailable: '该发言者的记录文件标识不唯一，无法引用。',
     replyingTo: '回复 {name}',
     cancelReply: '取消回复',
     replySingleLine: '回复内容暂不支持换行，请删除换行后再发送。',
