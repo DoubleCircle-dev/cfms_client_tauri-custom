@@ -16,6 +16,15 @@ export const KEYBOARD_HELP_SHORTCUTS = [
   { key: '/', primary: true },
 ] as const satisfies readonly ShortcutSpec[];
 
+/** Shared by file commands, row activation, and context-menu hints. */
+export const FILE_SHORTCUTS = {
+  activate: [{ key: 'Enter' }],
+  refresh: [{ key: 'F5' }, { key: 'r', primary: true }],
+  createFolder: [{ key: 'n', primary: true, shift: true }],
+  rename: [{ key: 'F2' }],
+  delete: [{ key: 'Delete' }],
+} as const satisfies Record<string, readonly ShortcutSpec[]>;
+
 export interface KeyboardCommand {
   id: string;
   label: string | (() => string);
@@ -193,14 +202,17 @@ export function focusRovingItem(
     selector?: string;
     orientation?: 'horizontal' | 'vertical' | 'both';
     wrap?: boolean;
+    includeAriaDisabled?: boolean;
   } = {},
 ): HTMLElement | null {
   const {
     selector = '[data-roving-item]',
     orientation = 'both',
     wrap = true,
+    includeAriaDisabled = false,
   } = options;
-  const items = Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(isFocusableItem);
+  const items = Array.from(container.querySelectorAll<HTMLElement>(selector))
+    .filter((item) => isFocusableItem(item, includeAriaDisabled));
   if (items.length === 0) return null;
 
   const horizontal = orientation === 'horizontal' || orientation === 'both';
@@ -351,10 +363,10 @@ function formatKey(key: string): string {
   return names[key] ?? (key.length === 1 ? key.toUpperCase() : key);
 }
 
-function isFocusableItem(element: HTMLElement): boolean {
+function isFocusableItem(element: HTMLElement, includeAriaDisabled = false): boolean {
   return !element.hidden
     && element.getAttribute('aria-hidden') !== 'true'
-    && element.getAttribute('aria-disabled') !== 'true'
+    && (includeAriaDisabled || element.getAttribute('aria-disabled') !== 'true')
     && !element.hasAttribute('disabled')
     && !(element instanceof HTMLButtonElement && element.disabled);
 }

@@ -145,6 +145,7 @@
   import { canSearchFiles } from '$lib/files/search-permissions';
   import { isAccessDeniedError, serverAvailability, serverErrorStatus } from '$lib/api/server-errors';
   import {
+    FILE_SHORTCUTS,
     fileManagerShortcutFor,
     isFindShortcut,
     registerKeyboardCommands,
@@ -1367,7 +1368,7 @@
       return;
     }
 
-    if (event.key === 'Enter') {
+    if (event.key === FILE_SHORTCUTS.activate[0].key) {
       event.preventDefault();
       if (row.kind === 'folder') void handleNavigate(row.folder.id, row.folder.name);
       else void handleDownload(row.document);
@@ -1576,6 +1577,7 @@
         { type: 'divider' },
         {
           id: 'delete-selection',
+          shortcuts: FILE_SHORTCUTS.delete,
           label: $t('common.delete'),
           icon: 'delete',
           disabled: batchBusy || !canDeleteSelection(),
@@ -1591,6 +1593,7 @@
       return [
         {
           id: 'refresh-current-directory',
+          shortcuts: FILE_SHORTCUTS.refresh,
           label: $t('common.refresh'),
           icon: 'refresh',
           onSelect: async () => {
@@ -1600,6 +1603,7 @@
         { type: 'divider' },
         {
           id: 'create-directory-here',
+          shortcuts: FILE_SHORTCUTS.createFolder,
           label: $t('files.createFolder'),
           icon: 'createNewFolder',
           onSelect: handleCreateFolder,
@@ -1657,6 +1661,7 @@
       return [
         {
           id: 'download-document',
+          shortcuts: FILE_SHORTCUTS.activate,
           label: $t('common.download'),
           icon: 'download',
           onSelect: () => handleDownload(doc),
@@ -1671,6 +1676,7 @@
         { type: 'divider' },
         {
           id: 'rename-document',
+          shortcuts: FILE_SHORTCUTS.rename,
           label: $t('files.rename'),
           icon: 'edit',
           requiredPermissions: ['rename_document'],
@@ -1685,6 +1691,7 @@
         },
         {
           id: 'delete-document',
+          shortcuts: FILE_SHORTCUTS.delete,
           label: $t('common.delete'),
           icon: 'delete',
           requiredPermissions: ['delete_document'],
@@ -1750,6 +1757,7 @@
     return [
       {
         id: 'open-folder',
+        shortcuts: FILE_SHORTCUTS.activate,
         label: $t('common.open'),
         icon: 'folderOpen',
         onSelect: () => handleNavigate(folder.id, folder.name),
@@ -1771,6 +1779,7 @@
       { type: 'divider' },
       {
         id: 'rename-folder',
+        shortcuts: FILE_SHORTCUTS.rename,
         label: $t('files.rename'),
         icon: 'edit',
         requiredPermissions: ['rename_directory'],
@@ -1785,6 +1794,7 @@
       },
       {
         id: 'delete-folder',
+        shortcuts: FILE_SHORTCUTS.delete,
         label: $t('common.delete'),
         icon: 'delete',
         requiredPermissions: ['delete_directory'],
@@ -3676,7 +3686,7 @@
         id: 'files.refresh',
         label: () => $t('common.refresh'),
         group: () => $t('files.title'),
-        shortcuts: [{ key: 'F5' }, { key: 'r', primary: true }],
+        shortcuts: FILE_SHORTCUTS.refresh,
         scope: 'page',
         enabled: () => !navigationUnavailable && !hasBlockingFilesDialog(),
         handler: (event) => executeFileManagerShortcut('refresh', event),
@@ -3685,7 +3695,7 @@
         id: 'files.create-folder',
         label: () => $t('files.createFolder'),
         group: () => $t('files.title'),
-        shortcuts: [{ key: 'n', primary: true, shift: true }],
+        shortcuts: FILE_SHORTCUTS.createFolder,
         scope: 'page',
         enabled: () => !loading && !batchBusy && !hasBlockingFilesDialog(),
         handler: (event) => executeFileManagerShortcut('create-folder', event),
@@ -3712,7 +3722,7 @@
         id: 'files.delete',
         label: () => $t('common.delete'),
         group: () => $t('files.title'),
-        shortcuts: [{ key: 'Delete' }],
+        shortcuts: FILE_SHORTCUTS.delete,
         scope: 'page',
         enabled: () => totalSelected > 0 && canDeleteSelection() && !hasBlockingFilesDialog(),
         handler: (event) => executeFileManagerShortcut('delete-selection', event),
@@ -3721,7 +3731,7 @@
         id: 'files.rename',
         label: () => $t('files.rename'),
         group: () => $t('files.title'),
-        shortcuts: [{ key: 'F2' }],
+        shortcuts: FILE_SHORTCUTS.rename,
         scope: 'page',
         enabled: () => totalSelected === 1 && canRenameSelected() && !hasBlockingFilesDialog(),
         handler: (event) => executeFileManagerShortcut('rename-selection', event),

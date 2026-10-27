@@ -86,9 +86,11 @@ Use locally bundled Noto Sans followed by Noto Sans SC for sans-serif text on ev
 
 The font stacks are declared in the Fluent theme module and emitted into the generated CSS. Fluent base/numeric tokens, Tailwind font utilities and legacy font aliases resolve to these same stacks. In particular, --font-md3-serif and --font-cfms-reading resolve to --font-cfms-serif, not the sans-serif base.
 
-Fonts ship as local variable WOFF2 slices covering weights 400–800. Preserve unicode ranges for dynamic filenames, user names and server content; never limit coverage to translation strings. The build-time font asset script is the only downloader. Ship the OFL license for each family and make no runtime font CDN requests.
+Fonts ship as local variable WOFF2 slices covering weights 300–800 for Noto Sans and Noto Sans SC, and 400–800 for other families. Preserve unicode ranges for dynamic filenames, user names and server content; never limit coverage to translation strings. The build-time font asset script is the only downloader. Ship the OFL license for each family and make no runtime font CDN requests.
 
 Use the 12/16, 14/20, 16/22, 20/26 and 28/36 pixel ramp. Default text is regular 14/20; semibold supplies hierarchy. Touch inputs use 16px. Prefer sentence case, baseline alignment and restrained tracking.
+
+Context-menu shortcut hints use the first existing binding, right-aligned beside the action label in 300-weight sans-serif text at 12/16px, without keycap decoration. Share bindings with command registration and retain platform-aware key names. Disabled actions with an explanation remain focusable with aria-disabled and cannot execute; hover, keyboard focus and touch reveal a portaled, viewport-constrained tooltip. Elevation reminders apply only when elevation is the missing prerequisite, and direct users to the existing toolbar control.
 
 ## Layout
 

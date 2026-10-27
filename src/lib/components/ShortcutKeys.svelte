@@ -4,21 +4,26 @@
   interface Props {
     shortcuts: readonly ShortcutSpec[];
     compact?: boolean;
+    variant?: 'keycap' | 'menu';
     class?: string;
   }
 
   let {
     shortcuts,
     compact = false,
+    variant = 'keycap',
     class: className = '',
   }: Props = $props();
 
-  const formattedShortcuts = $derived(shortcuts.map((shortcut) => formatShortcut(shortcut)));
+  const formattedShortcuts = $derived(
+    (variant === 'menu' ? shortcuts.slice(0, 1) : shortcuts).map((shortcut) => formatShortcut(shortcut)),
+  );
 </script>
 
 <span
   class="shortcut-keys {className}"
   class:shortcut-keys--compact={compact}
+  class:shortcut-keys--menu={variant === 'menu'}
   aria-hidden={compact ? 'true' : undefined}
   aria-label={compact ? undefined : formattedShortcuts.join(', ')}
 >
@@ -59,5 +64,31 @@
     font-size: 12px;
     line-height: 1.35;
     letter-spacing: -0.015em;
+  }
+
+  .shortcut-keys--menu {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    color: var(--colorNeutralForeground2);
+  }
+
+  .shortcut-keys--menu kbd {
+    min-width: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: inherit;
+    background: none;
+    box-shadow: none;
+    font: 300 12px/16px var(--fontFamilyBase);
+    letter-spacing: normal;
+  }
+
+  :global(.context-menu-item:is(:disabled, [aria-disabled='true'])) .shortcut-keys--menu {
+    color: inherit;
+  }
+
+  @media (forced-colors: active) {
+    .shortcut-keys--menu { color: inherit; }
   }
 </style>

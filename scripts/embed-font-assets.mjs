@@ -24,7 +24,8 @@ const assets = new Map();
 const chunks = [];
 for (const [name, family, licensePath] of specs) {
   const url = new URL('https://fonts.googleapis.com/css2');
-  url.searchParams.set('family', `${family}:wght@400..800`);
+  const minimumWeight = name === 'noto-sans' || name === 'noto-sans-sc' ? 300 : 400;
+  url.searchParams.set('family', `${family}:wght@${minimumWeight}..800`);
   url.searchParams.set('display', 'swap');
   let css = (await fetchBytes(url)).toString('utf8');
   const matches = [...css.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)\s+format\('woff2'\)/g)];

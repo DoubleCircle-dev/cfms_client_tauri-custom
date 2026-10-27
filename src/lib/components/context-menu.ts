@@ -1,4 +1,5 @@
 import type { IconName } from '$lib/icons';
+import type { ShortcutSpec } from '$lib/keyboard';
 
 export interface ContextMenuActionItem {
   id: string;
@@ -7,6 +8,9 @@ export interface ContextMenuActionItem {
   iconFilled?: boolean;
   onSelect: () => void | Promise<void>;
   disabled?: boolean;
+  /** Explanation shown only while this action is disabled. */
+  disabledReason?: string;
+  shortcuts?: readonly ShortcutSpec[];
   danger?: boolean;
   hidden?: boolean;
   requiredPermissions?: string[];

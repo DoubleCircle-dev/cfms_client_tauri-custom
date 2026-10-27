@@ -3,6 +3,7 @@ import {
   dispatchKeyboardCommand,
   fileManagerShortcutFor,
   formatShortcut,
+  focusRovingItem,
   isCommandShownInHelp,
   registerKeyboardCommands,
   shortcutMatches,
@@ -40,6 +41,41 @@ describe('fileManagerShortcutFor', () => {
 });
 
 describe('keyboard command registry', () => {
+  it('keeps page shortcuts blocked while a context menu is open', () => {
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    document.body.append(menu);
+    let calls = 0;
+    const unregister = registerKeyboardCommands({
+      id: 'test.menu-scope', label: 'Rename', shortcuts: [{ key: 'F2' }], scope: 'page',
+      handler: () => { calls++; },
+    });
+    expect(dispatchKeyboardCommand(key('F2'))).toBe(false);
+    expect(calls).toBe(0);
+    menu.remove();
+    expect(dispatchKeyboardCommand(key('F2'))).toBe(true);
+    expect(calls).toBe(1);
+    unregister();
+  });
+
+  it('only includes aria-disabled controls when navigation explicitly opts in', () => {
+    const container = document.createElement('div');
+    container.innerHTML = '<button data-roving-item>First</button><button data-roving-item aria-disabled="true">Explained</button><button data-roving-item disabled>Native disabled</button><button data-roving-item>Last</button>';
+    document.body.append(container);
+    const [first, explained, , last] = container.querySelectorAll('button');
+    const move = (includeAriaDisabled?: boolean) => {
+      const event = key('ArrowDown', { bubbles: true });
+      first.addEventListener('keydown', (event) => focusRovingItem(event, container, { orientation: 'vertical', includeAriaDisabled }), { once: true });
+      first.dispatchEvent(event);
+      return document.activeElement;
+    };
+    // jsdom has no scrolling implementation.
+    for (const button of container.querySelectorAll('button')) button.scrollIntoView = () => {};
+    expect(move()).toBe(last);
+    expect(move(true)).toBe(explained);
+    container.remove();
+  });
+
   it('maps the primary modifier for Windows and macOS', () => {
     const windowsEvent = key('1', { ctrlKey: true });
     const macEvent = key('1', { metaKey: true });

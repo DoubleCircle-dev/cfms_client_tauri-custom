@@ -106,6 +106,80 @@ afterEach(() => {
 });
 
 describe('management account context menu', () => {
+  it.each([
+    ['en', 'Reset password', 'Verify your identity using “Elevate privileges” in the top toolbar before using this action.'],
+    ['zh-CN', '重置密码', '请先通过顶部工具栏「申请提权」验证身份，再执行此操作。'],
+  ])('explains missing elevation in %s without sending a password reset request', async (language, label, reason) => {
+    locale.set(language);
+    authStore.permissions = ['list_users', 'super_configure_auth_methods'];
+    mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);
+    render(ManagePage);
+    await fireEvent.contextMenu((await screen.findAllByRole('listitem'))[0]);
+    const reset = screen.getByRole('menuitem', { name: label });
+    expect(reset.getAttribute('aria-disabled')).toBe('true');
+    reset.focus();
+    await waitFor(() => expect(screen.getByRole('tooltip').textContent).toBe(reason));
+    await fireEvent.click(reset);
+    await fireEvent.keyDown(reset, { key: 'Enter' });
+    await fireEvent.keyDown(reset, { key: ' ' });
+    expect(mocks.resetUserPassword).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('menu')).toBeTruthy();
+  });
+
+  it('does not suggest elevation when configuration permission is missing', async () => {
+    authStore.permissions = ['list_users'];
+    mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);
+    render(ManagePage);
+    await fireEvent.contextMenu((await screen.findAllByRole('listitem'))[0]);
+    const reset = screen.getByRole('menuitem', { name: 'Reset password' });
+    expect(reset.hasAttribute('disabled')).toBe(true);
+    expect(reset.hasAttribute('aria-describedby')).toBe(false);
+    expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
+    await fireEvent.click(reset);
+    expect(mocks.resetUserPassword).not.toHaveBeenCalled();
+  });
+
+  it('updates an open menu when elevation succeeds and expires', async () => {
+    authStore.permissions = ['list_users', 'super_configure_auth_methods'];
+    mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);
+    render(ManagePage);
+    await fireEvent.contextMenu((await screen.findAllByRole('listitem'))[0]);
+    const reset = screen.getByRole('menuitem', { name: 'Reset password' });
+    reset.focus();
+    await waitFor(() => expect(screen.getByRole('tooltip')).toBeTruthy());
+    authStore.escalationExp = Date.now() / 1000 + 300;
+    await waitFor(() => expect(reset.hasAttribute('aria-disabled')).toBe(false));
+    expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
+    expect(document.activeElement).toBe(reset);
+    // Expiration is observed on the page's existing one-second clock.
+    authStore.escalationExp = Date.now() / 1000 + 0.1;
+    await waitFor(() => expect(reset.getAttribute('aria-disabled')).toBe('true'), { timeout: 2000 });
+    expect(reset.hasAttribute('aria-describedby')).toBe(true);
+    await fireEvent.click(reset);
+    expect(mocks.resetUserPassword).not.toHaveBeenCalled();
+  });
+
+  it('does not suggest elevation while another account action is busy', async () => {
+    authStore.permissions = ['list_users', 'super_configure_auth_methods', 'manage_user_status'];
+    mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);
+    let finish!: (value: unknown) => void;
+    mocks.getUserInfo.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    render(ManagePage);
+    const row = (await screen.findAllByRole('listitem'))[0];
+    await fireEvent.contextMenu(row);
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Account management' }));
+    await waitFor(() => expect(mocks.getUserInfo).toHaveBeenCalled());
+    await fireEvent.contextMenu(row);
+    const reset = screen.getByRole('menuitem', { name: 'Reset password' });
+    expect(reset.hasAttribute('disabled')).toBe(true);
+    expect(reset.hasAttribute('aria-describedby')).toBe(false);
+    expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
+    finish(null);
+    await waitFor(() => expect(reset.hasAttribute('disabled')).toBe(false));
+    expect(reset.getAttribute('aria-disabled')).toBe('true');
+  });
+
   it('resets another account with configuration permission without reading authentication inventory', async () => {
     authStore.permissions = ['list_users', 'super_configure_auth_methods'];
     authStore.escalationExp = Date.now() / 1000 + 300;

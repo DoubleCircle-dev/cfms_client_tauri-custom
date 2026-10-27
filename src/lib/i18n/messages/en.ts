@@ -158,6 +158,9 @@ export const en = {
     unsupported: 'This client cannot use the available authentication methods: {methods}. Contact your administrator to configure a supported method.',
     unavailable: 'No active credential can satisfy the escalation policy. Contact your administrator.',
   },
+  contextMenu: {
+    elevationRequired: 'Verify your identity using “Elevate privileges” in the top toolbar before using this action.',
+  },
   common: {
     back: 'Back',
     loading: 'Loading...',

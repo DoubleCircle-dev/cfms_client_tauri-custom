@@ -158,6 +158,9 @@ export const zh_CN = {
     unsupported: '此客户端尚不支持可用的认证方式：{methods}。请联系管理员配置支持的方式。',
     unavailable: '没有可满足提权策略的有效凭据，请联系管理员。',
   },
+  contextMenu: {
+    elevationRequired: '请先通过顶部工具栏「申请提权」验证身份，再执行此操作。',
+  },
   common: {
     back: '返回',
     loading: '加载中...',

@@ -459,6 +459,9 @@
         icon: 'passwordReset',
         onSelect: () => handleResetPassword(user),
         disabled: disabled || !canResetPassword(user),
+        disabledReason: !disabled && !elevated
+          && canConfigureAuthentication(authStore.permissions, user.user_id !== authStore.userId)
+          ? $t('contextMenu.elevationRequired') : undefined,
       },
       {
         id: 'change-user-avatar',
