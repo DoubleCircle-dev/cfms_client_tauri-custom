@@ -314,6 +314,7 @@
         <div class="relative" bind:this={serverAddressField}>
           <MdOutlinedField
             inputId="serverUrl"
+            controlSize="large"
             label={$t('connect.serverAddress')}
             error={Boolean(serverAddressError)}
           >
@@ -423,7 +424,7 @@
                     text-md3-on-tertiary-container text-sm rounded-xl p-4 space-y-3"
         >
           <div class="flex items-start gap-2">
-            <span class="shrink-0 mt-0.5"
+            <span class="cfms-icon-text__icon shrink-0"
               ><Icon name="warning" size="16px" /></span
             >
             <div>
@@ -917,7 +918,6 @@
   }
 
   .server-address-input {
-    height: 42px;
     padding-left: 0.25rem;
     font-family: var(--font-md3-sans);
   }

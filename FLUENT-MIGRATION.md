@@ -2,6 +2,28 @@
 
 The migration preserves routes, server protocols, preferences, permission checks and workflow semantics. Existing `md3` and `explorer` names remain aliases of the Fluent theme, not independent design systems.
 
+## Shared field geometry refinement (2026-10-27)
+
+The audit covered 53 shared-field usages in 28 Svelte files, including the FluentTextInput adapter. The notched label now overhangs the control by 8px; it adds no layout height. MdOutlinedField and FluentTextInput share explicit small/medium/large sizes (24/32/40px desktop, 44px coarse pointer), and ordinary buttons and standalone native single-line fields use the same medium token. Multiline controls retain their natural height. Native password controls remain native.
+
+| Area | Changes and removed local fixes |
+| --- | --- |
+| Recycle bin | Removed the 36px button minimum and vertical padding; the folder field, Load and Select share the 32/44px border box. |
+| Account and storage settings | Removed nickname actions' 8px top compensation, its narrow-screen reset, and redundant input sizes. Storage actions align centrally and keep their width when the path shrinks. Help/errors stay outside the aligned controls. |
+| Connection, sign-in and private keys | Express large fields through controlSize instead of 38/42/48px native-input overrides; direct inline touch actions cover the wrapper border without increasing field height. |
+| Authentication, account/group creation, password changes/resets, preference unlock/recovery, user blocking and document-ID download | Removed single-line vertical-padding and height overrides. Password action spacing follows shared button dimensions through data-field-actions, including two 44px touch actions. |
+| Schedule, schema payload, permission and security editors; authorization dates; developer console; GitHub API settings; extension forms | Removed competing field heights and vertical padding. Schedule trigger/timezone controls align at the control body; field roots do not stretch with grid rows. Date/time composites preserve icons and native pickers. |
+| Other shared-field consumers | Authentication-method and authenticator settings, management reason fields and connection proxy/certificate fields inherit the shared correction without route-specific offsets. Independent address/search composites retain their established 32/44px geometry; their source and existing regression tests were reviewed. |
+
+Validation:
+
+- `pnpm check`: zero errors/warnings; focus-ring and generated Fluent contracts pass.
+- `pnpm test`: 993 tests in 130 files pass, including an added native/Fluent controlSize propagation regression. jsdom reports its existing unsupported canvas getContext diagnostic; the tests pass.
+- `pnpm build`: production static build passes. The layout detector returns no findings for the shared controls and the three principal affected surfaces.
+- Real Chromium browser, synthetic IPC data: 36 combinations across recycle bin, account nickname and storage path pages at 1280×900 and 390×844, English/Chinese, light/dark, 100%/125%/150% CSS zoom and normal/coarse-pointer CSS. Desktop field/action edges match exactly (0px error); narrow layouts stack correctly without horizontal overflow. The coarse-pointer condition was activated in the temporary fixture's CSSOM; this is style simulation, not hardware validation or OS/browser zoom validation.
+- Browser checks also cover native/Fluent 24/32/40px parity and 44px touch parity, error/disabled size stability, label-to-shadow-input focus, nickname count/errors and Escape, password visibility and two 44px action targets, multiline inputs, authorization date/time fields and the schedule select/timezone row.
+- Browser evidence is saved locally under `.svelte-kit/field-qa-evidence/`. The temporary Vite fixture is shut down after validation. No Android/Gradle or native-material validation was performed for this frontend geometry change.
+
 ## Implemented batches
 
 - [x] Typography: local Noto Sans, Noto Sans SC, Noto Serif, Noto Serif SC and JetBrains Mono; variable WOFF2 400–800, dynamic character coverage and bundled OFL licenses. Inter and legacy TTF assets removed.

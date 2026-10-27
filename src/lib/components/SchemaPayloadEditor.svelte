@@ -325,12 +325,12 @@
 
   {#if !prepared.renderable}
     <div class="editor-notice" role="status">
-      <Icon name="code" size="18px" />
+      <span class="cfms-icon-text__icon"><Icon name="code" size="18px" /></span>
       <span>{$t('schedules.payloadSourceFallback', { values: { keyword: prepared.unsupportedKeyword ?? 'schema' } })}</span>
     </div>
   {:else if prepared.root && !valueCanRender(prepared.root, value)}
     <div class="editor-notice" role="status">
-      <Icon name="warningAmber" size="18px" />
+      <span class="cfms-icon-text__icon"><Icon name="warningAmber" size="18px" /></span>
       <span>{$t('schedules.payloadFormTypeMismatch')}</span>
     </div>
   {/if}
@@ -687,7 +687,6 @@
   :global(:is(button[data-fluent-owner="lib-components-schema-payload-editor"], .cfms-button[data-fluent-owner="lib-components-schema-payload-editor"]):is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.48; }
   input, select, textarea { width: 100%; box-sizing: border-box; color: var(--color-md3-on-surface); font: 0.82rem/1.4 var(--font-md3-sans); }
   select { border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); }
-  input, select { min-height: 40px; padding: 0 0.65rem; }
   textarea { min-height: 6.5rem; resize: vertical; padding: 0.65rem; }
   select[aria-invalid="true"] { border-color: var(--color-md3-error); }
   .schema-description, .constraint-summary, .additional-properties-note { margin: 0; color: var(--color-md3-on-surface-variant); font: 0.7rem/1.45 var(--font-md3-sans); }

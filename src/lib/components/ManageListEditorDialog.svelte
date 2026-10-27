@@ -229,7 +229,7 @@
       {:else if error}
         <div class="rounded-lg border border-md3-error/35 bg-md3-error-container/20 p-4 text-sm text-md3-on-error-container">
           <div class="flex items-start gap-2">
-            <Icon name="errorFilled" size="18px" />
+            <span class="cfms-icon-text__icon"><Icon name="errorFilled" size="18px" /></span>
             <p class="min-w-0 break-words">{error}</p>
           </div>
         </div>

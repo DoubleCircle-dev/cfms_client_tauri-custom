@@ -53,7 +53,7 @@
       <code>{selection.fingerprint}</code>
     </details>
     {#if selection.encrypted}
-      <MdOutlinedField inputId={`${id}-passphrase`} label={$t('publicKey.passphrase')}>
+      <MdOutlinedField inputId={`${id}-passphrase`} label={$t('publicKey.passphrase')} controlSize="large">
         <input bind:this={input} id={`${id}-passphrase`} data-focus-ring="delegated" type="password" bind:value={passphrase} {disabled} autocomplete="off" class="cfms-native-field key-passphrase" />
       </MdOutlinedField>
     {/if}
@@ -76,8 +76,7 @@
   .key-fingerprint { color: var(--color-md3-on-surface-variant); font-size: 12px; }
   .key-fingerprint summary { cursor: pointer; padding: 0.25rem 0; }
   .key-fingerprint code { display: block; padding-top: 0.5rem; overflow-wrap: anywhere; font-family: var(--font-md3-mono); }
-  .key-passphrase { width: 100%; height: 42px; padding: 0 0.875rem; border: 0; outline: none; color: var(--color-md3-on-surface); background: transparent; }
   .key-error { margin: 0; font-size: 12px; color: var(--color-md3-error); }
-  @media (pointer: coarse) { .key-picker { min-height: 64px; } .key-fingerprint summary { min-height: 44px; display: flex; align-items: center; } .key-passphrase { height: 48px; } }
+  @media (pointer: coarse) { .key-picker { min-height: 64px; } .key-fingerprint summary { min-height: 44px; display: flex; align-items: center; } }
   @media (prefers-reduced-motion: reduce) { .key-picker { transition: none; } }
 </style>

@@ -497,7 +497,6 @@
 
   .date-field {
     display: grid;
-    min-height: 2.35rem;
     grid-template-columns: auto 1fr;
     align-items: center;
     gap: 8px;

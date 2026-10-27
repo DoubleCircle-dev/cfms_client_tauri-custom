@@ -407,9 +407,7 @@
   input {
     box-sizing: border-box;
     width: 100%;
-    min-height: 2.625rem;
     min-width: 0;
-    padding: 0 0.75rem;
     color: var(--color-md3-on-surface);
     font: 400 14px/20px var(--font-md3-sans);
   }
@@ -499,7 +497,6 @@
   @media (pointer: coarse) {
     :global(.editor-delete[data-fluent-owner="lib-components-permission-entry-editor"]) { width: 2.75rem; height: 2.75rem; }
     .segmented-control :global(:is(button[data-fluent-owner="lib-components-permission-entry-editor"], .cfms-button[data-fluent-owner="lib-components-permission-entry-editor"])),
-    input,
     .mode-summary,
     .deleted-editor :global(:is(button[data-fluent-owner="lib-components-permission-entry-editor"], .cfms-button[data-fluent-owner="lib-components-permission-entry-editor"])) { min-height: 3rem; }
   }

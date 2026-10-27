@@ -395,14 +395,12 @@
   .nickname-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; padding-bottom: 24px; }
   .nickname-editor__field { min-width: 0; }
   .field-with-count { position: relative; }
-  .text-field { width: 100%; min-height: 30px; padding: 5px 12px; color: var(--colorNeutralForeground1); font: 400 14px/20px var(--fontFamilyBase); }
   .text-field--counted { padding-inline-end: 72px; }
   .text-field:disabled { cursor: not-allowed; }
   .field-count { position: absolute; top: 50%; right: 12px; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyMonospace); transform: translateY(-50%); }
   .field-count--error, .field-help.field-help--error { color: var(--colorStatusDangerForeground1); }
   .field-help { display: block; margin-top: 4px; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
-  /* Match the outlined field's 8px label space above its control body. */
-  .nickname-editor__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-block-start: 8px; }
+  .nickname-editor__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]) { flex: none; font: 400 14px/20px var(--fontFamilyBase); }
   .profile-status { display: grid; gap: 8px; padding-bottom: 16px; }
   .profile-status p { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
@@ -427,13 +425,11 @@
   .authentication-link p { margin: 0; max-width: 70ch; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
   @media (max-width: 640px) {
     .profile-fields, .nickname-editor { grid-template-columns: minmax(0, 1fr); }
-    .nickname-editor__actions { padding-block-start: 0; }
     .identity-summary { grid-template-columns: auto minmax(0, 1fr); }
     :global(.identity-edit-button[data-fluent-owner="routes-home-settings-account-page"]) { grid-column: 2; justify-self: start; }
     .authentication-link { flex-wrap: wrap; }
     .profile-section, .authentication-link { padding-block: 20px; }
   }
-  @media (pointer: coarse) { .text-field { min-height: 42px; font-size: 16px; } }
   @media (prefers-reduced-motion: reduce) { .identity-avatar--editable { transition: none; } }
   @media (forced-colors: active) { .avatar-edit { background: Highlight; color: HighlightText; border-color: Canvas; } }
 </style>

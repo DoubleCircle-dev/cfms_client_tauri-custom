@@ -79,7 +79,7 @@
           <input id={`${outlinedId}-1`} data-focus-ring="delegated"
             bind:this={groupNameInput}
             bind:value={groupName}
-            class="cfms-native-field w-full py-2.5 pl-10 pr-3 text-sm text-md3-on-surface transition"
+            class="cfms-native-field w-full pl-10 pr-3 text-sm text-md3-on-surface transition"
             autocomplete="off"
             disabled={busy}
           />
@@ -95,7 +95,7 @@
           </span>
           <input id={`${outlinedId}-2`} data-focus-ring="delegated"
             bind:value={displayName}
-            class="cfms-native-field w-full py-2.5 pl-10 pr-3 text-sm text-md3-on-surface transition"
+            class="cfms-native-field w-full pl-10 pr-3 text-sm text-md3-on-surface transition"
             autocomplete="off"
             disabled={busy}
             placeholder={groupName || $t('manage.displayNamePrompt')}
@@ -106,7 +106,7 @@
 
     {#if error}
       <div class="flex items-start gap-2 rounded-lg border border-md3-error/35 bg-md3-error-container/25 p-3 text-sm text-md3-on-error-container">
-        <Icon name="errorFilled" size="16px" />
+        <span class="cfms-icon-text__icon"><Icon name="errorFilled" size="16px" /></span>
         <p class="min-w-0 break-words">{error}</p>
       </div>
     {/if}

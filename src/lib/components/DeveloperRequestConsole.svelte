@@ -253,7 +253,7 @@
   >
     <div class="developer-console">
       <div class="risk-strip" role="note">
-        <Icon name="warning" size="19px" />
+        <span class="cfms-icon-text__icon"><Icon name="warning" size="19px" /></span>
         <div>
           <strong>{$t('developerConsole.riskTitle')}</strong>
           <p>{$t('developerConsole.riskBody', { values: { server: serverAddress, username } })}</p>
@@ -729,8 +729,6 @@
   }
 
   .field-group input {
-    height: 2.5rem;
-    padding: 0 0.75rem;
     font-size: 12px;
   }
 

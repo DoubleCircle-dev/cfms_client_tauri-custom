@@ -223,14 +223,7 @@
 
   .credential-form > :global(.cfms-field) { width: min(100%, 30rem); }
   .credential-form input {
-    width: min(100%, 30rem);
-    min-height: 2.75rem;
-    border: 1px solid var(--color-md3-outline);
-    border-radius: var(--borderRadiusMedium);
-    padding: 0.65rem 0.85rem;
-    color: var(--color-md3-on-surface);
-    background: var(--color-md3-surface-container-high);
-    font: 0.875rem/1.4 var(--font-md3-sans);
+    width: 100%;
   }
 
   .credential-form input:is(:disabled, [disabled]) { opacity: 0.55; }

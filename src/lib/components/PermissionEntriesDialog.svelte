@@ -383,7 +383,7 @@
       <div class="permission-overview-copy">
         <p>{description}</p>
         <div class="replacement-notice">
-          <Icon name="info" size="15px" />
+          <span class="cfms-icon-text__icon"><Icon name="info" size="15px" /></span>
           <span>{$t('manage.permissionReplacementNotice')}</span>
         </div>
       </div>
@@ -405,7 +405,7 @@
 
     {#if error}
       <div class="workspace-error" role="alert">
-        <Icon name="errorFilled" size="17px" />
+        <span class="cfms-icon-text__icon" style="--cfms-icon-line-height: 16px"><Icon name="errorFilled" size="17px" /></span>
         <p>{error}</p>
       </div>
     {/if}
@@ -536,8 +536,6 @@
     color: var(--color-md3-on-surface-variant);
     font: 400 12px/16px var(--font-md3-sans);
   }
-
-  .replacement-notice :global(.cfms-icon) { margin-top: 0.08rem; }
 
   :global(.refresh-button[data-fluent-owner="lib-components-permission-entries-dialog"]) {
     display: grid;

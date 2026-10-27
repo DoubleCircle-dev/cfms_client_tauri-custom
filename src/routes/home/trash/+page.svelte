@@ -554,13 +554,12 @@
   :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
   :global(.select-button[data-fluent-owner="routes-home-trash-page"]) {
     display: inline-flex;
-    min-height: 36px;
     flex: none;
     align-items: center;
     justify-content: center;
     gap: 4px;
     border-radius: var(--borderRadiusMedium);
-    padding: 0.3rem 0.7rem;
+    padding-inline: 0.7rem;
     font-size: 12px;
     font-weight: 600;
     transition:
@@ -777,8 +776,6 @@
 
   @media (pointer: coarse) {
     .scope-field input { font-size: 16px; }
-    :global(.load-button[data-fluent-owner="routes-home-trash-page"]),
-    :global(.select-button[data-fluent-owner="routes-home-trash-page"]) { min-height: 44px; }
     .trash-row { min-height: 66px; }
   }
 

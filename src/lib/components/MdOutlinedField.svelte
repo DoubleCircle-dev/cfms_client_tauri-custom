@@ -5,17 +5,22 @@
     label: string;
     error?: boolean;
     disabled?: boolean;
+    controlSize?: 'small' | 'medium' | 'large';
     labelContent?: Snippet;
+    end?: Snippet;
     children: Snippet;
   }
-  let { inputId, label, error = false, disabled = false, labelContent, children }: Props = $props();
+  let { inputId, label, error = false, disabled = false, controlSize = 'medium', labelContent, end, children }: Props = $props();
 </script>
 
-<div class="cfms-field" class:cfms-field--error={error} class:cfms-field--disabled={disabled}>
+<div class="cfms-field" data-control-size={controlSize} class:cfms-field--error={error} class:cfms-field--disabled={disabled}>
   <label class="cfms-field__label" for={inputId} title={label}>
     {#if labelContent}{@render labelContent()}{:else}{label}{/if}
   </label>
-  <div class="cfms-field__content cfms-field-surface">{@render children()}</div>
+  <div class="cfms-field__content cfms-field-surface">
+    <div class="cfms-field__input" class:cfms-field__input--with-end={Boolean(end)}>{@render children()}</div>
+    {#if end}<span class="cfms-field__end">{@render end()}</span>{/if}
+  </div>
   <!-- The decorative legend cuts a real notch without painting over translucent surfaces. -->
   <fieldset class="cfms-field__outline" aria-hidden="true">
     <legend><span>{#if labelContent}{@render labelContent()}{:else}{label}{/if}</span></legend>
@@ -25,12 +30,16 @@
 <style>
   .cfms-field {
     --cfms-outline-color: var(--colorNeutralStroke1);
+    --cfms-control-height: var(--cfms-control-height-medium);
+    box-sizing: border-box;
     position: relative;
+    block-size: fit-content;
     inline-size: 100%;
     min-inline-size: 0;
-    padding-block-start: 8px;
     border-radius: var(--borderRadiusMedium);
   }
+  .cfms-field[data-control-size="small"] { --cfms-control-height: var(--cfms-control-height-small); }
+  .cfms-field[data-control-size="large"] { --cfms-control-height: var(--cfms-control-height-large); }
   .cfms-field__label, .cfms-field__outline legend {
     font: 400 12px/16px var(--fontFamilyBase);
     white-space: nowrap;
@@ -39,7 +48,7 @@
   }
   .cfms-field__label {
     position: absolute;
-    inset-block-start: 0;
+    inset-block-start: calc(-1 * var(--cfms-field-label-offset));
     inset-inline-start: 12px;
     z-index: 1;
     max-inline-size: calc(100% - 24px);
@@ -51,16 +60,16 @@
     box-sizing: border-box;
     display: flex;
     min-inline-size: 0;
-    min-block-size: var(--cfms-outlined-min-size, 32px);
+    min-block-size: var(--cfms-control-height);
     align-items: center;
     border: 1px solid transparent;
     border-radius: inherit;
   }
-  .cfms-field:has(:global(fluent-text-input[control-size="small"])) { --cfms-outlined-min-size: 24px; }
   .cfms-field__outline {
     box-sizing: border-box;
     position: absolute;
     inset: 0;
+    inset-block-start: calc(-1 * var(--cfms-field-label-offset));
     min-inline-size: 0;
     margin: 0;
     padding: 0;
@@ -69,6 +78,44 @@
     border-radius: inherit;
     pointer-events: none;
     transition: border-color var(--durationFaster) var(--curveEasyEase);
+  }
+  .cfms-field__input {
+    display: flex;
+    flex: 1;
+    min-inline-size: 0;
+    align-items: center;
+    border-radius: inherit;
+  }
+  .cfms-field__end {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0;
+    margin-block: -1px;
+    border-radius: inherit;
+  }
+  .cfms-field__input--with-end { container-type: inline-size; }
+  /* At narrow/zoomed sizes, keep space for editable text and full-size actions
+   * before spending it on the decorative leading icon or fixed padding. */
+  @container (max-width: 80px) {
+    .cfms-field__input--with-end :global([data-field-leading-icon]) { display: none; }
+    .cfms-field__input--with-end :global(input) { padding-inline: min(12px, 20cqi); }
+  }
+  .cfms-field__end :global(:is(button, .cfms-button)) {
+    box-sizing: border-box;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--cfms-control-height);
+    block-size: var(--cfms-control-height);
+    min-inline-size: var(--cfms-control-height);
+    min-block-size: var(--cfms-control-height);
+    padding: 0;
+  }
+  .cfms-field__end :global(:is(button, .cfms-button):last-child) {
+    border-start-end-radius: var(--borderRadiusMedium);
+    border-end-end-radius: var(--borderRadiusMedium);
   }
   .cfms-field .cfms-field__outline legend {
     margin-block: 0;
@@ -104,9 +151,7 @@
     border-color: var(--colorNeutralStrokeDisabled);
   }
   @media (pointer: coarse) {
-    .cfms-field__content { min-block-size: 44px; }
     .cfms-field__content :global(:is(input, textarea)) { font-size: 16px; }
-    .cfms-field__content :global(button) { min-inline-size: 44px; min-block-size: 44px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .cfms-field__label, .cfms-field__outline { transition: none; }

@@ -415,7 +415,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 
   {#if !canView}
     <section class="unavailable-state">
-      <Icon name="lock" size="23px" />
+      <span class="cfms-icon-text__icon"><Icon name="lock" size="23px" /></span>
       <div><h2>{$t('schedules.unavailableTitle')}</h2><p>{$t('schedules.unavailableDescription')}</p></div>
     </section>
   {:else}
@@ -436,7 +436,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
 
         {#if loadError}
           <div class="load-state error-state" role="alert">
-            <Icon name="errorFilled" size="22px" />
+            <span class="cfms-icon-text__icon"><Icon name="errorFilled" size="22px" /></span>
             <div><strong>{$t('schedules.loadFailed')}</strong><p>{loadError}</p></div>
             <FluentButton data-fluent-owner="routes-home-schedules-page"
               type="button"

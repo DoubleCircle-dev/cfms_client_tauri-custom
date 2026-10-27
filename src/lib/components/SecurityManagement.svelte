@@ -466,7 +466,7 @@
       </div>
 
       {#if editorError}
-        <div class="editor-error"><Icon name="errorFilled" size="17px" /><span>{editorError}</span></div>
+        <div class="editor-error"><span class="cfms-icon-text__icon"><Icon name="errorFilled" size="17px" /></span><span>{editorError}</span></div>
       {/if}
 
       <footer>
@@ -529,8 +529,8 @@
   .empty-state, .loading-state { padding: 2rem 1rem; text-align: center; color: var(--color-md3-on-surface-variant); font: 400 12px/16px var(--font-md3-sans); }
   .loading-state { display: flex; align-items: center; justify-content: center; gap: 8px; }
   .editor-form { display: grid; gap: 16px; padding: 1.25rem; }
-  .editor-form input, .editor-form textarea { width: 100%; padding: 0.62rem 0.72rem; color: var(--color-md3-on-surface); font: 400 12px/16px var(--font-md3-sans); }
-  .editor-form textarea { resize: vertical; }
+  .editor-form input, .editor-form textarea { width: 100%; color: var(--color-md3-on-surface); font: 400 12px/16px var(--font-md3-sans); }
+  .editor-form textarea { resize: vertical; padding: 0.62rem 0.72rem; }
   .editor-form small { color: var(--color-md3-on-surface-variant); font-size: 12px; font-weight: 400; }
   .expiry-panel { display: grid; gap: 12px; border: 1px solid color-mix(in srgb, var(--color-md3-outline) 70%, transparent); border-radius: 0.65rem; padding: 0.8rem; }
   .expiry-toggle { display: flex; align-items: flex-start; gap: 12px; }

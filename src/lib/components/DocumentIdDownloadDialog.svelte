@@ -52,7 +52,7 @@
   >
     <form class="space-y-5 p-5" aria-busy={busy} onsubmit={handleSubmit}>
       <div class="flex items-start gap-3 text-md3-on-surface-variant">
-        <span class="mt-0.5 shrink-0 text-md3-primary-emphasis">
+        <span class="cfms-icon-text__icon shrink-0 text-md3-primary-emphasis" style="--cfms-icon-line-height: 24px">
           <Icon name="download" size="22px" />
         </span>
         <p id="document-id-download-description" class="text-sm leading-6">
@@ -71,7 +71,7 @@
             placeholder={$t('tasks.downloadByIdPlaceholder')}
             aria-describedby="document-id-download-description{error ? ' document-id-download-error' : ''}"
             aria-invalid={error ? 'true' : undefined}
-            class="cfms-native-field document-id-input w-full px-3 py-2.5 font-mono text-sm text-md3-on-surface transition disabled:cursor-not-allowed disabled:opacity-60"
+            class="cfms-native-field document-id-input w-full px-3 font-mono text-sm text-md3-on-surface transition disabled:cursor-not-allowed disabled:opacity-60"
             bind:value={documentId}
             disabled={busy}
           />
@@ -84,7 +84,7 @@
           class="flex items-start gap-2 rounded-lg bg-md3-error-container/55 px-3 py-2.5 text-sm leading-5 text-md3-on-error-container"
           role="alert"
         >
-          <span class="mt-0.5 shrink-0"><Icon name="errorFilled" size="18px" /></span>
+          <span class="cfms-icon-text__icon shrink-0"><Icon name="errorFilled" size="18px" /></span>
           <span class="min-w-0 break-words">{error}</span>
         </div>
       {/if}
@@ -117,12 +117,7 @@
 
 <style>
   .document-id-input {
-    min-height: 42px;
     font-variant-ligatures: none;
-  }
-
-  @media (pointer: coarse) {
-    .document-id-input { min-height: 48px; }
   }
 
   @media (prefers-reduced-motion: reduce) {

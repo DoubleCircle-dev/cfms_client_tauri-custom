@@ -178,7 +178,7 @@
         <div class="block">
           <MdOutlinedField inputId={`${outlinedId}-1`} label={targetType === 'directory' ? $t('manage.directoryId') : $t('manage.documentId')} disabled={busy}>
             <input id={`${outlinedId}-1`} data-focus-ring="delegated"
-              class="cfms-native-field w-full px-3 py-2.5 text-sm text-md3-on-surface transition"
+              class="cfms-native-field w-full px-3 text-sm text-md3-on-surface transition"
               placeholder={targetType === 'directory' ? $t('manage.directoryIdPlaceholder') : $t('manage.documentIdPlaceholder')}
               bind:value={targetId}
               disabled={busy}
@@ -222,7 +222,7 @@
           <div>
             <MdOutlinedField inputId={`${outlinedId}-3`} label={$t('manage.expiryDate')} disabled={busy}>
               <input id={`${outlinedId}-3`} data-focus-ring="delegated"
-                class="cfms-native-field w-full px-3 py-2.5 text-sm text-md3-on-surface transition"
+                class="cfms-native-field w-full px-3 text-sm text-md3-on-surface transition"
                 type="date"
                 bind:value={expiryDate}
                 disabled={busy}
@@ -232,7 +232,7 @@
           <div>
             <MdOutlinedField inputId={`${outlinedId}-4`} label={$t('manage.expiryTime')} disabled={busy}>
               <input id={`${outlinedId}-4`} data-focus-ring="delegated"
-                class="cfms-native-field w-full px-3 py-2.5 text-sm text-md3-on-surface transition"
+                class="cfms-native-field w-full px-3 text-sm text-md3-on-surface transition"
                 type="time"
                 bind:value={expiryTime}
                 disabled={busy}
@@ -245,7 +245,7 @@
 
     {#if error}
       <div class="flex items-start gap-2 rounded-lg border border-md3-error/35 bg-md3-error-container/25 p-3 text-sm text-md3-on-error-container">
-        <Icon name="errorFilled" size="16px" />
+        <span class="cfms-icon-text__icon"><Icon name="errorFilled" size="16px" /></span>
         <p class="min-w-0 break-words">{error}</p>
       </div>
     {/if}

@@ -40,7 +40,7 @@
         class="flex items-start gap-3 rounded-xl border border-md3-error/40 bg-md3-error-container/35 p-4"
         role="alert"
       >
-        <span class="mt-0.5 shrink-0 text-md3-error"><Icon name="warningAmber" size="24px" /></span>
+        <span class="cfms-icon-text__icon shrink-0 text-md3-error"><Icon name="warningAmber" size="24px" /></span>
         <div class="space-y-1">
           <p class="text-sm font-semibold text-md3-on-error-container">{$t('settings.localData.irreversible')}</p>
           <p class="text-xs leading-5 text-md3-on-surface-variant">
