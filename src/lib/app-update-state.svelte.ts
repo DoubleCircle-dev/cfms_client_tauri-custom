@@ -27,9 +27,27 @@ interface CheckOptions {
   force?: boolean;
 }
 
+/** Setting key shared with the updater command; `disabled` downloads directly. */
+const MIRROR_ACCELERATION_SETTING_KEY = 'update_mirror_acceleration';
+
+const IDLE_PROGRESS: UpdateProgressSnapshot = {
+  phase: 'idle',
+  downloadedBytes: 0,
+  totalBytes: null,
+  progress: null,
+  mirror: null,
+  mirrorBytesPerSecond: null,
+};
+
+function parseMirrorAcceleration(value: string | null): boolean {
+  if (value === null) return true;
+  return !['disabled', 'off', 'false', '0'].includes(value.trim().toLowerCase());
+}
+
 export class AppUpdateState {
   channel = $state<UpdateChannel>('stable');
   source = $state<UpdateSource>('custom');
+  mirrorAcceleration = $state(true);
   automaticCheckPause = $state<UpdateCheckPause>(ACTIVE_UPDATE_CHECK_PAUSE);
   automaticCheckSettled = $state(false);
   checked = $state(false);
@@ -40,15 +58,11 @@ export class AppUpdateState {
   installing = $state(false);
   installed = $state(false);
   installError = $state<string | null>(null);
-  progress = $state<UpdateProgressSnapshot>({
-    phase: 'idle',
-    downloadedBytes: 0,
-    totalBytes: null,
-    progress: null,
-  });
+  progress = $state<UpdateProgressSnapshot>({ ...IDLE_PROGRESS });
 
   private channelLoaded = false;
   private sourceLoaded = false;
+  private mirrorAccelerationLoaded = false;
   private automaticCheckPauseLoaded = false;
   private automaticChecksInitialized = false;
   private pendingCheck: Promise<AppUpdateMetadata | null> | null = null;
@@ -89,6 +103,26 @@ export class AppUpdateState {
     }
 
     return this.source;
+  }
+
+  async ensureMirrorAcceleration(force = false): Promise<boolean> {
+    if (this.mirrorAccelerationLoaded && !force) return this.mirrorAcceleration;
+
+    try {
+      this.mirrorAcceleration = parseMirrorAcceleration(
+        await getSetting(MIRROR_ACCELERATION_SETTING_KEY),
+      );
+    } finally {
+      this.mirrorAccelerationLoaded = true;
+    }
+
+    return this.mirrorAcceleration;
+  }
+
+  async setMirrorAcceleration(enabled: boolean): Promise<void> {
+    await setSetting(MIRROR_ACCELERATION_SETTING_KEY, enabled ? 'enabled' : 'disabled');
+    this.mirrorAcceleration = enabled;
+    this.mirrorAccelerationLoaded = true;
   }
 
   async ensureAutomaticCheckPause(force = false): Promise<UpdateCheckPause> {
@@ -228,7 +262,7 @@ export class AppUpdateState {
     this.installing = true;
     this.installed = false;
     this.installError = null;
-    this.progress = { phase: 'downloading', downloadedBytes: 0, totalBytes: null, progress: null };
+    this.progress = { ...IDLE_PROGRESS, phase: 'downloading' };
     updateNotificationReporter.reset();
     if (copy) await updateNotificationReporter.report(this.progress, copy);
 
@@ -240,7 +274,7 @@ export class AppUpdateState {
       this.installed = true;
     } catch (err) {
       this.installError = err instanceof Error ? err.message : String(err);
-      this.progress = { phase: 'idle', downloadedBytes: 0, totalBytes: null, progress: null };
+      this.progress = { ...IDLE_PROGRESS };
       updateNotificationReporter.dismiss();
       throw err;
     } finally {
@@ -253,7 +287,7 @@ export class AppUpdateState {
     this.installing = false;
     this.installed = false;
     this.installError = null;
-    this.progress = { phase: 'idle', downloadedBytes: 0, totalBytes: null, progress: null };
+    this.progress = { ...IDLE_PROGRESS };
     this.pendingInstall = null;
     updateNotificationReporter.dismiss();
   }

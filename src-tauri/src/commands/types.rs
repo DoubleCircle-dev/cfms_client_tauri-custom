@@ -403,6 +403,15 @@ enum AssetDigestKind {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "event", content = "data")]
 pub enum AppUpdateDownloadEvent {
+    /// Emitted before a desktop download while GitHub and its mirrors are probed.
+    #[serde(rename_all = "camelCase")]
+    Probing { candidates: usize },
+    /// Emitted once the probe picked the fastest source for the download.
+    #[serde(rename_all = "camelCase")]
+    MirrorSelected {
+        mirror: String,
+        bytes_per_second: u64,
+    },
     #[serde(rename_all = "camelCase")]
     Started {
         content_length: Option<u64>,

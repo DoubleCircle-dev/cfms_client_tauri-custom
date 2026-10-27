@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
       downloadedBytes: 0,
       totalBytes: null,
       progress: null,
+      mirror: null,
+      mirrorBytesPerSecond: null,
     } as UpdateProgressSnapshot,
     ensureChannel: vi.fn(async () => 'stable'),
     ensureAutomaticCheckPause: vi.fn(async () => ({ mode: 'active' } as const)),
@@ -67,6 +69,8 @@ beforeEach(() => {
     downloadedBytes: 0,
     totalBytes: null,
     progress: null,
+    mirror: null,
+    mirrorBytesPerSecond: null,
   };
   vi.clearAllMocks();
 });
@@ -172,6 +176,8 @@ describe('AppUpdateChecker', () => {
       downloadedBytes: 512,
       totalBytes: 1024,
       progress: 0.5,
+      mirror: null,
+      mirrorBytesPerSecond: null,
     };
     renderChecker();
 
@@ -188,11 +194,47 @@ describe('AppUpdateChecker', () => {
       downloadedBytes: 0,
       totalBytes: null,
       progress: null,
+      mirror: null,
+      mirrorBytesPerSecond: null,
     };
     const { container } = renderChecker();
 
     expect(screen.getByRole('progressbar').hasAttribute('aria-valuenow')).toBe(false);
     expect(container.querySelector('.progress-fill--indeterminate')).toBeTruthy();
+  });
+
+  it('announces that update mirrors are being measured', () => {
+    mocks.appUpdateState.update = availableUpdate;
+    mocks.appUpdateState.installing = true;
+    mocks.appUpdateState.progress = {
+      phase: 'probing',
+      downloadedBytes: 0,
+      totalBytes: null,
+      progress: null,
+      mirror: null,
+      mirrorBytesPerSecond: null,
+    };
+    renderChecker();
+
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuetext')).toBe(
+      'Measuring update mirrors...',
+    );
+  });
+
+  it('shows the mirror selected for the download', () => {
+    mocks.appUpdateState.update = availableUpdate;
+    mocks.appUpdateState.installing = true;
+    mocks.appUpdateState.progress = {
+      phase: 'downloading',
+      downloadedBytes: 0,
+      totalBytes: null,
+      progress: null,
+      mirror: 'ghproxy.net',
+      mirrorBytesPerSecond: 12 * 1024 * 1024,
+    };
+    renderChecker();
+
+    expect(screen.getByText('Downloading from ghproxy.net (12 MB/s)')).toBeTruthy();
   });
 
   it('prioritizes restart after a desktop update is installed', async () => {

@@ -509,6 +509,10 @@ import svg506 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
 import svg507 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
 import svg508 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
 import svg509 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
+import svg510 from '@fluentui/svg-icons/icons/cloud_arrow_down_24_regular.svg?raw';
+import svg511 from '@fluentui/svg-icons/icons/cloud_arrow_down_24_filled.svg?raw';
+import svg512 from '@fluentui/svg-icons/icons/cloud_arrow_down_20_regular.svg?raw';
+import svg513 from '@fluentui/svg-icons/icons/cloud_arrow_down_20_filled.svg?raw';
 import duotone0 from './assets/duotone/person_circle_24.svg?raw';
 import duotone1 from './assets/duotone/person_circle_20.svg?raw';
 import duotone2 from './assets/duotone/folder_add_24.svg?raw';
@@ -672,4 +676,5 @@ export const ICON_VARIANTS = {
   minimizeToTray: { regular: svg498, filled: svg499, small: svg500, smallFilled: svg501 },
   quit: { regular: svg502, filled: svg503, small: svg504, smallFilled: svg505 },
   pushPin: { regular: svg506, filled: svg507, small: svg508, smallFilled: svg509 },
+  mirrorDownload: { regular: svg510, filled: svg511, small: svg512, smallFilled: svg513 },
 } as const;
