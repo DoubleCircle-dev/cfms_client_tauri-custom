@@ -476,7 +476,7 @@
   }
 
   .related-settings a:hover {
-    color: var(--color-md3-primary);
+    color: var(--colorBrandForegroundLinkHover);
   }
 
   .update-footnote {

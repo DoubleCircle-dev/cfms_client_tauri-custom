@@ -159,7 +159,7 @@ export const zh_CN = {
     unavailable: '没有可满足提权策略的有效凭据，请联系管理员。',
   },
   contextMenu: {
-    elevationRequired: '请先通过顶部工具栏「申请提权」验证身份，再执行此操作。',
+    elevationRequired: '此操作需要提权，选择后将验证身份。',
   },
   common: {
     back: '返回',

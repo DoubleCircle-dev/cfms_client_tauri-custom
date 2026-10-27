@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
+import '$lib/i18n';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ContextMenu from './ContextMenu.svelte';
 import type { ContextMenuItem } from './context-menu';
+import { locale } from 'svelte-i18n';
 
 vi.mock('$lib/motion/transitions', () => ({
   menuScale: () => ({ duration: 0 }),
@@ -20,8 +22,8 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('ContextMenu keyboard interaction', () => {
-  it.each(['contentCopy', 'adminPanelSettings', 'passwordReset', 'accountCircle'] as const)(
-    'uses the %s accent only for enabled, non-dangerous actions', (icon) => {
+  it.each(['createNewFolder', 'folderUpload', 'driveFileMove', 'contentCopy', 'adminPanelSettings', 'passwordReset', 'accountCircle'] as const)(
+    'uses %s duotone channels only for enabled, non-dangerous actions', (icon) => {
       render(ContextMenu, {
         open: true, x: 10, y: 10, onClose: vi.fn(),
         items: [
@@ -30,10 +32,12 @@ describe('ContextMenu keyboard interaction', () => {
           { id: 'danger', label: 'Danger', icon, danger: true, onSelect: vi.fn() },
         ],
       });
-      const accentPath = 'path[fill="var(--cfms-icon-accent, currentColor)"]';
-      expect(screen.getByRole('menuitem', { name: 'Enabled' }).querySelector(accentPath)).not.toBeNull();
-      expect(screen.getByRole('menuitem', { name: 'Disabled' }).querySelector(accentPath)).toBeNull();
-      expect(screen.getByRole('menuitem', { name: 'Danger' }).querySelector(accentPath)).toBeNull();
+      for (const channel of ['primary', 'secondary']) {
+        const path = `path[fill="var(--cfms-icon-${channel}, currentColor)"]`;
+        expect(screen.getByRole('menuitem', { name: 'Enabled' }).querySelector(path)).not.toBeNull();
+        expect(screen.getByRole('menuitem', { name: 'Disabled' }).querySelector(path)).toBeNull();
+        expect(screen.getByRole('menuitem', { name: 'Danger' }).querySelector(path)).toBeNull();
+      }
     },
   );
 
@@ -244,5 +248,85 @@ describe('context menu hints', () => {
     await fireEvent(window, new Event('resize'));
     expect(tooltip.style.left).toBe('108px');
     expect(tooltip.style.top).toBe('30px');
+  });
+});
+
+describe('context menu elevation', () => {
+  it.each(['passwordReset', 'info'] as const)('keeps the %s warning action enabled and closes before selecting', async (icon) => {
+    locale.set('en');
+    const order: string[] = [];
+    render(ContextMenu, { open: true, x: 10, y: 10, onClose: () => { order.push('close'); }, items: [
+      { id: 'reset', label: 'Reset password', icon, requiresElevation: true, onSelect: () => { order.push('select'); } },
+    ] });
+    const reset = screen.getByRole('menuitem', { name: 'Reset password' });
+    await waitFor(() => expect(document.activeElement).toBe(reset));
+    expect(reset.hasAttribute('disabled')).toBe(false);
+    expect(reset.hasAttribute('aria-disabled')).toBe(false);
+    expect(reset.classList.contains('requires-elevation')).toBe(true);
+    const tooltip = screen.getByRole('tooltip');
+    expect(reset.getAttribute('aria-describedby')).toBe(tooltip.id);
+    expect(tooltip.textContent).toBe('This action requires elevated privileges. Select it to verify your identity.');
+    const artwork = reset.querySelector('.context-menu-icon')!;
+    expect(artwork.classList.contains('duotone')).toBe(icon === 'passwordReset');
+    expect(artwork.classList.contains('warning')).toBe(true);
+    if (icon === 'passwordReset') {
+      expect(artwork.querySelector('path[fill="var(--cfms-icon-primary, currentColor)"]')).not.toBeNull();
+      expect(artwork.querySelector('path[fill="var(--cfms-icon-secondary, currentColor)"]')).not.toBeNull();
+    }
+    // Enter/Space remain native button activation; neither is suppressed.
+    expect(await fireEvent.keyDown(reset, { key: 'Enter' })).toBe(true);
+    expect(await fireEvent.keyDown(reset, { key: ' ' })).toBe(true);
+    await fireEvent.click(reset);
+    expect(order).toEqual(['close', 'select']);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('uses the disabled reason instead of an elevation warning when another prerequisite is missing', async () => {
+    const action = vi.fn();
+    render(ContextMenu, { open: true, x: 10, y: 10, onClose: vi.fn(), items: [
+      { id: 'busy', label: 'Busy', icon: 'passwordReset', disabled: true, disabledReason: 'Another operation is running.', requiresElevation: true, onSelect: action },
+    ] });
+    const busy = screen.getByRole('menuitem', { name: 'Busy' });
+    await waitFor(() => expect(screen.getByRole('tooltip').textContent).toBe('Another operation is running.'));
+    expect(busy.classList.contains('requires-elevation')).toBe(false);
+    expect(busy.querySelector('.context-menu-icon.warning')).toBeNull();
+    await fireEvent.click(busy);
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it('removes the warning and its tooltip after elevation without moving focus', async () => {
+    locale.set('en');
+    const item = { id: 'reset', label: 'Reset password', icon: 'passwordReset' as const, requiresElevation: true, onSelect: vi.fn() };
+    const { rerender } = render(ContextMenu, { open: true, x: 10, y: 10, onClose: vi.fn(), items: [item] });
+    const reset = screen.getByRole('menuitem', { name: 'Reset password' });
+    await waitFor(() => expect(screen.getByRole('tooltip')).toBeTruthy());
+    await rerender({ items: [{ ...item, requiresElevation: false }] });
+    expect(reset.classList.contains('requires-elevation')).toBe(false);
+    expect(reset.hasAttribute('aria-describedby')).toBe(false);
+    expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
+    expect(document.activeElement).toBe(reset);
+  });
+
+  it.each(['hover', 'touch'] as const)('explains elevation on %s while preserving activation', async (input) => {
+    locale.set('en');
+    const action = vi.fn();
+    render(ContextMenu, { open: true, x: 10, y: 10, onClose: vi.fn(), items: [
+      { id: 'available', label: 'Available', icon: 'info', onSelect: vi.fn() },
+      { id: 'reset', label: 'Reset password', icon: 'passwordReset', requiresElevation: true, onSelect: action },
+    ] });
+    await tick();
+    const reset = screen.getByRole('menuitem', { name: 'Reset password' });
+    if (input === 'hover') {
+      vi.useFakeTimers();
+      await fireEvent.pointerEnter(reset);
+      await vi.advanceTimersByTimeAsync(500);
+    } else {
+      const press = new Event('pointerdown', { bubbles: true });
+      Object.assign(press, { pointerType: 'touch' });
+      await fireEvent(reset, press);
+    }
+    expect(screen.getByRole('tooltip').textContent).toContain('elevated privileges');
+    await fireEvent.click(reset);
+    expect(action).toHaveBeenCalledOnce();
   });
 });

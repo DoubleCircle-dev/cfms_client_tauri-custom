@@ -69,7 +69,7 @@
   .key-picker:hover:not(:disabled) { border-color: var(--color-md3-primary); background: var(--color-md3-surface-container-highest); }
   .key-picker:disabled { opacity: 0.55; cursor: default; }
   .key-picker.invalid { border-color: var(--color-md3-error); }
-  .key-picker-icon { display: grid; place-items: center; flex: none; color: var(--color-md3-primary); }
+  .key-picker-icon { display: grid; place-items: center; flex: none; color: var(--colorCompoundBrandForeground1); }
   .key-picker-copy { display: grid; gap: 4px; min-width: 0; flex: 1; }
   .key-picker-copy strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
   .key-picker-copy span { font-size: 12px; color: var(--color-md3-on-surface-variant); overflow-wrap: anywhere; }

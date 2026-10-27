@@ -150,7 +150,7 @@
           </span>
           <a
             class="inline-flex min-h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold
-                   text-md3-primary transition-colors hover:bg-md3-primary-container/30"
+                   text-md3-primary-emphasis transition-colors hover:bg-md3-primary-container/30"
             href="/home/settings/app-lock"
           >
             <Icon name="lockPerson" size="16px" />

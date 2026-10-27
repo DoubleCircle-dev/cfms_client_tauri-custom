@@ -200,7 +200,7 @@
   }
 
   :global(.account-disabled-back[data-fluent-owner="lib-components-account-disabled-notice"]:hover) {
-    color: color-mix(in srgb, var(--color-md3-primary-emphasis, var(--color-md3-primary)) 78%, white);
+    color: var(--colorBrandForegroundLinkHover);
     filter: drop-shadow(0 0 5px color-mix(in srgb, currentColor 32%, transparent));
   }
 

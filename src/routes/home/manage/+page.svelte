@@ -1,8 +1,9 @@
 <script lang="ts">
   import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
-  import { onMount, tick, untrack } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
+  import { ensureEscalation } from '$lib/escalation.svelte';
   import {
     blockUser,
     changeGroupPermissions,
@@ -207,13 +208,17 @@
   const canManageUserStatus = $derived(hasAnyPermission('manage_user_status', 'manage_system'));
   const canManage2fa = $derived(hasAnyPermission('super_configure_auth_methods'));
   let now = $state(Date.now());
+  let disposed = false;
+  let resetPending = false;
+  onDestroy(() => { disposed = true; });
   const elevated = $derived((authStore.escalationExp ?? 0) * 1000 > now);
   onMount(() => { const timer = window.setInterval(() => { now = Date.now(); }, 1000); return () => window.clearInterval(timer); });
   function canReadUserAuthentication(user: ManagedUser) {
     return canReadAuthentication(authStore.permissions, user.user_id !== authStore.userId);
   }
   function canResetPassword(user: ManagedUser) {
-    return elevated && canConfigureAuthentication(authStore.permissions, user.user_id !== authStore.userId);
+    return elevated && (authStore.escalationExp ?? 0) * 1000 > Date.now()
+      && canConfigureAuthentication(authStore.permissions, user.user_id !== authStore.userId);
   }
   const canListBannedSubnets = $derived(hasAnyPermission('list_banned_subnets'));
   const canManageBannedSubnets = $derived(hasAnyPermission('manage_banned_subnets'));
@@ -458,10 +463,8 @@
         label: $t('manage.resetPassword'),
         icon: 'passwordReset',
         onSelect: () => handleResetPassword(user),
-        disabled: disabled || !canResetPassword(user),
-        disabledReason: !disabled && !elevated
-          && canConfigureAuthentication(authStore.permissions, user.user_id !== authStore.userId)
-          ? $t('contextMenu.elevationRequired') : undefined,
+        disabled: disabled || !canConfigureAuthentication(authStore.permissions, user.user_id !== authStore.userId),
+        requiresElevation: !elevated,
       },
       {
         id: 'change-user-avatar',
@@ -677,9 +680,18 @@
   }
 
   async function handleResetPassword(user: ManagedUser) {
-    if (!canResetPassword(user)) return;
-    if (user.user_id === authStore.userId) { activeDialog = { kind: 'user-authentication', user }; return; }
-    activeDialog = { kind: 'reset-password', user };
+    if (resetPending || busyKey !== null
+      || !canConfigureAuthentication(authStore.permissions, user.user_id !== authStore.userId)) return;
+    const actorId = authStore.userId;
+    resetPending = true;
+    try {
+      if (!(await ensureEscalation()) || disposed || authStore.userId !== actorId
+        || busyKey !== null || !canResetPassword(user)) return;
+      if (user.user_id === authStore.userId) { activeDialog = { kind: 'user-authentication', user }; return; }
+      activeDialog = { kind: 'reset-password', user };
+    } finally {
+      resetPending = false;
+    }
   }
 
   async function handleManageAccount(user: ManagedUser) {

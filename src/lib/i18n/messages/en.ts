@@ -159,7 +159,7 @@ export const en = {
     unavailable: 'No active credential can satisfy the escalation policy. Contact your administrator.',
   },
   contextMenu: {
-    elevationRequired: 'Verify your identity using “Elevate privileges” in the top toolbar before using this action.',
+    elevationRequired: 'This action requires elevated privileges. Select it to verify your identity.',
   },
   common: {
     back: 'Back',

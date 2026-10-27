@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
 import { dialogStore } from '$lib/dialogs.svelte';
 import ManagePage from './+page.svelte';
+import EscalationControl from '$lib/components/EscalationControl.svelte';
+import { escalationFlow } from '$lib/escalation.svelte';
 
 const mocks = vi.hoisted(() => ({
   viewAuditLogs: vi.fn(),
@@ -15,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   listUsers: vi.fn(),
   resetUserPassword: vi.fn(),
   getUserAuthentication: vi.fn(),
+  requestEscalation: vi.fn(),
   getManagedTwoFactorStatus: vi.fn(),
   disableManagedTwoFactor: vi.fn(),
 }));
@@ -28,6 +31,7 @@ vi.mock('$lib/api', async (importOriginal) => ({
   listUsers: mocks.listUsers,
   resetUserPassword: mocks.resetUserPassword,
   getUserAuthentication: mocks.getUserAuthentication,
+  requestEscalation: mocks.requestEscalation,
   getManagedTwoFactorStatus: mocks.getManagedTwoFactorStatus,
   disableManagedTwoFactor: mocks.disableManagedTwoFactor,
 }));
@@ -74,6 +78,7 @@ beforeEach(() => {
   locale.set('en');
   authStore.clear();
   serverStateStore.clear();
+  serverStateStore.connected = true;
   authStore.apply({
     username: 'admin', user_id: 'aabbccdd-0000-4000-8000-000000000002',
     nickname: 'Administrator',
@@ -90,11 +95,18 @@ beforeEach(() => {
     effective_inherited_permissions: [], groups: [], last_login: 1786600000,
   });
   mocks.getUserAvatar.mockReset().mockResolvedValue(null);
+  mocks.getUserAuthentication.mockReset().mockResolvedValue({ policies: { escalation: { revision: 0, chains: [] } } });
+  mocks.requestEscalation.mockReset().mockImplementation(async () => ({
+    username: authStore.username, user_id: authStore.userId, nickname: authStore.nickname,
+    has_token: true, token_exp: authStore.tokenExp, permissions: authStore.permissions,
+    groups: authStore.groups, escalation_exp: Date.now() / 1000 + 300,
+  }));
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener() {}, removeEventListener() {} })));
 });
 
 afterEach(() => {
   cleanup();
+  escalationFlow.cancel();
   authStore.clear();
   serverStateStore.clear();
   notificationStore.clear();
@@ -107,24 +119,27 @@ afterEach(() => {
 
 describe('management account context menu', () => {
   it.each([
-    ['en', 'Reset password', 'Verify your identity using “Elevate privileges” in the top toolbar before using this action.'],
-    ['zh-CN', '重置密码', '请先通过顶部工具栏「申请提权」验证身份，再执行此操作。'],
-  ])('explains missing elevation in %s without sending a password reset request', async (language, label, reason) => {
+    ['en', 'Reset password', 'This action requires elevated privileges. Select it to verify your identity.'],
+    ['zh-CN', '重置密码', '此操作需要提权，选择后将验证身份。'],
+  ])('explains and obtains elevation in %s before continuing the selected action', async (language, label, reason) => {
     locale.set(language);
     authStore.permissions = ['list_users', 'super_configure_auth_methods'];
     mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);
     render(ManagePage);
     await fireEvent.contextMenu((await screen.findAllByRole('listitem'))[0]);
     const reset = screen.getByRole('menuitem', { name: label });
-    expect(reset.getAttribute('aria-disabled')).toBe('true');
+    expect(reset.hasAttribute('aria-disabled')).toBe(false);
+    expect(reset.hasAttribute('disabled')).toBe(false);
+    expect(reset.classList.contains('requires-elevation')).toBe(true);
     reset.focus();
     await waitFor(() => expect(screen.getByRole('tooltip').textContent).toBe(reason));
     await fireEvent.click(reset);
-    await fireEvent.keyDown(reset, { key: 'Enter' });
-    await fireEvent.keyDown(reset, { key: ' ' });
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('alice');
+    expect(mocks.requestEscalation).toHaveBeenCalledOnce();
     expect(mocks.resetUserPassword).not.toHaveBeenCalled();
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('menu')).toBeTruthy();
+    expect(screen.queryByRole('menu')).toBeNull();
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
   });
 
   it('does not suggest elevation when configuration permission is missing', async () => {
@@ -149,14 +164,17 @@ describe('management account context menu', () => {
     reset.focus();
     await waitFor(() => expect(screen.getByRole('tooltip')).toBeTruthy());
     authStore.escalationExp = Date.now() / 1000 + 300;
-    await waitFor(() => expect(reset.hasAttribute('aria-disabled')).toBe(false));
+    await waitFor(() => expect(reset.classList.contains('requires-elevation')).toBe(false));
     expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
     expect(document.activeElement).toBe(reset);
     // Expiration is observed on the page's existing one-second clock.
     authStore.escalationExp = Date.now() / 1000 + 0.1;
-    await waitFor(() => expect(reset.getAttribute('aria-disabled')).toBe('true'), { timeout: 2000 });
+    await waitFor(() => expect(reset.classList.contains('requires-elevation')).toBe(true), { timeout: 2000 });
+    expect(reset.hasAttribute('aria-disabled')).toBe(false);
     expect(reset.hasAttribute('aria-describedby')).toBe(true);
     await fireEvent.click(reset);
+    await screen.findByRole('dialog');
+    expect(mocks.requestEscalation).toHaveBeenCalledOnce();
     expect(mocks.resetUserPassword).not.toHaveBeenCalled();
   });
 
@@ -177,7 +195,8 @@ describe('management account context menu', () => {
     expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
     finish(null);
     await waitFor(() => expect(reset.hasAttribute('disabled')).toBe(false));
-    expect(reset.getAttribute('aria-disabled')).toBe('true');
+    expect(reset.hasAttribute('aria-disabled')).toBe(false);
+    expect(reset.classList.contains('requires-elevation')).toBe(true);
   });
 
   it('resets another account with configuration permission without reading authentication inventory', async () => {
@@ -197,6 +216,69 @@ describe('management account context menu', () => {
     expect(mocks.getManagedTwoFactorStatus).not.toHaveBeenCalled();
     expect(authStore.isLoggedIn).toBe(true);
   });
+
+  it.each(['success', 'cancel', 'failure', 'leave', 'permission-loss', 'busy', 'expired'] as const)(
+    'continues a password reset only after valid elevation: %s', async (result) => {
+      authStore.permissions = ['list_users', 'super_configure_auth_methods', 'manage_user_status'];
+      mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);
+      mocks.getUserAuthentication.mockResolvedValue({
+        policies: { escalation: { chains: [[{ method: 'password', credential_ids: ['p'] }]] } },
+        methods: { password: { purposes: ['escalation'] } },
+        credentials: [{ method: 'password', credential_id: 'p', active: true }],
+      });
+      if (result === 'failure') mocks.requestEscalation.mockRejectedValueOnce(new Error('Invalid password'));
+      if (result === 'expired') mocks.requestEscalation.mockImplementationOnce(async () => ({
+        username: authStore.username, user_id: authStore.userId, nickname: authStore.nickname,
+        has_token: true, token_exp: authStore.tokenExp, permissions: authStore.permissions,
+        groups: [], escalation_exp: Date.now() / 1000 - 1,
+      }));
+      render(EscalationControl);
+      const page = render(ManagePage);
+      const row = (await screen.findAllByRole('listitem'))[0];
+      await fireEvent.contextMenu(row);
+      row.focus();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Reset password' }));
+      expect(screen.queryByRole('menu')).toBeNull();
+      const password = await screen.findByLabelText('Password');
+      expect(document.activeElement).toBe(password);
+      if (result === 'cancel') {
+        await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(mocks.requestEscalation).not.toHaveBeenCalled();
+        return;
+      }
+      if (result === 'leave') page.unmount();
+      if (result === 'permission-loss') authStore.permissions = ['list_users'];
+      let finishBusy: ((value: null) => void) | undefined;
+      if (result === 'busy') {
+        mocks.getUserInfo.mockImplementationOnce(() => new Promise((resolve) => { finishBusy = resolve; }));
+        // A competing page action can begin while authentication is being prepared.
+        await fireEvent.contextMenu(row);
+        await fireEvent.click(screen.getByRole('menuitem', { name: 'Account management' }));
+        await waitFor(() => expect(mocks.getUserInfo).toHaveBeenCalled());
+      }
+      await fireEvent.input(password, { target: { value: 'fresh-proof' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
+      await waitFor(() => expect(mocks.requestEscalation).toHaveBeenCalledWith('password', { password: 'fresh-proof' }));
+      if (result === 'failure') {
+        expect(await screen.findByRole('alert')).toBeTruthy();
+        expect(screen.queryByLabelText('New Password')).toBeNull();
+        await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      } else if (result === 'success') {
+        const next = await screen.findByLabelText('New Password');
+        expect(screen.getAllByRole('dialog')).toHaveLength(1);
+        await waitFor(() => expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true));
+        await fireEvent.input(next, { target: { value: 'new-password' } });
+        await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Reset password' }));
+        await waitFor(() => expect(mocks.resetUserPassword).toHaveBeenCalledWith('other-id', 'new-password', false, false));
+      } else {
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(screen.queryByLabelText('New Password')).toBeNull();
+      }
+      if (result !== 'success') expect(mocks.resetUserPassword).not.toHaveBeenCalled();
+      finishBusy?.(null);
+    },
+  );
   it('deletes a TOTP credential without requiring cross-user inventory permission or elevation', async () => {
     authStore.permissions = ['list_users', 'super_configure_auth_methods'];
     mocks.listUsers.mockResolvedValue([{ user_id: 'other-id', username: 'alice', nickname: 'Alice', groups: [], effective_permissions: [], last_login: null }]);

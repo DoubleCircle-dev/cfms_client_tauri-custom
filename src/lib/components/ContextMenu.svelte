@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, tick, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { _ as t } from 'svelte-i18n';
   import Icon from '$lib/components/Icon.svelte';
   import ShortcutKeys from '$lib/components/ShortcutKeys.svelte';
   import { menuScale } from '$lib/motion/transitions';
@@ -100,14 +101,20 @@
     reasonHovered = false;
   }
 
+  function itemReason(item: ContextMenuActionItem): string | undefined {
+    if (item.disabled) return item.disabledReason;
+    return item.requiresElevation ? $t('contextMenu.elevationRequired') : undefined;
+  }
+
   function showReason(item: ContextMenuActionItem, index: number, anchor: HTMLElement, immediate = false) {
-    if (!item.disabled || !item.disabledReason) return;
+    const text = itemReason(item);
+    if (!text) return;
     cancelReasonTimers();
     if (reasonTarget?.itemId !== item.id) {
       reasonOpen = false;
       reasonHovered = false;
     }
-    reasonTarget = { itemId: item.id, tooltipId: `${instanceId}-reason-${index}`, anchor, text: item.disabledReason };
+    reasonTarget = { itemId: item.id, tooltipId: `${instanceId}-reason-${index}`, anchor, text };
     if (immediate) reasonOpen = true;
     else {
       reasonHovered = true;
@@ -141,7 +148,7 @@
   $effect(() => {
     if (!reasonTarget) return;
     const item = visibleItems.find((item) => !isContextMenuDivider(item) && item.id === reasonTarget?.itemId);
-    if (!open || !item || isContextMenuDivider(item) || !item.disabled || item.disabledReason !== reasonTarget.text
+    if (!open || !item || isContextMenuDivider(item) || itemReason(item) !== reasonTarget.text
       || reasonTarget.tooltipId !== `${instanceId}-reason-${visibleItems.indexOf(item)}`) closeReason();
   });
 
@@ -241,12 +248,13 @@
           data-menu-item
           class="context-menu-item"
           class:danger={item.danger}
+          class:requires-elevation={item.requiresElevation && !item.disabled}
           role="menuitem"
           tabindex="-1"
           onclick={() => handleItemSelect(item)}
           disabled={item.disabled && !item.disabledReason}
           aria-disabled={item.disabled ? 'true' : undefined}
-          aria-describedby={item.disabled && item.disabledReason ? `${instanceId}-reason-${index}` : undefined}
+          aria-describedby={itemReason(item) ? `${instanceId}-reason-${index}` : undefined}
           onpointerenter={(event) => {
             if (event.pointerType !== 'touch') showReason(item, index, event.currentTarget);
           }}
@@ -261,13 +269,13 @@
             if (event.pointerType === 'touch') showReason(item, index, event.currentTarget, true);
           }}
         >
-          <Icon class="context-menu-icon" name={item.icon} size="20px" filled={item.iconFilled} duotone={!item.iconFilled && !item.danger && !item.disabled} />
+          <Icon class="context-menu-icon" name={item.icon} size="20px" filled={item.iconFilled} duotone={!item.iconFilled && !item.danger && !item.disabled} tone={item.requiresElevation && !item.disabled ? 'warning' : 'default'} />
           <span class="context-menu-label">{item.label}</span>
           {#if item.shortcuts?.length}
             <ShortcutKeys class="context-menu-shortcut" shortcuts={item.shortcuts} variant="menu" />
           {/if}
         </button>
-        {#if item.disabled && item.disabledReason}
+        {#if itemReason(item)}
           <span
             use:portal
             id={`${instanceId}-reason-${index}`}
@@ -278,7 +286,7 @@
             style:top="{reasonPosition.top}px"
             onpointerenter={() => { reasonHovered = true; clearTimeout(reasonHideTimer); }}
             onpointerleave={() => { reasonHovered = false; leaveReason(); }}
-          >{item.disabledReason}</span>
+          >{itemReason(item)}</span>
         {/if}
       {/if}
     {/each}
@@ -320,6 +328,7 @@
   .context-menu-item:hover:not(:disabled):not([aria-disabled='true']), .context-menu-item:focus-visible { background: var(--colorSubtleBackgroundHover); }
   .context-menu-item:active:not(:disabled):not([aria-disabled='true']) { background: var(--colorSubtleBackgroundPressed); }
   .context-menu-item.danger { color: var(--colorStatusDangerForeground1); }
+  .context-menu-item.requires-elevation { color: var(--colorStatusWarningForeground2); }
   .context-menu-item:is(:disabled, [aria-disabled='true']) { color: var(--colorNeutralForegroundDisabled); cursor: not-allowed; }
   .context-menu-item :global(.context-menu-icon) { grid-column: icon; }
   .context-menu-label { grid-column: label; min-width: 0; overflow-wrap: anywhere; }
@@ -345,8 +354,8 @@
   @media (forced-colors: active) {
     /* Rows use system colors explicitly; preserve them through inline labels,
      * shortcut text and SVGs without the browser's opaque text backplates. */
-    .context-menu-item { forced-color-adjust: none; color: CanvasText; background: transparent; }
-    .context-menu-item.danger { color: CanvasText; }
+    .context-menu-item { forced-color-adjust: none; color: CanvasText; background: transparent; transition: none; }
+    .context-menu-item.danger, .context-menu-item.requires-elevation { color: CanvasText; }
     .context-menu-item:is(:disabled, [aria-disabled='true']) { color: GrayText; background: transparent; }
     .context-menu-item:is(:hover, :focus-visible, :active):not(:disabled):not([aria-disabled='true']) { color: HighlightText; background: Highlight; }
     .context-menu-reason { color: CanvasText; background: Canvas; border-color: CanvasText; box-shadow: none; }

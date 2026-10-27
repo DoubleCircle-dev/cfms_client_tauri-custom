@@ -19,14 +19,37 @@ const common = {
   lineHeightBase500: '26px',
 };
 
+// Text needs its own contrast ramp; brand fills and graphic accents keep theirs.
+function brandTextColors(rest: string, hover: string, pressed: string) {
+  return {
+    colorBrandForeground1: rest,
+    colorBrandForeground2: rest,
+    colorBrandForeground2Hover: hover,
+    colorBrandForeground2Pressed: pressed,
+    colorBrandForegroundLink: rest,
+    colorBrandForegroundLinkHover: hover,
+    colorBrandForegroundLinkPressed: pressed,
+    colorBrandForegroundLinkSelected: rest,
+    colorNeutralForeground2BrandHover: hover,
+    colorNeutralForeground2BrandPressed: pressed,
+    colorNeutralForeground2BrandSelected: rest,
+    colorNeutralForeground3BrandHover: hover,
+    colorNeutralForeground3BrandPressed: pressed,
+    colorNeutralForeground3BrandSelected: rest,
+  };
+}
+
 export const lightTheme: Theme = {
   ...createLightTheme(brand), ...common,
+  ...brandTextColors('#004e8c', '#004577', '#003254'),
+  colorBrandBackground2Pressed: '#b7d2f6',
   colorNeutralBackground3: '#f3f3f3',
   colorStrokeFocus2: '#0067c0',
 };
 
 export const darkTheme: Theme = {
   ...createDarkTheme(brand), ...common,
+  ...brandTextColors('#8fddff', '#b8ebff', '#75d5ff'),
   colorNeutralBackground1: '#292929',
   colorNeutralBackground2: '#252525',
   colorNeutralBackground3: '#202020',
@@ -40,26 +63,12 @@ export const darkTheme: Theme = {
   colorBrandBackground2: '#173d50',
   colorBrandBackground2Hover: '#1c4b61',
   colorBrandBackground2Pressed: '#153343',
-  colorBrandForeground1: '#60cdff',
-  colorBrandForeground2: '#60cdff',
-  colorBrandForeground2Hover: '#7cd7ff',
-  colorBrandForeground2Pressed: '#4bb4df',
-  colorBrandForegroundLink: '#60cdff',
-  colorBrandForegroundLinkHover: '#7cd7ff',
-  colorBrandForegroundLinkPressed: '#4bb4df',
-  colorBrandForegroundLinkSelected: '#60cdff',
   colorCompoundBrandBackground: '#60cdff',
   colorCompoundBrandBackgroundHover: '#7cd7ff',
   colorCompoundBrandBackgroundPressed: '#4bb4df',
   colorCompoundBrandForeground1: '#60cdff',
   colorCompoundBrandForeground1Hover: '#7cd7ff',
   colorCompoundBrandForeground1Pressed: '#4bb4df',
-  colorNeutralForeground2BrandHover: '#60cdff',
-  colorNeutralForeground2BrandPressed: '#4bb4df',
-  colorNeutralForeground2BrandSelected: '#60cdff',
-  colorNeutralForeground3BrandHover: '#60cdff',
-  colorNeutralForeground3BrandPressed: '#4bb4df',
-  colorNeutralForeground3BrandSelected: '#60cdff',
   colorBrandStroke1: '#60cdff',
   colorBrandStroke2: '#30677f',
   colorCompoundBrandStroke: '#60cdff',

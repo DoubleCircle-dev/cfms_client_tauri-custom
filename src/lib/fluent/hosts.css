@@ -42,7 +42,7 @@
     box-shadow: none;
   }
 }
-.cfms-button[data-tone="warning"] { --colorNeutralForeground2: var(--colorStatusWarningForeground1); }
+.cfms-button[data-tone="warning"] { --colorNeutralForeground2: var(--colorStatusWarningForeground2); }
 .cfms-button[data-tone="danger"] {
   --colorNeutralForeground2: var(--colorStatusDangerForeground1);
   --colorBrandBackground: var(--colorStatusDangerBackground3);
