@@ -201,6 +201,14 @@ pub async fn install_app_update<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let _ = &app;
     let update_proxy = updater_proxy_url(&state)?;
+    let mirror_acceleration = mirror_acceleration_enabled(
+        state
+            .settings
+            .get(UPDATE_MIRROR_SETTING_KEY)
+            .ok()
+            .flatten()
+            .as_deref(),
+    );
     let update = {
         let mut pending = state
             .pending_update
@@ -213,28 +221,285 @@ pub async fn install_app_update<R: tauri::Runtime>(
         return Err("No pending update is available. Check for updates first.".to_string());
     };
 
-    let mut started = false;
     let download_url = update.download_url.clone();
     update.proxy = update_proxy;
     tracing::info!(
-        "Installing app update (proxy={})",
+        "Installing app update (proxy={}, mirror_acceleration={mirror_acceleration})",
         describe_update_proxy(update.proxy.as_ref())
     );
+
+    if !mirror_acceleration {
+        let mut started = false;
+        return update
+            .download_and_install(
+                |chunk_length, content_length| {
+                    if !started {
+                        let _ = on_event.send(AppUpdateDownloadEvent::Started { content_length });
+                        started = true;
+                    }
+                    let _ = on_event.send(AppUpdateDownloadEvent::Progress { chunk_length });
+                },
+                || {
+                    let _ = on_event.send(AppUpdateDownloadEvent::Finished);
+                },
+            )
+            .await
+            .map_err(|e| format!("Failed to install update from {download_url}: {e}"));
+    }
+
+    let probe_client = update_http_client(update.proxy.as_ref())?;
+    let _ = on_event.send(AppUpdateDownloadEvent::Probing {
+        candidates: DESKTOP_UPDATE_MIRRORS.len() + 1,
+    });
+    let candidates = rank_update_download_candidates(&probe_client, &download_url).await;
+    if let Some(fastest) = candidates.first() {
+        tracing::info!(
+            "Fastest update source is {} ({} B/s)",
+            fastest.label,
+            fastest.bytes_per_second
+        );
+    }
+    let candidates = if candidates.is_empty() {
+        tracing::warn!("Mirror probe failed for every source; falling back to GitHub");
+        vec![UpdateDownloadCandidate {
+            label: "GitHub".to_string(),
+            url: download_url.clone(),
+            bytes_per_second: 0,
+        }]
+    } else {
+        candidates
+    };
+
+    let bytes = download_update_with_fallback(&update, candidates, &on_event).await?;
+    let _ = on_event.send(AppUpdateDownloadEvent::Finished);
     update
-        .download_and_install(
-            |chunk_length, content_length| {
-                if !started {
-                    let _ = on_event.send(AppUpdateDownloadEvent::Started { content_length });
-                    started = true;
-                }
-                let _ = on_event.send(AppUpdateDownloadEvent::Progress { chunk_length });
-            },
-            || {
-                let _ = on_event.send(AppUpdateDownloadEvent::Finished);
-            },
-        )
-        .await
+        .install(&bytes)
         .map_err(|e| format!("Failed to install update from {download_url}: {e}"))
+}
+
+// GitHub release mirrors
+// ---------------------------------------------------------------------------
+// Each mirror is a prefix proxy: `<prefix><original GitHub URL>`. Public
+// mirrors come and go, so the list only widens the candidate pool — the
+// installer signature is still verified after the download, and any source
+// that fails to serve the bytes is skipped in favour of the next candidate.
+
+/// Setting key that records whether desktop downloads probe mirrors first.
+pub const UPDATE_MIRROR_SETTING_KEY: &str = "update_mirror_acceleration";
+
+#[cfg(not(target_os = "android"))]
+struct UpdateMirror {
+    label: &'static str,
+    prefix: &'static str,
+}
+
+#[cfg(not(target_os = "android"))]
+const DESKTOP_UPDATE_MIRRORS: &[UpdateMirror] = &[
+    UpdateMirror {
+        label: "gh-proxy.com",
+        prefix: "https://gh-proxy.com/",
+    },
+    UpdateMirror {
+        label: "ghproxy.net",
+        prefix: "https://ghproxy.net/",
+    },
+    UpdateMirror {
+        label: "gh.llkk.cc",
+        prefix: "https://gh.llkk.cc/",
+    },
+    UpdateMirror {
+        label: "ghproxy.homeboyc.cn",
+        prefix: "https://ghproxy.homeboyc.cn/",
+    },
+    UpdateMirror {
+        label: "hub.gitmirror.com",
+        prefix: "https://hub.gitmirror.com/",
+    },
+    UpdateMirror {
+        label: "mirror.ghproxy.com",
+        prefix: "https://mirror.ghproxy.com/",
+    },
+    UpdateMirror {
+        label: "moeyy.cn",
+        prefix: "https://moeyy.cn/gh-proxy/",
+    },
+    UpdateMirror {
+        label: "ghfast.top",
+        prefix: "https://ghfast.top/",
+    },
+    UpdateMirror {
+        label: "github.moeyy.xyz",
+        prefix: "https://github.moeyy.xyz/",
+    },
+    UpdateMirror {
+        label: "gh.ddlc.top",
+        prefix: "https://gh.ddlc.top/",
+    },
+    UpdateMirror {
+        label: "ghproxy.cc",
+        prefix: "https://ghproxy.cc/",
+    },
+];
+
+/// How much of the asset each candidate serves while it is being measured.
+#[cfg(not(target_os = "android"))]
+const UPDATE_MIRROR_PROBE_BYTES: u64 = 256 * 1024;
+
+/// Upper bound for one probe; slower mirrors are dropped entirely.
+#[cfg(not(target_os = "android"))]
+const UPDATE_MIRROR_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+
+#[cfg(not(target_os = "android"))]
+#[derive(Clone)]
+struct UpdateDownloadCandidate {
+    label: String,
+    url: url::Url,
+    bytes_per_second: u64,
+}
+
+/// Mirrors are opt-out: only an explicit `disabled`-style value turns them off.
+#[cfg(not(target_os = "android"))]
+fn mirror_acceleration_enabled(value: Option<&str>) -> bool {
+    !matches!(
+        value
+            .map(|value| value.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("disabled" | "off" | "false" | "0")
+    )
+}
+
+#[cfg(not(target_os = "android"))]
+fn mirror_download_url(mirror: &UpdateMirror, direct: &url::Url) -> Option<url::Url> {
+    url::Url::parse(&format!("{}{}", mirror.prefix, direct.as_str())).ok()
+}
+
+/// Measures how fast one source serves the first chunk of the asset.
+#[cfg(not(target_os = "android"))]
+async fn probe_update_source(
+    client: &reqwest::Client,
+    label: &str,
+    url: url::Url,
+) -> Option<UpdateDownloadCandidate> {
+    let started = std::time::Instant::now();
+    let measured = async {
+        let mut response = client
+            .get(url.clone())
+            .header(
+                reqwest::header::RANGE,
+                format!("bytes=0-{}", UPDATE_MIRROR_PROBE_BYTES - 1),
+            )
+            .header(reqwest::header::ACCEPT_ENCODING, "identity")
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        // Mirrors that answer with an HTML landing page would otherwise look
+        // like a very fast source and fail only after the real download starts.
+        if response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.starts_with("text/html"))
+        {
+            return None;
+        }
+        let mut received: u64 = 0;
+        while received < UPDATE_MIRROR_PROBE_BYTES {
+            match response.chunk().await {
+                Ok(Some(chunk)) => received += chunk.len() as u64,
+                Ok(None) | Err(_) => break,
+            }
+        }
+        (received > 0).then_some(received)
+    };
+    let received = tokio::time::timeout(UPDATE_MIRROR_PROBE_TIMEOUT, measured)
+        .await
+        .ok()??;
+    let elapsed_ms = started.elapsed().as_millis().max(1) as u64;
+    Some(UpdateDownloadCandidate {
+        label: label.to_string(),
+        url,
+        bytes_per_second: received.saturating_mul(1000) / elapsed_ms,
+    })
+}
+
+/// Probes GitHub plus every mirror in parallel and ranks them fastest-first.
+#[cfg(not(target_os = "android"))]
+async fn rank_update_download_candidates(
+    client: &reqwest::Client,
+    direct: &url::Url,
+) -> Vec<UpdateDownloadCandidate> {
+    let mut probes = tokio::task::JoinSet::new();
+    {
+        let client = client.clone();
+        let url = direct.clone();
+        probes.spawn(async move { probe_update_source(&client, "GitHub", url).await });
+    }
+    for mirror in DESKTOP_UPDATE_MIRRORS {
+        let Some(url) = mirror_download_url(mirror, direct) else {
+            continue;
+        };
+        let label = mirror.label;
+        let client = client.clone();
+        probes.spawn(async move { probe_update_source(&client, label, url).await });
+    }
+
+    let mut candidates: Vec<UpdateDownloadCandidate> = Vec::new();
+    while let Some(joined) = probes.join_next().await {
+        match joined {
+            Ok(Some(candidate)) => candidates.push(candidate),
+            Ok(None) => {}
+            Err(error) => tracing::warn!("Update mirror probe task failed: {error}"),
+        }
+    }
+    candidates.sort_by(|left, right| right.bytes_per_second.cmp(&left.bytes_per_second));
+    candidates
+}
+
+/// Downloads through the ranked candidates, moving on when a source fails.
+#[cfg(not(target_os = "android"))]
+async fn download_update_with_fallback(
+    update: &tauri_plugin_updater::Update,
+    candidates: Vec<UpdateDownloadCandidate>,
+    on_event: &Channel<AppUpdateDownloadEvent>,
+) -> Result<Vec<u8>, String> {
+    let mut failures: Vec<String> = Vec::new();
+    for candidate in candidates {
+        let _ = on_event.send(AppUpdateDownloadEvent::MirrorSelected {
+            mirror: candidate.label.clone(),
+            bytes_per_second: candidate.bytes_per_second,
+        });
+        let mut attempt = update.clone();
+        attempt.download_url = candidate.url;
+        let mut announced = false;
+        let downloaded = attempt
+            .download(
+                |chunk_length, content_length| {
+                    if !announced {
+                        let _ = on_event.send(AppUpdateDownloadEvent::Started { content_length });
+                        announced = true;
+                    }
+                    let _ = on_event.send(AppUpdateDownloadEvent::Progress { chunk_length });
+                },
+                || {},
+            )
+            .await;
+
+        match downloaded {
+            Ok(bytes) => return Ok(bytes),
+            Err(error) => {
+                tracing::warn!("Update download from {} failed: {error}", candidate.label);
+                failures.push(format!("{}: {error}", candidate.label));
+            }
+        }
+    }
+
+    Err(format!(
+        "Failed to download the update from any source ({})",
+        failures.join("; ")
+    ))
 }
 
 #[cfg(target_os = "android")]
@@ -1064,3 +1329,46 @@ mod app_update_tests {
 }
 
 // ---------------------------------------------------------------------------
+
+#[cfg(all(test, not(target_os = "android")))]
+mod update_mirror_tests {
+    use super::*;
+
+    #[test]
+    fn mirror_acceleration_defaults_to_enabled() {
+        assert!(mirror_acceleration_enabled(None));
+        assert!(mirror_acceleration_enabled(Some("")));
+        assert!(mirror_acceleration_enabled(Some("enabled")));
+        assert!(!mirror_acceleration_enabled(Some("disabled")));
+        assert!(!mirror_acceleration_enabled(Some(" OFF ")));
+        assert!(!mirror_acceleration_enabled(Some("false")));
+    }
+
+    #[test]
+    fn mirror_urls_prefix_the_original_github_url() {
+        let direct =
+            url::Url::parse("https://github.com/o/r/releases/download/v1/app.msi").unwrap();
+        let mirror = UpdateMirror {
+            label: "test",
+            prefix: "https://gh-proxy.com/",
+        };
+        let mirrored = mirror_download_url(&mirror, &direct).unwrap();
+        assert_eq!(
+            mirrored.as_str(),
+            "https://gh-proxy.com/https://github.com/o/r/releases/download/v1/app.msi"
+        );
+    }
+
+    #[test]
+    fn every_mirror_prefix_accepts_a_release_url() {
+        let direct =
+            url::Url::parse("https://github.com/o/r/releases/download/v1/app.msi").unwrap();
+        for mirror in DESKTOP_UPDATE_MIRRORS {
+            assert!(
+                mirror_download_url(mirror, &direct).is_some(),
+                "{} produced an invalid URL",
+                mirror.label
+            );
+        }
+    }
+}

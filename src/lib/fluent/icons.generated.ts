@@ -509,6 +509,18 @@ import svg506 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
 import svg507 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
 import svg508 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
 import svg509 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
+import svg510 from '@fluentui/svg-icons/icons/contact_card_24_regular.svg?raw';
+import svg511 from '@fluentui/svg-icons/icons/contact_card_24_filled.svg?raw';
+import svg512 from '@fluentui/svg-icons/icons/contact_card_20_regular.svg?raw';
+import svg513 from '@fluentui/svg-icons/icons/contact_card_20_filled.svg?raw';
+import svg514 from '@fluentui/svg-icons/icons/person_key_24_regular.svg?raw';
+import svg515 from '@fluentui/svg-icons/icons/person_key_24_filled.svg?raw';
+import svg516 from '@fluentui/svg-icons/icons/person_key_20_regular.svg?raw';
+import svg517 from '@fluentui/svg-icons/icons/person_key_20_filled.svg?raw';
+import svg518 from '@fluentui/svg-icons/icons/cloud_arrow_down_24_regular.svg?raw';
+import svg519 from '@fluentui/svg-icons/icons/cloud_arrow_down_24_filled.svg?raw';
+import svg520 from '@fluentui/svg-icons/icons/cloud_arrow_down_20_regular.svg?raw';
+import svg521 from '@fluentui/svg-icons/icons/cloud_arrow_down_20_filled.svg?raw';
 import duotone0 from './assets/duotone/person_circle_24.svg?raw';
 import duotone1 from './assets/duotone/person_circle_20.svg?raw';
 import duotone2 from './assets/duotone/folder_add_24.svg?raw';
@@ -672,6 +684,7 @@ export const ICON_VARIANTS = {
   minimizeToTray: { regular: svg498, filled: svg499, small: svg500, smallFilled: svg501 },
   quit: { regular: svg502, filled: svg503, small: svg504, smallFilled: svg505 },
   pushPin: { regular: svg506, filled: svg507, small: svg508, smallFilled: svg509 },
-  contactCard: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
-  personKey: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
+  contactCard: { regular: svg510, filled: svg511, small: svg512, smallFilled: svg513 },
+  personKey: { regular: svg514, filled: svg515, small: svg516, smallFilled: svg517 },
+  mirrorDownload: { regular: svg518, filled: svg519, small: svg520, smallFilled: svg521 },
 } as const;

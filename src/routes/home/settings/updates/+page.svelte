@@ -15,6 +15,7 @@
   import { dialogStore } from '$lib/dialogs.svelte';
   import { notificationStore } from '$lib/stores.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import MdSwitch from '$lib/components/MdSwitch.svelte';
   import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
   import { focusRovingItem } from '$lib/keyboard';
 
@@ -23,12 +24,14 @@
 
   let channel = $state<UpdateChannel>('stable');
   let source = $state<UpdateSource>('custom');
+  let mirrorAcceleration = $state(true);
   let loading = $state(true);
   let error = $state<string | null>(null);
   const autoSave = createAutoSave({
     onError: (message) => {
       channel = appUpdateState.channel;
       source = appUpdateState.source;
+      mirrorAcceleration = appUpdateState.mirrorAcceleration;
       error = message;
     },
   });
@@ -72,6 +75,8 @@
       } else {
         source = appUpdateState.source;
       }
+      await appUpdateState.ensureMirrorAcceleration();
+      mirrorAcceleration = appUpdateState.mirrorAcceleration;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -107,6 +112,13 @@
       await setSetting('update_source', nextSource);
       appUpdateState.setUpdateSource(nextSource);
     });
+  }
+
+  function applyMirrorAcceleration(enabled: boolean) {
+    if (loading || autoSave.saving || enabled === mirrorAcceleration) return;
+    mirrorAcceleration = enabled;
+    error = null;
+    void autoSave.run(() => appUpdateState.setMirrorAcceleration(enabled));
   }
 
   async function choosePauseDuration() {
@@ -176,6 +188,10 @@
         await setSetting('update_source', 'custom');
         source = 'custom';
         appUpdateState.setUpdateSource('custom');
+      }
+      if (!mirrorAcceleration) {
+        await appUpdateState.setMirrorAcceleration(true);
+        mirrorAcceleration = true;
       }
       if (appUpdateState.isAutomaticCheckPaused) {
         await appUpdateState.resumeAutomaticChecks();
@@ -360,6 +376,26 @@
         {/each}
       </div>
     </section>
+
+    <section class="update-section settings-section" aria-labelledby="update-mirror-heading">
+      <div class="settings-section-heading">
+        <h2 id="update-mirror-heading">{$t('settings.updates.mirrorAcceleration')}</h2>
+        <p>{$t('settings.updates.mirrorAccelerationHint')}</p>
+      </div>
+
+      <div class="settings-row mirror-row">
+        <span class="mirror-copy settings-row__copy">
+          <span class="channel-name">{$t('settings.updates.mirrorAccelerationToggle')}</span>
+          <span class="channel-description">{$t('settings.updates.mirrorAccelerationDescription')}</span>
+        </span>
+        <MdSwitch
+          checked={mirrorAcceleration}
+          disabled={loading || autoSave.saving}
+          ariaLabel={$t('settings.updates.mirrorAccelerationToggle')}
+          onChange={applyMirrorAcceleration}
+        />
+      </div>
+    </section>
   </div>
 
   <div class="update-notes">
@@ -473,6 +509,15 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+  }
+
+  .mirror-row {
+    align-items: flex-start;
+  }
+
+  .mirror-copy {
+    display: grid;
+    gap: 4px;
   }
 
   :global(.primary-action[data-fluent-owner="routes-home-settings-updates-page"]),

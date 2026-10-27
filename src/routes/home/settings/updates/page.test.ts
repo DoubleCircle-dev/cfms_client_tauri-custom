@@ -23,10 +23,13 @@ const mocks = vi.hoisted(() => ({
   appUpdateState: {
     channel: 'stable',
     source: 'custom',
+    mirrorAcceleration: true,
     automaticCheckPause: { mode: 'active' } as UpdateCheckPause,
     isAutomaticCheckPaused: false,
     ensureAutomaticCheckPause: vi.fn(),
+    ensureMirrorAcceleration: vi.fn(async () => true),
     setAutomaticCheckPause: vi.fn(),
+    setMirrorAcceleration: vi.fn(async () => {}),
     resumeAutomaticChecks: vi.fn(),
     setChannel: vi.fn(),
     setUpdateSource: vi.fn(),
@@ -59,6 +62,9 @@ beforeEach(() => {
   mocks.appUpdateState.source = 'custom';
   mocks.appUpdateState.automaticCheckPause = { mode: 'active' };
   mocks.appUpdateState.isAutomaticCheckPaused = false;
+  mocks.appUpdateState.mirrorAcceleration = true;
+  mocks.appUpdateState.ensureMirrorAcceleration.mockResolvedValue(true);
+  mocks.appUpdateState.setMirrorAcceleration.mockResolvedValue(undefined);
   mocks.getSetting.mockResolvedValue('stable');
   mocks.setSetting.mockResolvedValue(undefined);
   mocks.appUpdateState.ensureAutomaticCheckPause.mockResolvedValue({ mode: 'active' });
@@ -128,6 +134,17 @@ describe('update settings pause controls', () => {
     await waitFor(() => expect(mocks.confirm).toHaveBeenCalledOnce());
     expect(mocks.setSetting).not.toHaveBeenCalledWith('update_source', 'official');
     expect(mocks.appUpdateState.setUpdateSource).not.toHaveBeenCalledWith('official');
+  });
+
+  it('persists mirror acceleration changes', async () => {
+    render(UpdatesSettingsPage);
+
+    const toggle = await screen.findByRole('switch', { name: 'Probe mirrors and pick the fastest' });
+    await waitFor(() => expect(toggle.getAttribute('aria-disabled')).not.toBe('true'));
+    (toggle as HTMLElement & { checked: boolean }).checked = false;
+    await fireEvent.change(toggle);
+
+    await waitFor(() => expect(mocks.appUpdateState.setMirrorAcceleration).toHaveBeenCalledWith(false));
   });
 
   it('moves and selects release channels with arrow keys', async () => {

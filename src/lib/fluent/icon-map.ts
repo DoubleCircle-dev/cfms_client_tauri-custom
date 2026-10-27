@@ -150,4 +150,6 @@ export const ICON_MAP = {
   "pushPin": "pin",
   "contactCard": "contact_card",
   "personKey": "person_key",
+  // Update mirror indicator.
+  "mirrorDownload": "cloud_arrow_down",
 } as const;
