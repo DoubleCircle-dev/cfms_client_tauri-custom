@@ -465,17 +465,22 @@
   </div>
 
   <div class="task-toolbar" role="toolbar" aria-label={$t('tasks.filters')}>
-    <label class="search-field cfms-field-surface">
+    <label class="search-field cfms-input-composite cfms-field-surface">
       <Icon name="search" size="18px" />
       <span class="sr-only">{$t('tasks.search')}</span>
       <input class="cfms-native-field" data-focus-ring="delegated" bind:value={searchQuery} placeholder={$t('tasks.searchPlaceholder')} />
-      {#if searchQuery}<FluentButton data-fluent-owner="routes-home-tasks-page"
-  onclick={() => (searchQuery = '')}
-  aria-label={$t('common.clear')}
-  type="button"
-  appearance="subtle"
-  iconOnly
-><Icon name="close" size="16px" /></FluentButton>{/if}
+      {#if searchQuery}
+        <span class="cfms-input-composite__end">
+          <FluentButton data-fluent-owner="routes-home-tasks-page"
+            onclick={() => (searchQuery = '')}
+            aria-label={$t('common.clear')}
+            type="button"
+            appearance="subtle"
+            class="cfms-control-action"
+            iconOnly
+          ><Icon name="close" size="16px" /></FluentButton>
+        </span>
+      {/if}
     </label>
     <label class="section-filter">
       <span>{$t('files.filter')}</span>
@@ -578,16 +583,16 @@
   .task-tabs span { color: var(--explorer-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
   .task-toolbar { display: grid; min-width: 0; grid-template-columns: minmax(240px, 1fr) auto auto; align-items: center; gap: 12px; }
-  .search-field { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: 8px; border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); padding: 0 0.65rem; color: var(--explorer-text-muted); background: var(--explorer-surface-raised); transition: border-color 140ms var(--motion-easing-standard), box-shadow 140ms var(--motion-easing-standard), background-color 140ms var(--motion-easing-standard); }
+  .search-field { display: flex; min-width: 0; align-items: center; gap: 8px; border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); color: var(--explorer-text-muted); background: var(--explorer-surface-raised); transition: border-color 140ms var(--motion-easing-standard), box-shadow 140ms var(--motion-easing-standard), background-color 140ms var(--motion-easing-standard); }
   .search-field:focus-within { border-color: var(--explorer-accent); box-shadow: inset 0 0 0 1px var(--explorer-accent); }
   .search-field input { min-width: 0; width: 100%; flex: 1; appearance: none; border: 0 !important; outline: 0; padding: 0; color: var(--explorer-text); background: transparent; box-shadow: none !important; font: 400 12px/16px var(--font-md3-sans); }
   .search-field input::placeholder { color: var(--explorer-text-muted); opacity: 1; }
-  .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"])) { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: var(--borderRadiusMedium); color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
+  .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"])) { flex: none; border-radius: var(--borderRadiusMedium); color: var(--explorer-text-muted); transition: color 120ms var(--motion-easing-standard), background-color 120ms var(--motion-easing-standard), transform 120ms var(--motion-easing-standard); }
   .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"]):hover) { color: var(--explorer-text); background: var(--explorer-surface-hover); }
   .search-field :global(:is(button[data-fluent-owner="routes-home-tasks-page"], .cfms-button[data-fluent-owner="routes-home-tasks-page"]):active) { transform: none; }
 
   .section-filter { display: flex; align-items: center; gap: 8px; color: var(--explorer-text-muted); font-size: 12px; white-space: nowrap; }
-  .section-filter select { min-width: 112px; min-height: 36px; border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); padding: 0 1.8rem 0 0.55rem; color: var(--explorer-text); background-color: var(--explorer-surface-raised); }
+  .section-filter select { min-width: 112px; border: 1px solid var(--explorer-border); border-radius: var(--borderRadiusMedium); padding-inline: 0.55rem 1.8rem; color: var(--explorer-text); background-color: var(--explorer-surface-raised); }
   .task-summary { display: flex; justify-self: end; gap: 12px; color: var(--explorer-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .task-summary :global(.attention) { color: var(--explorer-danger); }
 

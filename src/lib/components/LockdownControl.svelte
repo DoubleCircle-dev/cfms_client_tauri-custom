@@ -126,7 +126,7 @@
         disabled={busy}
         onclick={cancelReasonEditor}
         appearance="subtle"
-        class="explorer-command-button lockdown-cancel-button"
+        class="cfms-control-action explorer-command-button lockdown-cancel-button"
         iconOnly
       >
         <Icon name="close" size="18px" />
@@ -142,7 +142,7 @@
       disabled={busy}
       onclick={() => openReasonEditor('edit')}
       appearance="subtle"
-      class="explorer-command-button lockdown-edit-button"
+      class="cfms-control-action explorer-command-button lockdown-edit-button"
       iconOnly
     >
       <Icon name="edit" size="17px" />
@@ -152,7 +152,7 @@
   <button data-fluent-owner="lib-components-lockdown-control"
     bind:this={primaryButton}
     type="button"
-    class="explorer-command-button lockdown-primary-button"
+    class="cfms-control-action cfms-control-action--icon explorer-command-button lockdown-primary-button"
     data-active={active ? 'true' : undefined}
     data-confirming={editorMode ? 'true' : undefined}
     disabled={busy}
@@ -192,7 +192,6 @@
 
   :global(.lockdown-reason-entry) input {
     width: clamp(12rem, 26vw, 22rem);
-    height: 34px;
     min-width: 0;
     border: 1px solid var(--explorer-border-strong);
     border-radius: var(--borderRadiusMedium);
@@ -226,7 +225,6 @@
   :global(.lockdown-cancel-button[data-fluent-owner="lib-components-lockdown-control"]),
   :global(.lockdown-edit-button[data-fluent-owner="lib-components-lockdown-control"]),
   .lockdown-primary-button {
-    width: 34px;
     flex: none;
     padding-inline: 0;
   }

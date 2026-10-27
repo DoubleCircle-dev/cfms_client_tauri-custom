@@ -177,13 +177,13 @@
         {/if}
       </div>
 
-      <div class="grid gap-3 sm:grid-cols-[1fr_auto]">
+      <div class="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
             <Icon name="search" size="18px" />
           </span>
           <input
-            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field py-2.5 pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
+            class="cfms-native-field w-full rounded-lg border border-md3-outline bg-md3-field pl-10 pr-3 text-sm text-md3-on-surface outline-none transition"
             placeholder={$t('manage.searchItems')}
             bind:value={query}
             disabled={loading || saving}
@@ -192,14 +192,14 @@
 
         {#if allowAdd}
           <form
-            class="flex min-w-0 gap-2"
+            class="flex min-w-0 items-center gap-2"
             onsubmit={(event) => {
               event.preventDefault();
               addCustomItem();
             }}
           >
             <input
-              class="cfms-native-field min-w-0 rounded-lg border border-md3-outline bg-md3-field px-3 py-2.5 text-sm text-md3-on-surface outline-none transition"
+              class="cfms-native-field min-w-0 rounded-lg border border-md3-outline bg-md3-field px-3 text-sm text-md3-on-surface outline-none transition"
               placeholder={addPlaceholder}
               bind:value={customValue}
               disabled={loading || saving}
@@ -209,7 +209,7 @@
               disabled={loading || saving || !customValue.trim()}
               title={$t('common.add')}
               appearance="subtle"
-              class="rounded bg-md3-primary-container p-2.5 text-md3-on-primary-container transition-all  disabled:cursor-not-allowed disabled:opacity-45"
+              class="cfms-control-action rounded bg-md3-primary-container text-md3-on-primary-container transition-all disabled:cursor-not-allowed disabled:opacity-45"
               iconOnly
               aria-label={$t('common.add')}
             >

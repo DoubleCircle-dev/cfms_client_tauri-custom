@@ -5,6 +5,52 @@
   --cfms-control-height-large: 40px;
   --cfms-field-label-offset: 8px;
 }
+
+/* Opt-in geometry for actions beside ordinary fields. List rows and explicit
+ * large/authentication controls retain their own sizing. */
+:root .cfms-control-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  block-size: var(--cfms-control-height-medium);
+  min-block-size: var(--cfms-control-height-medium);
+  padding-block: 0;
+}
+:root .cfms-control-action:is([icon-only], .cfms-control-action--icon) {
+  inline-size: var(--cfms-control-height-medium);
+  min-inline-size: var(--cfms-control-height-medium);
+  max-inline-size: var(--cfms-control-height-medium);
+  padding: 0;
+}
+
+/* The composite owns the border box. End actions span that full height just
+ * like MdOutlinedField's end region, without adding to the row's height. */
+:root .cfms-input-composite {
+  box-sizing: border-box;
+  block-size: var(--cfms-control-height-medium);
+  min-block-size: var(--cfms-control-height-medium);
+  padding: 0 12px;
+}
+:root .cfms-input-composite:has(> .cfms-input-composite__end) { padding-inline-end: 0; }
+:root .cfms-input-composite > input[data-focus-ring="delegated"] {
+  box-sizing: border-box;
+  block-size: calc(var(--cfms-control-height-medium) - 2px);
+  min-block-size: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+.cfms-input-composite__end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-block: -1px;
+}
+.cfms-input-composite__end > .cfms-control-action:last-child {
+  border-start-end-radius: var(--borderRadiusMedium);
+  border-end-end-radius: var(--borderRadiusMedium);
+}
 .cfms-heading-copy { display: grid; min-width: 0; gap: 4px; }
 .cfms-heading-copy > :is(h1, h2, h3, p) { margin: 0; }
 .cfms-heading-row { display: flex; min-width: 0; align-items: center; gap: 12px; }
@@ -115,6 +161,25 @@
   color: var(--colorNeutralForegroundDisabled);
 }
 .cfms-field__input > :is(div, span[data-outlined-content]) { flex: 1; min-inline-size: 0; }
+
+/* Keep native picker actions at the input's inline end. Theme color-scheme
+ * supplies the icon colors, including dark and forced-color environments. */
+:root input.cfms-native-field:is([type="date"], [type="time"], [type="datetime-local"]) {
+  color-scheme: inherit;
+}
+:root input.cfms-native-field:is([type="date"], [type="time"], [type="datetime-local"])::-webkit-datetime-edit {
+  flex: 1;
+  min-inline-size: 0;
+  padding: 0;
+}
+:root input.cfms-native-field:is([type="date"], [type="time"], [type="datetime-local"])::-webkit-calendar-picker-indicator {
+  flex: none;
+  margin-inline: 8px 0;
+  padding: 0;
+}
+:root input.cfms-native-field:is([type="date"], [type="time"], [type="datetime-local"]):not(:disabled)::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
 .cfms-field:has(input:disabled, textarea:disabled, fluent-text-input[disabled]) > .cfms-field__content::before,
 .cfms-field--disabled > .cfms-field__content::before { background: var(--colorNeutralBackgroundDisabled); }
 

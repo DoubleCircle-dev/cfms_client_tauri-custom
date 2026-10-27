@@ -422,7 +422,7 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
     <div class="schedule-workspace" class:has-inspector={editorMode !== null || selected !== null}>
       <section class="ledger" aria-label={$t('schedules.listLabel')}>
         <div class="command-bar">
-          <label class="search-field cfms-field-surface">
+          <label class="search-field cfms-input-composite cfms-field-surface">
             <Icon name="search" size="18px" />
             <span class="sr-only">{$t('schedules.search')}</span>
             <input class="cfms-native-field" data-focus-ring="delegated" bind:value={search} disabled={editorMode !== null} placeholder={$t('schedules.searchPlaceholder')} />
@@ -625,9 +625,9 @@ FORM: Grounded structure 7/7, a control-room ledger with persistent inspector; s
   .schedule-workspace.has-inspector .ledger { display: none; }
   .ledger { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
   .command-bar { display: flex; min-height: 52px; align-items: center; gap: 12px; border-bottom: 1px solid var(--color-md3-outline); padding: 0.45rem 1rem; }
-  .search-field { display: flex; min-width: 180px; max-width: 390px; flex: 1; align-items: center; gap: 8px; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); padding: 0 0.65rem; background: var(--color-md3-field); color: var(--color-md3-on-surface-variant); }
+  .search-field { display: flex; min-width: 180px; max-width: 390px; flex: 1; align-items: center; gap: 8px; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); color: var(--color-md3-on-surface-variant); }
   .search-field:focus-within { border-color: var(--color-md3-primary); box-shadow: inset 0 0 0 1px var(--color-md3-primary); }
-  .search-field input { width: 100%; min-height: 36px; border: 0; outline: 0; background: transparent; color: var(--color-md3-on-surface); font: 0.8rem var(--font-md3-sans); }
+  .search-field input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-md3-on-surface); font: 0.8rem var(--font-md3-sans); }
   .search-field:has(input:is(:disabled, [disabled])) { opacity: 0.55; }
   .deleted-filter { display: flex; align-items: center; gap: 8px; color: var(--color-md3-on-surface-variant); font-size: 12px; cursor: pointer; }
   .deleted-filter input { accent-color: var(--color-md3-primary); }

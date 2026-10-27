@@ -30,7 +30,8 @@
 <style>
   .cfms-field {
     --cfms-outline-color: var(--colorNeutralStroke1);
-    --cfms-control-height: var(--cfms-control-height-medium);
+    --cfms-field-padding-block: 0px;
+    --cfms-control-height: calc(var(--cfms-control-height-medium) + 2 * var(--cfms-field-padding-block));
     box-sizing: border-box;
     position: relative;
     block-size: fit-content;
@@ -38,8 +39,11 @@
     min-inline-size: 0;
     border-radius: var(--borderRadiusMedium);
   }
-  .cfms-field[data-control-size="small"] { --cfms-control-height: var(--cfms-control-height-small); }
-  .cfms-field[data-control-size="large"] { --cfms-control-height: var(--cfms-control-height-large); }
+  .cfms-field[data-control-size="small"] { --cfms-control-height: calc(var(--cfms-control-height-small) + 2 * var(--cfms-field-padding-block)); }
+  .cfms-field[data-control-size="large"] { --cfms-control-height: calc(var(--cfms-control-height-large) + 2 * var(--cfms-field-padding-block)); }
+  .cfms-field:has(:global(input:is([type="date"], [type="time"], [type="datetime-local"]))) {
+    --cfms-field-padding-block: 4px;
+  }
   .cfms-field__label, .cfms-field__outline legend {
     font: 400 12px/16px var(--fontFamilyBase);
     white-space: nowrap;
