@@ -171,6 +171,9 @@ export const zh_CN = {
     trayQuit: '退出 CFMS Client',
     trayTooltip: 'CFMS Client — 仍在后台运行',
   },
+  contextMenu: {
+    elevationRequired: '此操作需要提权，选择后将验证身份。',
+  },
   common: {
     back: '返回',
     loading: '加载中...',

@@ -4,6 +4,33 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.57.0
+**Released on:** 2026-10-27
+
+**Title:** Palette System & User Profile Page
+
+### Added
+- Refactor theme management and introduce palette system
+- Update theme colors and improve accessibility for elevated actions
+- Implement keyboard shortcut display on context menus
+- Enhance account settings page with user info and permissions management
+
+### Fixed
+- Update input components and styles for improved consistency and usability
+- Update icons in EscalationControl and settings to improve consistency
+- Enhance MdOutlinedField component with control size and end content support
+- Update styling for password reset dialog options to improve layout and readability
+- Enhance revision graph rendering and add push pin icon
+- Update node lookup action identifier for resolve_node_path function
+
+### Improved
+- Enhance context menu layout and shortcut display for improved usability
+- Update account terminology and enhance permissions display in account settings
+- Clean up unused translation keys and enhance i18n handling in frontend and backend
+- Remove unused AccountBadge component and update navigation routes
+
+--- 
+
 ## v0.56.0
 **Released on:** 2026-10-26
 

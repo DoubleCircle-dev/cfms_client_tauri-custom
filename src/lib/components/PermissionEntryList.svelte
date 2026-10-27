@@ -141,7 +141,7 @@
     </FluentButton>
   </div>
 
-  <div class="search-field cfms-field-surface">
+  <div class="search-field cfms-input-composite cfms-field-surface">
     <Icon name="search" size="18px" />
     <input class="cfms-native-field"
       value={query}
@@ -152,16 +152,19 @@
       oninput={(event) => onQueryChange(event.currentTarget.value)}
     />
     {#if query}
-      <FluentButton data-fluent-owner="lib-components-permission-entry-list"
-        type="button"
-        aria-label={$t('manage.clearPermissionSearch')}
-        disabled={disabled}
-        onclick={() => onQueryChange('')}
-        appearance="subtle"
-        iconOnly
-      >
-        <Icon name="close" size="16px" />
-      </FluentButton>
+      <span class="cfms-input-composite__end">
+        <FluentButton data-fluent-owner="lib-components-permission-entry-list"
+          type="button"
+          aria-label={$t('manage.clearPermissionSearch')}
+          disabled={disabled}
+          onclick={() => onQueryChange('')}
+          appearance="subtle"
+          class="cfms-control-action"
+          iconOnly
+        >
+          <Icon name="close" size="16px" />
+        </FluentButton>
+      </span>
     {/if}
   </div>
 
@@ -339,14 +342,12 @@
 
   .search-field {
     display: grid;
-    min-height: 2.625rem;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
     margin: 0 1rem;
     border: 1px solid var(--color-md3-outline);
     border-radius: var(--borderRadiusMedium);
-    padding: 0 0.7rem;
     color: var(--color-md3-on-surface-variant);
     background: var(--color-md3-field);
     transition: border-color 120ms ease, box-shadow 120ms ease;
@@ -370,10 +371,6 @@
   .search-field input::placeholder { color: var(--color-md3-on-surface-variant); opacity: 0.9; }
 
   .search-field :global(:is(button[data-fluent-owner="lib-components-permission-entry-list"], .cfms-button[data-fluent-owner="lib-components-permission-entry-list"])) {
-    display: grid;
-    width: 1.75rem;
-    height: 1.75rem;
-    place-items: center;
     border-radius: var(--borderRadiusMedium);
     color: var(--color-md3-on-surface-variant);
   }

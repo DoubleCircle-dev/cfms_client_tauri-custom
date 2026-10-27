@@ -78,7 +78,7 @@
   }
 </script>
 
-<MdOutlinedField inputId={id} {label} error={invalid} {disabled}>
+<MdOutlinedField inputId={id} {label} error={invalid} {disabled} {controlSize}>
   <fluent-text-input
     bind:this={element}
     use:forwardKeydown
@@ -108,19 +108,16 @@
   .cfms-text-input::part(label) { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; }
   .cfms-text-input::part(control) { font-size: var(--fontSizeBase300); }
   .cfms-text-input::part(root) {
-    height: 30px;
+    height: calc(var(--cfms-control-height) - 2px);
     background: transparent;
     border: 0;
     outline: none;
     box-shadow: none;
   }
-  .cfms-text-input[control-size="small"]::part(root) { height: 22px; }
-  .cfms-text-input[control-size="large"]::part(root) { height: 38px; }
   .cfms-text-input::part(root)::after { display: none; }
   .cfms-text-input[aria-invalid="true"] { --colorNeutralStroke1: var(--colorStatusDangerBorder1); --colorCompoundBrandStroke: var(--colorStatusDangerBorder1); }
   .cfms-text-input :global([slot]) { display: inline-flex; align-items: center; color: var(--colorNeutralForeground3); }
   @media (pointer: coarse) {
-    .cfms-text-input::part(root) { min-block-size: 42px; }
     .cfms-text-input::part(control) { font-size: 16px; }
   }
 </style>

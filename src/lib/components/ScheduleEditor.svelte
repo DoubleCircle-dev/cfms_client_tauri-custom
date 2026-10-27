@@ -182,7 +182,7 @@
 
   {#if editingUnavailableTask}
     <div class="editor-warning" role="alert">
-      <Icon name="warningAmber" size="19px" />
+      <span class="cfms-icon-text__icon"><Icon name="warningAmber" size="19px" /></span>
       <span>{$t('schedules.taskUnavailableEdit')}</span>
     </div>
   {/if}
@@ -311,9 +311,8 @@
   .field-label { color: var(--color-md3-on-surface); font-family: var(--font-md3-sans); font-size: 12px; font-weight: 600; }
   input, select { width: 100%; box-sizing: border-box; color: var(--color-md3-on-surface); font: 0.84rem/1.4 var(--font-md3-sans); }
   select { border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); background: var(--color-md3-field); }
-  input, select { min-height: 42px; padding: 0 0.7rem; }
   input:is(:disabled, [disabled]), select:is(:disabled, [disabled]) { cursor: not-allowed; opacity: 0.55; }
-  .trigger-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 12px; }
+  .trigger-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); align-items: end; gap: 12px; }
   .trigger-grid > div { display: grid; gap: 8px; }
   .field-help, .payload-heading p { color: var(--color-md3-on-surface-variant); font: 0.75rem/1.45 var(--font-md3-sans); }
   .payload-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-top: 0.25rem; }

@@ -126,7 +126,7 @@
         disabled={busy}
         onclick={cancelReasonEditor}
         appearance="subtle"
-        class="explorer-command-button lockdown-cancel-button"
+        class="cfms-control-action explorer-command-button lockdown-cancel-button"
         iconOnly
       >
         <Icon name="close" size="18px" />
@@ -142,7 +142,7 @@
       disabled={busy}
       onclick={() => openReasonEditor('edit')}
       appearance="subtle"
-      class="explorer-command-button lockdown-edit-button"
+      class="cfms-control-action explorer-command-button lockdown-edit-button"
       iconOnly
     >
       <Icon name="edit" size="17px" />
@@ -152,7 +152,7 @@
   <button data-fluent-owner="lib-components-lockdown-control"
     bind:this={primaryButton}
     type="button"
-    class="explorer-command-button lockdown-primary-button"
+    class="cfms-control-action cfms-control-action--icon explorer-command-button lockdown-primary-button"
     data-active={active ? 'true' : undefined}
     data-confirming={editorMode ? 'true' : undefined}
     disabled={busy}
@@ -168,7 +168,7 @@
     {:else if editorMode}
       <Icon name="check" size="19px" />
     {:else}
-      <Icon name="supervisedUserCircleOff" size="18px" />
+      <Icon name="security" size="18px" filled={active} />
     {/if}
   </button>
 </div>
@@ -192,7 +192,6 @@
 
   :global(.lockdown-reason-entry) input {
     width: clamp(12rem, 26vw, 22rem);
-    height: 34px;
     min-width: 0;
     border: 1px solid var(--explorer-border-strong);
     border-radius: var(--borderRadiusMedium);
@@ -226,7 +225,6 @@
   :global(.lockdown-cancel-button[data-fluent-owner="lib-components-lockdown-control"]),
   :global(.lockdown-edit-button[data-fluent-owner="lib-components-lockdown-control"]),
   .lockdown-primary-button {
-    width: 34px;
     flex: none;
     padding-inline: 0;
   }
@@ -237,13 +235,17 @@
   }
 
   .lockdown-primary-button[data-confirming='true'] {
-    color: var(--explorer-on-accent, white);
-    border-color: var(--explorer-accent);
-    background: var(--explorer-accent);
+    color: var(--colorNeutralForegroundOnBrand);
+    border-color: var(--colorBrandBackground);
+    background: var(--colorBrandBackground);
   }
 
   .lockdown-primary-button[data-confirming='true']:hover:not(:is(:disabled, [disabled])) {
-    background: color-mix(in srgb, var(--explorer-accent) 88%, var(--explorer-text));
+    background: var(--colorBrandBackgroundHover);
+  }
+
+  .lockdown-primary-button[data-confirming='true']:active:not(:is(:disabled, [disabled])) {
+    background: var(--colorBrandBackgroundPressed);
   }
 
   @keyframes reason-entry-in {

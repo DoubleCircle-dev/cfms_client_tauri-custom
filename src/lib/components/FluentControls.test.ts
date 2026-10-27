@@ -12,6 +12,26 @@ afterEach(() => { cleanup(); document.body.innerHTML = ''; });
 const children = createRawSnippet(() => ({ render: () => '<span>Continue</span>' }));
 
 describe('Svelte / Fluent interoperability', () => {
+  it('keeps native input labelling and form behavior when trailing actions are supplied', async () => {
+    const input = createRawSnippet(() => ({ render: () => '<input id="password-with-end" type="password" data-focus-ring="delegated" />' }));
+    const end = createRawSnippet(() => ({ render: () => '<button type="button">Show password</button>' }));
+    const form = document.createElement('form');
+    document.body.append(form);
+    const submit = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener('submit', submit);
+    const view = render(MdOutlinedField, { target: form, props: { inputId: 'password-with-end', label: 'Password', children: input, end } });
+    const control = screen.getByLabelText('Password') as HTMLInputElement;
+    expect(control.labels).toHaveLength(1);
+    expect(control.type).toBe('password');
+    await fireEvent.input(control, { target: { value: 'test-only-value' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(control.value).toBe('test-only-value');
+    expect(submit).not.toHaveBeenCalled();
+    await view.rerender({ inputId: 'password-with-end', label: 'Password', children: input, end: undefined });
+    expect(screen.queryByRole('button', { name: 'Show password' })).toBeNull();
+    expect(screen.getByLabelText('Password')).toBe(control);
+  });
+
   it('associates the notched label with a native input without naming it twice', () => {
     const input = createRawSnippet(() => ({ render: () => '<input id="native-password" type="password" data-focus-ring="delegated" />' }));
     const view = render(MdOutlinedField, { inputId: 'native-password', label: 'Password', children: input });
@@ -58,6 +78,22 @@ describe('Svelte / Fluent interoperability', () => {
     await view.rerender({ ...props, disabled: false });
     expect(host.hasAttribute('disabled')).toBe(false);
     expect(host.disabled).toBe(false);
+  });
+
+  it('keeps native and Fluent field density explicit when the requested size changes', async () => {
+    const native = createRawSnippet(() => ({ render: () => '<input id="sized-native" data-focus-ring="delegated" />' }));
+    const nativeView = render(MdOutlinedField, { inputId: 'sized-native', label: 'Native', children: native });
+    expect(screen.getByLabelText('Native').closest('.cfms-field')?.getAttribute('data-control-size')).toBe('medium');
+    await nativeView.rerender({ inputId: 'sized-native', label: 'Native', children: native, controlSize: 'large' });
+    expect(screen.getByLabelText('Native').closest('.cfms-field')?.getAttribute('data-control-size')).toBe('large');
+
+    const fluentView = render(FluentTextInput, { id: 'sized-fluent', label: 'Fluent', controlSize: 'small' });
+    const host = screen.getByLabelText('Fluent');
+    expect(host.getAttribute('control-size')).toBe('small');
+    expect(host.closest('.cfms-field')?.getAttribute('data-control-size')).toBe('small');
+    await fluentView.rerender({ id: 'sized-fluent', label: 'Fluent', controlSize: 'large' });
+    expect(host.getAttribute('control-size')).toBe('large');
+    expect(host.closest('.cfms-field')?.getAttribute('data-control-size')).toBe('large');
   });
   it('omits icon-only on labelled actions and adds it only for compact actions', async () => {
     const view = render(FluentButton, { children });

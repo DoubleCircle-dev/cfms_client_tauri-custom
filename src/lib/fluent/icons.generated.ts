@@ -31,10 +31,10 @@ import svg28 from '@fluentui/svg-icons/icons/arrow_enter_left_24_regular.svg?raw
 import svg29 from '@fluentui/svg-icons/icons/arrow_enter_left_24_filled.svg?raw';
 import svg30 from '@fluentui/svg-icons/icons/arrow_enter_left_20_regular.svg?raw';
 import svg31 from '@fluentui/svg-icons/icons/arrow_enter_left_20_filled.svg?raw';
-import svg32 from '@fluentui/svg-icons/icons/sign_out_24_regular.svg?raw';
-import svg33 from '@fluentui/svg-icons/icons/sign_out_24_filled.svg?raw';
-import svg34 from '@fluentui/svg-icons/icons/sign_out_20_regular.svg?raw';
-import svg35 from '@fluentui/svg-icons/icons/sign_out_20_filled.svg?raw';
+import svg32 from '@fluentui/svg-icons/icons/arrow_exit_24_regular.svg?raw';
+import svg33 from '@fluentui/svg-icons/icons/arrow_exit_24_filled.svg?raw';
+import svg34 from '@fluentui/svg-icons/icons/arrow_exit_20_regular.svg?raw';
+import svg35 from '@fluentui/svg-icons/icons/arrow_exit_20_filled.svg?raw';
 import svg36 from '@fluentui/svg-icons/icons/chevron_left_24_regular.svg?raw';
 import svg37 from '@fluentui/svg-icons/icons/chevron_left_24_filled.svg?raw';
 import svg38 from '@fluentui/svg-icons/icons/chevron_left_20_regular.svg?raw';
@@ -509,6 +509,14 @@ import svg506 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
 import svg507 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
 import svg508 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
 import svg509 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
+import svg482 from '@fluentui/svg-icons/icons/contact_card_24_regular.svg?raw';
+import svg483 from '@fluentui/svg-icons/icons/contact_card_24_filled.svg?raw';
+import svg484 from '@fluentui/svg-icons/icons/contact_card_20_regular.svg?raw';
+import svg485 from '@fluentui/svg-icons/icons/contact_card_20_filled.svg?raw';
+import svg486 from '@fluentui/svg-icons/icons/person_key_24_regular.svg?raw';
+import svg487 from '@fluentui/svg-icons/icons/person_key_24_filled.svg?raw';
+import svg488 from '@fluentui/svg-icons/icons/person_key_20_regular.svg?raw';
+import svg489 from '@fluentui/svg-icons/icons/person_key_20_filled.svg?raw';
 import duotone0 from './assets/duotone/person_circle_24.svg?raw';
 import duotone1 from './assets/duotone/person_circle_20.svg?raw';
 import duotone2 from './assets/duotone/folder_add_24.svg?raw';
@@ -537,7 +545,7 @@ export const ICON_VARIANTS = {
   chevronLeft: { regular: svg36, filled: svg37, small: svg38, smallFilled: svg39 },
   password: { regular: svg40, filled: svg41, small: svg42, smallFilled: svg43 },
   keyboard: { regular: svg44, filled: svg45, small: svg46, smallFilled: svg47 },
-  accountCircle: { regular: svg48, filled: svg49, small: svg50, smallFilled: svg51, duotone: duotone0, smallDuotone: duotone1 },
+  accountCircle: { regular: svg48, filled: svg49, small: svg50, smallFilled: svg51, duotone: duotone0, smallDuotone: duotone1, primaryTone: 'brand' },
   pin: { regular: svg52, filled: svg53, small: svg54, smallFilled: svg55 },
   fingerprint: { regular: svg56, filled: svg57, small: svg58, smallFilled: svg59 },
   passkey: { regular: svg60, filled: svg61, small: svg62, smallFilled: svg63 },
@@ -592,9 +600,9 @@ export const ICON_VARIANTS = {
   help: { regular: svg228, filled: svg229, small: svg230, smallFilled: svg231 },
   folder: { regular: svg8, filled: svg9, small: svg10, smallFilled: svg11 },
   folderOpen: { regular: svg232, filled: svg233, small: svg234, smallFilled: svg235 },
-  createNewFolder: { regular: svg236, filled: svg237, small: svg238, smallFilled: svg239, duotone: duotone2, smallDuotone: duotone3 },
+  createNewFolder: { regular: svg236, filled: svg237, small: svg238, smallFilled: svg239, duotone: duotone2, smallDuotone: duotone3, primaryTone: 'neutral' },
   filePresent: { regular: svg240, filled: svg241, small: svg242, smallFilled: svg243 },
-  driveFileMove: { regular: svg244, filled: svg245, small: svg246, smallFilled: svg247, duotone: duotone4, smallDuotone: duotone5 },
+  driveFileMove: { regular: svg244, filled: svg245, small: svg246, smallFilled: svg247, duotone: duotone4, smallDuotone: duotone5, primaryTone: 'neutral' },
   star: { regular: svg248, filled: svg249, small: svg250, smallFilled: svg251 },
   starOutline: { regular: svg248, filled: svg249, small: svg250, smallFilled: svg251 },
   deleteForever: { regular: svg252, filled: svg253, small: svg254, smallFilled: svg255 },
@@ -604,7 +612,7 @@ export const ICON_VARIANTS = {
   filterList: { regular: svg260, filled: svg261, small: svg262, smallFilled: svg263 },
   selectAll: { regular: svg264, filled: svg265, small: svg266, smallFilled: svg267 },
   checklist: { regular: svg268, filled: svg269, small: svg270, smallFilled: svg271 },
-  folderUpload: { regular: svg272, filled: svg273, small: svg274, smallFilled: svg275, duotone: duotone6, smallDuotone: duotone7 },
+  folderUpload: { regular: svg272, filled: svg273, small: svg274, smallFilled: svg275, duotone: duotone6, smallDuotone: duotone7, primaryTone: 'neutral' },
   folderEye: { regular: svg276, filled: svg277, small: svg276, smallFilled: svg277 },
   arrowUpward: { regular: svg278, filled: svg279, small: svg280, smallFilled: svg281 },
   arrowDownward: { regular: svg282, filled: svg283, small: svg284, smallFilled: svg285 },
@@ -621,7 +629,7 @@ export const ICON_VARIANTS = {
   emergencyHome: { regular: svg322, filled: svg323, small: svg324, smallFilled: svg325 },
   warning: { regular: svg326, filled: svg327, small: svg328, smallFilled: svg329 },
   supervisorAccount: { regular: svg330, filled: svg331, small: svg332, smallFilled: svg333 },
-  adminPanelSettings: { regular: svg334, filled: svg335, small: svg336, smallFilled: svg337, duotone: duotone8, smallDuotone: duotone9 },
+  adminPanelSettings: { regular: svg334, filled: svg335, small: svg336, smallFilled: svg337, duotone: duotone8, smallDuotone: duotone9, primaryTone: 'neutral' },
   article: { regular: svg338, filled: svg339, small: svg340, smallFilled: svg341 },
   groups: { regular: svg342, filled: svg343, small: svg344, smallFilled: svg345 },
   groupAdd: { regular: svg346, filled: svg347, small: svg348, smallFilled: svg349 },
@@ -660,10 +668,10 @@ export const ICON_VARIANTS = {
   ifl: { regular: svg164, filled: svg165, small: svg166, smallFilled: svg167 },
   api: { regular: svg0, filled: svg1, small: svg2, smallFilled: svg3 },
   arrowForward: { regular: svg460, filled: svg461, small: svg462, smallFilled: svg463 },
-  contentCopy: { regular: svg464, filled: svg465, small: svg466, smallFilled: svg467, duotone: duotone10, smallDuotone: duotone11 },
+  contentCopy: { regular: svg464, filled: svg465, small: svg466, smallFilled: svg467, duotone: duotone10, smallDuotone: duotone11, primaryTone: 'brand' },
   personPasskey: { regular: svg468, filled: svg469, small: svg470, smallFilled: svg471 },
   laptopBriefcase: { regular: svg472, filled: svg473, small: svg474, smallFilled: svg475 },
-  passwordReset: { regular: svg476, filled: svg477, small: svg476, smallFilled: svg477, duotone: duotone12, smallDuotone: duotone13 },
+  passwordReset: { regular: svg476, filled: svg477, small: svg476, smallFilled: svg477, duotone: duotone12, smallDuotone: duotone13, primaryTone: 'neutral' },
   tools: { regular: svg478, filled: svg479, small: svg480, smallFilled: svg481 },
   chat: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
   attachment: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
@@ -672,4 +680,6 @@ export const ICON_VARIANTS = {
   minimizeToTray: { regular: svg498, filled: svg499, small: svg500, smallFilled: svg501 },
   quit: { regular: svg502, filled: svg503, small: svg504, smallFilled: svg505 },
   pushPin: { regular: svg506, filled: svg507, small: svg508, smallFilled: svg509 },
+  contactCard: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
+  personKey: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
 } as const;

@@ -313,7 +313,7 @@
           <div><dt>{$t('manage.registered')}</dt><dd>{date(info.created_time)}</dd></div>
         </dl>
       {:else if errorKey}
-        <p class="user-preview__error" role="status"><Icon name="info" size="18px" /><span>{$t(errorKey)}</span></p>
+        <p class="user-preview__error" role="status"><span class="cfms-icon-text__icon"><Icon name="info" size="18px" /></span><span>{$t(errorKey)}</span></p>
       {:else}
         <p role="status">{$t('manage.userPreviewLoading')}</p>
       {/if}

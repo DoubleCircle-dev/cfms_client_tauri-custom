@@ -1,6 +1,6 @@
 import { setTheme } from '@fluentui/web-components/theme/set-theme.js';
-import { fluentTheme } from './theme';
+import { fluentTheme, type ThemeOptions } from './theme';
 
-export function applyFluentTheme(scheme: 'light' | 'dark', reduceMotion: boolean) {
-  setTheme(fluentTheme(scheme, reduceMotion));
+export function applyFluentTheme(options: ThemeOptions) {
+  setTheme(fluentTheme(options));
 }

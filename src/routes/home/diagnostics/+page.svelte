@@ -21,7 +21,7 @@
     <ServerDiagnosticsPanel />
   {:else}
     <section class="unavailable-state" aria-labelledby="diagnostics-unavailable-title">
-      <Icon name="lock" size="22px" />
+      <span class="cfms-icon-text__icon" style="--cfms-icon-line-height: calc(14px * 1.25)"><Icon name="lock" size="22px" /></span>
       <div>
         <h2 id="diagnostics-unavailable-title">{$t('diagnostics.unavailableTitle')}</h2>
         <p>{$t('diagnostics.unavailableDescription')}</p>

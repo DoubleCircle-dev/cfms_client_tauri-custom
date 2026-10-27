@@ -542,7 +542,7 @@
     width: 100%;
     height: 100%;
     border-radius: inherit;
-    background: var(--color-md3-primary-emphasis);
+    background: var(--colorCompoundBrandForeground1);
     transform: scaleX(0);
     transform-origin: left center;
     transition: transform var(--motion-duration-medium2) var(--motion-easing-emphasized-decelerate);
@@ -607,19 +607,27 @@
 
   :global(.primary-action[data-fluent-owner="lib-components-app-update-checker"]) {
     border: 1px solid transparent;
-    color: var(--explorer-background);
-    background: var(--color-md3-primary-emphasis);
+    color: var(--colorNeutralForegroundOnBrand);
+    background: var(--colorBrandBackground);
   }
 
   :global(.success-action[data-fluent-owner="lib-components-app-update-checker"]) {
     border: 1px solid transparent;
-    color: var(--explorer-background);
-    background: var(--color-md3-success);
+    color: var(--colorNeutralForegroundStaticInverted);
+    background: var(--colorStatusSuccessBackground3);
   }
 
   :global(.primary-action[data-fluent-owner="lib-components-app-update-checker"]:hover:not(:is(:disabled, [disabled]))),
   :global(.success-action[data-fluent-owner="lib-components-app-update-checker"]:hover:not(:is(:disabled, [disabled]))) {
     filter: none;
+  }
+
+  :global(.primary-action[data-fluent-owner="lib-components-app-update-checker"]:hover:not(:is(:disabled, [disabled]))) {
+    background: var(--colorBrandBackgroundHover);
+  }
+
+  :global(.primary-action[data-fluent-owner="lib-components-app-update-checker"]:active:not(:is(:disabled, [disabled]))) {
+    background: var(--colorBrandBackgroundPressed);
   }
 
   :global(.secondary-action[data-fluent-owner="lib-components-app-update-checker"]) {

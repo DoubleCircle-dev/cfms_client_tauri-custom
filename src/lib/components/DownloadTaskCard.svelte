@@ -119,7 +119,7 @@
         <div><dt>{$t('tasks.retryCount')}</dt><dd>{task.retry_count} / {task.max_retries}</dd></div>
         <div><dt>{$t('tasks.resumeSupport')}</dt><dd>{task.supports_resume ? $t('common.yes') : $t('common.no')}</dd></div>
       </dl>
-      {#if displayError}<p class="detail-error"><Icon name="errorFilled" size="16px" /> {displayError}</p>{/if}
+      {#if displayError}<p class="detail-error"><span class="cfms-icon-text__icon"><Icon name="errorFilled" size="16px" /></span><span class="min-w-0 break-words">{displayError}</span></p>{/if}
       <div class="detail-actions">
         {#if capabilities.cancel}<TaskActionButton presentation="labelled" icon="cancel" label={$t('tasks.cancel')} tone="danger" onclick={() => run('cancel', onCancel)} disabled={Boolean(pendingAction)} />{/if}
         {#if capabilities.deleteFile}<TaskActionButton presentation="labelled" icon="deleteForever" label={$t('tasks.deleteLocalFile')} tone="danger" onclick={() => run('delete', onDeleteFile)} disabled={Boolean(pendingAction)} />{/if}

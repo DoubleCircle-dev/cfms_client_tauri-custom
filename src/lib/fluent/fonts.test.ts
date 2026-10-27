@@ -24,7 +24,8 @@ describe('bundled offline typography', () => {
     '%s has real regular, semibold and bold weights', family => {
       const familyFaces = faces.filter(face => face.includes(`font-family: '${family}';`));
       expect(familyFaces.length).toBeGreaterThan(0);
-      expect(familyFaces.every(face => /font-weight: 400 800;/.test(face))).toBe(true);
+      const minimumWeight = family === 'Noto Sans' || family === 'Noto Sans SC' ? 300 : 400;
+      expect(familyFaces.every(face => face.includes(`font-weight: ${minimumWeight} 800;`))).toBe(true);
     },
   );
 

@@ -151,14 +151,13 @@
       <div>
         <MdOutlinedField inputId="cp-new" label={$t('dialog.changePassword.newPassword')} disabled={busy}>
           <div data-outlined-content class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+            <span data-field-leading-icon class="absolute flex left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
               <Icon name="password" size="18px" />
             </span>
             <input data-focus-ring="delegated"
               id="cp-new"
               type={newVisible ? 'text' : 'password'}
-              class="w-full pl-10 pr-20 py-2.5
-                     text-md3-on-surface text-sm
+              class="w-full pl-10 text-md3-on-surface text-sm
                      placeholder:text-md3-on-surface-variant
                      transition-colors"
               placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}
@@ -166,31 +165,31 @@
               disabled={busy}
               autocomplete="new-password"
             />
-            <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              <FluentButton data-fluent-owner="lib-components-change-password-dialog"
-                type="button"
-                onclick={handleDice}
-                disabled={busy}
-                title={$t('dialog.changePassword.generateStrongPassword')}
-                aria-label={$t('dialog.changePassword.generateStrongPassword')}
-                appearance="subtle"
-                class="text-md3-on-surface-variant hover:text-md3-primary-emphasis\r\n                     transition-colors rounded p-1"
-                iconOnly
-              >
-                <Icon name="ifl" size="18px" />
-              </FluentButton>
-              <FluentButton data-fluent-owner="lib-components-change-password-dialog"
-                type="button"
-                onclick={() => (newVisible = !newVisible)}
-                aria-label={newVisible ? $t('login.hidePassword') : $t('login.showPassword')}
-                appearance="subtle"
-                class="text-md3-on-surface-variant hover:text-md3-on-surface\r\n                     transition-colors rounded p-1"
-                iconOnly
-              >
-                <Icon name="visibility" size="18px" />
-              </FluentButton>
-            </div>
           </div>
+          {#snippet end()}
+            <FluentButton data-fluent-owner="lib-components-change-password-dialog"
+              type="button"
+              onclick={handleDice}
+              disabled={busy}
+              title={$t('dialog.changePassword.generateStrongPassword')}
+              aria-label={$t('dialog.changePassword.generateStrongPassword')}
+              appearance="subtle"
+              class="text-md3-on-surface-variant hover:text-md3-primary-emphasis\r\n                     transition-colors rounded p-1"
+              iconOnly
+            >
+              <Icon name="ifl" size="18px" />
+            </FluentButton>
+            <FluentButton data-fluent-owner="lib-components-change-password-dialog"
+              type="button"
+              onclick={() => (newVisible = !newVisible)}
+              aria-label={newVisible ? $t('login.hidePassword') : $t('login.showPassword')}
+              appearance="subtle"
+              class="text-md3-on-surface-variant hover:text-md3-on-surface\r\n                     transition-colors rounded p-1"
+              iconOnly
+            >
+              <Icon name="visibility" size="18px" />
+            </FluentButton>
+          {/snippet}
         </MdOutlinedField>
 
         <!-- Strength meter -->
@@ -201,10 +200,10 @@
                 class="h-full rounded-full transition-all duration-300"
                 style="width: {(strength.score / 5) * 100}%;
                        background: {strength.score <= 1
-                         ? 'var(--color-md3-error, #e5484d)'
+                         ? 'var(--colorStatusDangerForeground1)'
                          : strength.score <= 3
-                         ? '#f5a524'
-                         : 'var(--color-md3-primary, #7c9cff)'};"
+                         ? 'var(--colorStatusWarningForeground1)'
+                         : 'var(--colorStatusSuccessForeground1)'};"
               ></div>
             </div>
             <span class="text-xs text-md3-on-surface-variant w-16 text-right">{strength.label}</span>
@@ -214,7 +213,7 @@
 
       {#if tip || $t('dialog.changePassword.defaultTip')}
         <p class="text-xs text-md3-on-surface-variant flex items-start gap-1.5">
-          <span class="shrink-0 mt-0.5 text-md3-tertiary"><Icon name="info" size="14px" /></span>
+          <span class="cfms-icon-text__icon shrink-0 text-md3-tertiary"><Icon name="info" size="14px" /></span>
           <span>{tip || $t('dialog.changePassword.defaultTip')}</span>
         </p>
       {/if}
@@ -224,7 +223,7 @@
           class="bg-md3-error-container/60 border border-md3-error/30
                  text-md3-on-error-container text-sm rounded-xl p-3 flex items-start gap-2"
         >
-          <span class="shrink-0 mt-0.5"><Icon name="errorFilled" size="16px" /></span>
+          <span class="cfms-icon-text__icon shrink-0"><Icon name="errorFilled" size="16px" /></span>
           <span>{error}</span>
         </div>
       {/if}

@@ -14,11 +14,13 @@
   import PublicKeyVerification from './PublicKeyVerification.svelte';
   import type { PublicKeyInteraction } from '$lib/api';
 
-  let { methods, onVerify, onCancel, title, allowPublicKey = false }: {
+  let { methods, onVerify, onCancel, title, allowPublicKey = false, onClosed }: {
     methods: string[];
     title: string;
     onVerify: (method: string, data: Record<string, JsonValue>, onInteraction?: (event: PublicKeyInteraction) => void) => Promise<boolean>;
     onCancel: () => void;
+    /** Called after destruction, including child outros and focus restoration. */
+    onClosed?: () => void;
     allowPublicKey?: boolean;
   } = $props();
   const methodIcons: Record<string, IconName> = { password: 'password', totp: 'personPasskey', publickey: 'passkey' };
@@ -28,7 +30,11 @@
   let busy = $state(false);
   let error = $state('');
   let passwordInput = $state<HTMLInputElement>();
-  onDestroy(() => { password = ''; });
+  onDestroy(() => {
+    password = '';
+    // Child modal cleanup runs in the same destruction pass.
+    if (onClosed) queueMicrotask(onClosed);
+  });
 
   $effect(() => {
     if (selected === 'password') void tick().then(() => passwordInput?.focus());
@@ -70,7 +76,7 @@
       <form class="flex flex-col gap-5 p-5" onsubmit={verifyPassword}>
         <p class="text-sm text-md3-on-surface-variant">{$t('authentication.passwordPrompt')}</p>
         <MdOutlinedField inputId="authentication-password" label={$t('login.password')}>
-          <input bind:this={passwordInput} id="authentication-password" data-focus-ring="delegated" type="password" bind:value={password} autocomplete="current-password" disabled={busy} class="cfms-native-field w-full px-4 py-3 text-md3-on-surface" />
+          <input bind:this={passwordInput} id="authentication-password" data-focus-ring="delegated" type="password" bind:value={password} autocomplete="current-password" disabled={busy} class="cfms-native-field w-full px-4 text-md3-on-surface" />
         </MdOutlinedField>
         {#if error}<p role="alert" class="text-sm text-md3-error">{error}</p>{/if}
         <div class="flex justify-end gap-2">

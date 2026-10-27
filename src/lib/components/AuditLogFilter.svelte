@@ -219,7 +219,7 @@
         </FluentButton>
       </header>
 
-      <div class="filter-search cfms-field-surface">
+      <div class="filter-search cfms-input-composite cfms-field-surface">
         <Icon name="search" size="18px" />
         <input class="cfms-native-field"
           bind:this={queryInput}
@@ -232,18 +232,21 @@
           onkeydown={handleInputKeydown}
         />
         {#if query}
-          <FluentButton data-fluent-owner="lib-components-audit-log-filter"
-            type="button"
-            aria-label={$t('manage.auditFilterClearSearch')}
-            onclick={() => {
-              query = '';
-              queryInput?.focus({ preventScroll: true });
-            }}
-            appearance="subtle"
-            iconOnly
-          >
-            <Icon name="close" size="15px" />
-          </FluentButton>
+          <span class="cfms-input-composite__end">
+            <FluentButton data-fluent-owner="lib-components-audit-log-filter"
+              type="button"
+              aria-label={$t('manage.auditFilterClearSearch')}
+              onclick={() => {
+                query = '';
+                queryInput?.focus({ preventScroll: true });
+              }}
+              appearance="subtle"
+              class="cfms-control-action"
+              iconOnly
+            >
+              <Icon name="close" size="15px" />
+            </FluentButton>
+          </span>
         {/if}
       </div>
 
@@ -446,13 +449,11 @@
   .filter-search {
     display: flex;
     flex: none;
-    min-height: 2.625rem;
     align-items: center;
     gap: 8px;
     margin: 0 1rem 0.75rem;
     border: 1px solid var(--color-md3-outline);
     border-radius: 8px;
-    padding: 0 0.7rem;
     color: var(--color-md3-on-surface-variant);
     background: var(--color-md3-field);
     transition: border-color 120ms ease, box-shadow 120ms ease;
@@ -478,11 +479,7 @@
   }
 
   .filter-search :global(:is(button[data-fluent-owner="lib-components-audit-log-filter"], .cfms-button[data-fluent-owner="lib-components-audit-log-filter"])) {
-    display: inline-grid;
-    width: 1.75rem;
-    height: 1.75rem;
     flex: none;
-    place-items: center;
     border-radius: var(--borderRadiusMedium);
     transition: background-color 120ms ease, color 120ms ease;
   }
@@ -686,8 +683,7 @@
       block-size: 44px;
     }
 
-    :global(.filter-close[data-fluent-owner="lib-components-audit-log-filter"]),
-    .filter-search :global(:is(button[data-fluent-owner="lib-components-audit-log-filter"], .cfms-button[data-fluent-owner="lib-components-audit-log-filter"])) {
+    :global(.filter-close[data-fluent-owner="lib-components-audit-log-filter"]) {
       width: 2.75rem;
       height: 2.75rem;
     }

@@ -90,30 +90,32 @@
           >
             <MdOutlinedField inputId="preference-recovery-password" label={$t('dialog.corruptedPreference.recoveryPassword')} disabled={recoveryBusy}>
               <div data-outlined-content class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+                <span data-field-leading-icon class="absolute flex left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
                   <Icon name="password" size="18px" />
                 </span>
                 <input data-focus-ring="delegated"
                   id="preference-recovery-password"
-                  class="w-full py-2.5 pl-10 pr-10 text-sm text-md3-on-surface transition-colors placeholder:text-md3-on-surface-variant"
+                  class="w-full pl-10 text-sm text-md3-on-surface transition-colors placeholder:text-md3-on-surface-variant"
                   type={recoveryVisible ? 'text' : 'password'}
                   bind:value={recoveryPassword}
                   autocomplete="current-password"
                   placeholder={$t('dialog.corruptedPreference.recoveryPlaceholder')}
                   disabled={recoveryBusy}
                 />
+              </div>
+              {#snippet end()}
                 <FluentButton data-fluent-owner="lib-components-corrupted-preference-dialog"
                   type="button"
                   onclick={() => (recoveryVisible = !recoveryVisible)}
                   aria-label={recoveryVisible ? $t('login.hidePassword') : $t('login.showPassword')}
                   disabled={recoveryBusy}
                   appearance="subtle"
-                  class="absolute right-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface"
+                  class="text-md3-on-surface-variant transition-colors hover:text-md3-on-surface"
                   iconOnly
                 >
                   <Icon name="visibility" size="18px" />
                 </FluentButton>
-              </div>
+              {/snippet}
             </MdOutlinedField>
             {#if recoveryError}
               <p class="text-xs leading-5 text-md3-error">{recoveryError}</p>

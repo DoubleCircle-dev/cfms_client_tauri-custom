@@ -60,7 +60,7 @@
 
   {#if error}
     <div class="load-error" role="alert">
-      <Icon name="errorFilled" size="20px" />
+      <span class="cfms-icon-text__icon"><Icon name="errorFilled" size="20px" /></span>
       <div>
         <strong>{$t('diagnostics.loadFailed')}</strong>
         <p>{error}</p>

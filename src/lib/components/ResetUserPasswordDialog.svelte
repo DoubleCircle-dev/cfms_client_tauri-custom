@@ -141,44 +141,44 @@
     <div>
       <MdOutlinedField inputId="reset-password" label={$t('dialog.changePassword.newPassword')} disabled={busy}>
         <div data-outlined-content class="relative">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
+          <span data-field-leading-icon class="absolute flex left-3 top-1/2 -translate-y-1/2 text-md3-on-surface-variant">
             <Icon name="password" size="18px" />
           </span>
           <input data-focus-ring="delegated"
             id="reset-password"
-            class="w-full py-2.5 pl-10 pr-20 text-sm text-md3-on-surface transition"
+            class="w-full pl-10 text-sm text-md3-on-surface transition"
             type={visible ? 'text' : 'password'}
             placeholder={$t('dialog.changePassword.newPasswordPlaceholder')}
             autocomplete="new-password"
             bind:value={password}
             disabled={busy}
           />
-          <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-            <FluentButton data-fluent-owner="lib-components-reset-user-password-dialog"
-              type="button"
-              title={$t('dialog.changePassword.generateStrongPassword')}
-              disabled={busy}
-              onclick={generate}
-              appearance="subtle"
-              class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-primary-emphasis disabled:opacity-45"
-              iconOnly
-              aria-label={$t('dialog.changePassword.generateStrongPassword')}
-            >
-              <Icon name="ifl" size="18px" />
-            </FluentButton>
-            <FluentButton data-fluent-owner="lib-components-reset-user-password-dialog"
-              type="button"
-              aria-label={visible ? $t('login.hidePassword') : $t('login.showPassword')}
-              disabled={busy}
-              onclick={() => (visible = !visible)}
-              appearance="subtle"
-              class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface disabled:opacity-45"
-              iconOnly
-            >
-              <Icon name="visibility" size="18px" />
-            </FluentButton>
-          </div>
         </div>
+        {#snippet end()}
+          <FluentButton data-fluent-owner="lib-components-reset-user-password-dialog"
+            type="button"
+            title={$t('dialog.changePassword.generateStrongPassword')}
+            disabled={busy}
+            onclick={generate}
+            appearance="subtle"
+            class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-primary-emphasis disabled:opacity-45"
+            iconOnly
+            aria-label={$t('dialog.changePassword.generateStrongPassword')}
+          >
+            <Icon name="ifl" size="18px" />
+          </FluentButton>
+          <FluentButton data-fluent-owner="lib-components-reset-user-password-dialog"
+            type="button"
+            aria-label={visible ? $t('login.hidePassword') : $t('login.showPassword')}
+            disabled={busy}
+            onclick={() => (visible = !visible)}
+            appearance="subtle"
+            class="rounded p-1 text-md3-on-surface-variant transition-colors hover:text-md3-on-surface disabled:opacity-45"
+            iconOnly
+          >
+            <Icon name="visibility" size="18px" />
+          </FluentButton>
+        {/snippet}
       </MdOutlinedField>
 
       {#if password}
@@ -186,7 +186,7 @@
           <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-md3-surface-container-high">
             <div
               class="h-full rounded-full transition-all duration-300"
-              style="width: {(strength.score / 5) * 100}%; background: {strength.score <= 1 ? 'var(--md3-error, #ba1a1a)' : strength.score <= 3 ? '#f5a524' : 'var(--md3-primary, #6750a4)'};"
+              style="width: {(strength.score / 5) * 100}%; background: {strength.score <= 1 ? 'var(--colorStatusDangerForeground1)' : strength.score <= 3 ? 'var(--colorStatusWarningForeground1)' : 'var(--colorStatusSuccessForeground1)'};"
             ></div>
           </div>
           <span class="w-16 text-right text-xs text-md3-on-surface-variant">{strength.label}</span>
@@ -201,7 +201,7 @@
           disabled={busy}
           ariaLabel={$t('manage.bypassPasswordRequirements')}
         />
-        <span>
+        <span class="min-w-0 flex-1 break-words">
           <span class="block font-medium">{$t('manage.bypassPasswordRequirements')}</span>
           <span class="text-xs text-md3-on-surface-variant">{$t('manage.bypassPasswordRequirementsHelp')}</span>
         </span>
@@ -212,7 +212,7 @@
           disabled={busy}
           ariaLabel={$t('manage.forcePasswordUpdate')}
         />
-        <span>
+        <span class="min-w-0 flex-1 break-words">
           <span class="block font-medium">{$t('manage.forcePasswordUpdate')}</span>
           <span class="text-xs text-md3-on-surface-variant">{$t('manage.forcePasswordUpdateHelp')}</span>
         </span>
@@ -224,7 +224,7 @@
             disabled={busy}
             ariaLabel={$t('manage.disableTwoFactorWithPasswordReset')}
           />
-          <span>
+          <span class="min-w-0 flex-1 break-words">
             <span class="block font-medium">{$t('manage.disableTwoFactorWithPasswordReset')}</span>
             <span class="text-xs text-md3-on-surface-variant">{$t('manage.disableTwoFactorWithPasswordResetHelp')}</span>
           </span>
@@ -234,7 +234,7 @@
 
     {#if error}
       <div class="flex items-start gap-2 rounded-lg border border-md3-error/35 bg-md3-error-container/25 p-3 text-sm text-md3-on-error-container">
-        <Icon name="errorFilled" size="16px" />
+        <span class="cfms-icon-text__icon"><Icon name="errorFilled" size="16px" /></span>
         <p class="min-w-0 break-words">{error}</p>
       </div>
     {/if}

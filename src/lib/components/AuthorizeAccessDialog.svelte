@@ -250,7 +250,7 @@
         </FluentButton>
       </div>
 
-      <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
+      <div class="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <input
           class="cfms-native-field field"
           bind:value={entityQuery}
@@ -270,7 +270,7 @@
             onclick={searchEntities}
             disabled={saving || searching}
             appearance="subtle"
-            class="filled-button"
+            class="cfms-control-action filled-button"
           >
             {#if searching}
               <ProgressRing size={17} strokeWidth={2.4} label={$t('common.loadingEllipsis')} />
@@ -465,22 +465,20 @@
   }
 
   :global(.filled-button[data-fluent-owner="lib-components-authorize-access-dialog"]) {
-    min-height: 2.35rem;
     border-radius: var(--borderRadiusMedium);
     background: var(--color-md3-primary);
     color: var(--color-md3-on-primary);
-    padding: 0.5rem 1rem;
+    padding-inline: 1rem;
     font-size: 14px;
     font-weight: 500;
   }
 
   .field {
-    min-height: 2.35rem;
     border-radius: var(--borderRadiusMedium);
     border: 1px solid var(--color-md3-outline);
     background: var(--color-md3-field);
     color: var(--color-md3-on-surface);
-    padding: 0.5rem 0.75rem;
+    padding-inline: 0.75rem;
     font-size: 14px;
     outline: none;
     transition:
@@ -497,8 +495,7 @@
 
   .date-field {
     display: grid;
-    min-height: 2.35rem;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 8px;
     color: var(--color-md3-on-surface-variant);
@@ -508,21 +505,12 @@
 
   .date-field input {
     min-width: 0;
+    padding-inline: 0;
     background: transparent;
     color: var(--color-md3-on-surface);
     color-scheme: inherit;
     font-size: 14px;
     outline: none;
-  }
-
-  .date-field input::-webkit-calendar-picker-indicator {
-    cursor: pointer;
-    filter: invert(84%) sepia(16%) saturate(391%) hue-rotate(179deg) brightness(94%) contrast(91%);
-    opacity: 0.95;
-  }
-
-  .date-field input::-webkit-calendar-picker-indicator:hover {
-    filter: none;
   }
 
   :global(.choice-button[data-fluent-owner="lib-components-authorize-access-dialog"]):is(:disabled, [disabled]),

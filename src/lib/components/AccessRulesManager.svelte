@@ -408,7 +408,7 @@
                     disabled={saving}
                     appearance="subtle"
                     tone="danger"
-                    class="icon-button danger-button"
+                    class="cfms-control-action icon-button danger-button"
                     iconOnly
                     aria-label={$t('files.deleteRuleGroup')}
                   >
@@ -442,7 +442,7 @@
                           disabled={saving}
                           appearance="subtle"
                           tone="danger"
-                          class="icon-button danger-button"
+                          class="cfms-control-action icon-button danger-button"
                           iconOnly
                           aria-label={$t('files.deleteSubgroup')}
                         >
@@ -475,7 +475,7 @@
                                   disabled={saving}
                                   appearance="subtle"
                                   tone="danger"
-                                  class="icon-button danger-button"
+                                  class="cfms-control-action icon-button danger-button"
                                   iconOnly
                                   aria-label={$t('files.removeSection')}
                                 >
@@ -521,7 +521,7 @@
                               >
                                 <input
                                   name="entry"
-                                  class="cfms-native-field min-w-0 flex-1 rounded-lg border border-md3-outline bg-md3-field px-3 py-2 text-sm text-md3-on-surface outline-none transition"
+                                  class="cfms-native-field min-w-0 flex-1 rounded-lg border border-md3-outline bg-md3-field px-3 text-sm text-md3-on-surface outline-none transition"
                                   placeholder={type === 'rights' ? $t('files.rightNamePlaceholder') : $t('files.groupNamePlaceholder')}
                                   disabled={saving}
                                 />
@@ -530,7 +530,7 @@
                                   title={$t('files.addEntry')}
                                   disabled={saving}
                                   appearance="subtle"
-                                  class="icon-button primary-button"
+                                  class="cfms-control-action icon-button primary-button"
                                   iconOnly
                                   aria-label={$t('files.addEntry')}
                                 >
@@ -703,8 +703,6 @@
   }
 
   :global(.icon-button[data-fluent-owner="lib-components-access-rules-manager"]) {
-    width: 2rem;
-    height: 2rem;
     border-radius: var(--borderRadiusMedium);
     color: var(--color-md3-on-surface-variant);
   }
@@ -729,12 +727,11 @@
   }
 
   .select-field {
-    min-height: 2rem;
     border-radius: var(--borderRadiusMedium);
     border: 1px solid var(--color-md3-outline);
     background: var(--color-md3-field);
     color: var(--color-md3-on-surface);
-    padding: 0.25rem 0.55rem;
+    padding-inline: 0.55rem;
     outline: none;
   }
 

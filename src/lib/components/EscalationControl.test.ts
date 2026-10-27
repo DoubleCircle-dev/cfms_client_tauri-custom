@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authStore, serverStateStore } from '$lib/stores.svelte';
 import EscalationControl from './EscalationControl.svelte';
 import EscalationCountdown from './EscalationCountdown.svelte';
+import { ensureEscalation, escalationFlow } from '$lib/escalation.svelte';
 
 const mocks = vi.hoisted(() => ({ inventory: vi.fn(), escalate: vi.fn(), drop: vi.fn() }));
 vi.mock('$lib/api', () => ({ getUserAuthentication: mocks.inventory, requestEscalation: mocks.escalate, dropEscalation: mocks.drop }));
@@ -31,6 +32,75 @@ beforeEach(() => {
 afterEach(() => { cleanup(); authStore.clear(); serverStateStore.clear(); vi.useRealTimers(); vi.clearAllMocks(); });
 
 describe('elevation controls', () => {
+  it('shares one pending flow and resolves all callers after password verification', async () => {
+    mocks.inventory.mockResolvedValue({
+      policies: { escalation: { chains: [[{ method: 'password', credential_ids: ['p'] }]] } },
+      methods: { password: { purposes: ['escalation'] } },
+      credentials: [{ method: 'password', credential_id: 'p', active: true }],
+    });
+    render(EscalationControl);
+    const first = ensureEscalation();
+    expect(ensureEscalation()).toBe(first);
+    const password = await screen.findByLabelText('login.password');
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(mocks.inventory).toHaveBeenCalledOnce();
+    await fireEvent.input(password, { target: { value: 'proof' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'dialog.twoFactor.verify' }));
+    expect(await first).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(escalationFlow.busy).toBe(false);
+    expect(await ensureEscalation()).toBe(true);
+    expect(mocks.inventory).toHaveBeenCalledOnce();
+    expect(mocks.drop).not.toHaveBeenCalled();
+  });
+
+  it('returns false when inventory cannot be loaded and allows another attempt', async () => {
+    mocks.inventory.mockRejectedValueOnce(new Error('Unavailable'));
+    render(EscalationControl);
+    expect(await ensureEscalation()).toBe(false);
+    expect(mocks.escalate).not.toHaveBeenCalled();
+    expect(await ensureEscalation()).toBe(true);
+    expect(mocks.inventory).toHaveBeenCalledTimes(2);
+  });
+
+  it('can start a fresh verification after cancelling the previous dialog', async () => {
+    mocks.inventory.mockResolvedValue({
+      policies: { escalation: { chains: [[{ method: 'password', credential_ids: ['p'] }]] } },
+      methods: { password: { purposes: ['escalation'] } },
+      credentials: [{ method: 'password', credential_id: 'p', active: true }],
+    });
+    render(EscalationControl);
+    const first = ensureEscalation();
+    await screen.findByLabelText('login.password');
+    await fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
+    expect(await first).toBe(false);
+    const second = ensureEscalation();
+    const password = await screen.findByLabelText('login.password');
+    await fireEvent.input(password, { target: { value: 'new-proof' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'dialog.twoFactor.verify' }));
+    expect(await second).toBe(true);
+    expect(mocks.inventory).toHaveBeenCalledTimes(2);
+    expect(mocks.escalate).toHaveBeenCalledOnce();
+  });
+
+  it.each(['cancel', 'disconnect', 'logout', 'unmount'] as const)('settles pending callers on %s and ignores a late result', async (reason) => {
+    let finish!: (value: typeof status & { escalation_exp: number }) => void;
+    mocks.escalate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const { unmount } = render(EscalationControl);
+    const pending = ensureEscalation();
+    await waitFor(() => expect(mocks.escalate).toHaveBeenCalledOnce());
+    if (reason === 'disconnect') serverStateStore.connected = false;
+    else if (reason === 'logout') authStore.clear();
+    else if (reason === 'unmount') unmount();
+    else escalationFlow.cancel();
+    await tick();
+    expect(await pending).toBe(false);
+    finish({ ...status, escalation_exp: Date.now() / 1000 + 300 });
+    await tick();
+    expect(authStore.escalationExp).toBeNull();
+    expect(escalationFlow.busy).toBe(false);
+  });
+
   it('drops elevation on a second click, preserving login and removing the countdown', async () => {
     authStore.escalationExp = Date.now() / 1000 + 300;
     serverStateStore.connected = false;
@@ -107,5 +177,27 @@ describe('elevation controls', () => {
     expect(authStore.isLoggedIn).toBe(true);
     await fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
     expect(mocks.escalate).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps callers pending after invalid verification and completes after a successful retry', async () => {
+    mocks.inventory.mockResolvedValue({
+      policies: { escalation: { chains: [[{ method: 'totp', credential_ids: ['t'] }]] } },
+      methods: { totp: { purposes: ['escalation'] } },
+      credentials: [{ method: 'totp', credential_id: 't', active: true }],
+    });
+    mocks.escalate.mockRejectedValueOnce(new Error('Invalid verification code'));
+    render(EscalationControl);
+    const completed = vi.fn();
+    const pending = ensureEscalation();
+    void pending.then(completed);
+    await screen.findByLabelText('dialog.twoFactor.enterTotp');
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: '123456' } });
+    await screen.findByRole('alert');
+    expect(completed).not.toHaveBeenCalled();
+    expect(authStore.escalationExp).toBeNull();
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: '' } });
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: '654321' } });
+    expect(await pending).toBe(true);
+    expect(mocks.escalate).toHaveBeenCalledTimes(2);
   });
 });

@@ -33,7 +33,7 @@
   </div>
 
   <aside class="account-disabled-reason">
-    <span class="account-disabled-reason__icon">
+    <span class="cfms-icon-text__icon account-disabled-reason__icon">
       <Icon name="warningAmber" size="21px" />
     </span>
     <p>{reason}</p>
@@ -127,8 +127,7 @@
   }
 
   .account-disabled-reason__icon {
-    display: inline-flex;
-    margin-top: 0.05rem;
+    --cfms-icon-line-height: calc(14px * 1.55);
     color: var(--explorer-warning);
   }
 
@@ -201,7 +200,7 @@
   }
 
   :global(.account-disabled-back[data-fluent-owner="lib-components-account-disabled-notice"]:hover) {
-    color: color-mix(in srgb, var(--color-md3-primary-emphasis, var(--color-md3-primary)) 78%, white);
+    color: var(--colorBrandForegroundLinkHover);
     filter: drop-shadow(0 0 5px color-mix(in srgb, currentColor 32%, transparent));
   }
 

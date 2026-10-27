@@ -164,7 +164,7 @@
       </span>
     </span>
     <span class="batch-state" class:batch-state-warning={isRateLimited} aria-live="polite">
-      {#if isRateLimited}<span class="batch-state-icon" aria-hidden="true"><Icon name="warningAmber" size="15px" /></span>{/if}
+      {#if isRateLimited}<span class="cfms-icon-text__icon batch-state-icon" aria-hidden="true"><Icon name="warningAmber" size="15px" /></span>{/if}
       <span class="batch-state-copy">
         {statusText || (group.total > 0 && group.completed === group.total
           ? $t('tasks.completed')
@@ -406,9 +406,7 @@
   }
 
   .batch-state-icon {
-    display: inline-flex;
     flex: none;
-    margin-top: 0.08rem;
   }
 
   .batch-state-copy {
@@ -441,7 +439,7 @@
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--explorer-accent);
+    background: var(--colorCompoundBrandForeground1);
     transition: width 260ms var(--motion-easing-emphasized-decelerate);
   }
 

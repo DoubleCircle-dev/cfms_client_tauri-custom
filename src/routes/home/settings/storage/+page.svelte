@@ -116,7 +116,7 @@
       />
     </div>
 
-    <div class="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-end">
+    <div class="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center">
       <FluentTextInput
         id="external-storage-path"
         label={$t('settings.storage.externalPath')}
@@ -126,6 +126,7 @@
         disabled={loading || !preferences || !useExternalStorage}
       />
       <FluentButton data-fluent-owner="routes-home-settings-storage-page"
+        class="shrink-0"
         appearance="outline"
         disabled={loading || !preferences || selectingPath}
         onclick={chooseExternalStoragePath}

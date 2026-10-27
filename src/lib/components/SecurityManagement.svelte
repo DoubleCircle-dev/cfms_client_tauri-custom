@@ -466,7 +466,7 @@
       </div>
 
       {#if editorError}
-        <div class="editor-error"><Icon name="errorFilled" size="17px" /><span>{editorError}</span></div>
+        <div class="editor-error"><span class="cfms-icon-text__icon"><Icon name="errorFilled" size="17px" /></span><span>{editorError}</span></div>
       {/if}
 
       <footer>
@@ -500,9 +500,9 @@
   .section-heading { min-width: 0; flex: 1; }
   .section-heading h2 { color: var(--color-md3-on-surface); font: 600 14px/20px var(--font-md3-sans); }
   .section-heading p { margin-top: 0.12rem; color: var(--color-md3-on-surface-variant); font: 400 12px/16px var(--font-md3-sans); }
-  .section-icon, .record-leading { display: grid; width: 2.25rem; height: 2.25rem; flex: none; place-items: center; border-radius: 0.65rem; color: var(--color-md3-primary); background: var(--color-md3-primary-container); }
+  .section-icon, .record-leading { display: grid; width: 2.25rem; height: 2.25rem; flex: none; place-items: center; border-radius: 0.65rem; color: var(--colorCompoundBrandForeground1); background: var(--color-md3-primary-container); }
   :global(.back-button[data-fluent-owner="lib-components-security-management"]) { display: grid; width: 2rem; height: 2rem; flex: none; place-items: center; border-radius: var(--borderRadiusMedium); color: var(--color-md3-on-surface-variant); transition: color 120ms ease, background-color 120ms ease; }
-  :global(.back-button[data-fluent-owner="lib-components-security-management"]:hover) { color: var(--color-md3-primary); background: var(--color-md3-primary-container); }
+  :global(.back-button[data-fluent-owner="lib-components-security-management"]:hover) { color: var(--colorBrandForegroundLinkHover); background: var(--color-md3-primary-container); }
   :global(.primary-pill[data-fluent-owner="lib-components-security-management"]) { display: inline-flex; min-height: 2rem; flex: none; align-items: center; gap: 4px; border-radius: 999px; padding: 0.3rem 0.8rem; color: var(--color-md3-on-primary-container); background: var(--color-md3-primary-container); font: 600 12px/16px var(--font-md3-sans); transition: filter 120ms ease, transform 120ms ease; }
   :global(.primary-pill[data-fluent-owner="lib-components-security-management"]:hover:not(:is(:disabled, [disabled]))) { filter: none; transform: translateY(-1px); }
   :global(:is(button[data-fluent-owner="lib-components-security-management"], .cfms-button[data-fluent-owner="lib-components-security-management"]):is(:disabled, [disabled])) { cursor: not-allowed; opacity: 0.46; }
@@ -522,15 +522,15 @@
   .status-chip--scheduled { color: var(--color-md3-on-primary-container); background: var(--color-md3-primary-container); }
   .record-actions { display: flex; gap: 4px; }
   .record-actions :global(:is(button[data-fluent-owner="lib-components-security-management"], .cfms-button[data-fluent-owner="lib-components-security-management"])) { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: var(--borderRadiusMedium); color: var(--color-md3-on-surface-variant); transition: color 120ms ease, background-color 120ms ease; }
-  .record-actions :global(:is(button[data-fluent-owner="lib-components-security-management"], .cfms-button[data-fluent-owner="lib-components-security-management"]):hover:not(:is(:disabled, [disabled]))) { color: var(--color-md3-primary); background: var(--color-md3-primary-container); }
+  .record-actions :global(:is(button[data-fluent-owner="lib-components-security-management"], .cfms-button[data-fluent-owner="lib-components-security-management"]):hover:not(:is(:disabled, [disabled]))) { color: var(--colorBrandForegroundLinkHover); background: var(--color-md3-primary-container); }
   .record-actions :global(.danger-action[data-fluent-owner="lib-components-security-management"]:hover:not(:is(:disabled, [disabled]))) { color: var(--color-md3-error); background: var(--color-md3-error-container); }
   :global(.unlock-button[data-fluent-owner="lib-components-security-management"]) { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--color-md3-outline); border-radius: var(--borderRadiusMedium); padding: 0.34rem 0.7rem; color: var(--color-md3-on-surface-variant); font: 600 12px/16px var(--font-md3-sans); transition: color 120ms ease, background-color 120ms ease; }
   :global(.unlock-button[data-fluent-owner="lib-components-security-management"]:hover:not(:is(:disabled, [disabled]))) { color: var(--color-md3-on-primary-container); background: var(--color-md3-primary-container); }
   .empty-state, .loading-state { padding: 2rem 1rem; text-align: center; color: var(--color-md3-on-surface-variant); font: 400 12px/16px var(--font-md3-sans); }
   .loading-state { display: flex; align-items: center; justify-content: center; gap: 8px; }
   .editor-form { display: grid; gap: 16px; padding: 1.25rem; }
-  .editor-form input, .editor-form textarea { width: 100%; padding: 0.62rem 0.72rem; color: var(--color-md3-on-surface); font: 400 12px/16px var(--font-md3-sans); }
-  .editor-form textarea { resize: vertical; }
+  .editor-form input, .editor-form textarea { width: 100%; color: var(--color-md3-on-surface); font: 400 12px/16px var(--font-md3-sans); }
+  .editor-form textarea { resize: vertical; padding: 0.62rem 0.72rem; }
   .editor-form small { color: var(--color-md3-on-surface-variant); font-size: 12px; font-weight: 400; }
   .expiry-panel { display: grid; gap: 12px; border: 1px solid color-mix(in srgb, var(--color-md3-outline) 70%, transparent); border-radius: 0.65rem; padding: 0.8rem; }
   .expiry-toggle { display: flex; align-items: flex-start; gap: 12px; }

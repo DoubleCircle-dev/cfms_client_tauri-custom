@@ -57,16 +57,12 @@
 <style>
   .cfms-button {
     box-sizing: border-box;
-    min-block-size: 32px;
+    min-block-size: var(--cfms-control-height-medium);
     max-inline-size: 100%;
     gap: 8px;
     vertical-align: middle;
   }
   .cfms-button::part(content) { display: inline-flex; align-items: center; justify-content: center; gap: inherit; white-space: nowrap; }
-  .cfms-button[icon-only] { inline-size: 32px; padding: 0; }
+  .cfms-button[icon-only] { inline-size: var(--cfms-control-height-medium); padding: 0; }
   .cfms-button :global([slot]) { display: inline-flex; align-items: center; justify-content: center; }
-  @media (pointer: coarse) {
-    .cfms-button { min-block-size: 44px; }
-    .cfms-button[icon-only] { min-inline-size: 44px; }
-  }
 </style>

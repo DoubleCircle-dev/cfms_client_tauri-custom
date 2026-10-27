@@ -171,6 +171,9 @@ export const en = {
     trayQuit: 'Quit CFMS Client',
     trayTooltip: 'CFMS Client — still running in the background',
   },
+  contextMenu: {
+    elevationRequired: 'This action requires elevated privileges. Select it to verify your identity.',
+  },
   common: {
     back: 'Back',
     loading: 'Loading...',

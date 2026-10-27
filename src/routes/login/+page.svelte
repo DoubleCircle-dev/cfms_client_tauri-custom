@@ -1151,10 +1151,11 @@
         <div>
           <MdOutlinedField
             inputId="password"
+            controlSize="large"
             label={$t('login.password')}
             error={Boolean(fieldErrors.password)}
           >
-            <span class="login-text-field__leading-icon">
+            <span data-field-leading-icon class="login-text-field__leading-icon">
               <Icon name="password" size="18px" />
             </span>
             <input
@@ -1170,17 +1171,19 @@
               disabled={busy}
               autocomplete="current-password"
             />
-            <button
-              type="button"
-              class="login-text-field__trailing-button"
-              onclick={() => (passwordVisible = !passwordVisible)}
-              aria-label={passwordVisible ? $t('login.hidePassword') : $t('login.showPassword')}
-            >
-              <Icon
-                name={passwordVisible ? "visibility" : "visibility"}
-                size="18px"
-              />
-            </button>
+            {#snippet end()}
+              <button
+                type="button"
+                class="login-text-field__trailing-button"
+                onclick={() => (passwordVisible = !passwordVisible)}
+                aria-label={passwordVisible ? $t('login.hidePassword') : $t('login.showPassword')}
+              >
+                <Icon
+                  name={passwordVisible ? "visibility" : "visibility"}
+                  size="18px"
+                />
+              </button>
+            {/snippet}
           </MdOutlinedField>
           {#if fieldErrors.password}
             <p id="login-password-error" role="alert" class="text-xs text-md3-error mt-1 ml-1">
@@ -1208,7 +1211,7 @@
                       text-md3-on-tertiary-container text-sm rounded-xl p-4 space-y-3"
           >
             <div class="flex items-start gap-2">
-              <span class="shrink-0 mt-0.5"
+              <span class="cfms-icon-text__icon shrink-0"
                 ><Icon name="lockPerson" size="18px" /></span
               >
               <div>
@@ -1240,7 +1243,7 @@
             class="bg-md3-primary/15 border border-md3-primary/30
                    text-md3-on-surface text-sm rounded-xl p-3 flex items-start gap-2"
           >
-            <span class="shrink-0 mt-0.5 text-md3-primary-emphasis"
+            <span class="cfms-icon-text__icon shrink-0 text-md3-primary-emphasis"
               ><Icon name="checkCircle" size="16px" /></span
             >
             <span>{successMessage}</span>
@@ -1427,7 +1430,6 @@
 
   .login-text-field__input {
     min-width: 0;
-    height: 38px;
     flex: 1 1 auto;
     border: 0;
     background: transparent;
@@ -1568,13 +1570,6 @@
   }
 
   .login-text-field__trailing-button {
-    position: relative;
-    display: inline-flex;
-    width: 38px;
-    height: 38px;
-    flex: none;
-    align-items: center;
-    justify-content: center;
     border: 0;
     padding: 0;
     color: var(--explorer-text-muted);

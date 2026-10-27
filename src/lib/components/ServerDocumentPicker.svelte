@@ -188,7 +188,7 @@
       {:else if loadError}
         <div class="rounded-lg border border-md3-error/35 bg-md3-error-container/20 p-4 text-sm text-md3-on-error-container">
           <div class="mb-3 flex items-start gap-2">
-            <Icon name="warningAmber" size="18px" />
+            <span class="cfms-icon-text__icon"><Icon name="warningAmber" size="18px" /></span>
             <p class="min-w-0 break-words">{loadError}</p>
           </div>
           <FluentButton data-fluent-owner="lib-components-server-document-picker"
