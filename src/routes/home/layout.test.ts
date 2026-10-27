@@ -31,10 +31,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); authStore.clear(); serverStateStore.clear(); });
 afterAll(() => vi.unstubAllGlobals());
 
-it('opens My account from the account menu for an ordinary user and closes the flyout', async () => {
+it('opens User account from the account menu for an ordinary user and closes the flyout', async () => {
   render(WorkspaceLayout, { children: createRawSnippet(() => ({ render: () => '<div>Workspace content</div>' })) });
   await fireEvent.click(screen.getByRole('button', { name: 'Account menu' }));
-  const entry = screen.getByRole('menuitem', { name: 'My account' });
+  const entry = screen.getByRole('menuitem', { name: 'User account' });
   const menuItems = screen.getAllByRole('menuitem');
   expect(menuItems.indexOf(entry)).toBeLessThan(menuItems.findIndex((item) => item.textContent?.includes('Log out')));
   await fireEvent.click(entry);

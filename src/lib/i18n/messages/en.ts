@@ -1598,7 +1598,7 @@ export const en = {
       },
     },
     account: {
-      title: 'My account',
+      title: 'User account',
       description: 'View your profile, groups and permissions, and manage your nickname and avatar',
       basicInfo: 'Basic information',
       username: 'Username',
@@ -1614,8 +1614,6 @@ export const en = {
       noGroups: 'You do not belong to any groups.',
       effectivePermissions: 'Current effective permissions',
       permissionsHint: 'The final permissions calculated by the server at the last refresh. Refresh after authorization changes to see the latest result.',
-      searchPermissions: 'Search permission identifiers',
-      noPermissionMatches: 'No permissions match your search.',
       noPermissions: 'You have no effective permissions.',
       authorizationDetails: 'Authorization details and sources',
       directPermissions: 'Personal permission entries',

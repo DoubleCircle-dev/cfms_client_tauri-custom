@@ -4,15 +4,11 @@
   import type { ManagedUserInfo } from '$lib/api';
   import { filterAccountPermissions, formatAccountTimestamp } from '$lib/account-profile';
   import { permissionEntryState } from '$lib/permission-entries';
-  import Icon from './Icon.svelte';
-  import IconButton from './IconButton.svelte';
 
   let { info }: { info: ManagedUserInfo } = $props();
-  let query = $state('');
   let now = $state(Date.now() / 1000);
   const headingId = $props.id();
-  const visiblePermissions = $derived(filterAccountPermissions(info.effective_permissions, query));
-  const effectiveCount = $derived(new Set(info.effective_permissions).size);
+  const visiblePermissions = $derived(filterAccountPermissions(info.effective_permissions, ''));
   const sources = $derived([
     { title: $t('settings.account.ownPermissions'), permissions: filterAccountPermissions(info.effective_own_permissions, '') },
     { title: $t('settings.account.inheritedPermissions'), permissions: filterAccountPermissions(info.effective_inherited_permissions, '') },
@@ -31,28 +27,16 @@
 
 <section class="permissions-section" aria-labelledby={headingId}>
   <div class="cfms-heading-copy">
-    <h2 id={headingId}>{$t('settings.account.effectivePermissions')} <span class="count">{effectiveCount}</span></h2>
+    <h2 id={headingId}>{$t('settings.account.effectivePermissions')} <span class="count">{visiblePermissions.length}</span></h2>
     <p>{$t('settings.account.permissionsHint')}</p>
   </div>
 
-  <div class="permission-search cfms-field-surface">
-    <Icon name="search" size="18px" />
-    <input class="cfms-native-field" type="search" bind:value={query}
-      data-focus-ring="delegated"
-      aria-label={$t('settings.account.searchPermissions')} placeholder={$t('settings.account.searchPermissions')} />
-    {#if query}
-      <IconButton icon="close" label={$t('manage.clearPermissionSearch')} onclick={() => { query = ''; }} />
-    {/if}
-  </div>
   {#if visiblePermissions.length}
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region needs keyboard access.) -->
-    <div class="permission-scroll cfms-content-surface" role="region" tabindex="0" aria-label={$t('settings.account.effectivePermissions')}>
-    <ul class="permission-names" aria-label={$t('settings.account.effectivePermissions')}>
+    <ul class="effective-permissions" aria-label={$t('settings.account.effectivePermissions')}>
       {#each visiblePermissions as permission (permission)}<li><code>{permission}</code></li>{/each}
     </ul>
-    </div>
   {:else}
-    <p class="empty" role="status">{$t(query ? 'settings.account.noPermissionMatches' : 'settings.account.noPermissions')}</p>
+    <p class="empty" role="status">{$t('settings.account.noPermissions')}</p>
   {/if}
 
   <details class="permission-details">
@@ -107,9 +91,8 @@
   p, dl, dd { margin: 0; }
   p, dt, .count, .rule-state { color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
   .count { margin-inline-start: 8px; font-variant-numeric: tabular-nums; }
-  .permission-search { display: flex; min-width: 0; align-items: center; gap: 8px; border: 1px solid var(--colorNeutralStroke1); border-radius: 4px; padding: 0 8px; }
-  .permission-search:focus-within { outline: 2px solid var(--colorStrokeFocus2); outline-offset: 2px; }
-  .permission-search input { min-width: 0; width: 100%; min-height: 32px; border: 0; padding: 4px; background: transparent; color: var(--colorNeutralForeground1); font: 400 14px/20px var(--fontFamilyBase); }
+  .effective-permissions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; }
+  .effective-permissions li { min-width: 0; max-width: 100%; }
   .permission-names, .permission-rules { margin: 0; padding: 0; list-style: none; }
   .permission-scroll { min-width: 0; border: 1px solid var(--colorNeutralStroke2); border-radius: 8px; overflow: auto; max-height: 320px; }
   .permission-scroll--rules { max-height: 480px; }
@@ -132,5 +115,5 @@
   .source-hint { margin-top: 8px; max-width: 70ch; }
   .permission-source { display: grid; min-width: 0; gap: 8px; }
   @media (max-width: 640px) { .rule-times { grid-template-columns: minmax(0, 1fr); } }
-  @media (pointer: coarse) { summary, .permission-search input { min-height: 44px; } .permission-search input { font-size: 16px; } }
+  @media (pointer: coarse) { summary { min-height: 44px; } }
 </style>

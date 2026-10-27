@@ -1587,7 +1587,7 @@ export const zh_CN = {
       },
     },
     account: {
-      title: '我的账户',
+      title: '用户账户',
       description: '查看个人资料、用户组与权限，管理昵称和头像',
       basicInfo: '基本信息',
       username: '用户名',
@@ -1603,8 +1603,6 @@ export const zh_CN = {
       noGroups: '未加入用户组。',
       effectivePermissions: '当前有效权限',
       permissionsHint: '服务器在最近一次读取时计算的最终权限。授权发生变化后，请刷新以查看最新结果。',
-      searchPermissions: '搜索权限标识',
-      noPermissionMatches: '没有匹配的权限。',
       noPermissions: '当前没有有效权限。',
       authorizationDetails: '授权明细与来源',
       directPermissions: '个人直接授权条目',

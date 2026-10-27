@@ -39,15 +39,18 @@ describe('read-only account permissions', () => {
     expect(screen.queryByRole('button', { name: /add|save|delete/i })).toBeNull();
   });
 
-  it('searches effective permissions and supports clearing an empty result', async () => {
-    render(AccountPermissions, { info });
-    const search = screen.getByRole('searchbox', { name: 'Search permission identifiers' });
-    await fireEvent.input(search, { target: { value: 'READ_' } });
-    expect(within(screen.getByRole('list', { name: 'Current effective permissions' })).getByText('read_document')).toBeTruthy();
-    await fireEvent.input(search, { target: { value: 'set_user_avatar' } });
-    expect(screen.getByRole('status').textContent).toBe('No permissions match your search.');
-    await fireEvent.click(screen.getByRole('button', { name: 'Clear permission search' }));
-    expect(screen.getByRole('list', { name: 'Current effective permissions' })).toBeTruthy();
+  it('lists every effective permission once in sorted order without a search control', () => {
+    render(AccountPermissions, { info: { ...info, effective_permissions: ['set_user_avatar', 'read_document', 'read_document'] } });
+    const effective = within(screen.getByRole('list', { name: 'Current effective permissions' }));
+    expect(effective.getAllByRole('listitem').map(item => item.textContent)).toEqual(['read_document', 'set_user_avatar']);
+    expect(screen.getByRole('heading', { name: 'Current effective permissions 2' })).toBeTruthy();
+    expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+
+  it('shows the empty state when there are no effective permissions', () => {
+    render(AccountPermissions, { info: { ...info, effective_permissions: [] } });
+    expect(screen.getByRole('status').textContent).toBe('You have no effective permissions.');
+    expect(screen.queryByRole('list', { name: 'Current effective permissions' })).toBeNull();
   });
 
   it('renders long unknown permission identifiers and Chinese labels without a translation catalog', async () => {
@@ -55,7 +58,7 @@ describe('read-only account permissions', () => {
     const permission = `extension_${'very_long_identifier_'.repeat(20)}`;
     render(AccountPermissions, { info: { ...info, effective_permissions: [permission], permissions: [] } });
     expect(screen.getByText(permission)).toBeTruthy();
-    expect(screen.getByRole('searchbox', { name: '搜索权限标识' })).toBeTruthy();
+    expect(screen.getByRole('list', { name: '当前有效权限' })).toBeTruthy();
     await fireEvent.click(screen.getByText('授权明细与来源'));
     expect(screen.getByText('尚未配置直接权限条目。')).toBeTruthy();
   });
