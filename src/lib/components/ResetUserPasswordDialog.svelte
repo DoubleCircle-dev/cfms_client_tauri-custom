@@ -201,7 +201,7 @@
           disabled={busy}
           ariaLabel={$t('manage.bypassPasswordRequirements')}
         />
-        <span>
+        <span class="min-w-0 flex-1 break-words">
           <span class="block font-medium">{$t('manage.bypassPasswordRequirements')}</span>
           <span class="text-xs text-md3-on-surface-variant">{$t('manage.bypassPasswordRequirementsHelp')}</span>
         </span>
@@ -212,7 +212,7 @@
           disabled={busy}
           ariaLabel={$t('manage.forcePasswordUpdate')}
         />
-        <span>
+        <span class="min-w-0 flex-1 break-words">
           <span class="block font-medium">{$t('manage.forcePasswordUpdate')}</span>
           <span class="text-xs text-md3-on-surface-variant">{$t('manage.forcePasswordUpdateHelp')}</span>
         </span>
@@ -224,7 +224,7 @@
             disabled={busy}
             ariaLabel={$t('manage.disableTwoFactorWithPasswordReset')}
           />
-          <span>
+          <span class="min-w-0 flex-1 break-words">
             <span class="block font-medium">{$t('manage.disableTwoFactorWithPasswordReset')}</span>
             <span class="text-xs text-md3-on-surface-variant">{$t('manage.disableTwoFactorWithPasswordResetHelp')}</span>
           </span>

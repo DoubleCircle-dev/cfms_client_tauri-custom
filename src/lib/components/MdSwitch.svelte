@@ -89,6 +89,6 @@
     :global(html:not([data-reduce-motion="false"])) .cfms-switch { transition: none; }
     :global(html:not([data-reduce-motion="false"])) .cfms-switch::part(checked-indicator) { transition: none; }
   }
-  .cfms-choice-target { display: inline-flex; align-items: center; justify-content: center; min-inline-size: 28px; min-block-size: 28px; position: relative; }
+  .cfms-choice-target { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; min-inline-size: 28px; min-block-size: 28px; position: relative; }
   @media (pointer: coarse) { .cfms-choice-target { min-block-size: 44px; min-inline-size: 44px; } }
 </style>
