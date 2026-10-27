@@ -2061,6 +2061,8 @@ export const zh_CN = {
         files_metadata_read: '读取文件元数据',
         files_list: '列出服务器目录',
         files_search: '搜索服务器文件',
+        files_updates_check: '检查文件更新',
+        files_sync_full: '完整同步文件（可能删除服务器上已不存在的本地文件）',
         tasks_read: '读取传输任务状态',
         transfers_download_enqueue: '请求经确认的下载',
         account_summary_read: '读取当前账户摘要',

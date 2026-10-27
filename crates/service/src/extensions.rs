@@ -30,6 +30,8 @@ const ALLOWED_CAPABILITIES: &[&str] = &[
     "files.metadata.read",
     "files.list",
     "files.search",
+    "files.updates.check",
+    "files.sync.full",
     "tasks.read",
     "transfers.download.enqueue",
     "account.summary.read",
@@ -1236,7 +1238,7 @@ mod tests {
             "min_client_version": "0.1.0",
             "platforms": [current_platform()],
             "entrypoints": { "navigation": [{ "id": "stats", "label": "Statistics", "icon": "analytics", "page": "stats" }] },
-            "requested_capabilities": ["account.summary.read"],
+            "requested_capabilities": ["account.summary.read", "files.updates.check", "files.sync.full"],
             "background_triggers": [],
             "content_hashes": {}
         }).to_string().into_bytes();

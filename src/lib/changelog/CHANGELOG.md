@@ -4,6 +4,23 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.57.0-custom-0.2
+**Released on:** 2026-10-28
+
+**Title:** Extension file update and synchronization APIs
+
+### Fixed
+- Use full record id in replies
+- Use download queue for server records
+
+### Added
+- Support message replies
+- Add inline simulated message composer
+- Expose file update checks and full synchronization to authorized extensions
+- Require user confirmation before extension syncs that may delete local files
+
+---
+
 ## v0.57.0-custom-0.1
 **Released on:** 2026-10-28
 

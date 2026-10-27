@@ -316,6 +316,19 @@ pub async fn execute_extension_host_call(
                 .ok_or_else(|| "files.metadata.read requires documentId".to_string())?;
             server_action_json(&state, "core.document.info.get", serde_json::json!({ "document_id": document_id })).await
         }
+        "files.updates.check" => {
+            let report = crate::file_auto_check::check_for_extension(&app_handle, false).await?;
+            serde_json::to_value(report)
+                .map_err(|e| format!("Failed to serialize file update check: {e}"))
+        }
+        "files.sync.full" => {
+            if user_confirmed != Some(true) {
+                return Err("User confirmation is required before synchronizing files".into());
+            }
+            let report = crate::file_auto_check::check_for_extension(&app_handle, true).await?;
+            serde_json::to_value(report)
+                .map_err(|e| format!("Failed to serialize file synchronization: {e}"))
+        }
         "preferences.read" => {
             let (_, preferences) = load_current_user_preferences(&state).await?;
             Ok(preferences.extensions.get(&extension_id)

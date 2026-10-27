@@ -155,6 +155,7 @@ pub struct FileAutoCheckRuntime {
     report: Mutex<Option<FileAutoCheckReport>>,
     last_check_at: AtomicI64,
     next_check_at: AtomicI64,
+    check_lock: tokio::sync::Mutex<()>,
     /// Set by the frontend after a manual check so the countdown restarts.
     rebase_requested: AtomicBool,
     /// Wakes the scheduler out of its sleep (settings changed, rebase, ...).
@@ -173,6 +174,7 @@ impl FileAutoCheckRuntime {
             report: Mutex::new(None),
             last_check_at: AtomicI64::new(0),
             next_check_at: AtomicI64::new(0),
+            check_lock: tokio::sync::Mutex::new(()),
             rebase_requested: AtomicBool::new(false),
             wake: tokio::sync::Notify::new(),
         }
@@ -414,7 +416,7 @@ pub async fn run(app: AppHandle, mut shutdown: watch::Receiver<bool>) {
         }
 
         startup_check_done = true;
-        match perform_check(&app, &current).await {
+        match perform_check(&app, &current, true).await {
             Ok(mut report) => {
                 let finished_at = now_ms();
                 let next = finished_at + current.interval_ms();
@@ -450,10 +452,42 @@ fn emit_schedule(app: &AppHandle, runtime: &FileAutoCheckRuntime) {
 
 /// Walk the server tree and compare it against the local download root,
 /// optionally applying the staged updates and safe deletions.
+pub async fn check_for_extension(
+    app: &AppHandle,
+    synchronize: bool,
+) -> Result<FileAutoCheckReport, String> {
+    if !is_logged_in(app).await {
+        return Err("Not logged in".into());
+    }
+
+    let mut settings = read_settings(app)
+        .await
+        .ok_or_else(|| "File update settings are unavailable".to_string())?;
+    settings.auto_download = synchronize;
+
+    let mut report = perform_check(app, &settings, synchronize).await?;
+    let finished_at = now_ms();
+    let next_check_at = finished_at + settings.interval_ms();
+    report.checked_at = finished_at;
+    report.next_check_at = next_check_at;
+
+    let runtime = Arc::clone(&app.state::<AppHandleState>().file_auto_check);
+    runtime.store_report(report.clone());
+    runtime.set_schedule(finished_at, next_check_at);
+    runtime.request_rebase();
+    let _ = app.emit(CHECK_EVENT, &report);
+    emit_schedule(app, &runtime);
+
+    Ok(report)
+}
+
 async fn perform_check(
     app: &AppHandle,
     settings: &AutoCheckSettings,
+    update_local_files: bool,
 ) -> Result<FileAutoCheckReport, String> {
+    let runtime = Arc::clone(&app.state::<AppHandleState>().file_auto_check);
+    let _check_guard = runtime.check_lock.lock().await;
     let download_root = {
         let state = app.state::<AppHandleState>();
         crate::commands::resolve_download_root(app, &state).await?
@@ -508,7 +542,9 @@ async fn perform_check(
 
         if !path_parts.is_empty() && listing.documents.is_empty() && listing.folders.is_empty() {
             let marker_path = format!("{directory_path}/{EMPTY_FOLDER_MARKER}");
-            ensure_local_placeholder(&download_root, &marker_path)?;
+            if update_local_files {
+                ensure_local_placeholder(&download_root, &marker_path)?;
+            }
             server_paths.insert(marker_path);
         }
 
@@ -568,10 +604,10 @@ async fn perform_check(
         }
     }
 
-    if settings.auto_download && !report.items.is_empty() {
+    if update_local_files && settings.auto_download && !report.items.is_empty() {
         apply_downloads(app, &download_root, settings, &mut report).await;
     }
-    if settings.auto_download {
+    if update_local_files && settings.auto_download {
         report.deleted = delete_stale_files(&download_root, &report.deletions)?;
     }
 

@@ -2074,6 +2074,8 @@ export const en = {
         files_metadata_read: 'Read file metadata',
         files_list: 'List server folders',
         files_search: 'Search server files',
+        files_updates_check: 'Check for file updates',
+        files_sync_full: 'Fully synchronize files (may delete local files missing from the server)',
         tasks_read: 'Read transfer task status',
         transfers_download_enqueue: 'Request confirmed downloads',
         account_summary_read: 'Read the signed-in account summary',

@@ -9,6 +9,7 @@ import { notificationStore } from '$lib/stores.svelte';
 
 const MAX_STEPS = 100;
 const MAX_DURATION_MS = 30_000;
+const MAX_FILE_UPDATE_DURATION_MS = 10 * 60_000;
 
 export interface WorkflowRunOptions {
   input?: Record<string, unknown>;
@@ -35,7 +36,11 @@ async function runWorkflowDocument(
   }
   const nodes = new Map(workflow.nodes.map((node) => [node.id, node]));
   const context: Record<string, unknown> = { input: options.input ?? {}, results: {} };
-  const deadline = Date.now() + MAX_DURATION_MS;
+  const includesFileUpdate = workflow.nodes.some((node) =>
+    node.type === 'host_call'
+      && (node.capability === 'files.updates.check' || node.capability === 'files.sync.full'),
+  );
+  const deadline = Date.now() + (includesFileUpdate ? MAX_FILE_UPDATE_DURATION_MS : MAX_DURATION_MS);
   let current: string | undefined = workflow.start;
   let steps = 0;
 
@@ -53,10 +58,19 @@ async function runWorkflowDocument(
         const capability = String(node.capability ?? '') as ExtensionCapability;
         const args = resolveValue(node.arguments ?? {}, context);
         let userConfirmed: boolean | undefined;
-        if (capability === 'transfers.download.enqueue') {
-          if (options.background) throw new Error('Background workflows cannot enqueue downloads');
-          userConfirmed = window.confirm(`Allow extension ${extensionId} to add this download?`);
-          if (!userConfirmed) throw new Error('Download request cancelled');
+        if (capability === 'transfers.download.enqueue' || capability === 'files.sync.full') {
+          if (options.background) {
+            throw new Error(
+              capability === 'files.sync.full'
+                ? 'Background workflows cannot synchronize files'
+                : 'Background workflows cannot enqueue downloads',
+            );
+          }
+          const prompt = capability === 'files.sync.full'
+            ? `Allow extension ${extensionId} to synchronize files, including deleting local files that no longer exist on the server?`
+            : `Allow extension ${extensionId} to add this download?`;
+          userConfirmed = window.confirm(prompt);
+          if (!userConfirmed) throw new Error('Extension file operation cancelled');
         }
         const result = await withinExecutionLimit(
           executeExtensionHostCall(extensionId, capability, args, userConfirmed),

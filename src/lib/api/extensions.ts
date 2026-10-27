@@ -4,6 +4,8 @@ export type ExtensionCapability =
   | 'files.metadata.read'
   | 'files.list'
   | 'files.search'
+  | 'files.updates.check'
+  | 'files.sync.full'
   | 'tasks.read'
   | 'transfers.download.enqueue'
   | 'account.summary.read'
