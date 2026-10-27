@@ -15,15 +15,21 @@ export interface AppUpdateMetadata {
 }
 
 export type AppUpdateDownloadEvent =
+  | { event: 'Probing'; data: { candidates: number } }
+  | { event: 'MirrorSelected'; data: { mirror: string; bytesPerSecond: number } }
   | { event: 'Started'; data: { contentLength?: number | null } }
   | { event: 'Progress'; data: { chunkLength: number } }
   | { event: 'Finished' };
 
 export interface UpdateProgressSnapshot {
-  phase: 'idle' | 'downloading' | 'installing' | 'finished';
+  phase: 'idle' | 'probing' | 'downloading' | 'installing' | 'finished';
   downloadedBytes: number;
   totalBytes: number | null;
   progress: number | null;
+  /** Source picked by the mirror probe, or `null` for a direct download. */
+  mirror: string | null;
+  /** Throughput measured for the selected source, in bytes per second. */
+  mirrorBytesPerSecond: number | null;
 }
 
 export async function checkAppUpdate(
@@ -38,26 +44,44 @@ export async function installAppUpdate(
 ): Promise<void> {
   let downloadedBytes = 0;
   let totalBytes: number | null = null;
+  let mirror: string | null = null;
+  let mirrorBytesPerSecond: number | null = null;
 
   const progressChannel = new Channel<AppUpdateDownloadEvent>((event) => {
+    if (event.event === 'Probing') {
+      downloadedBytes = 0;
+      totalBytes = null;
+      mirror = null;
+      mirrorBytesPerSecond = null;
+      onProgress(toSnapshot('probing', downloadedBytes, totalBytes, mirror, mirrorBytesPerSecond));
+      return;
+    }
+
+    if (event.event === 'MirrorSelected') {
+      mirror = event.data.mirror;
+      mirrorBytesPerSecond = event.data.bytesPerSecond;
+      onProgress(toSnapshot('downloading', downloadedBytes, totalBytes, mirror, mirrorBytesPerSecond));
+      return;
+    }
+
     if (event.event === 'Started') {
       downloadedBytes = 0;
       totalBytes = event.data.contentLength ?? null;
-      onProgress(toSnapshot('downloading', downloadedBytes, totalBytes));
+      onProgress(toSnapshot('downloading', downloadedBytes, totalBytes, mirror, mirrorBytesPerSecond));
       return;
     }
 
     if (event.event === 'Progress') {
       downloadedBytes += event.data.chunkLength;
-      onProgress(toSnapshot('downloading', downloadedBytes, totalBytes));
+      onProgress(toSnapshot('downloading', downloadedBytes, totalBytes, mirror, mirrorBytesPerSecond));
       return;
     }
 
-    onProgress(toSnapshot('installing', downloadedBytes, totalBytes));
+    onProgress(toSnapshot('installing', downloadedBytes, totalBytes, mirror, mirrorBytesPerSecond));
   });
 
   await invoke('install_app_update', { onEvent: progressChannel });
-  onProgress(toSnapshot('finished', downloadedBytes, totalBytes));
+  onProgress(toSnapshot('finished', downloadedBytes, totalBytes, mirror, mirrorBytesPerSecond));
 }
 
 export async function relaunchApp(): Promise<void> {
@@ -80,6 +104,8 @@ function toSnapshot(
   phase: UpdateProgressSnapshot['phase'],
   downloadedBytes: number,
   totalBytes: number | null,
+  mirror: string | null,
+  mirrorBytesPerSecond: number | null,
 ): UpdateProgressSnapshot {
   const progress =
     totalBytes && totalBytes > 0
@@ -91,5 +117,7 @@ function toSnapshot(
     downloadedBytes,
     totalBytes,
     progress,
+    mirror,
+    mirrorBytesPerSecond,
   };
 }

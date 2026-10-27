@@ -148,4 +148,6 @@ export const ICON_MAP = {
   "minimizeToTray": "arrow_minimize",
   "quit": "power",
   "pushPin": "pin",
+  // Update mirror indicator.
+  "mirrorDownload": "cloud_arrow_down",
 } as const;

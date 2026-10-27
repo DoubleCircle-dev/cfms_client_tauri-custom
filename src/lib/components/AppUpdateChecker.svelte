@@ -40,6 +40,7 @@
   );
   const progressLabel = $derived.by(() => {
     const progress = appUpdateState.progress;
+    if (progress.phase === 'probing') return $t('settings.updates.probingMirrors');
     if (progress.phase === 'installing') return $t('settings.updates.installing');
     if (progress.phase === 'finished') return $t('settings.updates.installed');
     if (progress.totalBytes) {
@@ -57,6 +58,20 @@
       });
     }
     return $t('settings.updates.preparingDownload');
+  });
+  const mirrorLabel = $derived.by(() => {
+    const progress = appUpdateState.progress;
+    if (progress.phase === 'finished' || progress.phase === 'idle') return null;
+    if (!progress.mirror) return null;
+    if (!progress.mirrorBytesPerSecond) {
+      return $t('settings.updates.downloadingViaMirror', { values: { mirror: progress.mirror } });
+    }
+    return $t('settings.updates.downloadingViaMirrorSpeed', {
+      values: {
+        mirror: progress.mirror,
+        speed: `${formatBytes(progress.mirrorBytesPerSecond)}/s`,
+      },
+    });
   });
   const installCompleteMessage = $derived(
     appUpdateState.update?.installMode === 'android-apk'
@@ -289,6 +304,12 @@
           <span>{progressPercent.toFixed(1)}%</span>
         {/if}
       </div>
+      {#if mirrorLabel}
+        <p class="mirror-label">
+          <Icon name="mirrorDownload" size="14px" />
+          {mirrorLabel}
+        </p>
+      {/if}
     </div>
   {/if}
 
@@ -568,6 +589,20 @@
     gap: 16px;
     color: var(--color-md3-on-surface-variant);
     font-size: 12px;
+  }
+
+  .mirror-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--color-md3-primary-emphasis);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .mirror-label :global(.cfms-icon) {
+    flex: none;
   }
 
   .actions {

@@ -132,6 +132,7 @@ class UpdateNotificationReporter {
   }
 
   private bodyFor(snapshot: UpdateProgressSnapshot, copy: UpdateNotificationCopy) {
+    if (snapshot.phase === 'probing') return copy.preparingDownload;
     if (snapshot.phase === 'installing') return copy.installing;
     if (snapshot.phase === 'finished') return copy.installed;
 

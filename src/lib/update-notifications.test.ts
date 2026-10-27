@@ -20,13 +20,13 @@ describe('floating update progress', () => {
     ['downloading', 0, null, 0],
     ['installing', 100, 100, 0],
   ] as const)('maps %s with %s bytes and total %s to %s', async (phase, downloadedBytes, totalBytes, expectedTotal) => {
-    await updateNotificationReporter.report({ phase, downloadedBytes, totalBytes, progress: null }, copy);
+    await updateNotificationReporter.report({ phase, downloadedBytes, totalBytes, progress: null, mirror: null, mirrorBytesPerSecond: null }, copy);
     expect(floatingProgressStore.entries[0]).toMatchObject({ current: downloadedBytes, total: expectedTotal });
   });
 
   it.each(['finished', 'idle'] as const)('removes the toast on %s', async (phase: UpdateProgressSnapshot['phase']) => {
-    await updateNotificationReporter.report({ phase: 'downloading', downloadedBytes: 20, totalBytes: 100, progress: 0.2 }, copy);
-    await updateNotificationReporter.report({ phase, downloadedBytes: 100, totalBytes: 100, progress: 1 }, copy);
+    await updateNotificationReporter.report({ phase: 'downloading', downloadedBytes: 20, totalBytes: 100, progress: 0.2, mirror: null, mirrorBytesPerSecond: null }, copy);
+    await updateNotificationReporter.report({ phase, downloadedBytes: 100, totalBytes: 100, progress: 1, mirror: null, mirrorBytesPerSecond: null }, copy);
     expect(floatingProgressStore.entries).toHaveLength(0);
   });
 });
