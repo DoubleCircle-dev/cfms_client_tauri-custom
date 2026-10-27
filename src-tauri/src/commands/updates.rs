@@ -327,6 +327,22 @@ const DESKTOP_UPDATE_MIRRORS: &[UpdateMirror] = &[
         label: "moeyy.cn",
         prefix: "https://moeyy.cn/gh-proxy/",
     },
+    UpdateMirror {
+        label: "ghfast.top",
+        prefix: "https://ghfast.top/",
+    },
+    UpdateMirror {
+        label: "github.moeyy.xyz",
+        prefix: "https://github.moeyy.xyz/",
+    },
+    UpdateMirror {
+        label: "gh.ddlc.top",
+        prefix: "https://gh.ddlc.top/",
+    },
+    UpdateMirror {
+        label: "ghproxy.cc",
+        prefix: "https://ghproxy.cc/",
+    },
 ];
 
 /// How much of the asset each candidate serves while it is being measured.
