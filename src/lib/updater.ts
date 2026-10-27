@@ -58,6 +58,8 @@ export async function installAppUpdate(
     }
 
     if (event.event === 'MirrorSelected') {
+      downloadedBytes = 0;
+      totalBytes = null;
       mirror = event.data.mirror;
       mirrorBytesPerSecond = event.data.bytesPerSecond;
       onProgress(toSnapshot('downloading', downloadedBytes, totalBytes, mirror, mirrorBytesPerSecond));

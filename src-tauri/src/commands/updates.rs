@@ -258,10 +258,6 @@ pub async fn install_app_update<R: tauri::Runtime>(
             fastest.label,
             fastest.bytes_per_second
         );
-        let _ = on_event.send(AppUpdateDownloadEvent::MirrorSelected {
-            mirror: fastest.label.clone(),
-            bytes_per_second: fastest.bytes_per_second,
-        });
     }
     let candidates = if candidates.is_empty() {
         tracing::warn!("Mirror probe failed for every source; falling back to GitHub");
@@ -471,6 +467,10 @@ async fn download_update_with_fallback(
 ) -> Result<Vec<u8>, String> {
     let mut failures: Vec<String> = Vec::new();
     for candidate in candidates {
+        let _ = on_event.send(AppUpdateDownloadEvent::MirrorSelected {
+            mirror: candidate.label.clone(),
+            bytes_per_second: candidate.bytes_per_second,
+        });
         let mut attempt = update.clone();
         attempt.download_url = candidate.url;
         let mut announced = false;
