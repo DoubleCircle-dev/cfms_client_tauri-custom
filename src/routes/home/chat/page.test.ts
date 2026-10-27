@@ -441,4 +441,60 @@ describe('chat page online mode', () => {
       );
     });
   });
+
+  it('quotes the selected message using the chatbox reply marker', async () => {
+    const accountHash = createHash('sha256').update('alice').digest('hex').slice(0, 7);
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', '.runtime', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockImplementation(async (folderId: string | null) => {
+      if (folderId === 'chatbox-folder-id') {
+        return {
+          folders: [{ id: 'room-folder-id', name: 'room-id', created_time: 100 }],
+          documents: [],
+          parent_id: null,
+        };
+      }
+      return {
+        folders: [],
+        documents: [{ id: 'quoted-record-id', title: 'b2e8fa7.txt' }],
+        parent_id: folderId,
+      };
+    });
+    mocks.readServerDocument.mockResolvedValue({
+      content: '# time | msg\n2025-07-24 20:53:18 | When was Kuroshio Hour?\n',
+      size: 64,
+      truncated: false,
+    });
+    mocks.uploadChatRecord.mockResolvedValue({
+      file_name: `${accountHash}.txt`,
+      overwritten: false,
+    });
+
+    render(ChatPage);
+    await waitFor(() => expect(roomCards().length).toBe(1));
+    await fireEvent.click(roomCards()[0].closest('.chat-room-card') as HTMLElement);
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'chat.reply' }));
+    expect(screen.getByText('chat.replyingTo:user131')).toBeTruthy();
+    await fireEvent.input(screen.getByRole('textbox', { name: 'chat.message' }), {
+      target: { value: '回复是这个' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'chat.speak' }));
+
+    await waitFor(() => {
+      expect(mocks.uploadChatRecord).toHaveBeenCalledWith(
+        'room-folder-id',
+        accountHash,
+        expect.stringMatching(
+          /^# time \| msg\n\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| 回复是这个 \/\/ b2e8fa7 -> When was Kuroshio Hour\?\n$/,
+        ),
+        expect.any(String),
+      );
+    });
+    expect(document.querySelector('.chat-reply-composer')).toBeNull();
+    expect(
+      document.querySelector('.chat-msg .chat-reply .chat-reply-text')?.textContent,
+    ).toContain('When was Kuroshio Hour?');
+  });
 });

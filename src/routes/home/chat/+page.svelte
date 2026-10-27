@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { open } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
@@ -65,12 +65,14 @@
     '#40c8c8',
   ];
   const URL_PATTERN = /https?:\/\/[^\s)]+/g;
-  const REPLY_PATTERN = /\s*\/\/\s*(\w{7})\s*->\s*(.*)$/s;
+  const REPLY_PATTERN = /([\s\S]*)\s*\/\/\s*(\w{7})\s*->\s*(.*)$/;
 
   interface ReplyRef {
     user: string;
     text: string;
   }
+
+  type ReplyTarget = ReplyRef;
 
   interface ChatMessage {
     user: string;
@@ -124,6 +126,8 @@
   let composeSpeakerName = $state(authStore.username ?? '');
   let hashSpeakerName = $state(true);
   let composeMessage = $state('');
+  let composeTextarea = $state<HTMLTextAreaElement | undefined>(undefined);
+  let replyTarget = $state<ReplyTarget | null>(null);
   let composeValidationError = $state<string | null>(null);
   let uploadingChatRecord = $state(false);
   let speakerLocked = $state(false);
@@ -521,8 +525,8 @@
       let replyRef: ReplyRef | null = null;
       const match = REPLY_PATTERN.exec(content);
       if (match) {
-        replyRef = { user: match[1], text: match[2].trim() };
-        content = content.slice(0, match.index);
+        replyRef = { user: match[2], text: match[3].trim() };
+        content = match[1].trimEnd();
       }
       messages.push({ user: userId, time, content, replyRef });
     }
@@ -559,6 +563,7 @@
 
   function resetComposer() {
     composeMessage = '';
+    replyTarget = null;
     composeSpeakerName = authStore.username ?? '';
     hashSpeakerName = true;
     composeValidationError = null;
@@ -602,6 +607,28 @@
       + ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
+  function replyUserId(message: ChatMessage): string | null {
+    const userId = message.user.slice(0, 7);
+    if (!/^\w{7}$/.test(userId)) return null;
+    const matchingUsers = new Set(
+      selectedRoom?.messages
+        .map((item) => item.user)
+        .filter((user) => user.slice(0, 7) === userId),
+    );
+    return matchingUsers.size === 1 ? userId : null;
+  }
+
+  function startReply(message: ChatMessage) {
+    const userId = replyUserId(message);
+    if (!userId) {
+      notificationStore.info($t('chat.replyUnavailable'));
+      return;
+    }
+    replyTarget = { user: userId, text: message.content };
+    composeValidationError = null;
+    void tick().then(() => composeTextarea?.focus());
+  }
+
   async function appendComposeMessage() {
     const speakerName = normalizedSpeakerName();
     if (!isValidSpeakerName(speakerName)) {
@@ -614,7 +641,12 @@
       return;
     }
     const targetRoom = selectedRoom;
+    const targetReply = replyTarget;
     if (!targetRoom || mode !== 'online' || !targetRoom.loaded || uploadingChatRecord) return;
+    if (targetReply && content.includes('\n')) {
+      composeValidationError = $t('chat.replySingleLine');
+      return;
+    }
     uploadingChatRecord = true;
     try {
       const user = await effectiveSpeakerName();
@@ -632,7 +664,12 @@
         overwriteApprovedFor = targetKey;
       }
 
-      const newMessage: ChatMessage = { user, time, content, replyRef: null };
+      const newMessage: ChatMessage = {
+        user,
+        time,
+        content,
+        replyRef: targetReply ? { ...targetReply } : null,
+      };
       let existingContent = '';
       if (existingDocument) {
         const existingRecord = await readServerDocument(existingDocument.id);
@@ -641,13 +678,16 @@
         }
         existingContent = existingRecord.content;
       }
-      const messageLines = content
-        .split(/\r?\n/)
+      const messageLines = content.split(/\r?\n/);
+      if (targetReply) {
+        messageLines[messageLines.length - 1] += ` // ${targetReply.user} -> ${targetReply.text}`;
+      }
+      const timestampedMessageLines = messageLines
         .map((line) => `${time} | ${line}`)
         .join('\n');
       const recordContent = existingContent
-        ? `${existingContent}${existingContent.endsWith('\n') ? '' : '\n'}${messageLines}\n`
-        : `# time | msg\n${messageLines}\n`;
+        ? `${existingContent}${existingContent.endsWith('\n') ? '' : '\n'}${timestampedMessageLines}\n`
+        : `# time | msg\n${timestampedMessageLines}\n`;
       await uploadChatRecord(targetRoom.id, user, recordContent, crypto.randomUUID());
 
       const updatedRoom: ChatRoom = {
@@ -662,6 +702,7 @@
       if (selectedRoomId === targetRoom.roomId) {
         speakerLocked = true;
         composeMessage = '';
+        replyTarget = null;
         composeValidationError = null;
       }
     } catch (err) {
@@ -676,6 +717,12 @@
       event.preventDefault();
       void appendComposeMessage();
     }
+  }
+
+  function cancelReply() {
+    replyTarget = null;
+    composeValidationError = null;
+    composeTextarea?.focus();
   }
 
   function unreadableRecordReason(record: UnreadableRecord): string {
@@ -997,6 +1044,15 @@
                     </button>
                   {/if}
                   <span class="chat-msg-time">{message.time}</span>
+                  {#if mode === 'online' && selectedRoom.loaded && authStore.username}
+                    <button
+                      type="button"
+                      class="chat-msg-reply"
+                      disabled={uploadingChatRecord || !replyUserId(message)}
+                      title={$t(replyUserId(message) ? 'chat.reply' : 'chat.replyUnavailable')}
+                      onclick={() => startReply(message)}
+                    >{$t('chat.reply')}</button>
+                  {/if}
                 </div>
                 <div class="chat-bubble" style:background={colors.bg} style:border-color={colors.strip}>
                   {#if message.replyRef}
@@ -1112,12 +1168,29 @@
                 <span>{$t('chat.hashSpeakerName')}</span>
               </label>
             </div>
+            {#if replyTarget}
+              <div class="chat-reply-composer">
+                <span class="chat-reply-composer-icon" aria-hidden="true">↩</span>
+                <div class="chat-reply-composer-copy">
+                  <strong>{$t('chat.replyingTo', { values: { name: displayName(replyTarget.user) } })}</strong>
+                  <span>{replyTarget.text}</span>
+                </div>
+                <button
+                  type="button"
+                  class="chat-reply-composer-cancel"
+                  aria-label={$t('chat.cancelReply')}
+                  disabled={uploadingChatRecord}
+                  onclick={cancelReply}
+                >×</button>
+              </div>
+            {/if}
             <div class="chat-compose-entry">
               <label class="chat-compose-field">
                 <span>{$t('chat.message')}</span>
                 <textarea
                   class="cfms-native-field"
                   data-focus-ring="delegated"
+                  bind:this={composeTextarea}
                   bind:value={composeMessage}
                   disabled={uploadingChatRecord}
                   rows="2"
@@ -1493,6 +1566,64 @@
     gap: 8px;
   }
 
+  .chat-reply-composer {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    border-inline-start: 3px solid var(--colorBrandStroke);
+    border-radius: var(--borderRadiusSmall);
+    padding: 6px 8px;
+    background: var(--colorNeutralBackground2);
+  }
+
+  .chat-reply-composer-icon {
+    flex: none;
+    color: var(--colorBrandForeground1);
+    font: 600 14px/18px var(--fontFamilyBase);
+  }
+
+  .chat-reply-composer-copy {
+    display: grid;
+    min-width: 0;
+    gap: 1px;
+    flex: 1;
+    color: var(--colorNeutralForeground2);
+    font: 400 11px/15px var(--fontFamilyBase);
+  }
+
+  .chat-reply-composer-copy strong {
+    color: var(--colorBrandForeground1);
+    font-weight: 600;
+  }
+
+  .chat-reply-composer-copy span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chat-reply-composer-cancel {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    flex: none;
+    place-items: center;
+    border-radius: var(--borderRadiusSmall);
+    color: var(--colorNeutralForeground3);
+    font: 400 18px/1 var(--fontFamilyBase);
+    cursor: pointer;
+  }
+
+  .chat-reply-composer-cancel:hover:not(:disabled) {
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground1Hover);
+  }
+
+  .chat-reply-composer-cancel:disabled {
+    cursor: not-allowed;
+  }
+
   .chat-compose-entry .chat-compose-field {
     flex: 1;
   }
@@ -1594,6 +1725,25 @@
   .chat-msg-time {
     color: var(--colorNeutralForeground4, var(--colorNeutralForeground3));
     font: 400 10px/14px var(--fontFamilyBase);
+  }
+
+  .chat-msg-reply {
+    border: 0;
+    border-radius: var(--borderRadiusSmall);
+    padding: 1px 5px;
+    color: var(--colorBrandForeground1);
+    background: transparent;
+    font: 400 10px/14px var(--fontFamilyBase);
+    cursor: pointer;
+  }
+
+  .chat-msg-reply:hover:not(:disabled) {
+    background: var(--colorNeutralBackground1Hover);
+  }
+
+  .chat-msg-reply:disabled {
+    color: var(--colorNeutralForegroundDisabled);
+    cursor: not-allowed;
   }
 
   /* Bubble interiors intentionally keep a fixed light palette: they mirror the
