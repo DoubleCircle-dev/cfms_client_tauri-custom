@@ -302,31 +302,31 @@
   .preference-card:hover:not(:disabled) { background: var(--color-md3-surface-container-highest); transform: translateY(-1px); }
   .preference-card--selected { border-color: var(--color-md3-primary); color: var(--color-md3-primary-emphasis); background: var(--color-md3-primary-container); }
   .preference-card:disabled { opacity: 0.6; }
-  .scheme-preview { grid-column: 1 / -1; display: block; overflow: hidden; aspect-ratio: 16 / 8; border: 1px solid rgb(128 128 128 / 0.28); border-radius: 0.42rem; background: #f3f3f3; box-shadow: 0 5px 16px rgb(0 0 0 / 0.12); }
-  .scheme-preview__bar { display: block; height: 24%; background: #fafafa; }
-  .scheme-preview__body { display: grid; height: 76%; grid-template-columns: 28% 1fr; gap: 8%; padding: 8%; background: #f3f3f3; }
-  .scheme-preview__body span { border-radius: 999px; background: #d7d7d7; }
-  .scheme-preview__body span:first-child { grid-row: 1 / 3; border-radius: 3px; background: #e5e5e5; }
-  .scheme-preview--dark { background: #17191d; }
-  .scheme-preview--dark .scheme-preview__bar { background: #20232a; }
-  .scheme-preview--dark .scheme-preview__body { background: #0f1115; }
-  .scheme-preview--dark .scheme-preview__body span { background: #343840; }
-  .scheme-preview--dark .scheme-preview__body span:first-child { background: #20232a; }
+  .scheme-preview { grid-column: 1 / -1; display: block; overflow: hidden; aspect-ratio: 16 / 8; border: 1px solid var(--cfmsPreviewBorder); border-radius: 0.42rem; background: var(--cfmsPreviewLightCanvas); box-shadow: 0 5px 16px rgb(0 0 0 / 0.12); }
+  .scheme-preview__bar { display: block; height: 24%; background: var(--cfmsPreviewLightChrome); }
+  .scheme-preview__body { display: grid; height: 76%; grid-template-columns: 28% 1fr; gap: 8%; padding: 8%; background: var(--cfmsPreviewLightCanvas); }
+  .scheme-preview__body span { border-radius: 999px; background: var(--cfmsPreviewLightLine); }
+  .scheme-preview__body span:first-child { grid-row: 1 / 3; border-radius: 3px; background: var(--cfmsPreviewLightRail); }
+  .scheme-preview--dark { background: var(--cfmsPreviewDarkCanvas); }
+  .scheme-preview--dark .scheme-preview__bar { background: var(--cfmsPreviewDarkChrome); }
+  .scheme-preview--dark .scheme-preview__body { background: var(--cfmsPreviewDarkContent); }
+  .scheme-preview--dark .scheme-preview__body span { background: var(--cfmsPreviewDarkLine); }
+  .scheme-preview--dark .scheme-preview__body span:first-child { background: var(--cfmsPreviewDarkChrome); }
   .scheme-preview--system {
     position: relative;
     isolation: isolate;
-    border-color: rgb(82 94 108 / 0.68);
+    border-color: var(--cfmsPreviewSystemBorder);
     background:
-      radial-gradient(circle at 14% 12%, rgb(255 255 255 / 0.9), transparent 32%),
-      radial-gradient(circle at 86% 88%, rgb(52 64 80 / 0.9), transparent 36%),
+      radial-gradient(circle at 14% 12%, var(--cfmsPreviewSystemLightGlow), transparent 32%),
+      radial-gradient(circle at 86% 88%, var(--cfmsPreviewSystemDarkGlow), transparent 36%),
       linear-gradient(
         135deg,
-        #e8edf2 0 38%,
-        #d9e0e7 43%,
-        #aab4bf 48%,
-        #65717e 53%,
-        #323c48 58%,
-        #1a2028 66% 100%
+        var(--cfmsPreviewSystemLightStart) 0 38%,
+        var(--cfmsPreviewSystemLightEnd) 43%,
+        var(--cfmsPreviewSystemMiddleLight) 48%,
+        var(--cfmsPreviewSystemMiddleDark) 53%,
+        var(--cfmsPreviewSystemDarkStart) 58%,
+        var(--cfmsPreviewSystemDarkEnd) 66% 100%
       );
     box-shadow: 0 5px 16px rgb(0 0 0 / 0.18), inset 0 0 0 1px rgb(0 0 0 / 0.14);
   }
@@ -341,15 +341,15 @@
     aspect-ratio: 1;
     left: -10%;
     top: -32%;
-    background: rgb(255 255 255 / 0.72);
+    background: var(--cfmsPreviewSystemLightOrb);
   }
   .system-preview__orb--dark {
     width: 34%;
     aspect-ratio: 1;
     right: -7%;
     bottom: -35%;
-    border: 1px solid rgb(121 195 255 / 0.16);
-    background: rgb(38 48 62 / 0.72);
+    border: 1px solid var(--cfmsPreviewSystemOrbBorder);
+    background: var(--cfmsPreviewSystemDarkOrb);
   }
   .system-preview__window {
     position: absolute;
@@ -365,9 +365,9 @@
     left: 7%;
     top: 12%;
     z-index: 1;
-    border: 1px solid rgb(25 34 44 / 0.15);
-    color: #adb4bd;
-    background: #f8fafc;
+    border: 1px solid var(--cfmsPreviewWindowLightBorder);
+    color: var(--cfmsPreviewWindowLightLine);
+    background: var(--cfmsPreviewWindowLightBackground);
     box-shadow: 0 7px 16px rgb(25 34 44 / 0.2);
     transform: rotate(-2deg);
   }
@@ -375,9 +375,9 @@
     right: 7%;
     bottom: 11%;
     z-index: 2;
-    border: 1px solid rgb(255 255 255 / 0.13);
-    color: #586373;
-    background: #171c23;
+    border: 1px solid var(--cfmsPreviewWindowDarkBorder);
+    color: var(--cfmsPreviewWindowDarkLine);
+    background: var(--cfmsPreviewWindowDarkBackground);
     box-shadow: 0 8px 18px rgb(0 0 0 / 0.38);
     transform: rotate(2deg);
   }

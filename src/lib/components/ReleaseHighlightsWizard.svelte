@@ -336,7 +336,7 @@
     width: 1px;
     height: 1.15rem;
     flex: 0 0 1px;
-    background: var(--explorer-accent);
+    background: var(--colorCompoundBrandForeground1);
   }
 
   :global(.skip-action[data-fluent-owner="lib-components-release-highlights-wizard"]),
@@ -382,12 +382,16 @@
 
   :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]) {
     min-width: 8.25rem;
-    color: var(--explorer-background);
-    background: var(--explorer-accent);
+    color: var(--colorNeutralForegroundOnBrand);
+    background: var(--colorBrandBackground);
   }
 
   :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]:hover) {
-    background: color-mix(in srgb, var(--explorer-accent) 88%, var(--explorer-text));
+    background: var(--colorBrandBackgroundHover);
+  }
+
+  :global(.next-action[data-fluent-owner="lib-components-release-highlights-wizard"]:active) {
+    background: var(--colorBrandBackgroundPressed);
   }
 
   :global(.back-action[data-fluent-owner="lib-components-release-highlights-wizard"]:is(:disabled, [disabled])) {
@@ -490,7 +494,7 @@
 
   .progress-rail :global(:is(button[data-fluent-owner="lib-components-release-highlights-wizard"], .cfms-button[data-fluent-owner="lib-components-release-highlights-wizard"]).active[data-fluent-owner="lib-components-release-highlights-wizard"] span) {
     height: 3px;
-    background: var(--explorer-accent);
+    background: var(--colorCompoundBrandForeground1);
   }
 
   .navigation-actions {

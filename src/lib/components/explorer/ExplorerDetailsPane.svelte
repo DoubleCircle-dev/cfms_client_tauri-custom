@@ -240,7 +240,7 @@
   .explorer-details-resize-handle:hover::after,
   .explorer-details-resize-handle:focus-visible::after,
   .explorer-details-pane.is-resizing .explorer-details-resize-handle::after {
-    background: var(--explorer-accent);
+    background: var(--colorCompoundBrandForeground1);
   }
 
   .explorer-details-header {

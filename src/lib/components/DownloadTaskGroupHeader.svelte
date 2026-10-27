@@ -439,7 +439,7 @@
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--explorer-accent);
+    background: var(--colorCompoundBrandForeground1);
     transition: width 260ms var(--motion-easing-emphasized-decelerate);
   }
 

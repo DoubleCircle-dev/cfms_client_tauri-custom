@@ -99,16 +99,8 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    --disclaimer-background: #11161d;
-    --disclaimer-text: rgba(248, 250, 252, 0.88);
-    --disclaimer-text-strong: rgba(248, 250, 252, 0.9);
-    --disclaimer-text-muted: rgba(248, 250, 252, 0.78);
-    --disclaimer-divider: rgba(226, 232, 240, 0.25);
-    --disclaimer-button: #191e25;
-    --disclaimer-accent: #b9c5ff;
-    --disclaimer-outline: rgba(248, 250, 252, 0.24);
-    background: var(--disclaimer-background);
-    color: var(--disclaimer-text);
+    background: var(--cfmsDisclaimerBackground);
+    color: var(--cfmsDisclaimerText);
     font-family: var(--font-md3-serif);
   }
 
@@ -120,7 +112,7 @@
     min-height: 0;
     margin: 0 auto;
     padding: var(--flet-pad) var(--flet-pad) max(var(--flet-pad), var(--safe-area-bottom));
-    background: var(--disclaimer-background);
+    background: var(--cfmsDisclaimerBackground);
   }
 
   .disclaimer-header {
@@ -131,12 +123,12 @@
     display: block;
     width: var(--flet-icon);
     height: var(--flet-icon);
-    color: #fff04f;
+    color: var(--cfmsDisclaimerWarning);
   }
 
   h1 {
     margin: calc(var(--flet-gap) * 0.55) 0 0;
-    color: var(--disclaimer-text-strong);
+    color: var(--cfmsDisclaimerTextStrong);
     font-size: var(--flet-title);
     font-weight: 800;
     line-height: 1.15;
@@ -145,7 +137,7 @@
 
   .disclaimer-header p {
     margin: var(--flet-gap) 0 0;
-    color: var(--disclaimer-text);
+    color: var(--cfmsDisclaimerText);
     font-size: var(--flet-body);
     line-height: 1.45;
     letter-spacing: 0;
@@ -155,7 +147,7 @@
     flex: 0 0 auto;
     height: 1px;
     margin: var(--flet-gap) 0;
-    background: var(--disclaimer-divider);
+    background: var(--cfmsDisclaimerDivider);
   }
 
   .disclaimer-copy {
@@ -163,7 +155,7 @@
     min-height: 0;
     overflow-y: auto;
     padding-right: calc(var(--flet-gap) * 0.8);
-    color: var(--disclaimer-text-muted);
+    color: var(--cfmsDisclaimerTextMuted);
     font-size: var(--flet-body);
     line-height: 1.55;
     letter-spacing: 0;
@@ -201,7 +193,7 @@
 
   .disclaimer-copy::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background: var(--disclaimer-text-strong);
+    background: var(--cfmsDisclaimerTextStrong);
   }
 
   .disclaimer-copy::-webkit-scrollbar-track {
@@ -214,7 +206,7 @@
 
   .disclaimer-footer p {
     margin: 0;
-    color: var(--disclaimer-text-strong);
+    color: var(--cfmsDisclaimerTextStrong);
     font-size: var(--flet-body);
     font-weight: 800;
     line-height: 1.5;
@@ -250,8 +242,8 @@
   :global(.accept-button[data-fluent-owner="routes-connect-disclaimer-page"]) {
     flex: 0 0 min(100%, var(--flet-button-width));
     width: min(100%, var(--flet-button-width));
-    background: var(--disclaimer-button);
-    color: var(--disclaimer-accent);
+    background: var(--cfmsDisclaimerButton);
+    color: var(--cfmsDisclaimerAccent);
     box-shadow:
       0 12px 24px rgba(0, 0, 0, 0.28),
       inset 0 1px 0 rgba(255, 255, 255, 0.02);
@@ -261,8 +253,8 @@
     flex: 0 0 min(100%, var(--flet-button-width));
     width: min(100%, var(--flet-button-width));
     background: transparent;
-    color: var(--disclaimer-text-muted);
-    box-shadow: inset 0 0 0 1px var(--disclaimer-outline);
+    color: var(--cfmsDisclaimerTextMuted);
+    box-shadow: inset 0 0 0 1px var(--cfmsDisclaimerOutline);
   }
 
   :global(.accept-button[data-fluent-owner="routes-connect-disclaimer-page"]:hover),
@@ -296,14 +288,4 @@
     font-size: var(--flet-icon) !important;
   }
 
-  :global(html[data-theme='light']) .disclaimer-screen {
-    --disclaimer-background: #f3f3f3;
-    --disclaimer-text: #3f3f46;
-    --disclaimer-text-strong: #18181b;
-    --disclaimer-text-muted: #5d5d66;
-    --disclaimer-divider: rgba(0, 0, 0, 0.14);
-    --disclaimer-button: #d8eaff;
-    --disclaimer-accent: #005a9e;
-    --disclaimer-outline: rgba(0, 0, 0, 0.22);
-  }
 </style>

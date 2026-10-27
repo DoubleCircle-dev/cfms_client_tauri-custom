@@ -186,7 +186,7 @@
           <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-md3-surface-container-high">
             <div
               class="h-full rounded-full transition-all duration-300"
-              style="width: {(strength.score / 5) * 100}%; background: {strength.score <= 1 ? 'var(--md3-error, #ba1a1a)' : strength.score <= 3 ? '#f5a524' : 'var(--md3-primary, #6750a4)'};"
+              style="width: {(strength.score / 5) * 100}%; background: {strength.score <= 1 ? 'var(--colorStatusDangerForeground1)' : strength.score <= 3 ? 'var(--colorStatusWarningForeground1)' : 'var(--colorStatusSuccessForeground1)'};"
             ></div>
           </div>
           <span class="w-16 text-right text-xs text-md3-on-surface-variant">{strength.label}</span>

@@ -3,6 +3,8 @@ import type { AppearancePreference } from '$lib/api';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '@tauri-apps/api/core';
 import { setWindowBackdrop } from '$lib/api/core';
+import { colorPalettes, DEFAULT_PALETTE_ID } from './fluent/palettes';
+import { paletteWindowAppearance } from './fluent/theme';
 import {
   DEFAULT_APPEARANCE,
   normalizeAppearance,
@@ -114,21 +116,25 @@ class AppearanceStore {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
     root.dataset.theme = this.resolvedColorScheme;
+    root.dataset.palette = DEFAULT_PALETTE_ID;
     root.dataset.colorSchemePreference = this.preference.color_scheme;
     root.dataset.reduceMotion = String(reduceMotion);
     root.style.colorScheme = this.resolvedColorScheme;
     const scheme = this.resolvedColorScheme;
     const revision = ++this.appearanceRevision;
     void import('./fluent/runtime').then(({ applyFluentTheme }) => {
-      if (revision === this.appearanceRevision) applyFluentTheme(scheme, reduceMotion);
+      if (revision === this.appearanceRevision) applyFluentTheme({ paletteId: DEFAULT_PALETTE_ID, mode: scheme, reduceMotion });
     });
     root.dataset.windowBackdrop = 'solid';
     if (!isTauri()) return;
-    const enableMaterial = !this.forcedColorsMediaQuery?.matches && !this.reducedTransparencyMediaQuery?.matches;
+    const { enabled, solidColor } = paletteWindowAppearance(
+      colorPalettes[DEFAULT_PALETTE_ID], scheme,
+      !this.forcedColorsMediaQuery?.matches && !this.reducedTransparencyMediaQuery?.matches,
+    );
     this.nativeAppearanceUpdate = this.nativeAppearanceUpdate.then(async () => {
       if (revision !== this.appearanceRevision) return;
       await getCurrentWindow().setTheme(scheme);
-      const mode = await setWindowBackdrop(scheme, enableMaterial);
+      const mode = await setWindowBackdrop(scheme, enabled, solidColor);
       if (revision === this.appearanceRevision) root.dataset.windowBackdrop = mode;
     }).catch(() => {
       // The opaque CSS canvas is already active if native material is unavailable.

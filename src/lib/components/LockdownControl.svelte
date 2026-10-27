@@ -235,13 +235,17 @@
   }
 
   .lockdown-primary-button[data-confirming='true'] {
-    color: var(--explorer-on-accent, white);
-    border-color: var(--explorer-accent);
-    background: var(--explorer-accent);
+    color: var(--colorNeutralForegroundOnBrand);
+    border-color: var(--colorBrandBackground);
+    background: var(--colorBrandBackground);
   }
 
   .lockdown-primary-button[data-confirming='true']:hover:not(:is(:disabled, [disabled])) {
-    background: color-mix(in srgb, var(--explorer-accent) 88%, var(--explorer-text));
+    background: var(--colorBrandBackgroundHover);
+  }
+
+  .lockdown-primary-button[data-confirming='true']:active:not(:is(:disabled, [disabled])) {
+    background: var(--colorBrandBackgroundPressed);
   }
 
   @keyframes reason-entry-in {

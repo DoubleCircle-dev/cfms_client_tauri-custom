@@ -60,6 +60,7 @@
   --explorer-border-strong: var(--colorNeutralStroke1);
   --explorer-text: var(--colorNeutralForeground1);
   --explorer-text-muted: var(--colorNeutralForeground3);
+  /* Legacy accent means text. Fills/graphics use their Fluent roles directly. */
   --explorer-accent: var(--colorBrandForeground1);
   --explorer-accent-soft: var(--colorBrandBackground2);
   --explorer-info: var(--colorBrandForeground1);

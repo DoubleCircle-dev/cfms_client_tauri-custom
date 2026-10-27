@@ -200,10 +200,10 @@
                 class="h-full rounded-full transition-all duration-300"
                 style="width: {(strength.score / 5) * 100}%;
                        background: {strength.score <= 1
-                         ? 'var(--color-md3-error, #e5484d)'
+                         ? 'var(--colorStatusDangerForeground1)'
                          : strength.score <= 3
-                         ? '#f5a524'
-                         : 'var(--color-md3-primary, #7c9cff)'};"
+                         ? 'var(--colorStatusWarningForeground1)'
+                         : 'var(--colorStatusSuccessForeground1)'};"
               ></div>
             </div>
             <span class="text-xs text-md3-on-surface-variant w-16 text-right">{strength.label}</span>

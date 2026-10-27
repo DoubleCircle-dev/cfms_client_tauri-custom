@@ -679,7 +679,9 @@
   .explorer-account-summary { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 0.7rem; padding: 0.65rem; }
   .explorer-account-menu .explorer-account-avatar { position: relative; display: grid; width: 42px; height: 42px; place-items: center; overflow: visible; border-radius: 999px; padding: 0; transition: transform 140ms ease, box-shadow 140ms ease; }
   .explorer-account-menu button.explorer-account-avatar:hover { transform: scale(1.04); box-shadow: 0 0 0 3px color-mix(in srgb, var(--explorer-accent) 22%, transparent); }
-  .explorer-account-avatar-edit { position: absolute; right: -2px; bottom: -2px; display: grid; width: 17px; height: 17px; place-items: center; border: 2px solid var(--explorer-surface-raised); border-radius: 999px; color: var(--explorer-background); background: var(--explorer-accent); }
+  .explorer-account-avatar-edit { position: absolute; right: -2px; bottom: -2px; display: grid; width: 17px; height: 17px; place-items: center; border: 2px solid var(--explorer-surface-raised); border-radius: 999px; color: var(--colorNeutralForegroundOnBrand); background: var(--colorBrandBackground); }
+  .explorer-account-avatar-edit:hover { background: var(--colorBrandBackgroundHover); }
+  .explorer-account-avatar-edit:active { background: var(--colorBrandBackgroundPressed); }
   .explorer-account-identity { display: grid; min-width: 0; }
   .explorer-account-identity strong, .explorer-account-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .explorer-account-identity strong { font-size: 0.82rem; font-weight: 650; }
