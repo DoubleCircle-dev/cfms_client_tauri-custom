@@ -2,10 +2,16 @@
   import MdOutlinedField from '$lib/components/MdOutlinedField.svelte';
   import FluentButton from '$lib/components/FluentButton.svelte';
   import { goto } from '$app/navigation';
-  import { tick } from 'svelte';
-  import { _ as t } from 'svelte-i18n';
-  import { renameUser } from '$lib/api';
-  import { authStore, notificationStore } from '$lib/stores.svelte';
+  import { tick, untrack } from 'svelte';
+  import { locale, _ as t } from 'svelte-i18n';
+  import { getUserInfo, renameUser, serverErrorStatus, type ManagedUserInfo } from '$lib/api';
+  import { authStore, notificationStore, serverStateStore } from '$lib/stores.svelte';
+  import { canSetOwnAvatar } from '$lib/avatar-permissions';
+  import { formatAccountTimestamp } from '$lib/account-profile';
+  import { copyText } from '$lib/clipboard';
+  import AccountPermissions from '$lib/components/AccountPermissions.svelte';
+  import UserAvatarPicker from '$lib/components/UserAvatarPicker.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import AvatarPreview from '$lib/components/AvatarPreview.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
@@ -18,21 +24,110 @@
   let nicknameBusy = $state(false);
   let status = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let info = $state<ManagedUserInfo | null>(null);
+  let loading = $state(false);
+  let loadError = $state<string | null>(null);
+  let updatedAt = $state<number | null>(null);
+  let showAvatarPicker = $state(false);
+  let avatarButton: HTMLButtonElement | undefined = $state();
+  let requestSequence = 0;
+  let accountGeneration = 0;
+  let nicknameWriteVersion = 0;
+  const accountScope = $derived(authStore.isLoggedIn && authStore.userId
+    ? JSON.stringify([serverStateStore.remoteAddress, authStore.userId]) : null);
+  const displayName = $derived(info?.nickname?.trim() || info?.username || authStore.displayName || authStore.username || $t('common.unknown'));
+  const canChangeAvatar = $derived(authStore.isLoggedIn && canSetOwnAvatar(authStore.permissions));
+  const profileFields = $derived(info ? [
+    { label: $t('settings.account.username'), value: info.username },
+    { label: $t('settings.account.accountStatus'), value: $t(info.status === 'active' ? 'manage.statusActive' : 'manage.statusDisabled') },
+    { label: $t('settings.account.createdAt'), value: date(info.created_time) },
+    { label: $t('settings.account.lastLogin'), value: date(info.last_login) },
+    { label: $t('settings.account.passwordModifiedAt'), value: date(info.passwd_last_modified) },
+  ] : []);
   const cleanNickname = $derived(nicknameInput.trim() || null);
   const nicknameCharacterCount = $derived(Array.from(nicknameInput.trim()).length);
   const nicknameTooLong = $derived(nicknameCharacterCount > NICKNAME_MAX_LENGTH);
   const nicknameChanged = $derived.by(() => {
     const username = authStore.username;
     if (!username) return false;
-    return (cleanNickname ?? username) !== (authStore.displayName ?? username);
+    return (cleanNickname ?? username) !== displayName;
   });
   const canSaveNickname = $derived(
     authStore.isLoggedIn
+      && serverStateStore.connected
       && Boolean(authStore.username)
       && nicknameChanged
       && !nicknameTooLong
       && !nicknameBusy,
   );
+  $effect(() => {
+    const scope = accountScope;
+    untrack(() => {
+      accountGeneration += 1;
+      info = null;
+      updatedAt = null;
+      loadError = null;
+      loading = false;
+      showAvatarPicker = false;
+      editingNickname = false;
+      nicknameInput = '';
+      nicknameBusy = false;
+    });
+    return () => { requestSequence += 1; };
+  });
+
+  $effect(() => {
+    const scope = accountScope;
+    const connected = serverStateStore.connected;
+    const ready = !authStore.postLoginPending;
+    if (scope && connected && ready) untrack(() => { void refreshProfile(); });
+    else untrack(() => { loading = false; showAvatarPicker = false; });
+    return () => { requestSequence += 1; };
+  });
+
+  function date(value: number | null | undefined) {
+    return formatAccountTimestamp(value, $locale ?? 'zh-CN', $t('settings.account.notProvided'));
+  }
+
+  async function refreshProfile() {
+    const scope = accountScope;
+    const userId = authStore.userId;
+    if (!scope || !userId || !serverStateStore.connected || authStore.postLoginPending || loading) return;
+    const sequence = ++requestSequence;
+    const nicknameVersion = nicknameWriteVersion;
+    loading = true;
+    loadError = null;
+    try {
+      const result = await getUserInfo({ userId });
+      if (sequence !== requestSequence || scope !== accountScope) return;
+      if (result.user_id !== userId) throw new Error($t('settings.account.invalidProfile'));
+      // A read started before a successful nickname write must not undo that write.
+      info = nicknameVersion === nicknameWriteVersion ? result : { ...result, nickname: authStore.nickname };
+      updatedAt = Date.now() / 1000;
+    } catch (err) {
+      if (sequence !== requestSequence || scope !== accountScope) return;
+      loadError = serverErrorStatus(err) === 403
+        ? $t('settings.account.profileDenied') : formatUserFacingError(err);
+    } finally {
+      if (sequence === requestSequence && scope === accountScope) loading = false;
+    }
+  }
+
+  async function copyUserId() {
+    if (!info) return;
+    try {
+      await copyText(info.user_id);
+      notificationStore.success($t('settings.account.userIdCopied'));
+    } catch {
+      notificationStore.error($t('manage.userIdCopyFailed'));
+    }
+  }
+
+  async function closeAvatarPicker() {
+    showAvatarPicker = false;
+    await tick();
+    avatarButton?.focus({ preventScroll: true });
+  }
   $effect(() => {
     if (!status) return;
     notificationStore.success(status, 5000);
@@ -47,7 +142,7 @@
 
   async function beginNicknameEdit() {
     if (!authStore.isLoggedIn || !authStore.username || nicknameBusy) return;
-    nicknameInput = authStore.displayName ?? authStore.username;
+    nicknameInput = displayName;
     editingNickname = true;
     await tick();
     nicknameInputElement?.focus();
@@ -69,32 +164,40 @@
   async function saveNickname() {
     const username = authStore.username;
     if (!canSaveNickname || !username) return;
-
+    const scope = accountScope;
+    const generation = accountGeneration;
+    const nickname = cleanNickname;
     nicknameBusy = true;
     try {
-      const success = await renameUser(authStore.userId!, cleanNickname);
+      const success = await renameUser(authStore.userId!, nickname);
+      if (scope !== accountScope || generation !== accountGeneration) return;
       if (!success) throw new Error($t('settings.account.nicknameUpdateFailed'));
 
       if (authStore.isLoggedIn && authStore.username === username) {
-        authStore.nickname = cleanNickname ?? username;
+        nicknameWriteVersion += 1;
+        authStore.nickname = nickname ?? username;
+        if (info) info = { ...info, nickname };
       }
       nicknameInput = '';
       editingNickname = false;
       status = $t('settings.account.nicknameUpdated');
     } catch (err) {
-      error = formatUserFacingError(err);
+      if (scope === accountScope && generation === accountGeneration) error = formatUserFacingError(err);
     } finally {
-      nicknameBusy = false;
+      if (scope === accountScope && generation === accountGeneration) nicknameBusy = false;
     }
   }
 
 </script>
 
+{#if authStore.isLoggedIn}
 <div class="workspace-page settings-page-shell account-settings-page">
   <SettingsPageHeader
     title={$t('settings.account.title')}
     description={$t('settings.account.description')}
     icon="accountCircle"
+    onRefresh={refreshProfile}
+    refreshDisabled={loading || !serverStateStore.connected || authStore.postLoginPending}
   />
 
   <div class="account-sections">
@@ -103,25 +206,30 @@
     aria-label={$t('settings.account.nicknameLabel')}
   >
     <div class="identity-summary">
+      {#if canChangeAvatar}
+        <button bind:this={avatarButton} type="button" class="identity-avatar identity-avatar--editable"
+          title={$t('avatar.change')} aria-label={$t('avatar.change')}
+          disabled={!serverStateStore.connected}
+          onclick={() => { showAvatarPicker = true; }}>
+          <AvatarPreview username={authStore.username ?? ''} size={64} avatarPath={authStore.avatarPath} />
+          <span class="avatar-edit" aria-hidden="true"><Icon name="edit" size="14px" /></span>
+        </button>
+      {:else}
       <div class="identity-avatar">
         <AvatarPreview
           username={authStore.username ?? $t('common.unknownUser')}
-          size={52}
+          size={64}
           avatarPath={authStore.avatarPath}
         />
       </div>
+      {/if}
 
       <div class="identity-copy">
-        <h2>{authStore.displayName ?? authStore.username ?? $t('common.unknown')}</h2>
-        {#if authStore.username && authStore.displayName !== authStore.username}
+        <h2>{displayName}</h2>
+        {#if authStore.username}
           <p class="identity-username">@{authStore.username}</p>
         {/if}
-        {#if authStore.groups.length > 0}
-          <p class="identity-groups">
-            <Icon name="groups" size="15px" />
-            <span>{authStore.groups.join(', ')}</span>
-          </p>
-        {/if}
+        {#if !canChangeAvatar}<p class="avatar-hint">{$t('settings.account.avatarReadOnly')}</p>{/if}
       </div>
 
       {#if !editingNickname}
@@ -129,7 +237,7 @@
           type="button"
           title={$t('settings.account.editNickname')}
           aria-label={$t('settings.account.editNickname')}
-          disabled={!authStore.isLoggedIn || !authStore.username}
+          disabled={!authStore.isLoggedIn || !authStore.username || !serverStateStore.connected}
           onclick={() => void beginNicknameEdit()}
           appearance="subtle"
           class="action-button action-button--secondary identity-edit-button"
@@ -195,7 +303,7 @@
             aria-label={$t('common.cancel')}
             disabled={nicknameBusy}
             onclick={cancelNicknameEdit}
-            appearance="subtle"
+            appearance="outline"
             class="action-button action-button--secondary"
           >
             <Icon name="close" size="18px" />
@@ -206,7 +314,7 @@
             title={$t(nicknameBusy ? 'common.saving' : 'common.save')}
             aria-label={$t(nicknameBusy ? 'common.saving' : 'common.save')}
             disabled={!canSaveNickname}
-            appearance="subtle"
+            appearance="primary"
             class="action-button action-button--primary"
           >
             {#if nicknameBusy}
@@ -221,6 +329,36 @@
     {/if}
   </section>
 
+  <div class="profile-status" aria-live="polite">
+    {#if loading}<p role="status"><span aria-hidden="true"><ProgressRing size={16} label={$t('common.loading')} /></span>{$t('settings.account.loading')}</p>{/if}
+    {#if !serverStateStore.connected}<p role="status">{$t('settings.account.offline')}</p>{/if}
+    {#if loadError}
+      <div class="profile-error" role="alert">
+        <div class="cfms-heading-copy"><strong>{$t(info ? 'settings.account.refreshFailed' : 'settings.account.loadFailed')}</strong><p>{loadError}</p></div>
+        <FluentButton appearance="outline" disabled={loading || !serverStateStore.connected} onclick={refreshProfile}>{$t('settings.account.retry')}</FluentButton>
+      </div>
+    {/if}
+    {#if updatedAt}<p>{$t('settings.account.lastUpdated', { values: { time: date(updatedAt) } })}</p>{/if}
+  </div>
+
+  {#if info}
+    <section class="account-section profile-section" aria-labelledby="account-basic-title">
+      <h2 id="account-basic-title">{$t('settings.account.basicInfo')}</h2>
+      <dl class="profile-fields">
+        <div class="profile-id"><dt>{$t('settings.account.userId')}</dt><dd><code>{info.user_id}</code><IconButton icon="contentCopy" label={$t('manage.copyUserId')} onclick={copyUserId} /></dd></div>
+        {#each profileFields as field}<div><dt>{field.label}</dt><dd>{field.value}</dd></div>{/each}
+      </dl>
+      <p class="section-hint">{$t('settings.account.lastLoginHint')}</p>
+    </section>
+    <section class="account-section profile-section" aria-labelledby="account-groups-title">
+      <h2 id="account-groups-title">{$t('settings.account.groups')} <span class="section-count">{info.groups?.length ?? 0}</span></h2>
+      {#if info.groups?.length}
+        <ul class="group-list">{#each [...info.groups].sort() as group (group)}<li><Icon name="groups" size="18px" /><span>{group}</span></li>{/each}</ul>
+      {:else}<p class="section-hint">{$t('settings.account.noGroups')}</p>{/if}
+    </section>
+    <div class="account-section profile-section"><AccountPermissions {info} /></div>
+  {/if}
+
   <section class="account-section authentication-link">
     <div class="cfms-heading-copy"><h2>{$t('authManagement.title')}</h2><p>{$t('authManagement.description')}</p></div>
     <FluentButton data-fluent-owner="routes-home-settings-account-page"
@@ -232,204 +370,68 @@
   </section>
   </div>
 </div>
+{#if showAvatarPicker && canChangeAvatar && serverStateStore.connected}
+  <UserAvatarPicker onClose={() => { void closeAvatarPicker(); }} />
+{/if}
+{/if}
 
 <style>
-  .account-settings-page {
-    gap: 16px;
+  .account-settings-page { width: min(100%, 960px); gap: 16px; color: var(--colorNeutralForeground1); }
+  .account-sections { min-width: 0; border-top: 1px solid var(--colorNeutralStroke2); }
+  .account-section { min-width: 0; }
+  .profile-section, .authentication-link { border-top: 1px solid var(--colorNeutralStroke2); padding-block: 24px; }
+  .profile-section { display: grid; gap: 16px; }
+  .profile-section h2 { margin: 0; font: 600 16px/22px var(--fontFamilyBase); }
+  .identity-summary { display: grid; min-width: 0; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; padding-block: 24px; }
+  .identity-avatar { position: relative; display: grid; border-radius: 50%; padding: 0; }
+  .identity-avatar--editable { cursor: pointer; transition: background-color 140ms ease; }
+  .identity-avatar--editable:hover { background: var(--colorSubtleBackgroundHover); }
+  .identity-avatar--editable:disabled { cursor: not-allowed; opacity: 0.6; }
+  .avatar-edit { position: absolute; right: -2px; bottom: -2px; display: grid; width: 22px; height: 22px; place-items: center; border: 2px solid var(--colorNeutralBackground1); border-radius: 50%; background: var(--colorBrandBackground); color: var(--colorNeutralForegroundOnBrand); }
+  .identity-copy { min-width: 0; }
+  .identity-copy h2, .identity-copy p { margin: 0; overflow-wrap: anywhere; }
+  .identity-copy h2 { font: 600 20px/26px var(--fontFamilyBase); }
+  .identity-username, .avatar-hint { margin-top: 4px !important; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
+  .nickname-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; padding-bottom: 24px; }
+  .nickname-editor__field { min-width: 0; }
+  .field-with-count { position: relative; }
+  .text-field { width: 100%; min-height: 32px; padding: 6px 12px; color: var(--colorNeutralForeground1); font: 400 14px/20px var(--fontFamilyBase); }
+  .text-field--counted { padding-inline-end: 72px; }
+  .text-field:disabled { cursor: not-allowed; }
+  .field-count { position: absolute; top: 50%; right: 12px; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyMonospace); transform: translateY(-50%); }
+  .field-count--error, .field-help.field-help--error { color: var(--colorStatusDangerForeground1); }
+  .field-help { display: block; margin-top: 4px; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
+  .nickname-editor__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]) { flex: none; font: 400 14px/20px var(--fontFamilyBase); }
+  .profile-status { display: grid; gap: 8px; padding-bottom: 16px; }
+  .profile-status p { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
+  .profile-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--colorStatusDangerBorder1); border-radius: 8px; }
+  .profile-error .cfms-heading-copy { flex: 1; min-width: min(100%, 240px); }
+  .profile-error strong { color: var(--colorStatusDangerForeground1); font: 600 14px/20px var(--fontFamilyBase); }
+  .profile-error p { overflow-wrap: anywhere; }
+  .profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 32px; margin: 0; }
+  .profile-fields > div { min-width: 0; }
+  .profile-fields dt, .section-hint, .section-count { color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
+  .profile-fields dd { margin: 4px 0 0; overflow-wrap: anywhere; font: 400 14px/20px var(--fontFamilyBase); }
+  .profile-fields .profile-id { grid-column: 1 / -1; }
+  .profile-id dd { display: flex; align-items: center; gap: 12px; }
+  .profile-id code { min-width: 0; font-family: var(--fontFamilyMonospace); overflow-wrap: anywhere; }
+  .section-hint { margin: 0; max-width: 70ch; }
+  .section-count { margin-inline-start: 8px; font-variant-numeric: tabular-nums; }
+  .group-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .group-list li { display: flex; align-items: baseline; gap: 8px; min-width: 0; font: 400 14px/20px var(--fontFamilyBase); }
+  .group-list span { overflow-wrap: anywhere; min-width: 0; }
+  .authentication-link { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .authentication-link h2 { margin: 0; font: 600 16px/22px var(--fontFamilyBase); }
+  .authentication-link p { margin: 0; max-width: 70ch; color: var(--colorNeutralForeground3); font: 400 12px/16px var(--fontFamilyBase); }
+  @media (max-width: 640px) {
+    .profile-fields, .nickname-editor { grid-template-columns: minmax(0, 1fr); }
+    .identity-summary { grid-template-columns: auto minmax(0, 1fr); }
+    :global(.identity-edit-button[data-fluent-owner="routes-home-settings-account-page"]) { grid-column: 2; justify-self: start; }
+    .authentication-link { flex-wrap: wrap; }
+    .profile-section, .authentication-link { padding-block: 20px; }
   }
-
-  .account-sections {
-    border-top: 1px solid var(--color-md3-outline);
-  }
-
-  .account-section + .account-section {
-    border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
-  }
-
-  .identity-panel {
-    min-width: 0;
-  }
-
-  .identity-summary {
-    display: grid;
-    min-width: 0;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    padding: 0.9rem 0;
-  }
-
-  .identity-avatar {
-    display: grid;
-    border-radius: 9999px;
-  }
-
-  .identity-copy {
-    min-width: 0;
-  }
-
-  .identity-copy h2,
-  .identity-copy p {
-    margin: 0;
-  }
-
-  .identity-copy h2 {
-    overflow: hidden;
-    color: var(--color-md3-on-surface);
-    font: 700 16px/22px var(--font-md3-sans);
-    letter-spacing: -0.012em;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .identity-username,
-  .identity-groups {
-    overflow: hidden;
-    color: var(--color-md3-on-surface-variant);
-    font-size: 12px;
-    line-height: 1.45;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .identity-username {
-    margin-top: 0.2rem !important;
-  }
-
-  .identity-groups {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 0.35rem !important;
-  }
-
-  .identity-groups span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .nickname-editor {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 12px;
-    border-top: 1px solid color-mix(in srgb, var(--color-md3-outline) 72%, transparent);
-    padding: 0.9rem 0 1rem;
-  }
-
-  .nickname-editor__field {
-    min-width: 0;
-  }
-
-  .field-with-count {
-    position: relative;
-  }
-
-  .text-field {
-    width: 100%;
-    min-height: 42px;
-    padding: 0.58rem 0.75rem;
-    color: var(--color-md3-on-surface);
-    font: 400 14px/20px var(--font-md3-sans);
-  }
-
-  .text-field--counted {
-    padding-inline-end: 4.5rem;
-  }
-
-  .text-field:is(:disabled, [disabled]) {
-    cursor: not-allowed;
-    opacity: 0.58;
-  }
-
-  .field-count {
-    position: absolute;
-    top: 50%;
-    right: 0.75rem;
-    color: var(--color-md3-on-surface-variant);
-    font: 0.68rem/1 var(--font-md3-mono);
-    font-variant-numeric: tabular-nums;
-    transform: translateY(-50%);
-  }
-
-  .field-count--error,
-  .field-help--error {
-    color: var(--color-md3-error);
-  }
-
-  .field-help {
-    display: block;
-    margin-top: 0.35rem;
-    color: var(--color-md3-on-surface-variant);
-    font-size: 12px;
-    line-height: 1.45;
-  }
-
-  .nickname-editor__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .nickname-editor__actions {
-    min-height: 42px;
-    align-items: center;
-  }
-
-  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]) {
-    display: inline-flex;
-    min-height: 34px;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    border: 1px solid transparent;
-    border-radius: var(--borderRadiusMedium);
-    padding: 0.42rem 0.72rem;
-    font: 600 12px/16px var(--font-md3-sans);
-    transition:
-      border-color var(--motion-duration-short3) var(--motion-easing-standard),
-      color var(--motion-duration-short3) var(--motion-easing-standard),
-      background-color var(--motion-duration-short3) var(--motion-easing-standard),
-      transform var(--motion-duration-short3) var(--motion-easing-standard);
-  }
-
-  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]:hover:not(:is(:disabled, [disabled]))) {
-    transform: translateY(-1px);
-  }
-
-  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]:active:not(:is(:disabled, [disabled]))) {
-    transform: none;
-  }
-
-  :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]:is(:disabled, [disabled])) {
-    cursor: not-allowed;
-    opacity: 0.44;
-  }
-
-  :global(.action-button--primary[data-fluent-owner="routes-home-settings-account-page"]) {
-    color: var(--color-md3-on-primary);
-    background: var(--color-md3-primary);
-  }
-
-  :global(.action-button--primary[data-fluent-owner="routes-home-settings-account-page"]:hover:not(:is(:disabled, [disabled]))) {
-    background: var(--color-md3-primary-emphasis);
-  }
-
-  :global(.action-button--secondary[data-fluent-owner="routes-home-settings-account-page"]) {
-    border-color: var(--color-md3-outline);
-    color: var(--color-md3-on-surface);
-    background: transparent;
-  }
-
-  :global(.action-button--secondary[data-fluent-owner="routes-home-settings-account-page"]:hover:not(:is(:disabled, [disabled]))) {
-    background: var(--color-md3-surface-container-high);
-  }
-
-  .authentication-link { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 1.25rem 0; }
-  .authentication-link h2 { margin: 0; font-size: 14px; font-weight: 600; }
-  .authentication-link p { font-size: 12px; line-height: 16px; color: var(--color-md3-on-surface-variant); margin: 0; }
-  @media (max-width: 640px) { .nickname-editor { grid-template-columns: 1fr; } .identity-summary { grid-template-columns: auto minmax(0, 1fr); } :global(.identity-edit-button[data-fluent-owner="routes-home-settings-account-page"]) { grid-column: 2; justify-self: start; } .authentication-link { flex-wrap: wrap; } }
-  @media (pointer: coarse) { :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]) { min-height: 44px; } }
-  @media (prefers-reduced-motion: reduce) { :global(.action-button[data-fluent-owner="routes-home-settings-account-page"]), .text-field { transition: none; } }
+  @media (pointer: coarse) { .text-field { min-height: 44px; font-size: 16px; } }
+  @media (prefers-reduced-motion: reduce) { .identity-avatar--editable { transition: none; } }
+  @media (forced-colors: active) { .avatar-edit { background: Highlight; color: HighlightText; border-color: Canvas; } }
 </style>

@@ -28,12 +28,14 @@
   let {
     title,
     description,
+    selectionBusy = false,
     documentFilter = () => true,
     onSelect,
     onCancel,
   }: {
     title: string;
     description?: string;
+    selectionBusy?: boolean;
     documentFilter?: (document: ServerDocumentEntry) => boolean;
     onSelect: (document: ServerDocumentEntry) => void;
     onCancel: () => void;
@@ -61,6 +63,7 @@
   });
 
   async function loadDirectory(folderId: string | null): Promise<boolean> {
+    if (selectionBusy) return false;
     loading = true;
     loadError = null;
 
@@ -127,10 +130,14 @@
   minWidth={520}
   minHeight={420}
   closeLabel={$t('common.close')}
+  dismissible={!selectionBusy}
   onClose={onCancel}
 >
-  <div class="flex h-full min-h-0 max-h-[78vh] flex-col" style:--picker-row-height={`${rowHeight}px`}>
+  <div class="flex h-full min-h-0 max-h-[78vh] flex-col" aria-busy={selectionBusy} style:--picker-row-height={`${rowHeight}px`}>
     <div class="shrink-0 space-y-3 border-b border-md3-outline/60 p-5">
+      {#if selectionBusy}
+        <p class="selection-busy" role="status"><span aria-hidden="true"><ProgressRing size={16} label={$t('common.saving')} /></span>{$t('common.saving')}</p>
+      {/if}
       {#if description}
         <p class="max-w-[70ch] text-xs leading-5 text-md3-on-surface-variant">
           {description}
@@ -147,7 +154,7 @@
           <FluentButton data-fluent-owner="lib-components-server-document-picker"
             type="button"
             title={$t('files.goToRoot')}
-            disabled={loading || currentFolderId === null}
+            disabled={loading || selectionBusy || currentFolderId === null}
             onclick={navigateToRoot}
             appearance="subtle"
             class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
@@ -159,7 +166,7 @@
           <FluentButton data-fluent-owner="lib-components-server-document-picker"
             type="button"
             title={$t('common.refresh')}
-            disabled={loading}
+            disabled={loading || selectionBusy}
             onclick={() => loadDirectory(currentFolderId)}
             appearance="subtle"
             class="rounded p-2 text-md3-on-surface-variant transition-colors hover:bg-md3-surface-container-high hover:text-md3-on-surface disabled:cursor-not-allowed disabled:opacity-45"
@@ -199,6 +206,7 @@
           {#if parentId !== null}
             <button
               type="button"
+              disabled={selectionBusy}
               class="server-picker-row server-picker-parent"
               onclick={navigateToParent}
             >
@@ -227,6 +235,7 @@
               {#if row.kind === 'folder'}
                 <button data-fluent-owner="lib-components-server-document-picker"
                   type="button"
+                  disabled={selectionBusy}
                   onclick={() => navigateToFolder(row.folder)}
 
                   class="server-picker-row"
@@ -238,6 +247,7 @@
               {:else}
                 <button data-fluent-owner="lib-components-server-document-picker"
                   type="button"
+                  disabled={selectionBusy}
                   onclick={() => onSelect(row.document)}
 
                   class="server-picker-row server-picker-document"
@@ -258,6 +268,8 @@
 </ModalFrame>
 
 <style>
+  .selection-busy { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--colorNeutralForeground2); font: 400 14px/20px var(--fontFamilyBase); }
+  .server-picker-row:disabled { cursor: wait; color: var(--colorNeutralForegroundDisabled); }
   .server-picker-row {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);

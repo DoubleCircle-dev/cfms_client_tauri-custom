@@ -22,6 +22,7 @@
   import { initEventListeners } from "$lib/events";
   import { initI18n } from "$lib/i18n";
   import { initNavigationHistory, navigateUp, parentRouteFor } from "$lib/navigation";
+  import { isAccountProfileRoute, isPublicUtilityRoute as isPublicHomeRoute } from '$lib/public-utility-navigation';
   import { appUpdateState } from "$lib/app-update-state.svelte";
   import { releaseHighlightsState } from "$lib/release-highlights/state.svelte";
   import { appearanceStore } from "$lib/appearance.svelte";
@@ -85,14 +86,8 @@
   const CONNECTION_ROUTES = ["/login"];
   // Lockdown override route.
   const LOCKDOWN_ROUTE = "/lockdown";
-  // Home routes that are intentionally reachable from /connect before login.
-  const PUBLIC_HOME_ROUTES = ["/home/about", "/home/settings"];
   // Auth-protected route prefix.
   const HOME_PREFIX = "/home";
-
-  function isPublicHomeRoute(path: string) {
-    return PUBLIC_HOME_ROUTES.some((route) => path === route || path.startsWith(`${route}/`));
-  }
 
   const showRootLockdownBanner = $derived(
     serverStateStore.lockdown && page.url.pathname !== LOCKDOWN_ROUTE,
@@ -178,6 +173,11 @@
       path !== "/connect/disclaimer"
     ) {
       goto("/connect/disclaimer", { replaceState: true });
+      return;
+    }
+
+    if (isAccountProfileRoute(path) && !authStore.isLoggedIn && !authStore.postLoginPending) {
+      goto('/home/settings', { replaceState: true });
       return;
     }
 
