@@ -1410,21 +1410,40 @@
     return ids;
   });
   const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
+  const pendingDeletions = $derived(fileUpdateTracker.pendingDeletions);
   let queueBusy = $state(false);
 
-  /** Manually triggered: check server changes first (also resets the auto-check
-   *  countdown), then immediately download/update everything found. */
+  /** Stage a full-tree reconciliation, ask once, then apply the confirmed plan. */
   async function syncAllFiles() {
     if (syncAllCoordinator.busy) return;
     error = null;
     try {
       await detectAndQueueServerChanges();
       fileUpdateTracker.resetPollingCountdown();
+      if (pendingUpdates.length === 0 && pendingDeletions.length === 0) {
+        notificationStore.success($t('files.syncAllUpToDate'), 3000);
+        return;
+      }
+      const confirmed = await dialogStore.confirm({
+        title: $t('files.syncPlanConfirmTitle'),
+        message: $t('files.syncPlanConfirmMessage', {
+          values: { updates: pendingUpdates.length, deletions: pendingDeletions.length },
+        }),
+        confirmLabel: $t('files.confirmQueuedUpdates'),
+        cancelLabel: $t('common.cancel'),
+      });
+      if (!confirmed) return;
       await refreshDownloadedFileIds();
       const result = await syncFiles({
+        queue: pendingUpdates.map((item) => ({
+          docId: item.id,
+          path: item.downloadPath,
+          sha256: item.sha256,
+        })),
+        stagedDeletions: pendingDeletions,
         // The "overwrite" switch means "replace conflicting files without asking".
         overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
-        confirmDeletes: true,
+        confirmDeletes: false,
         onStatus: (msg, level) => { statusLevel = level; status = msg; },
         onError: (msg) => { error = msg; },
         onRefresh: () => refreshDownloadedFileIds(),
@@ -1454,6 +1473,11 @@
       }
       if (result.denied > 0) {
         parts.push($t('files.checkHistoryDenied', { values: { count: result.denied } }));
+      }
+      if (result.deletions.length > 0) {
+        parts.push($t('files.serverChangesDeletedFiles', {
+          values: { count: result.deletions.length },
+        }));
       }
       const scope = $t('files.checkHistoryScope', {
         values: { dirs: result.dirs, docs: result.docs },
@@ -1497,28 +1521,37 @@
         }
       },
     ).then((result) => {
-      if (changedMap.size > 0) {
-        fileUpdateTracker.enqueuePendingUpdates([...changedMap.values()]);
-      }
+      fileUpdateTracker.replacePendingSyncPlan([...changedMap.values()], result.deletions);
       return result;
     });
   }
 
   async function confirmQueuedUpdates() {
-    if (queueBusy || pendingUpdates.length === 0) return;
+    if (queueBusy || (pendingUpdates.length === 0 && pendingDeletions.length === 0)) return;
     queueBusy = true;
     error = null;
     try {
+      if (pendingDeletions.length > 0) {
+        const confirmed = await dialogStore.confirm({
+          title: $t('files.syncDeleteTitle'),
+          message: $t('files.syncDeleteMessage', {
+            values: { count: pendingDeletions.length },
+          }),
+          confirmLabel: $t('common.delete'),
+          cancelLabel: $t('common.cancel'),
+          danger: true,
+        });
+        if (!confirmed) return;
+      }
       await refreshDownloadedFileIds();
-      // Fetch exactly what the check queued. The check already walked the tree,
-      // so re-scanning here would double the cost of every confirm; deletions and
-      // renames stay with the full "sync all files" action.
+      // Apply the exact download/deletion plan staged by the completed check.
       const result = await syncFiles({
         queue: pendingUpdates.map((item) => ({
           docId: item.id,
           path: item.downloadPath,
           sha256: item.sha256,
         })),
+        stagedDeletions: pendingDeletions,
         // The "overwrite" switch means "replace conflicting files without
         // asking"; otherwise the shared prompt decides.
         overwriteStrategy: overwriteLocal ? 'force_overwrite' : undefined,
@@ -1567,9 +1600,9 @@
     },
     {
       id: 'confirm-queued-updates',
-      label: `${$t('files.confirmQueuedUpdates')} (${pendingUpdates.length})`,
+      label: `${$t('files.confirmQueuedUpdates')} (${pendingUpdates.length + pendingDeletions.length})`,
       icon: 'checkCircle',
-      visible: pendingUpdates.length > 0,
+      visible: pendingUpdates.length + pendingDeletions.length > 0,
       disabled: queueBusy || syncAllCoordinator.busy,
       run: confirmQueuedUpdates,
     },

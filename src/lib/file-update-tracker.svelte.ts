@@ -7,7 +7,7 @@
 // (stale) for visual indicators.
 
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api';
-import { checkDownloadsExist, deleteDownloadFile } from '$lib/api/files';
+import { checkDownloadsExist, deleteDownloadFile, listDownloadFiles } from '$lib/api/files';
 import { getSetting, setSetting } from '$lib/api/settings';
 import { isDocumentAccessDenied } from '$lib/api/server-errors';
 import { browserPreviewMode, isTauriRuntime } from '$lib/tauri-runtime';
@@ -16,6 +16,7 @@ import { deniedDocuments } from '$lib/denied-documents.svelte';
 import {
   DENIED_FOLDER_MARKER_FILENAME,
   EMPTY_FOLDER_MARKER_FILENAME,
+  FOLDER_HOLDUP_MARKER_FILENAME,
   commitPendingFolderHistoryChanges,
   ensureDownloadFolderPlaceholder,
   ensureDownloadPlaceholder,
@@ -146,6 +147,27 @@ export interface PendingUpdateItem {
   /** Destination inside the download root (sanitised) — the actual write target. */
   downloadPath: string;
   sha256?: string | null;
+}
+
+function heldFoldersFromPaths(paths: readonly string[]): Set<string> {
+  return new Set(
+    paths
+      .map(path => path.replace(/\\/g, '/'))
+      .filter(path => path === FOLDER_HOLDUP_MARKER_FILENAME || path.endsWith(`/${FOLDER_HOLDUP_MARKER_FILENAME}`))
+      .map(path => path === FOLDER_HOLDUP_MARKER_FILENAME
+        ? ''
+        : path.slice(0, -FOLDER_HOLDUP_MARKER_FILENAME.length - 1)),
+  );
+}
+
+function isPathHeld(path: string, heldFolders: ReadonlySet<string>): boolean {
+  const normalizedPath = path.replace(/\\/g, '/');
+  for (const folder of heldFolders) {
+    if (folder === '' || normalizedPath === folder || normalizedPath.startsWith(`${folder}/`)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,13 +305,15 @@ class FileUpdateTracker {
     // With automatic downloads the service has already applied the changes;
     // queueing them again would offer the same files for a second download.
     if (!report.autoDownload) {
-      this.enqueuePendingUpdates(report.items.map((item) => ({
+      this.replacePendingSyncPlan(report.items.map((item) => ({
         id: item.id,
         title: item.title,
         path: item.path,
         downloadPath: item.path,
         sha256: item.sha256,
-      })));
+      })), report.deletions ?? []);
+    } else {
+      this.clearPendingUpdates();
     }
 
     return true;
@@ -330,9 +354,14 @@ class FileUpdateTracker {
       /** Documents the server refuses to hand over. */
       denied: ServerDocumentEntry[];
     }) => void,
-  ): Promise<{ outdated: number; denied: number; dirs: number; docs: number }> {
+  ): Promise<{ outdated: number; denied: number; dirs: number; docs: number; deletions: string[] }> {
     if (this.historyKey) await this.historyLoads.get(this.historyKey);
     await this.loadAccessStates();
+    const localFiles = (await listDownloadFiles()).map(path => path.replace(/\\/g, '/'));
+    const heldFolders = heldFoldersFromPaths(localFiles);
+    const serverPaths = new Set<string>();
+    const walkedDirs = new Set<string>();
+    const failedDirs = new Set<string>();
     let outdatedDocs = 0;
     let deniedItems = 0;
     let checkedDirs = 0;
@@ -353,15 +382,20 @@ class FileUpdateTracker {
 
     const walk = async (id: string | null, depth: number, pathParts: string[]): Promise<void> => {
       if (depth > maxDepth) return;
+      const directoryPath = makeDownloadPath(pathParts);
+      if (isPathHeld(directoryPath, heldFolders)) return;
       await new Promise((r) => setTimeout(r, delayMs));
       let resp: { folders: ServerDirectoryEntry[]; documents: ServerDocumentEntry[] };
       try {
         resp = await listFn(id);
       } catch (err) {
-        const path = makeDownloadPath(pathParts);
+        const path = directoryPath;
+        failedDirs.add(path);
+        if (pathParts.length === 0) throw err;
         if (pathParts.length > 0 && isDocumentAccessDenied(err)) {
           const title = pathParts[pathParts.length - 1];
           await ensureDownloadFolderPlaceholder(path, DENIED_FOLDER_MARKER_FILENAME);
+          serverPaths.add(`${path}/${DENIED_FOLDER_MARKER_FILENAME}`);
           deniedItems += 1;
           const itemId = `folder:${id}`;
           const previous = this.knownAccessState(itemId);
@@ -371,9 +405,9 @@ class FileUpdateTracker {
         return;
       }
 
+      walkedDirs.add(directoryPath);
       const diff = this.compareSnapshot(id, resp.folders, resp.documents);
       if (pathParts.length > 0) {
-        const directoryPath = makeDownloadPath(pathParts);
         const folderId = `folder:${id}`;
         const previousFolderState = this.knownAccessState(folderId);
         if (previousFolderState?.status === 'denied') {
@@ -406,6 +440,9 @@ class FileUpdateTracker {
 
       const outdated: ServerDocumentEntry[] = [];
       const denied: ServerDocumentEntry[] = [];
+      for (const document of resp.documents) {
+        serverPaths.add(makeDownloadPath([...pathParts, document.title]));
+      }
       try {
         for (const state of await readLocalDocumentStates(resp.documents, pathParts)) {
           const path = makeDownloadPath([...pathParts, state.doc.title]);
@@ -486,10 +523,12 @@ class FileUpdateTracker {
       });
 
       if (pathParts.length > 0 && resp.folders.length === 0 && resp.documents.length === 0) {
+        const directoryPath = makeDownloadPath(pathParts);
         await ensureDownloadFolderPlaceholder(
-          makeDownloadPath(pathParts),
+          directoryPath,
           EMPTY_FOLDER_MARKER_FILENAME,
         );
+        serverPaths.add(`${directoryPath}/${EMPTY_FOLDER_MARKER_FILENAME}`);
       }
 
       checkedDirs += resp.folders.length;
@@ -500,6 +539,34 @@ class FileUpdateTracker {
     };
 
     await walk(dirId, 0, []);
+    const deletions: string[] = [];
+    for (const localPath of localFiles) {
+      if (
+        localPath === '.git'
+        || localPath.startsWith('.git/')
+        || localPath === '.gitignore'
+        || localPath.endsWith(`/${FOLDER_HOLDUP_MARKER_FILENAME}`)
+        || isPathHeld(localPath, heldFolders)
+        || serverPaths.has(localPath)
+        || /\+\d{8}-\d{6}(\.bak)?$/.test(localPath)
+      ) {
+        continue;
+      }
+      let parent = localPath.includes('/')
+        ? localPath.slice(0, localPath.lastIndexOf('/'))
+        : 'download';
+      let canConfirmMissing = false;
+      while (true) {
+        if (failedDirs.has(parent)) break;
+        if (walkedDirs.has(parent)) {
+          canConfirmMissing = true;
+          break;
+        }
+        if (parent === 'download') break;
+        parent = parent.includes('/') ? parent.slice(0, parent.lastIndexOf('/')) : 'download';
+      }
+      if (canConfirmMissing) deletions.push(localPath);
+    }
     await this.persistAccessStates();
     this.addCheckHistory({
       outdated: outdatedDocs,
@@ -513,8 +580,8 @@ class FileUpdateTracker {
     });
     // Keep folder-state changes pending when updates need confirmation so the
     // eventual sync snapshot records both changes in one commit.
-    if (outdatedDocs === 0) await commitPendingFolderHistoryChanges();
-    return { outdated: outdatedDocs, denied: deniedItems, dirs: checkedDirs, docs: checkedDocs };
+    if (outdatedDocs === 0 && deletions.length === 0) await commitPendingFolderHistoryChanges();
+    return { outdated: outdatedDocs, denied: deniedItems, dirs: checkedDirs, docs: checkedDocs, deletions };
   }
 
   /** Queue changed/new documents for user-confirmed update. */
@@ -525,6 +592,15 @@ class FileUpdateTracker {
       next.set(item.id, item);
     }
     this.pendingUpdateQueue = next;
+  }
+
+  /** Files present locally but absent from the successfully checked server tree. */
+  pendingDeletions = $state<string[]>([]);
+
+  /** Replace the staged plan with the result of the latest complete check. */
+  replacePendingSyncPlan(items: PendingUpdateItem[], deletions: string[]) {
+    this.pendingUpdateQueue = new Map(items.map(item => [item.id, item]));
+    this.pendingDeletions = [...new Set(deletions)];
   }
 
   /** Remove queued items by document id. */
@@ -538,6 +614,7 @@ class FileUpdateTracker {
   /** Clear all queued pending updates. */
   clearPendingUpdates() {
     this.pendingUpdateQueue = new Map();
+    this.pendingDeletions = [];
   }
 
   /** Snapshot pending updates as a stable array for UI. */

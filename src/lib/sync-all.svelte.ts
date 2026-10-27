@@ -511,10 +511,13 @@ interface SyncPlan {
  *
  * The check already walked the server tree and hashed the download root, so
  * this only checks hold markers for queued paths and hashes those paths.
- * Deletions and renames are left to a full sync: deciding those needs the
- * complete tree, which is exactly what this mode avoids.
+ * The complete tree was already staged, so this mode applies the recorded
+ * deletions without repeating the server walk.
  */
-async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPlan> {
+async function planQueuedSync(
+  queued: readonly QueuedDownload[],
+  stagedDeletions: readonly string[] = [],
+): Promise<SyncPlan> {
   const plan: SyncPlan = {
     downloads: [],
     deletions: [],
@@ -525,8 +528,8 @@ async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPl
   };
 
   const markerPaths = new Set<string>();
-  for (const item of queued) {
-    const parts = item.path.replace(/\\/g, '/').split('/');
+  for (const path of [...queued.map(item => item.path), ...stagedDeletions]) {
+    const parts = path.replace(/\\/g, '/').split('/');
     for (let depth = 0; depth < parts.length; depth++) {
       markerPaths.add([...parts.slice(0, depth), FOLDER_HOLDUP_MARKER_FILENAME].join('/'));
     }
@@ -536,7 +539,10 @@ async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPl
 
   let localHashes: Record<string, string> = {};
   try {
-    localHashes = await computeLocalSha256(queued.map((item) => item.path));
+    localHashes = await computeLocalSha256([
+      ...queued.map((item) => item.path),
+      ...stagedDeletions,
+    ]);
   } catch {
     /* unreadable pass: treat every path as absent and fetch it */
   }
@@ -560,6 +566,25 @@ async function planQueuedSync(queued: readonly QueuedDownload[]): Promise<SyncPl
       serverHash: item.sha256,
     });
   }
+
+  const newDownloads = plan.downloads.filter(item => !item.existsLocally);
+  const unmatchedDeletions: string[] = [];
+  for (const path of stagedDeletions) {
+    if (isPathHeld(path, heldFolders)) continue;
+    const hash = localHashes[path];
+    if (hash) {
+      const index = newDownloads.findIndex(item =>
+        item.serverHash != null && item.serverHash === hash,
+      );
+      if (index >= 0) {
+        const [download] = newDownloads.splice(index, 1);
+        plan.moves.push({ from: path, to: download.path, download });
+        continue;
+      }
+    }
+    unmatchedDeletions.push(path);
+  }
+  plan.deletions = unmatchedDeletions;
 
   return plan;
 }
@@ -776,6 +801,8 @@ export interface SyncOptions {
   confirmDeletes?: boolean;
   /** Whether the download root is versioned with git. Overrides the stored setting. */
   gitTracking?: boolean;
+  /** Deletions staged by a completed recursive update check. */
+  stagedDeletions?: readonly string[];
   /**
    * How to handle files whose server revision differs from the local copy.
    * Automatic downloads pass the stored setting; manual syncs omit it and are
@@ -856,7 +883,12 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
   // server refuses are not retried here: the check that builds the plan asks
   // the server which of them are readable now, so a restored permission turns
   // into an ordinary queued update rather than a blind download attempt.
-  if (queue && queue.length === 0 && pendingFolderHistoryMarkers.length === 0) return emptyResult();
+  if (
+    queue
+    && queue.length === 0
+    && (options.stagedDeletions?.length ?? 0) === 0
+    && pendingFolderHistoryMarkers.length === 0
+  ) return emptyResult();
   if (!syncAllCoordinator.acquire()) return emptyResult();
 
   const runner = createDownloadRunner();
@@ -882,7 +914,9 @@ export async function syncFiles(options: SyncOptions = {}): Promise<SyncAllResul
     console.log(`%c[cfms:sync] ${queue ? 'Applying cached update check' : 'Full recursive sync'} starting (throttled: %d per %ds)…`, 'color:#4fc3f7', DOWNLOAD_BATCH_SIZE, DOWNLOAD_BATCH_DELAY_MS / 1000);
 
     const pendingMarkersAtStart = pendingFolderHistoryMarkers.length;
-    const plan = queue ? await planQueuedSync(queue) : await planServerSync(runner);
+    const plan = queue
+      ? await planQueuedSync(queue, options.stagedDeletions)
+      : await planServerSync(runner);
     plan.folderMarkersCreated = pendingFolderHistoryMarkers.length - pendingMarkersAtStart;
     plan.folderHistoryMarkers = [...pendingFolderHistoryMarkers];
     skipped += plan.skipped;

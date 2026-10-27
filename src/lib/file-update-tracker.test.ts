@@ -4,6 +4,7 @@ const files = vi.hoisted(() => ({
   checkDownloadsExist: vi.fn(),
   deleteDownloadFile: vi.fn(),
   getDocumentInfo: vi.fn(),
+  listDownloadFiles: vi.fn(),
 }));
 const sharedSettings = vi.hoisted(() => ({
   get: vi.fn(),
@@ -25,6 +26,7 @@ const placeholders = vi.hoisted(() => ({
 vi.mock('$lib/sync-all.svelte', () => ({
   DENIED_FOLDER_MARKER_FILENAME: '.cfms-no-folder-access',
   EMPTY_FOLDER_MARKER_FILENAME: '.cfms-empty-folder',
+  FOLDER_HOLDUP_MARKER_FILENAME: '.cfms-folder-holdup',
   makeDownloadPath: (p: string[]) => p.join('/'),
   commitPendingFolderHistoryChanges: placeholders.commitPendingFolderHistoryChanges,
   readLocalDocumentStates: vi.fn(),
@@ -82,6 +84,8 @@ beforeEach(() => {
   sharedSettings.set.mockResolvedValue(undefined);
   files.checkDownloadsExist.mockReset();
   files.checkDownloadsExist.mockResolvedValue([]);
+  files.listDownloadFiles.mockReset();
+  files.listDownloadFiles.mockResolvedValue([]);
   files.deleteDownloadFile.mockReset();
   files.deleteDownloadFile.mockResolvedValue(true);
   placeholders.commitPendingFolderHistoryChanges.mockReset();
@@ -301,6 +305,33 @@ describe('check history scoping', () => {
 });
 
 describe('what a check reports', () => {
+  it('stages local files missing from an accessible server directory', async () => {
+    files.listDownloadFiles.mockResolvedValue(['archive/HAIL.txt']);
+    const listFn = vi.fn(async (id: string | null) =>
+      id === null
+        ? { folders: [{ id: 'archive', name: 'archive', created_time: null }], documents: [] }
+        : { folders: [], documents: [] },
+    );
+
+    const result = await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(result.deletions).toEqual(['archive/HAIL.txt']);
+  });
+
+  it('does not stage local files below an inaccessible server directory', async () => {
+    files.listDownloadFiles.mockResolvedValue(['locked/old.txt']);
+    const listFn = vi.fn(async (id: string | null) => {
+      if (id === null) {
+        return { folders: [{ id: 'locked', name: 'locked', created_time: null }], documents: [] };
+      }
+      throw new Error('Server returned 403: access denied');
+    });
+
+    const result = await fileUpdateTracker.recursiveCheck(listFn, null, 3, 0);
+
+    expect(result.deletions).toEqual([]);
+  });
+
   it('counts an undownloadable document separately from the updates', async () => {
     // The whole point: a file the server refuses is not something the user can
     // confirm, so leaving it in "needs update" left one phantom entry forever.
@@ -587,6 +618,8 @@ describe('background check reports', () => {
         { id: 'doc-1', title: 'a.txt', path: 'a.txt', sha256: 'HASH', existedLocally: false },
       ],
       autoDownload: false,
+      deletions: [],
+      deleted: 0,
       downloaded: 0,
       downloadFailed: 0,
       skipped: 0,
@@ -615,11 +648,14 @@ describe('background check reports', () => {
   });
 
   it('records the report and queues its updates when auto-download is off', () => {
-    const applied = fileUpdateTracker.applyAutoCheckReport(report());
+    const applied = fileUpdateTracker.applyAutoCheckReport(report({
+      deletions: ['archive/old.txt'],
+    }));
 
     expect(applied).toBe(true);
     expect(fileUpdateTracker.checkHistory.at(-1)).toMatchObject({ changed: 1, docs: 1 });
     expect([...fileUpdateTracker.pendingUpdates].map((item) => item.id)).toEqual(['doc-1']);
+    expect(fileUpdateTracker.pendingDeletions).toEqual(['archive/old.txt']);
     expect(fileUpdateTracker.nextCheckTime).toBe(2_000);
   });
 
@@ -631,6 +667,7 @@ describe('background check reports', () => {
     }));
 
     expect(fileUpdateTracker.pendingUpdates).toEqual([]);
+    expect(fileUpdateTracker.pendingDeletions).toEqual([]);
   });
 
   it('applies each report once', () => {

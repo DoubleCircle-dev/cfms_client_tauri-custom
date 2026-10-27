@@ -147,6 +147,7 @@
   const checkHistory = $derived([...fileUpdateTracker.checkHistory].reverse());
   const lastCheckResult = $derived(checkHistory.find((entry) => entry.eventType === 'check') ?? null);
   const pendingUpdates = $derived(fileUpdateTracker.pendingUpdates);
+  const pendingDeletions = $derived(fileUpdateTracker.pendingDeletions);
 
   const historyRows = $derived(buildCheckHistoryRows(checkHistory));
 
@@ -301,9 +302,7 @@
         }
       },
     );
-    if (changedMap.size > 0) {
-      fileUpdateTracker.enqueuePendingUpdates([...changedMap.values()]);
-    }
+    fileUpdateTracker.replacePendingSyncPlan([...changedMap.values()], result.deletions);
     // Denied documents are reported too — leaving them out would make a check
     // that found nothing usable look like a clean bill of health.
     const parts: string[] = [];
@@ -312,6 +311,11 @@
     }
     if (result.denied > 0) {
       parts.push($t('files.checkHistoryDenied', { values: { count: result.denied } }));
+    }
+    if (result.deletions.length > 0) {
+      parts.push($t('files.serverChangesDeletedFiles', {
+        values: { count: result.deletions.length },
+      }));
     }
     if (parts.length > 0) {
       notificationStore.info(
@@ -324,14 +328,9 @@
     return result.outdated;
   }
 
-  /** Confirm queued updates.
-   *
-   *  Downloads exactly what the last check queued — the check already walked the
-   *  tree, so re-scanning here would double the cost of every confirm. A preset
-   *  strategy (automatic downloads) applies silently; omitting it (manual
-   *  confirm) prompts once for the files that would be overwritten. */
+  /** Apply exactly the download/deletion plan staged by the last complete check. */
   async function confirmQueuedUpdates(strategy?: SyncOverwriteStrategy) {
-    if (queueBusy || pendingUpdates.length === 0) return;
+    if (queueBusy || (pendingUpdates.length === 0 && pendingDeletions.length === 0)) return;
     if (syncAllCoordinator.busy) {
       // Another sync is in flight (e.g. manual sync from the Files page) —
       // keep the queue so the user can confirm once it finishes.
@@ -340,12 +339,26 @@
     }
     queueBusy = true;
     try {
+      if (pendingDeletions.length > 0 && strategy === undefined) {
+        const confirmed = await dialogStore.confirm({
+          title: $t('files.syncDeleteTitle'),
+          message: $t('files.syncDeleteMessage', {
+            values: { count: pendingDeletions.length },
+          }),
+          confirmLabel: $t('common.delete'),
+          cancelLabel: $t('common.cancel'),
+          danger: true,
+        });
+        if (!confirmed) return;
+      }
       const result = await syncFiles({
         queue: pendingUpdates.map((item) => ({
           docId: item.id,
           path: item.downloadPath,
           sha256: item.sha256,
         })),
+        stagedDeletions: pendingDeletions,
+        confirmDeletes: false,
         overwriteStrategy: strategy,
         // Same wording as the Files page, same colour: the sync says how it
         // went, and the page only decides how loudly to show it.
@@ -427,7 +440,7 @@
         <button
           type="button"
           class="blueprint-check-btn"
-          disabled={queueBusy || pendingUpdates.length === 0}
+          disabled={queueBusy || (pendingUpdates.length === 0 && pendingDeletions.length === 0)}
           onclick={() => confirmQueuedUpdates()}
           title={$t('files.confirmQueuedUpdates')}
         >
@@ -436,7 +449,7 @@
           {:else}
             <Icon name="download" size="16px" />
           {/if}
-          <span>{$t('files.confirmQueuedUpdates')} ({pendingUpdates.length})</span>
+          <span>{$t('files.confirmQueuedUpdates')} ({pendingUpdates.length + pendingDeletions.length})</span>
         </button>
       </div>
     </div>

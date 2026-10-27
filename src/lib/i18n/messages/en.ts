@@ -923,6 +923,8 @@ export const en = {
     folderContainsNotUpdated: 'This folder contains items that have not been updated recently',
     notDownloaded: 'Not downloaded',
     syncAll: 'Sync all files',
+    syncPlanConfirmTitle: 'Confirm Sync',
+    syncPlanConfirmMessage: 'Check complete: {updates, plural, one {# file will be updated} other {# files will be updated}} and {deletions, plural, one {# local file no longer on the server will be deleted} other {# local files no longer on the server will be deleted}}. Continue?',
     syncQueued: '{count} download(s) queued.',
     syncAllDownloaded: 'All files in this directory are already downloaded.',
     syncCompleted: 'Sync complete: {downloaded} downloaded, {updated} updated, {moved} moved, {deleted} deleted.',

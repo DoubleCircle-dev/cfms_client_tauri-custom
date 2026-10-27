@@ -41,6 +41,8 @@ export interface FileAutoCheckReport {
   dirs: number;
   docs: number;
   items: FileAutoCheckItem[];
+  deletions: string[];
+  deleted: number;
   /** Whether "download updates immediately" was enabled for this run. */
   autoDownload: boolean;
   downloaded: number;

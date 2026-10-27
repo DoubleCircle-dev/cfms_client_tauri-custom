@@ -17,8 +17,9 @@
 //! (the conflict prompt, placeholders for denied folders, the check history
 //! list, the git snapshot) still lives in the Svelte layer, which reacts to
 //! [`CHECK_EVENT`]. A background check therefore reports what it found and —
-//! when the user enabled "download updates immediately" — downloads it with the
-//! configured overwrite strategy, but never asks a question.
+//! when the user enabled "download updates immediately" — applies downloads
+//! and safe deletions with the configured overwrite strategy, but never asks a
+//! question.
 //!
 //! # Freshness
 //!
@@ -26,6 +27,7 @@
 //! from disk. Nothing is cached across runs, so the first check after a cold
 //! start is as accurate as any other one.
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -71,6 +73,8 @@ const STARTUP_CHECK_DELAY_MS: i64 = 5_000;
 
 /// SHA-256 of the empty byte string — the digest every zero-byte file has.
 const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+const EMPTY_FOLDER_MARKER: &str = ".cfms-empty-folder";
+const FOLDER_HOLDUP_MARKER: &str = ".cfms-folder-holdup";
 
 /// One server document that is missing locally or superseded by a newer
 /// revision.
@@ -110,6 +114,10 @@ pub struct FileAutoCheckReport {
     pub docs: u32,
     /// The outdated documents themselves.
     pub items: Vec<FileAutoCheckItem>,
+    /// Local files absent from every successfully checked server directory.
+    pub deletions: Vec<String>,
+    /// Local files deleted as part of this automatic check.
+    pub deleted: u32,
     /// Whether "download updates immediately" was enabled for this run.
     pub auto_download: bool,
     /// Documents queued for download by this run.
@@ -440,8 +448,8 @@ fn emit_schedule(app: &AppHandle, runtime: &FileAutoCheckRuntime) {
     let _ = app.emit(SCHEDULE_EVENT, &runtime.schedule());
 }
 
-/// Walk the server tree and compare every document against the local download
-/// root, optionally downloading what is outdated.
+/// Walk the server tree and compare it against the local download root,
+/// optionally applying the staged updates and safe deletions.
 async fn perform_check(
     app: &AppHandle,
     settings: &AutoCheckSettings,
@@ -457,10 +465,19 @@ async fn perform_check(
         ..Default::default()
     };
 
+    let local_files = collect_download_files(&download_root)?;
+    let held_folders = held_folders_from_paths(&local_files);
+    let mut server_paths = HashSet::new();
+    let mut walked_dirs = HashSet::new();
+    let mut failed_dirs = HashSet::new();
     let mut pending: Vec<(Option<String>, Vec<String>, usize)> = vec![(None, Vec::new(), 0)];
     let mut listings = 0usize;
 
     while let Some((folder_id, path_parts, depth)) = pending.pop() {
+        let directory_path = make_download_path(&path_parts);
+        if is_path_held(&directory_path, &held_folders) {
+            continue;
+        }
         if listings > 0 {
             sleep_between_listings().await;
         }
@@ -475,16 +492,25 @@ async fn perform_check(
             Ok(listing) => listing,
             Err(error) if path_parts.is_empty() => return Err(error),
             Err(error) => {
-                tracing::warn!(
-                    "Automatic check could not list {}: {error}",
-                    make_download_path(&path_parts)
-                );
+                failed_dirs.insert(directory_path.clone());
+                tracing::warn!("Automatic check could not list {}: {error}", directory_path);
                 continue;
             }
         };
 
+        walked_dirs.insert(directory_path.clone());
         report.docs += listing.documents.len() as u32;
         report.dirs += listing.folders.len() as u32;
+
+        for document in &listing.documents {
+            server_paths.insert(make_download_path_with_title(&path_parts, &document.title));
+        }
+
+        if !path_parts.is_empty() && listing.documents.is_empty() && listing.folders.is_empty() {
+            let marker_path = format!("{directory_path}/{EMPTY_FOLDER_MARKER}");
+            ensure_local_placeholder(&download_root, &marker_path)?;
+            server_paths.insert(marker_path);
+        }
 
         for document in &listing.documents {
             let path = make_download_path_with_title(&path_parts, &document.title);
@@ -519,17 +545,191 @@ async fn perform_check(
             }
             let mut child_parts = path_parts.clone();
             child_parts.push(folder.name.clone());
+            if is_path_held(&make_download_path(&child_parts), &held_folders) {
+                continue;
+            }
             pending.push((Some(folder.id.clone()), child_parts, depth + 1));
         }
     }
 
     report.outdated = report.items.len() as u32;
+    for path in local_files {
+        if is_sync_metadata_or_backup(&path)
+            || is_path_held(&path, &held_folders)
+            || server_paths.contains(&path)
+        {
+            continue;
+        }
+        let parent = path
+            .rsplit_once('/')
+            .map_or("download", |(parent, _)| parent);
+        if can_confirm_missing(parent, &walked_dirs, &failed_dirs) {
+            report.deletions.push(path);
+        }
+    }
 
     if settings.auto_download && !report.items.is_empty() {
         apply_downloads(app, &download_root, settings, &mut report).await;
     }
+    if settings.auto_download {
+        report.deleted = delete_stale_files(&download_root, &report.deletions)?;
+    }
 
     Ok(report)
+}
+
+fn collect_download_files(download_root: &Path) -> Result<Vec<String>, String> {
+    fn walk(root: &Path, current: &Path, files: &mut Vec<String>) -> std::io::Result<()> {
+        for entry in std::fs::read_dir(current)? {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            let path = entry.path();
+            if file_type.is_dir() {
+                if entry.file_name() == ".git" {
+                    continue;
+                }
+                walk(root, &path, files)?;
+            } else if file_type.is_file() && entry.file_name() != ".gitignore" {
+                if let Ok(relative) = path.strip_prefix(root) {
+                    files.push(relative.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    let mut files = Vec::new();
+    walk(download_root, download_root, &mut files)
+        .map_err(|error| format!("Failed to list local download files: {error}"))?;
+    Ok(files)
+}
+
+fn held_folders_from_paths(paths: &[String]) -> HashSet<String> {
+    paths
+        .iter()
+        .map(|path| path.replace('\\', "/"))
+        .filter(|path| {
+            path == FOLDER_HOLDUP_MARKER || path.ends_with(&format!("/{FOLDER_HOLDUP_MARKER}"))
+        })
+        .map(|path| {
+            if path == FOLDER_HOLDUP_MARKER {
+                String::new()
+            } else {
+                path[..path.len() - FOLDER_HOLDUP_MARKER.len() - 1].to_string()
+            }
+        })
+        .collect()
+}
+
+fn is_path_held(path: &str, held_folders: &HashSet<String>) -> bool {
+    let normalized = path.replace('\\', "/");
+    held_folders.iter().any(|folder| {
+        folder.is_empty() || normalized == *folder || normalized.starts_with(&format!("{folder}/"))
+    })
+}
+
+fn is_sync_metadata_or_backup(path: &str) -> bool {
+    if path == ".git" || path.starts_with(".git/") || path == ".gitignore" {
+        return true;
+    }
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let name = name.strip_suffix(".bak").unwrap_or(name);
+    let Some((_, timestamp)) = name.rsplit_once('+') else {
+        return false;
+    };
+    let Some((date, time)) = timestamp.split_once('-') else {
+        return false;
+    };
+    date.len() == 8
+        && time.len() == 6
+        && date.bytes().all(|byte| byte.is_ascii_digit())
+        && time.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn can_confirm_missing(
+    parent: &str,
+    walked_dirs: &HashSet<String>,
+    failed_dirs: &HashSet<String>,
+) -> bool {
+    let mut current = parent.to_string();
+    loop {
+        if failed_dirs.contains(&current) {
+            return false;
+        }
+        if walked_dirs.contains(&current) {
+            return true;
+        }
+        if current == "download" {
+            return false;
+        }
+        current = current.rsplit_once('/').map_or_else(
+            || "download".to_string(),
+            |(ancestor, _)| ancestor.to_string(),
+        );
+    }
+}
+
+fn ensure_local_placeholder(download_root: &Path, relative_path: &str) -> Result<(), String> {
+    let path =
+        crate::commands::resolve_download_subdirectory(download_root.to_path_buf(), relative_path)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create empty-folder directory: {error}"))?;
+    }
+    if !path.exists() {
+        std::fs::write(&path, "")
+            .map_err(|error| format!("Failed to create empty-folder marker: {error}"))?;
+    }
+    Ok(())
+}
+
+fn delete_stale_files(download_root: &Path, paths: &[String]) -> Result<u32, String> {
+    let mut deleted = 0;
+    let mut parents = HashSet::new();
+    for relative_path in paths {
+        let path = crate::commands::resolve_download_subdirectory(
+            download_root.to_path_buf(),
+            relative_path,
+        )?;
+        match std::fs::remove_file(&path) {
+            Ok(()) => deleted += 1,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Failed to delete stale download {relative_path}: {error}"
+                ));
+            }
+        }
+        if let Some(parent) = Path::new(relative_path).parent() {
+            let mut relative_parent = parent.to_string_lossy().replace('\\', "/");
+            while !relative_parent.is_empty() && relative_parent != "." {
+                parents.insert(relative_parent.clone());
+                relative_parent = relative_parent
+                    .rsplit_once('/')
+                    .map_or_else(String::new, |(ancestor, _)| ancestor.to_string());
+            }
+        }
+    }
+    let mut parents: Vec<_> = parents.into_iter().collect();
+    parents.sort_by_key(|path| std::cmp::Reverse(path.matches('/').count()));
+    for relative_path in parents {
+        let path = crate::commands::resolve_download_subdirectory(
+            download_root.to_path_buf(),
+            &relative_path,
+        )?;
+        match std::fs::remove_dir(path) {
+            Ok(()) => {}
+            Err(error)
+                if error.kind() == std::io::ErrorKind::NotFound
+                    || error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
+            Err(error) => {
+                return Err(format!(
+                    "Failed to remove empty download directory {relative_path}: {error}"
+                ));
+            }
+        }
+    }
+    Ok(deleted)
 }
 
 /// Pacing pause between directory listings.
@@ -818,6 +1018,20 @@ mod tests {
         assert!(!is_local_copy_current(Some("abc"), &empty));
         let unknown_size = document(None, None);
         assert!(!is_local_copy_current(Some(EMPTY_SHA256), &unknown_size));
+    }
+
+    #[test]
+    fn missing_local_files_are_confirmed_only_inside_walked_accessible_trees() {
+        let walked = HashSet::from(["download".to_string()]);
+        let failed = HashSet::from(["locked".to_string()]);
+        assert!(can_confirm_missing("archive", &walked, &HashSet::new()));
+        assert!(!can_confirm_missing("locked", &walked, &failed));
+        assert!(is_path_held(
+            "archive/old.txt",
+            &HashSet::from(["archive".to_string()])
+        ));
+        assert!(is_sync_metadata_or_backup("old+20261028-014100.bak"));
+        assert!(!is_sync_metadata_or_backup("old.txt"));
     }
 
     #[test]

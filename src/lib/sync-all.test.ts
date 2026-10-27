@@ -210,6 +210,32 @@ describe('syncFiles (cached queue)', () => {
     expect(result.changed).toBe(false);
   });
 
+  it('executes deletions staged by the same recursive check', async () => {
+    const result = await syncFiles({
+      queue: [],
+      stagedDeletions: ['archive/old.txt'],
+      confirmDeletes: false,
+    });
+
+    expect(files.listDirectory).not.toHaveBeenCalled();
+    expect(files.deleteDownloadFile).toHaveBeenCalledWith('archive/old.txt');
+    expect(result.deleted).toBe(1);
+  });
+
+  it('does not execute a staged deletion beneath a held folder', async () => {
+    files.checkDownloadsExist.mockResolvedValue([
+      `archive/${FOLDER_HOLDUP_MARKER_FILENAME}`,
+    ]);
+
+    await syncFiles({
+      queue: [],
+      stagedDeletions: ['archive/old.txt'],
+      confirmDeletes: false,
+    });
+
+    expect(files.deleteDownloadFile).not.toHaveBeenCalled();
+  });
+
   it('fetches exactly the queued documents, into their recorded download paths', async () => {
     const result = await syncFiles({
       queue: [

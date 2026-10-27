@@ -52,7 +52,7 @@ export function disposeFileAutoCheck(): void {
 
 function applyReport(report: FileAutoCheckReport) {
   const recorded = fileUpdateTracker.applyAutoCheckReport(report);
-  if (!recorded || report.outdated === 0) return;
+  if (!recorded || (report.outdated === 0 && (report.deletions?.length ?? 0) === 0)) return;
   notificationStore.info(describeReport(report), 5000);
 }
 
@@ -63,6 +63,11 @@ function describeReport(report: FileAutoCheckReport): string {
   }
   if (report.denied > 0) {
     parts.push(get(t)('files.checkHistoryDenied', { values: { count: report.denied } }));
+  }
+  if ((report.deletions?.length ?? 0) > 0) {
+    parts.push(get(t)('files.serverChangesDeletedFiles', {
+      values: { count: report.deletions.length },
+    }));
   }
   return get(t)('files.serverChangesDetected', { values: { changes: parts.join(', ') } });
 }

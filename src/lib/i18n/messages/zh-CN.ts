@@ -916,6 +916,8 @@ export const zh_CN = {
     folderContainsNotUpdated: '此文件夹包含长时间未更新的项目',
     notDownloaded: '未下载到本地',
     syncAll: '同步全部文件',
+    syncPlanConfirmTitle: '确认同步更新',
+    syncPlanConfirmMessage: '检查完成：将更新 {updates} 个文件，并删除服务器上已不存在的 {deletions} 个本地文件。是否继续？',
     syncQueued: '已加入 {count} 个下载任务。',
     syncAllDownloaded: '当前目录所有文件均已下载。',
     syncCompleted: '同步完成：{downloaded} 个下载, {updated} 个更新, {moved} 个移动, {deleted} 个删除。',
