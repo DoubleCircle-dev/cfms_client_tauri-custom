@@ -109,6 +109,7 @@
     { id: 'home', label: $t('nav.home'), href: '/home/overview', icon: 'home', exact: true },
     { id: 'files', label: $t('workspace.allFiles'), href: '/home/files', icon: 'folder', exact: true },
     { id: 'tasks', label: $t('workspace.transfers'), href: '/home/tasks', icon: 'tasks', badge: activeTaskCount, exact: true },
+    { id: 'notifications', label: $t('notifications.title'), href: '/home/notifications', icon: 'history', exact: true },
     // Keep dynamic extension navigation implemented while the feature remains
     // intentionally absent from user-reachable surfaces.
     ...(USER_EXTENSIONS_ENABLED
@@ -155,6 +156,7 @@
         ?? $t('settings.extensions.title');
     }
     if (path === '/home/trash') return $t('workspace.recycleBin');
+    if (path === '/home/notifications') return $t('notifications.title');
     if (path === '/home/tools') return $t('tools.title');
     if (path === '/home/chat') return $t('chat.title');
     if (path === '/home/manage') return $t('workspace.administration');

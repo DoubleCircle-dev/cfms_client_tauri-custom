@@ -835,9 +835,29 @@ export interface NotificationOptions {
   action?: NotificationAction;
 }
 
+/**
+ * One past notification. The live `entries` list is capped at five because it
+ * feeds the toast stack; history keeps a longer session-scoped trail so a
+ * message that disappeared while the user was on another page can still be
+ * read back.
+ */
+export interface NotificationHistoryEntry {
+  id: number;
+  type: NotificationType;
+  text: string;
+  createdAt: number;
+  groupKey?: string;
+  groupTitle?: string;
+  items: Array<{ text: string; createdAt: number }>;
+}
+
+const NOTIFICATION_HISTORY_LIMIT = 200;
+
 class NotificationStoreImpl {
   entries = $state<NotificationEntry[]>([]);
+  history = $state<NotificationHistoryEntry[]>([]);
   private nextId = 1;
+  private nextHistoryId = 1;
 
   push(
     type: NotificationType,
@@ -865,6 +885,7 @@ class NotificationStoreImpl {
           action: undefined,
         };
         this.entries = [next, ...this.entries.filter((entry) => entry.id !== existing.id)];
+        this.recordHistory(next);
         return existing.id;
       }
     }
@@ -881,7 +902,32 @@ class NotificationStoreImpl {
       action: options.action,
     };
     this.entries = [entry, ...this.entries].slice(0, 5);
+    this.recordHistory(entry);
     return entry.id;
+  }
+
+  /**
+   * Grouped notifications update their summary in place, so the trail keeps one
+   * row per group instead of one row per item.
+   */
+  private recordHistory(source: NotificationEntry) {
+    const record: NotificationHistoryEntry = {
+      id: this.nextHistoryId++,
+      type: source.type,
+      text: source.text,
+      createdAt: source.createdAt,
+      groupKey: source.groupKey,
+      groupTitle: source.groupTitle,
+      items: source.items.map((item) => ({ ...item })),
+    };
+    const rest = source.groupKey
+      ? this.history.filter((item) => item.groupKey !== source.groupKey)
+      : this.history;
+    this.history = [record, ...rest].slice(0, NOTIFICATION_HISTORY_LIMIT);
+  }
+
+  clearHistory() {
+    this.history = [];
   }
 
   info(text: string, timeoutMs = 7000, options?: NotificationOptions) {
