@@ -1,6 +1,7 @@
 import { goto } from '$app/navigation';
 import {
   executeExtensionHostCall,
+  executeExtensionModule,
   readExtensionWorkflow,
   type DeclarativeWorkflow,
   type ExtensionCapability,
@@ -83,6 +84,17 @@ async function runWorkflowDocument(
       }
       case 'transform': {
         storeResult(context, node.result, evaluateExpression(node.expression, context));
+        current = next;
+        break;
+      }
+      case 'wasm': {
+        const input = resolveValue(node.input ?? context, context);
+        const result = await withinExecutionLimit(
+          executeExtensionModule(extensionId, input),
+          deadline,
+          options.signal,
+        );
+        storeResult(context, node.result, result);
         current = next;
         break;
       }

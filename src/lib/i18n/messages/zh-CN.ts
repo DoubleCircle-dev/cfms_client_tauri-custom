@@ -2031,7 +2031,8 @@ export const zh_CN = {
     },
     extensions: {
       title: '功能扩展',
-      description: '安装和管理经过签名的 CFMS 客户端功能扩展',
+      description: '预览已签名的 CFMS 扩展与受限 WebAssembly 支持',
+      previewNotice: '预览功能。扩展模块不能直接访问文件系统、网络或原生 API；声明的客户端能力仍须经过权限授权。',
       import: '导入扩展包',
       installedTitle: '已安装扩展',
       installedHint: '扩展包安装在当前设备上，每个账户可单独授权和启用。',
@@ -2056,7 +2057,8 @@ export const zh_CN = {
       revoked: '此版本已被撤回。',
       noTrustKey: '尚未配置官方扩展公钥',
       noTrustKeyHint: '当前构建可以读取扩展元数据，但在发布签名公钥注入前不能导入或下载扩展包。',
-      mobileUnavailable: '可安装扩展目前仅支持桌面端；移动端仍可使用内置可选模块。',
+      mobileCatalogOnly: 'Android 可从目录安装已签名扩展；本地导入安装包仅支持桌面端。',
+      iosUnavailable: 'iOS 暂不支持安装扩展。',
       capabilities: {
         files_metadata_read: '读取文件元数据',
         files_list: '列出服务器目录',

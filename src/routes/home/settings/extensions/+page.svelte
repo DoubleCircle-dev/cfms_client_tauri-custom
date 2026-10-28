@@ -17,7 +17,7 @@
   import { extensionsStore } from '$lib/extensions.svelte';
   import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
   import { authStore, notificationStore } from '$lib/stores.svelte';
-  import { isMobilePlatform } from '$lib/platform';
+  import { isAndroidPlatform, isMobilePlatform } from '$lib/platform';
   import Icon from '$lib/components/Icon.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
   import { formatUserFacingError } from '$lib/user-facing-errors';
@@ -25,6 +25,7 @@
   let busy = $state<string | null>(null);
   let catalogBusy = $state(false);
   const mobile = isMobilePlatform();
+  const android = isAndroidPlatform();
   const CAPABILITY_LABEL_KEYS: Record<ExtensionCapability, string> = {
     'files.metadata.read': 'settings.extensions.capabilities.files_metadata_read',
     'files.list': 'settings.extensions.capabilities.files_list',
@@ -142,11 +143,15 @@
 ><Icon name="uploadFile" size="18px" />{$t('settings.extensions.import')}</FluentButton>{/if}
   </header>
 
+  <section class="notice"><Icon name="info" size="22px" /><p>{$t('settings.extensions.previewNotice')}</p></section>
+
   {#if !extensionsStore.overview?.trustedKeysConfigured}
     <section class="notice warning"><Icon name="warning" size="22px" /><div><strong>{$t('settings.extensions.noTrustKey')}</strong><p>{$t('settings.extensions.noTrustKeyHint')}</p></div></section>
   {/if}
-  {#if mobile}
-    <section class="notice"><Icon name="info" size="22px" /><p>{$t('settings.extensions.mobileUnavailable')}</p></section>
+  {#if mobile && android}
+    <section class="notice"><Icon name="info" size="22px" /><p>{$t('settings.extensions.mobileCatalogOnly')}</p></section>
+  {:else if mobile}
+    <section class="notice"><Icon name="info" size="22px" /><p>{$t('settings.extensions.iosUnavailable')}</p></section>
   {/if}
 
   <section class="section">
@@ -161,7 +166,7 @@
           {@const accountState = extensionsStore.overview?.accountStates[installation.manifest.id]}
           <article class="extension-card cfms-content-surface">
             <div class="extension-icon"><Icon name="extensions" size="24px" /></div>
-            <div class="extension-copy"><h3>{installation.manifest.name}</h3><p>{installation.manifest.description}</p><small>{installation.manifest.publisher} · v{installation.manifest.version} · {formatBytes(installation.disk_bytes)}</small></div>
+            <div class="extension-copy"><h3>{installation.manifest.name}</h3><p>{installation.manifest.description}</p><small>{installation.manifest.publisher} · v{installation.manifest.version} · API {installation.manifest.host_api} · {formatBytes(installation.disk_bytes)}</small></div>
             <label class="switch"><input type="checkbox" checked={accountState?.enabled ?? false} disabled={!authStore.isLoggedIn || busy !== null} onchange={() => toggle(installation)} /><span></span></label>
             {#if installation.manifest.requested_capabilities.length > 0}
               <details><summary>{$t('settings.extensions.permissions')}</summary><ul>{#each installation.manifest.requested_capabilities as capability}<li>{capabilityLabel(capability)}</li>{/each}</ul></details>
@@ -197,8 +202,8 @@
     {/if}
   </section>
 
-  {#if !mobile}
-    <section class="section">
+  {#if !mobile || android}
+  <section class="section">
       <div class="section-title cfms-heading-copy">
         <div class="cfms-heading-row">
           <h2>{$t('settings.extensions.catalogTitle')}</h2>
@@ -211,7 +216,7 @@
           {@const isInstalled = extensionsStore.overview?.installed.some((item) => item.manifest.id === entry.manifest.id && item.manifest.version === entry.manifest.version)}
           <article class="extension-card catalog-card" class:revoked={entry.revoked}>
             <div class="extension-icon"><Icon name={entry.revoked ? 'block' : 'extensions'} size="24px" /></div>
-            <div class="extension-copy"><h3>{entry.manifest.name}</h3><p>{entry.manifest.description}</p><small>{entry.manifest.publisher} · v{entry.manifest.version}</small>{#if entry.revoked}<b>{entry.revocation_reason ?? $t('settings.extensions.revoked')}</b>{/if}</div>
+            <div class="extension-copy"><h3>{entry.manifest.name}</h3><p>{entry.manifest.description}</p><small>{entry.manifest.publisher} · v{entry.manifest.version} · API {entry.manifest.host_api}</small>{#if entry.revoked}<b>{entry.revocation_reason ?? $t('settings.extensions.revoked')}</b>{/if}</div>
             <FluentButton data-fluent-owner="routes-home-settings-extensions-page"
               type="button"
               disabled={entry.revoked || isInstalled || busy !== null}
@@ -221,7 +226,7 @@
           </article>
         {/each}
       </div>
-    </section>
+  </section>
   {/if}
 </div>
 {/if}

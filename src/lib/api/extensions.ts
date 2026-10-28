@@ -1,5 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 
+export const DECLARATIVE_HOST_API_VERSION = '1.0.0';
+export const WASM_HOST_API_VERSION = 'api-custom-v2';
+
 export type ExtensionCapability =
   | 'files.metadata.read'
   | 'files.list'
@@ -46,6 +49,7 @@ export interface ExtensionManifest {
   requested_capabilities: ExtensionCapability[];
   background_triggers: ExtensionBackgroundTrigger[];
   content_hashes: Record<string, string>;
+  runtime?: { kind: 'wasm'; module: string };
 }
 
 export interface ExtensionInstallation {
@@ -89,6 +93,7 @@ export interface ExtensionOverview {
   catalog: ExtensionCatalog | null;
   trustedKeysConfigured: boolean;
   hostApiVersion: string;
+  supportedHostApiVersions: string[];
 }
 
 export interface DeclarativePage {
@@ -153,6 +158,13 @@ export function readExtensionPage(extensionId: string, page: string): Promise<De
 
 export function readExtensionWorkflow(extensionId: string, workflow: string): Promise<DeclarativeWorkflow> {
   return invoke('read_extension_workflow', { extensionId, workflow });
+}
+
+export function executeExtensionModule<T = unknown>(
+  extensionId: string,
+  input: unknown,
+): Promise<T> {
+  return invoke('execute_extension_module', { extensionId, input });
 }
 
 export function executeExtensionHostCall<T = unknown>(

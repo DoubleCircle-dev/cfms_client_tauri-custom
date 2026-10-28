@@ -1,7 +1,7 @@
-//! Signed, declarative client extension packages.
+//! Signed client extensions with declarative and sandboxed WebAssembly runtimes.
 //!
-//! Extension packages contain data only. This module deliberately has no script,
-//! dynamic-library, network, or arbitrary filesystem execution surface.
+//! WebAssembly modules have no host imports or ambient network, filesystem, or
+//! native access; host operations remain explicit, capability-checked workflows.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -17,7 +17,11 @@ use sha2::{Digest, Sha256};
 
 use crate::db::settings::SettingsStore;
 
+#[path = "extension_wasm.rs"]
+mod wasm_runtime;
+
 pub const HOST_API_VERSION: &str = "1.0.0";
+pub const WASM_HOST_API_VERSION: &str = "api-custom-v2";
 pub const DEFAULT_CATALOG_URL: &str =
     "https://cfms-dev.github.io/cfms_client_extensions/v1/catalog.json";
 const MAX_PACKAGE_BYTES: usize = 20 * 1024 * 1024;
@@ -62,6 +66,14 @@ pub struct ExtensionManifest {
     pub background_triggers: Vec<BackgroundTrigger>,
     #[serde(default)]
     pub content_hashes: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<ExtensionRuntime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ExtensionRuntime {
+    Wasm { module: String },
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -514,6 +526,44 @@ impl ExtensionStore {
                 ]
             }));
         }
+        if let Some(installation) = self.get_installed(extension_id)?
+            && let Some(ExtensionRuntime::Wasm { module }) = &installation.manifest.runtime
+        {
+            let page_is_declared = installation
+                .manifest
+                .entrypoints
+                .navigation
+                .iter()
+                .any(|entry| entry.page == page)
+                || installation
+                    .manifest
+                    .entrypoints
+                    .settings
+                    .iter()
+                    .any(|entry| entry.page == page);
+            if !page_is_declared {
+                return Err("Extension page is not declared in the manifest".into());
+            }
+            let module_path = safe_join(
+                &self.package_dir(extension_id, &installation.manifest.version)?,
+                module,
+            )?;
+            let module_bytes = fs::read(&module_path)
+                .map_err(|e| format!("Failed to read extension WebAssembly module: {e}"))?;
+            let document =
+                wasm_runtime::execute(&module_bytes, &serde_json::json!({ "page": page }))?;
+            if document
+                .get("schema_version")
+                .and_then(serde_json::Value::as_u64)
+                != Some(1)
+                || !document
+                    .get("blocks")
+                    .is_some_and(serde_json::Value::is_array)
+            {
+                return Err("WebAssembly extension returned an unsupported page document".into());
+            }
+            return Ok(document);
+        }
         let installation = self
             .get_installed(extension_id)?
             .ok_or_else(|| "Extension is not installed".to_string())?;
@@ -523,6 +573,27 @@ impl ExtensionStore {
             .join(format!("{page}.json"));
         let bytes = fs::read(&path).map_err(|e| format!("Failed to read extension page: {e}"))?;
         serde_json::from_slice(&bytes).map_err(|e| format!("Invalid extension page: {e}"))
+    }
+
+    pub fn execute_module(
+        &self,
+        extension_id: &str,
+        input: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        validate_extension_id(extension_id)?;
+        let installation = self
+            .get_installed(extension_id)?
+            .ok_or_else(|| "Extension is not installed".to_string())?;
+        let Some(ExtensionRuntime::Wasm { module }) = &installation.manifest.runtime else {
+            return Err("Extension does not provide a WebAssembly runtime".into());
+        };
+        let module_path = safe_join(
+            &self.package_dir(extension_id, &installation.manifest.version)?,
+            module,
+        )?;
+        let module_bytes = fs::read(&module_path)
+            .map_err(|e| format!("Failed to read extension WebAssembly module: {e}"))?;
+        wasm_runtime::execute(&module_bytes, &input)
     }
 
     pub fn read_workflow(
@@ -736,6 +807,23 @@ impl ExtensionStore {
             .map_err(|e| format!("Invalid extension manifest: {e}"))?;
         self.validate_manifest(&manifest)?;
         validate_declarative_documents(&files, &manifest)?;
+        let wasm_paths = files
+            .keys()
+            .filter(|path| path.starts_with("wasm/"))
+            .collect::<Vec<_>>();
+        if let Some(ExtensionRuntime::Wasm { module }) = &manifest.runtime {
+            if wasm_paths.len() != 1 || wasm_paths[0].as_str() != module {
+                return Err(
+                    "API v2 packages must contain exactly the declared WebAssembly module".into(),
+                );
+            }
+            let module_bytes = files
+                .get(module)
+                .ok_or_else(|| format!("Extension WebAssembly module {module} is missing"))?;
+            wasm_runtime::validate_module(module_bytes)?;
+        } else if !wasm_paths.is_empty() {
+            return Err("Declarative v1 packages cannot contain WebAssembly modules".into());
+        }
 
         Ok(ValidatedPackage {
             manifest,
@@ -795,11 +883,33 @@ impl ExtensionStore {
     }
 
     fn validate_manifest(&self, manifest: &ExtensionManifest) -> Result<(), String> {
-        if manifest.schema_version != 1 {
-            return Err(format!(
-                "Unsupported extension manifest schema {}",
-                manifest.schema_version
-            ));
+        match manifest.schema_version {
+            1 if manifest.runtime.is_none() && manifest.host_api.starts_with('1') => {}
+            2 if manifest.host_api == WASM_HOST_API_VERSION => {
+                match &manifest.runtime {
+                    Some(ExtensionRuntime::Wasm { module }) => {
+                        validate_package_path(module)?;
+                        if !module.starts_with("wasm/") || !module.ends_with(".wasm") {
+                            return Err("WebAssembly modules must be stored under wasm/ with a .wasm extension".into());
+                        }
+                    }
+                    None => return Err("API v2 extensions must declare a runtime".into()),
+                }
+            }
+            1 => {
+                return Err(
+                    "Declarative v1 extensions must use a v1 host API and cannot declare a runtime"
+                        .into(),
+                );
+            }
+            2 => {
+                return Err(format!(
+                    "API v2 extensions must declare host_api {WASM_HOST_API_VERSION}"
+                ));
+            }
+            version => {
+                return Err(format!("Unsupported extension manifest schema {version}"));
+            }
         }
         validate_extension_id(&manifest.id)?;
         if manifest.name.trim().is_empty() || manifest.publisher.trim().is_empty() {
@@ -811,12 +921,6 @@ impl ExtensionStore {
         if self.client_version < minimum {
             return Err(format!(
                 "Extension requires client version {minimum} or newer"
-            ));
-        }
-        if !manifest.host_api.starts_with('1') {
-            return Err(format!(
-                "Extension requires unsupported host API {}",
-                manifest.host_api
             ));
         }
         let current_platform = current_platform();
@@ -904,6 +1008,7 @@ fn bundled_installations() -> Vec<ExtensionInstallation> {
             requested_capabilities: vec!["account.summary.read".into()],
             background_triggers: Vec::new(),
             content_hashes: BTreeMap::new(),
+            runtime: None,
         },
         package_digest: "bundled".into(),
         install_epoch: format!("bundled:{}", env!("CARGO_PKG_VERSION")),
@@ -979,12 +1084,16 @@ fn validate_declarative_documents(
     for entry in &manifest.entrypoints.navigation {
         validate_entry_id(&entry.id)?;
         validate_entry_id(&entry.page)?;
-        ensure_json_object(files, &format!("pages/{}.json", entry.page))?;
+        if manifest.runtime.is_none() {
+            ensure_json_object(files, &format!("pages/{}.json", entry.page))?;
+        }
     }
     for entry in &manifest.entrypoints.settings {
         validate_entry_id(&entry.id)?;
         validate_entry_id(&entry.page)?;
-        ensure_json_object(files, &format!("pages/{}.json", entry.page))?;
+        if manifest.runtime.is_none() {
+            ensure_json_object(files, &format!("pages/{}.json", entry.page))?;
+        }
     }
     for entry in &manifest.entrypoints.workflows {
         validate_entry_id(&entry.id)?;
@@ -1022,6 +1131,7 @@ fn validate_package_path(path: &str) -> Result<(), String> {
         || path == "META-INF/signature.ed25519"
         || (path.starts_with("pages/") && path.ends_with(".json"))
         || (path.starts_with("workflows/") && path.ends_with(".json"))
+        || (path.starts_with("wasm/") && path.ends_with(".wasm"))
         || (path.starts_with("i18n/") && path.ends_with(".json"))
         || (path.starts_with("assets/")
             && matches!(
@@ -1280,6 +1390,79 @@ mod tests {
         output.into_inner()
     }
 
+    fn wasm_package(signing: &SigningKey) -> Vec<u8> {
+        let page = br#"{"schema_version":1,"title":"WASM page","blocks":[]}"#;
+        let output = page
+            .iter()
+            .map(|byte| format!("\\{byte:02x}"))
+            .collect::<String>();
+        let ptr = 4096_u64;
+        let packed = (ptr << 32) | page.len() as u64;
+        let module = wat::parse_str(format!(
+            r#"(module
+                (memory (export "memory") 1 4)
+                (data (i32.const {ptr}) "{output}")
+                (func (export "cfms_alloc") (param i32) (result i32) i32.const 16)
+                (func (export "cfms_invoke") (param i32 i32) (result i64) i64.const {packed})
+            )"#
+        ))
+        .unwrap();
+        let manifest = serde_json::json!({
+            "schema_version": 2,
+            "id": "org.cfms.wasm-page",
+            "name": "WASM page",
+            "description": "A sandboxed WebAssembly page",
+            "publisher": "CFMS",
+            "version": "1.0.0",
+            "host_api": WASM_HOST_API_VERSION,
+            "min_client_version": "0.1.0",
+            "platforms": [current_platform()],
+            "entrypoints": { "navigation": [{ "id": "page", "label": "WASM page", "icon": "extensions", "page": "overview" }] },
+            "requested_capabilities": [],
+            "background_triggers": [],
+            "content_hashes": {},
+            "runtime": { "kind": "wasm", "module": "wasm/main.wasm" }
+        })
+        .to_string()
+        .into_bytes();
+        let indexed = [
+            ("manifest.json", manifest.as_slice()),
+            ("wasm/main.wasm", module.as_slice()),
+        ];
+        let index = serde_json::json!({
+            "files": indexed.iter().map(|(path, bytes)| serde_json::json!({
+                "path": path,
+                "sha256": hex::encode(Sha256::digest(bytes)),
+                "size": bytes.len()
+            })).collect::<Vec<_>>()
+        })
+        .to_string()
+        .into_bytes();
+        let signature = signing.sign(&index);
+        let envelope = serde_json::json!({
+            "key_id": "test",
+            "signature": hex::encode(signature.to_bytes())
+        })
+        .to_string()
+        .into_bytes();
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut output);
+            let options = zip::write::SimpleFileOptions::default();
+            for (path, bytes) in indexed {
+                zip.start_file(path, options).unwrap();
+                zip.write_all(bytes).unwrap();
+            }
+            zip.start_file("META-INF/files.json", options).unwrap();
+            zip.write_all(&index).unwrap();
+            zip.start_file("META-INF/signature.ed25519", options)
+                .unwrap();
+            zip.write_all(&envelope).unwrap();
+            zip.finish().unwrap();
+        }
+        output.into_inner()
+    }
+
     #[test]
     fn signed_package_installs_and_lists() {
         let temp = tempfile::tempdir().unwrap();
@@ -1300,6 +1483,52 @@ mod tests {
                 .unwrap()
                 .is_object()
         );
+    }
+
+    #[test]
+    fn api_custom_v2_installs_and_renders_in_the_wasm_sandbox() {
+        let temp = tempfile::tempdir().unwrap();
+        let signing = SigningKey::from_bytes(&[7_u8; 32]);
+        let store = store(&temp, &signing);
+        let installed = store.install_package(&wasm_package(&signing)).unwrap();
+        assert_eq!(installed.manifest.host_api, WASM_HOST_API_VERSION);
+        assert_eq!(
+            store.read_page("org.cfms.wasm-page", "overview").unwrap()["title"],
+            "WASM page"
+        );
+        assert_eq!(
+            store
+                .execute_module("org.cfms.wasm-page", serde_json::json!({ "answer": 42 }))
+                .unwrap()["title"],
+            "WASM page"
+        );
+        assert!(
+            store
+                .read_page("org.cfms.wasm-page", "not-declared")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn api_custom_v2_requires_the_exact_host_api_marker() {
+        let temp = tempfile::tempdir().unwrap();
+        let signing = SigningKey::from_bytes(&[7_u8; 32]);
+        let store = store(&temp, &signing);
+        let mut manifest: ExtensionManifest = serde_json::from_value(serde_json::json!({
+            "schema_version": 2,
+            "id": "org.cfms.v2",
+            "name": "v2",
+            "description": "test",
+            "publisher": "CFMS",
+            "version": "1.0.0",
+            "host_api": "api-custom-v3",
+            "min_client_version": "0.1.0",
+            "runtime": { "kind": "wasm", "module": "wasm/main.wasm" }
+        }))
+        .unwrap();
+        assert!(store.validate_manifest(&manifest).is_err());
+        manifest.host_api = WASM_HOST_API_VERSION.into();
+        assert!(store.validate_manifest(&manifest).is_ok());
     }
 
     #[test]

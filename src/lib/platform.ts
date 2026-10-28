@@ -17,6 +17,10 @@ export function isMobilePlatform(value: Platform | null = detectPlatform()): boo
   return value === 'android' || value === 'ios';
 }
 
+export function isAndroidPlatform(value: Platform | null = detectPlatform()): boolean {
+  return value === 'android';
+}
+
 export function supportsKeyboardShortcuts(value: Platform | null = detectPlatform()): boolean {
   return !isMobilePlatform(value);
 }

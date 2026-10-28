@@ -29,6 +29,10 @@ import type {
   ServerState,
   UserPreference,
 } from '$lib/api';
+import {
+  DECLARATIVE_HOST_API_VERSION,
+  WASM_HOST_API_VERSION,
+} from '$lib/api/extensions';
 import { authStore, serverStateStore } from '$lib/stores.svelte';
 
 type MockArgs = Record<string, unknown>;
@@ -196,6 +200,7 @@ const EXTENSION_OVERVIEW: ExtensionOverview = {
   catalog: null,
   trustedKeysConfigured: false,
   hostApiVersion: APP_VERSION,
+  supportedHostApiVersions: [DECLARATIVE_HOST_API_VERSION, WASM_HOST_API_VERSION],
 };
 
 /** Device settings the UI reads back after writing (e.g. the disclaimer flag). */

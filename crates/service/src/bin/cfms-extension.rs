@@ -172,6 +172,7 @@ fn validate_source_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
         || (path.starts_with("pages/") && extension == "json")
         || (path.starts_with("workflows/") && extension == "json")
         || (path.starts_with("i18n/") && extension == "json")
+        || (path.starts_with("wasm/") && extension == "wasm")
         || (path.starts_with("assets/")
             && matches!(
                 extension.as_str(),
