@@ -8,7 +8,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import { DEFAULT_ROOM_NAMES, DEFAULT_USER_NAMES } from '$lib/chatbox/names';
-  import { findReplySourceIndex } from '$lib/chat/reply-reference';
+  import { findReplySourceSpan, type ReplySourceSpan } from '$lib/chat/reply-reference';
   import {
     getDocument,
     listDirectory,
@@ -131,7 +131,7 @@
   let composeTextarea = $state<HTMLTextAreaElement | undefined>(undefined);
   let replyTarget = $state<ReplyTarget | null>(null);
   let messagesEl = $state<HTMLDivElement | null>(null);
-  let highlightedMessageIndex = $state<number | null>(null);
+  let highlightedSpan = $state<ReplySourceSpan | null>(null);
   let highlightTimer: ReturnType<typeof setTimeout> | null = null;
   let composeValidationError = $state<string | null>(null);
   let uploadingChatRecord = $state(false);
@@ -560,6 +560,12 @@
     return last ? last.time : '';
   }
 
+  /** Quotes keep the record's line breaks; the preview reads as one line. */
+  function replyPreview(text: string): string {
+    const flat = text.replace(/\s+/gu, ' ').trim();
+    return flat.length > 60 ? `${flat.slice(0, 60)}…` : flat;
+  }
+
   function selectRoom(roomId: string) {
     if (roomId !== selectedRoomId) {
       resetComposer();
@@ -639,30 +645,30 @@
   /**
    * Walks backwards from a reply to the message it quotes. Records carry no
    * stable message id, so the reference is matched against the sender plus the
-   * quoted text; see `findReplySourceIndex` for the matching rules.
+   * quoted text; see `findReplySourceSpan` for the matching rules.
    */
-  function replySourceIndex(messageIndex: number, ref: ReplyRef): number {
-    return findReplySourceIndex(selectedRoom?.messages ?? [], messageIndex, ref);
+  function replySourceSpan(messageIndex: number, ref: ReplyRef): ReplySourceSpan | null {
+    return findReplySourceSpan(selectedRoom?.messages ?? [], messageIndex, ref);
   }
 
   /** Scrolls a quoted message back into view and flashes it for a moment. */
   function jumpToReply(messageIndex: number, ref: ReplyRef) {
-    const sourceIndex = replySourceIndex(messageIndex, ref);
-    if (sourceIndex < 0) {
+    const span = replySourceSpan(messageIndex, ref);
+    if (!span) {
       notificationStore.info($t('chat.replySourceMissing'));
       return;
     }
 
     const target = messagesEl?.querySelector<HTMLElement>(
-      `[data-message-index="${sourceIndex}"]`,
+      `[data-message-index="${span.start}"]`,
     );
     if (!target) return;
 
     target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    highlightedMessageIndex = sourceIndex;
+    highlightedSpan = span;
     if (highlightTimer) clearTimeout(highlightTimer);
     highlightTimer = setTimeout(() => {
-      highlightedMessageIndex = null;
+      highlightedSpan = null;
       highlightTimer = null;
     }, REPLY_HIGHLIGHT_MS);
   }
@@ -702,11 +708,17 @@
         overwriteApprovedFor = targetKey;
       }
 
+      // The quoted message may be multi-line, but a record line cannot be:
+      // writing the newlines through would push the rest of the quote onto a
+      // line without a timestamp, which parses as loose text instead of a
+      // message. Flattening keeps the whole quote on the reply's own line, and
+      // the in-memory copy mirrors the record so both sides read the same.
+      const quoted = targetReply ? targetReply.text.replace(/\s+/gu, ' ').trim() : '';
       const newMessage: ChatMessage = {
         user,
         time,
         content,
-        replyRef: targetReply ? { ...targetReply } : null,
+        replyRef: targetReply ? { user: targetReply.user, text: quoted } : null,
       };
       let existingContent = '';
       if (existingDocument) {
@@ -718,7 +730,7 @@
       }
       const messageLines = content.split(/\r?\n/);
       if (targetReply) {
-        messageLines[messageLines.length - 1] += ` // ${targetReply.user} -> ${targetReply.text}`;
+        messageLines[messageLines.length - 1] += ` // ${targetReply.user} -> ${quoted}`;
       }
       const timestampedMessageLines = messageLines
         .map((line) => `${time} | ${line}`)
@@ -1063,7 +1075,9 @@
               {@const colors = selectedColorMap.get(message.user) ?? { bg: BUBBLE_COLORS[0], strip: STRIP_COLORS[0] }}
               <article
                 class="chat-msg"
-                class:chat-msg--highlight={highlightedMessageIndex === index}
+                class:chat-msg--highlight={highlightedSpan !== null
+                  && index >= highlightedSpan.start
+                  && index <= highlightedSpan.end}
                 data-message-index={index}
               >
                 <div class="chat-msg-header">
@@ -1106,11 +1120,7 @@
                     >
                       <span class="chat-reply-arrow">↩</span>
                       <strong>{displayName(message.replyRef.user)}</strong>
-                      <span class="chat-reply-text">
-                        ：{message.replyRef.text.length > 60
-                          ? `${message.replyRef.text.slice(0, 60)}…`
-                          : message.replyRef.text}
-                      </span>
+                      <span class="chat-reply-text">：{replyPreview(message.replyRef.text)}</span>
                     </button>
                     <div class="chat-reply-sep"></div>
                   {/if}
