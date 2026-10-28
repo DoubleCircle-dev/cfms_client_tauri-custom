@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { open } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
@@ -8,6 +8,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import { DEFAULT_ROOM_NAMES, DEFAULT_USER_NAMES } from '$lib/chatbox/names';
+  import { findReplySourceIndex } from '$lib/chat/reply-reference';
   import {
     getDocument,
     listDirectory,
@@ -66,6 +67,7 @@
   ];
   const URL_PATTERN = /https?:\/\/[^\s)]+/g;
   const REPLY_PATTERN = /([\s\S]*)\s*\/\/\s*(.+?)\s*->\s*(.*)$/;
+  const REPLY_HIGHLIGHT_MS = 1600;
 
   interface ReplyRef {
     user: string;
@@ -128,6 +130,9 @@
   let composeMessage = $state('');
   let composeTextarea = $state<HTMLTextAreaElement | undefined>(undefined);
   let replyTarget = $state<ReplyTarget | null>(null);
+  let messagesEl = $state<HTMLDivElement | null>(null);
+  let highlightedMessageIndex = $state<number | null>(null);
+  let highlightTimer: ReturnType<typeof setTimeout> | null = null;
   let composeValidationError = $state<string | null>(null);
   let uploadingChatRecord = $state(false);
   let speakerLocked = $state(false);
@@ -172,6 +177,10 @@
     } else {
       void refresh();
     }
+  });
+
+  onDestroy(() => {
+    if (highlightTimer) clearTimeout(highlightTimer);
   });
 
   function loadMode(): ChatMode {
@@ -627,6 +636,37 @@
     void tick().then(() => composeTextarea?.focus());
   }
 
+  /**
+   * Walks backwards from a reply to the message it quotes. Records carry no
+   * stable message id, so the reference is matched against the sender plus the
+   * quoted text; see `findReplySourceIndex` for the matching rules.
+   */
+  function replySourceIndex(messageIndex: number, ref: ReplyRef): number {
+    return findReplySourceIndex(selectedRoom?.messages ?? [], messageIndex, ref);
+  }
+
+  /** Scrolls a quoted message back into view and flashes it for a moment. */
+  function jumpToReply(messageIndex: number, ref: ReplyRef) {
+    const sourceIndex = replySourceIndex(messageIndex, ref);
+    if (sourceIndex < 0) {
+      notificationStore.info($t('chat.replySourceMissing'));
+      return;
+    }
+
+    const target = messagesEl?.querySelector<HTMLElement>(
+      `[data-message-index="${sourceIndex}"]`,
+    );
+    if (!target) return;
+
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    highlightedMessageIndex = sourceIndex;
+    if (highlightTimer) clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(() => {
+      highlightedMessageIndex = null;
+      highlightTimer = null;
+    }, REPLY_HIGHLIGHT_MS);
+  }
+
   async function appendComposeMessage() {
     const speakerName = normalizedSpeakerName();
     if (!isValidSpeakerName(speakerName)) {
@@ -1012,7 +1052,7 @@
             <p>{$t('chat.loadingRoom')}</p>
           </div>
         {:else}
-          <div class="chat-messages">
+          <div class="chat-messages" bind:this={messagesEl}>
             {#if selectedRoom.messages.length === 0 && selectedRoom.unreadableRecords.length === 0}
               <div class="chat-state">
                 <Icon name="chat" size="28px" />
@@ -1021,7 +1061,11 @@
             {/if}
             {#each selectedRoom.messages as message, index (index)}
               {@const colors = selectedColorMap.get(message.user) ?? { bg: BUBBLE_COLORS[0], strip: STRIP_COLORS[0] }}
-              <article class="chat-msg">
+              <article
+                class="chat-msg"
+                class:chat-msg--highlight={highlightedMessageIndex === index}
+                data-message-index={index}
+              >
                 <div class="chat-msg-header">
                   <button
                     type="button"
@@ -1054,7 +1098,12 @@
                 </div>
                 <div class="chat-bubble" style:background={colors.bg} style:border-color={colors.strip}>
                   {#if message.replyRef}
-                    <div class="chat-reply">
+                    <button
+                      type="button"
+                      class="chat-reply"
+                      title={$t('chat.jumpToReply')}
+                      onclick={() => jumpToReply(index, message.replyRef as ReplyRef)}
+                    >
                       <span class="chat-reply-arrow">↩</span>
                       <strong>{displayName(message.replyRef.user)}</strong>
                       <span class="chat-reply-text">
@@ -1062,7 +1111,7 @@
                           ? `${message.replyRef.text.slice(0, 60)}…`
                           : message.replyRef.text}
                       </span>
-                    </div>
+                    </button>
                     <div class="chat-reply-sep"></div>
                   {/if}
                   <div class="chat-content">
@@ -1755,11 +1804,32 @@
 
   .chat-reply {
     display: flex;
+    width: 100%;
     align-items: baseline;
     gap: 4px;
+    border: none;
+    border-radius: var(--borderRadiusSmall) var(--borderRadiusSmall) 0 0;
     padding: 7px 10px 3px;
+    background: transparent;
     color: rgba(0, 0, 0, 0.55);
     font: 400 11px/16px var(--fontFamilyBase);
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .chat-reply:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(0, 0, 0, 0.72);
+  }
+
+  .chat-reply:focus-visible {
+    outline: 2px solid #409eff;
+    outline-offset: -2px;
+  }
+
+  .chat-msg--highlight .chat-bubble {
+    outline: 2px solid #409eff;
+    outline-offset: 2px;
   }
 
   .chat-reply-arrow {

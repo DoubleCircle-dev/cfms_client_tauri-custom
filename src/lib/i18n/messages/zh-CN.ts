@@ -1090,6 +1090,8 @@ export const zh_CN = {
     failedTitle: '下载失败',
     failedOne: '下载失败：{error}',
     failedSummary: '{count} 个下载失败',
+    notifyCompleteTitle: '下载完成',
+    notifyCompleteMany: '{count} 个文件已下载完成',
   },
   about: {
     productName: '机密文件管理系统',
@@ -2326,6 +2328,8 @@ export const zh_CN = {
     sendingMessage: '发送中…',
     reply: '回复',
     replyUnavailable: '该发言者的记录文件标识不唯一，无法引用。',
+    jumpToReply: '查看原消息',
+    replySourceMissing: '找不到被引用的原消息，它可能已不在当前记录中。',
     replyingTo: '回复 {name}',
     cancelReply: '取消回复',
     replySingleLine: '回复内容暂不支持换行，请删除换行后再发送。',

@@ -1097,6 +1097,8 @@ export const en = {
     failedTitle: 'Downloads failed',
     failedOne: 'Download failed: {error}',
     failedSummary: '{count} download(s) failed',
+    notifyCompleteTitle: 'Download complete',
+    notifyCompleteMany: '{count} files downloaded',
   },
   about: {
     productName: 'Confidential File Management System',
@@ -2339,6 +2341,8 @@ export const en = {
     sendingMessage: 'Sending…',
     reply: 'Reply',
     replyUnavailable: 'This speaker does not have a unique record filename identifier and cannot be quoted.',
+    jumpToReply: 'Show the original message',
+    replySourceMissing: 'The quoted message is not in the current record any more.',
     replyingTo: 'Replying to {name}',
     cancelReply: 'Cancel reply',
     replySingleLine: 'Replies currently support one line only. Remove line breaks before sending.',

@@ -29,8 +29,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const originalAnimate = Element.prototype.animate;
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+const scrollIntoViewSpy = vi.fn();
 
 beforeAll(() => {
+  Element.prototype.scrollIntoView = scrollIntoViewSpy;
   Element.prototype.animate = vi.fn(() => {
     const animation = {
       cancel: vi.fn(),
@@ -63,6 +66,7 @@ beforeAll(() => {
 
 afterAll(() => {
   Element.prototype.animate = originalAnimate;
+  Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
 vi.mock('$lib/api/files', () => ({
@@ -496,6 +500,56 @@ describe('chat page online mode', () => {
     expect(
       document.querySelector('.chat-msg .chat-reply .chat-reply-text')?.textContent,
     ).toContain('When was Kuroshio Hour?');
+  });
+
+  it('scrolls back to the quoted message and highlights it when the quote is clicked', async () => {
+    scrollIntoViewSpy.mockClear();
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', '.runtime', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockImplementation(async (folderId: string | null) => {
+      if (folderId === 'chatbox-folder-id') {
+        return {
+          folders: [{ id: 'room-folder-id', name: 'room-id', created_time: 100 }],
+          documents: [],
+          parent_id: null,
+        };
+      }
+      return {
+        folders: [],
+        documents: [{ id: 'reply-record-id', title: 'b2e8fa7.txt' }],
+        parent_id: folderId,
+      };
+    });
+    mocks.readServerDocument.mockResolvedValue({
+      content:
+        '# time | msg\n'
+        + '2025-07-24 20:53:18 | When was Kuroshio Hour?\n'
+        + '2025-07-24 20:54:02 | 回复是这个 // b2e8fa7 -> When was Kuroshio Hour?\n',
+      size: 128,
+      truncated: false,
+    });
+
+    render(ChatPage);
+    await waitFor(() => expect(roomCards().length).toBe(1));
+    await fireEvent.click(roomCards()[0].closest('.chat-room-card') as HTMLElement);
+
+    const quote = await waitFor(() => {
+      const element = document.querySelector('.chat-msg .chat-reply');
+      expect(element).toBeTruthy();
+      return element as HTMLElement;
+    });
+    expect(quote.tagName).toBe('BUTTON');
+    await fireEvent.click(quote);
+
+    expect(scrollIntoViewSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(
+        document
+          .querySelector('[data-message-index="0"]')
+          ?.classList.contains('chat-msg--highlight'),
+      ).toBe(true);
+    });
   });
 
   it('uses the complete source filename identifier when replying to a custom speaker', async () => {
