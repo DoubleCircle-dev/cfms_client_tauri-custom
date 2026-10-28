@@ -16,6 +16,11 @@ import {
   serverStateStore,
   uploadStore,
 } from "./stores.svelte";
+import {
+  ensureNotificationPermission,
+  notifyDownloadCompleted,
+  resetSystemNotifications,
+} from "./system-notifications";
 
 let unlisten: (() => void) | null = null;
 let unlistenUpload: (() => void) | null = null;
@@ -43,6 +48,10 @@ async function subscribe<T>(
 /** Start listening for backend `cfms:event` events. */
 export async function initEventListeners(): Promise<void> {
   if (unlisten) return; // Already initialized.
+
+  // Warm the OS permission early so a background completion can actually
+  // notify; failures are ignored, the notification path degrades silently.
+  void ensureNotificationPermission();
 
   unlisten = await subscribe<ServiceEvent>("cfms:event", (payload) => {
     const event = payload.payload;
@@ -78,6 +87,7 @@ export async function initEventListeners(): Promise<void> {
         const { task_id, file_path } = event.data;
         downloadStore.markCompleted(task_id);
         eventLog.push("success", `Download complete: ${file_path}`);
+        notifyDownloadCompleted(file_path);
         break;
       }
 
@@ -201,4 +211,5 @@ export function stopEventListeners(): void {
     unlistenUpload();
     unlistenUpload = null;
   }
+  resetSystemNotifications();
 }
