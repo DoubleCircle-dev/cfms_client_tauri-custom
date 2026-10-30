@@ -1,5 +1,6 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
+  import { openUrl } from '@tauri-apps/plugin-opener';
 
   import FluentButton from '$lib/components/FluentButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -7,6 +8,8 @@
   import { ToolError } from '$lib/tools/errors';
   import { matrixDecode, matrixEncode, matrixTranspose } from '$lib/tools/matrix';
   import { TOOLS, MATRIX_TOOL_ID, type ToolDefinition, type ToolFunction } from '$lib/tools/registry';
+
+  const TOOLBOX_URL = 'https://www.tool.mistarg.cn/';
 
   interface ToolPanelState {
     input: string;
@@ -91,6 +94,17 @@
     panel.input = '';
     panel.output = '';
     panel.error = null;
+  }
+
+  // The promo leaves the app: hand the URL to the OS browser, and fall back to
+  // a normal tab when running in the Vite preview without a Tauri shell.
+  async function openToolbox(event: MouseEvent) {
+    event.preventDefault();
+    try {
+      await openUrl(TOOLBOX_URL);
+    } catch {
+      window.open(TOOLBOX_URL, '_blank', 'noopener,noreferrer');
+    }
   }
 
   function readMatrix(): number[][] {
@@ -333,16 +347,60 @@
       {/if}
     </section>
   {/if}
+
+  <div class="tools-promo">
+    <p>
+      {$t('tools.promo.lead')}<a
+        class="tools-promo__link"
+        href={TOOLBOX_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        onclick={openToolbox}
+      >{$t('tools.promo.link')}</a>{$t('tools.promo.suffix')}
+    </p>
+  </div>
 </div>
 
 <style>
+  /* The promo bar is pinned to the bottom of the scroll viewport: the column
+     pushes it down when the content is short, and keeps it stuck while the
+     tool panels scroll underneath. */
   .tools-page {
-    display: grid;
+    display: flex;
+    box-sizing: border-box;
+    flex-direction: column;
     width: min(100%, 48rem);
-    align-content: start;
+    min-height: 100%;
     gap: 20px;
     margin-inline: auto;
     padding: 24px;
+  }
+
+  .tools-promo {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    padding: 10px 16px;
+    background: var(--colorNeutralBackground2);
+    text-align: center;
+  }
+
+  .tools-promo p {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+    font: 400 13px/18px var(--fontFamilyBase);
+  }
+
+  .tools-promo__link {
+    color: var(--colorBrandForeground1);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .tools-promo__link:hover {
+    text-decoration: underline;
   }
 
   .cfms-heading-copy h1 {

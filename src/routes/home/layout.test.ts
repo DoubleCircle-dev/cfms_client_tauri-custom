@@ -53,6 +53,20 @@ it.each([
   expect(mocks.goto).toHaveBeenCalledWith(href);
 });
 
+it('lists notification history directly below transfers in the sidebar', async () => {
+  render(WorkspaceLayout, { children: createRawSnippet(() => ({ render: () => '<div>Workspace content</div>' })) });
+  const navLabels = Array.from(document.querySelectorAll('[data-nav-item]'))
+    .map((element) => element.textContent?.trim() ?? '');
+  const transfersIndex = navLabels.findIndex((label) => label.includes('Transfers'));
+  const historyIndex = navLabels.findIndex((label) => label.includes('Notification history'));
+
+  expect(transfersIndex).toBeGreaterThanOrEqual(0);
+  expect(historyIndex).toBe(transfersIndex + 1);
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Notification history' }));
+  expect(mocks.goto).toHaveBeenCalledWith('/home/notifications');
+});
+
 it('keeps the avatar picker accessible from the account menu', async () => {
   authStore.permissions = ['set_user_avatar'];
   render(WorkspaceLayout, { children: createRawSnippet(() => ({ render: () => '<div>Workspace content</div>' })) });

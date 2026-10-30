@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { open } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
@@ -8,6 +8,8 @@
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import { DEFAULT_ROOM_NAMES, DEFAULT_USER_NAMES } from '$lib/chatbox/names';
+  import { findReplySourceSpan, type ReplySourceSpan } from '$lib/chat/reply-reference';
+  import { isScrolledToBottom, isScrolledToTop, SCROLL_EDGE_TOLERANCE } from '$lib/scroll-edges';
   import {
     getDocument,
     listDirectory,
@@ -66,6 +68,7 @@
   ];
   const URL_PATTERN = /https?:\/\/[^\s)]+/g;
   const REPLY_PATTERN = /([\s\S]*)\s*\/\/\s*(.+?)\s*->\s*(.*)$/;
+  const REPLY_HIGHLIGHT_MS = 1600;
 
   interface ReplyRef {
     user: string;
@@ -128,6 +131,9 @@
   let composeMessage = $state('');
   let composeTextarea = $state<HTMLTextAreaElement | undefined>(undefined);
   let replyTarget = $state<ReplyTarget | null>(null);
+  let messagesEl = $state<HTMLDivElement | null>(null);
+  let highlightedSpan = $state<ReplySourceSpan | null>(null);
+  let highlightTimer: ReturnType<typeof setTimeout> | null = null;
   let composeValidationError = $state<string | null>(null);
   let uploadingChatRecord = $state(false);
   let speakerLocked = $state(false);
@@ -172,6 +178,78 @@
     } else {
       void refresh();
     }
+  });
+
+  onDestroy(() => {
+    if (highlightTimer) clearTimeout(highlightTimer);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Message scrolling
+  //
+  // A room opens at the newest message. Two overlay buttons then follow the
+  // scroll position: "to top" sits in the top-right corner while the list is
+  // scrolled away from the start, "to bottom" appears in the bottom-right
+  // corner once the user has scrolled up from the end.
+  // ---------------------------------------------------------------------------
+  let atMessagesTop = $state(true);
+  let atMessagesBottom = $state(true);
+  let roomShowingMessages: string | null = null;
+
+  function updateMessageScrollState() {
+    const element = messagesEl;
+    if (!element) {
+      atMessagesTop = true;
+      atMessagesBottom = true;
+      return;
+    }
+    const metrics = {
+      scrollTop: element.scrollTop,
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight,
+    };
+    atMessagesTop = isScrolledToTop(metrics, SCROLL_EDGE_TOLERANCE);
+    atMessagesBottom = isScrolledToBottom(metrics, SCROLL_EDGE_TOLERANCE);
+  }
+
+  function scrollMessagesTo(edge: 'top' | 'bottom') {
+    const element = messagesEl;
+    if (!element) return;
+    element.scrollTo({
+      top: edge === 'top' ? 0 : element.scrollHeight,
+      behavior: 'smooth',
+    });
+  }
+
+  /** Jumps to the end without animation; used when a room is first painted. */
+  function pinMessagesToBottom() {
+    const element = messagesEl;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
+    updateMessageScrollState();
+  }
+
+  // A newly opened room always starts at its newest message, even if the
+  // previous room was left scrolled up.
+  $effect(() => {
+    const roomId = selectedRoomId;
+    if (roomId === roomShowingMessages) return;
+    roomShowingMessages = roomId;
+    atMessagesTop = true;
+    atMessagesBottom = true;
+  });
+
+  // Follow the end as content arrives, but only while the reader is already
+  // there — scrolling up to read old messages must not be interrupted.
+  $effect(() => {
+    const activeRoomId = selectedRoomId;
+    const room = selectedRoom;
+    const ready = room?.loaded ?? false;
+    const messageCount = room?.messages.length ?? 0;
+    if (!room || room.roomId !== activeRoomId) return;
+    if (!ready || messageCount === 0) return;
+    if (!untrack(() => atMessagesBottom)) return;
+    void tick().then(pinMessagesToBottom);
   });
 
   function loadMode(): ChatMode {
@@ -551,6 +629,12 @@
     return last ? last.time : '';
   }
 
+  /** Quotes keep the record's line breaks; the preview reads as one line. */
+  function replyPreview(text: string): string {
+    const flat = text.replace(/\s+/gu, ' ').trim();
+    return flat.length > 60 ? `${flat.slice(0, 60)}…` : flat;
+  }
+
   function selectRoom(roomId: string) {
     if (roomId !== selectedRoomId) {
       resetComposer();
@@ -627,6 +711,37 @@
     void tick().then(() => composeTextarea?.focus());
   }
 
+  /**
+   * Walks backwards from a reply to the message it quotes. Records carry no
+   * stable message id, so the reference is matched against the sender plus the
+   * quoted text; see `findReplySourceSpan` for the matching rules.
+   */
+  function replySourceSpan(messageIndex: number, ref: ReplyRef): ReplySourceSpan | null {
+    return findReplySourceSpan(selectedRoom?.messages ?? [], messageIndex, ref);
+  }
+
+  /** Scrolls a quoted message back into view and flashes it for a moment. */
+  function jumpToReply(messageIndex: number, ref: ReplyRef) {
+    const span = replySourceSpan(messageIndex, ref);
+    if (!span) {
+      notificationStore.info($t('chat.replySourceMissing'));
+      return;
+    }
+
+    const target = messagesEl?.querySelector<HTMLElement>(
+      `[data-message-index="${span.start}"]`,
+    );
+    if (!target) return;
+
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    highlightedSpan = span;
+    if (highlightTimer) clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(() => {
+      highlightedSpan = null;
+      highlightTimer = null;
+    }, REPLY_HIGHLIGHT_MS);
+  }
+
   async function appendComposeMessage() {
     const speakerName = normalizedSpeakerName();
     if (!isValidSpeakerName(speakerName)) {
@@ -662,11 +777,17 @@
         overwriteApprovedFor = targetKey;
       }
 
+      // The quoted message may be multi-line, but a record line cannot be:
+      // writing the newlines through would push the rest of the quote onto a
+      // line without a timestamp, which parses as loose text instead of a
+      // message. Flattening keeps the whole quote on the reply's own line, and
+      // the in-memory copy mirrors the record so both sides read the same.
+      const quoted = targetReply ? targetReply.text.replace(/\s+/gu, ' ').trim() : '';
       const newMessage: ChatMessage = {
         user,
         time,
         content,
-        replyRef: targetReply ? { ...targetReply } : null,
+        replyRef: targetReply ? { user: targetReply.user, text: quoted } : null,
       };
       let existingContent = '';
       if (existingDocument) {
@@ -678,7 +799,7 @@
       }
       const messageLines = content.split(/\r?\n/);
       if (targetReply) {
-        messageLines[messageLines.length - 1] += ` // ${targetReply.user} -> ${targetReply.text}`;
+        messageLines[messageLines.length - 1] += ` // ${targetReply.user} -> ${quoted}`;
       }
       const timestampedMessageLines = messageLines
         .map((line) => `${time} | ${line}`)
@@ -1012,76 +1133,107 @@
             <p>{$t('chat.loadingRoom')}</p>
           </div>
         {:else}
-          <div class="chat-messages">
-            {#if selectedRoom.messages.length === 0 && selectedRoom.unreadableRecords.length === 0}
-              <div class="chat-state">
-                <Icon name="chat" size="28px" />
-                <p>{$t('chat.noMessages')}</p>
-              </div>
-            {/if}
-            {#each selectedRoom.messages as message, index (index)}
-              {@const colors = selectedColorMap.get(message.user) ?? { bg: BUBBLE_COLORS[0], strip: STRIP_COLORS[0] }}
-              <article class="chat-msg">
-                <div class="chat-msg-header">
-                  <button
-                    type="button"
-                    class="chat-user-name"
-                    title={$t('chat.renameUser')}
-                    onclick={() => renameUser(message.user)}
-                  >
-                    {displayName(message.user)}
-                  </button>
-                  {#if isUserNameOverridden(message.user)}
-                    <button
-                      type="button"
-                      class="chat-user-name-reset"
-                      title={$t('chat.restoreUserName')}
-                      onclick={() => clearUserNameOverride(message.user)}
-                    >
-                      <Icon name="undo" size="14px" />
-                    </button>
-                  {/if}
-                  <span class="chat-msg-time">{message.time}</span>
-                  {#if mode === 'online' && selectedRoom.loaded && authStore.username}
-                    <button
-                      type="button"
-                      class="chat-msg-reply"
-                      disabled={uploadingChatRecord || !replyUserId(message)}
-                      title={$t(replyUserId(message) ? 'chat.reply' : 'chat.replyUnavailable')}
-                      onclick={() => startReply(message)}
-                    >{$t('chat.reply')}</button>
-                  {/if}
-                </div>
-                <div class="chat-bubble" style:background={colors.bg} style:border-color={colors.strip}>
-                  {#if message.replyRef}
-                    <div class="chat-reply">
-                      <span class="chat-reply-arrow">↩</span>
-                      <strong>{displayName(message.replyRef.user)}</strong>
-                      <span class="chat-reply-text">
-                        ：{message.replyRef.text.length > 60
-                          ? `${message.replyRef.text.slice(0, 60)}…`
-                          : message.replyRef.text}
-                      </span>
-                    </div>
-                    <div class="chat-reply-sep"></div>
-                  {/if}
-                  <div class="chat-content">
-                    {#each splitUrls(message.content) as part, partIndex (partIndex)}
-                      {#if part.url}
-                        <a
-                          href={part.url}
-                          class="chat-link"
-                          onclick={(event) => openLink(event, part.url as string)}
-                        >{part.text}</a>
-                      {:else}
-                        {part.text}
-                      {/if}
-                    {/each}
+          <div class="chat-messages-shell">
+            <div class="chat-messages" bind:this={messagesEl} onscroll={updateMessageScrollState}>
+                {#if selectedRoom.messages.length === 0 && selectedRoom.unreadableRecords.length === 0}
+                  <div class="chat-state">
+                    <Icon name="chat" size="28px" />
+                    <p>{$t('chat.noMessages')}</p>
                   </div>
-                </div>
-              </article>
-            {/each}
+                {/if}
+                {#each selectedRoom.messages as message, index (index)}
+                {@const colors = selectedColorMap.get(message.user) ?? { bg: BUBBLE_COLORS[0], strip: STRIP_COLORS[0] }}
+                <article
+                  class="chat-msg"
+                  class:chat-msg--highlight={highlightedSpan !== null
+                    && index >= highlightedSpan.start
+                    && index <= highlightedSpan.end}
+                  data-message-index={index}
+                >
+                  <div class="chat-msg-header">
+                    <button
+                      type="button"
+                      class="chat-user-name"
+                      title={$t('chat.renameUser')}
+                      onclick={() => renameUser(message.user)}
+                    >
+                      {displayName(message.user)}
+                    </button>
+                    {#if isUserNameOverridden(message.user)}
+                      <button
+                        type="button"
+                        class="chat-user-name-reset"
+                        title={$t('chat.restoreUserName')}
+                        onclick={() => clearUserNameOverride(message.user)}
+                      >
+                        <Icon name="undo" size="14px" />
+                      </button>
+                    {/if}
+                    <span class="chat-msg-time">{message.time}</span>
+                    {#if mode === 'online' && selectedRoom.loaded && authStore.username}
+                      <button
+                        type="button"
+                        class="chat-msg-reply"
+                        disabled={uploadingChatRecord || !replyUserId(message)}
+                        title={$t(replyUserId(message) ? 'chat.reply' : 'chat.replyUnavailable')}
+                        onclick={() => startReply(message)}
+                      >{$t('chat.reply')}</button>
+                    {/if}
+                  </div>
+                  <div class="chat-bubble" style:background={colors.bg} style:border-color={colors.strip}>
+                    {#if message.replyRef}
+                      <button
+                        type="button"
+                        class="chat-reply"
+                        title={$t('chat.jumpToReply')}
+                        onclick={() => jumpToReply(index, message.replyRef as ReplyRef)}
+                      >
+                        <span class="chat-reply-arrow">↩</span>
+                        <strong>{displayName(message.replyRef.user)}</strong>
+                        <span class="chat-reply-text">：{replyPreview(message.replyRef.text)}</span>
+                      </button>
+                      <div class="chat-reply-sep"></div>
+                    {/if}
+                    <div class="chat-content">
+                      {#each splitUrls(message.content) as part, partIndex (partIndex)}
+                        {#if part.url}
+                          <a
+                            href={part.url}
+                            class="chat-link"
+                            onclick={(event) => openLink(event, part.url as string)}
+                          >{part.text}</a>
+                        {:else}
+                          {part.text}
+                        {/if}
+                      {/each}
+                    </div>
+                  </div>
+                </article>
+              {/each}
           </div>
+          {#if !atMessagesTop}
+            <button
+              type="button"
+              class="chat-scroll-jump chat-scroll-jump--top"
+              title={$t('chat.scrollToTop')}
+              aria-label={$t('chat.scrollToTop')}
+              onclick={() => scrollMessagesTo('top')}
+            >
+              <Icon name="arrowUpward" size="16px" />
+            </button>
+          {/if}
+          {#if !atMessagesBottom}
+            <button
+              type="button"
+              class="chat-scroll-jump chat-scroll-jump--bottom"
+              title={$t('chat.scrollToBottom')}
+              aria-label={$t('chat.scrollToBottom')}
+              onclick={() => scrollMessagesTo('bottom')}
+            >
+              <Icon name="arrowDownward" size="16px" />
+            </button>
+          {/if}
+        </div>
         {/if}
 
         {#if selectedRoom.unreadableRecords.length > 0}
@@ -1665,12 +1817,49 @@
     color: var(--colorBrandForeground1);
   }
 
+  .chat-messages-shell {
+    position: relative;
+    display: flex;
+    min-height: 0;
+    flex: 1;
+  }
+
   .chat-messages {
     min-height: 0;
     flex: 1;
     overflow-y: auto;
     padding: 14px 16px;
     background: color-mix(in srgb, var(--explorer-background) 55%, var(--explorer-surface));
+  }
+
+  .chat-scroll-jump {
+    position: absolute;
+    z-index: 2;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusCircular);
+    box-shadow: var(--shadow4);
+    color: var(--colorNeutralForeground2);
+    background: var(--colorNeutralBackground1);
+    cursor: pointer;
+  }
+
+  .chat-scroll-jump:hover {
+    border-color: var(--colorBrandStroke);
+    color: var(--colorBrandForeground1);
+  }
+
+  .chat-scroll-jump--top {
+    top: 10px;
+    right: 12px;
+  }
+
+  .chat-scroll-jump--bottom {
+    right: 12px;
+    bottom: 12px;
   }
 
   .chat-msg {
@@ -1755,11 +1944,32 @@
 
   .chat-reply {
     display: flex;
+    width: 100%;
     align-items: baseline;
     gap: 4px;
+    border: none;
+    border-radius: var(--borderRadiusSmall) var(--borderRadiusSmall) 0 0;
     padding: 7px 10px 3px;
+    background: transparent;
     color: rgba(0, 0, 0, 0.55);
     font: 400 11px/16px var(--fontFamilyBase);
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .chat-reply:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(0, 0, 0, 0.72);
+  }
+
+  .chat-reply:focus-visible {
+    outline: 2px solid #409eff;
+    outline-offset: -2px;
+  }
+
+  .chat-msg--highlight .chat-bubble {
+    outline: 2px solid #409eff;
+    outline-offset: 2px;
   }
 
   .chat-reply-arrow {

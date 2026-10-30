@@ -29,8 +29,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const originalAnimate = Element.prototype.animate;
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+const scrollIntoViewSpy = vi.fn();
+const originalScrollTo = Element.prototype.scrollTo;
+const scrollToSpy = vi.fn();
 
 beforeAll(() => {
+  Element.prototype.scrollIntoView = scrollIntoViewSpy;
+  Element.prototype.scrollTo = scrollToSpy;
   Element.prototype.animate = vi.fn(() => {
     const animation = {
       cancel: vi.fn(),
@@ -63,6 +69,8 @@ beforeAll(() => {
 
 afterAll(() => {
   Element.prototype.animate = originalAnimate;
+  Element.prototype.scrollIntoView = originalScrollIntoView;
+  Element.prototype.scrollTo = originalScrollTo;
 });
 
 vi.mock('$lib/api/files', () => ({
@@ -498,6 +506,56 @@ describe('chat page online mode', () => {
     ).toContain('When was Kuroshio Hour?');
   });
 
+  it('scrolls back to the quoted message and highlights it when the quote is clicked', async () => {
+    scrollIntoViewSpy.mockClear();
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', '.runtime', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockImplementation(async (folderId: string | null) => {
+      if (folderId === 'chatbox-folder-id') {
+        return {
+          folders: [{ id: 'room-folder-id', name: 'room-id', created_time: 100 }],
+          documents: [],
+          parent_id: null,
+        };
+      }
+      return {
+        folders: [],
+        documents: [{ id: 'reply-record-id', title: 'b2e8fa7.txt' }],
+        parent_id: folderId,
+      };
+    });
+    mocks.readServerDocument.mockResolvedValue({
+      content:
+        '# time | msg\n'
+        + '2025-07-24 20:53:18 | When was Kuroshio Hour?\n'
+        + '2025-07-24 20:54:02 | 回复是这个 // b2e8fa7 -> When was Kuroshio Hour?\n',
+      size: 128,
+      truncated: false,
+    });
+
+    render(ChatPage);
+    await waitFor(() => expect(roomCards().length).toBe(1));
+    await fireEvent.click(roomCards()[0].closest('.chat-room-card') as HTMLElement);
+
+    const quote = await waitFor(() => {
+      const element = document.querySelector('.chat-msg .chat-reply');
+      expect(element).toBeTruthy();
+      return element as HTMLElement;
+    });
+    expect(quote.tagName).toBe('BUTTON');
+    await fireEvent.click(quote);
+
+    expect(scrollIntoViewSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(
+        document
+          .querySelector('[data-message-index="0"]')
+          ?.classList.contains('chat-msg--highlight'),
+      ).toBe(true);
+    });
+  });
+
   it('uses the complete source filename identifier when replying to a custom speaker', async () => {
     const accountHash = createHash('sha256').update('alice').digest('hex').slice(0, 7);
     const customSpeaker = 'custom-speaker-long';
@@ -552,5 +610,80 @@ describe('chat page online mode', () => {
     expect(
       document.querySelector('.chat-msg .chat-reply .chat-reply-text')?.textContent,
     ).toContain('question from custom name');
+  });
+});
+
+describe('chat message scroll controls', () => {
+  async function openSingleRoomDocument() {
+    mocks.resolveNodePath.mockResolvedValue({
+      node_ids: ['/', '.runtime', 'chatbox-folder-id'],
+    });
+    mocks.listDirectory.mockImplementation(async (folderId: string | null) => {
+      if (folderId === 'chatbox-folder-id') {
+        return {
+          folders: [{ id: 'room-folder-id', name: 'room-id', created_time: 100 }],
+          documents: [],
+          parent_id: null,
+        };
+      }
+      return {
+        folders: [],
+        documents: [{ id: 'scroll-record-id', title: 'b2e8fa7.txt' }],
+        parent_id: folderId,
+      };
+    });
+    mocks.readServerDocument.mockResolvedValue({
+      content: '# time | msg\n2025-07-24 20:53:18 | hello\n2025-07-24 20:54:02 | again\n',
+      size: 96,
+      truncated: false,
+    });
+
+    render(ChatPage);
+    await waitFor(() => expect(roomCards().length).toBe(1));
+    await fireEvent.click(roomCards()[0].closest('.chat-room-card') as HTMLElement);
+    await waitFor(() => expect(document.querySelector('.chat-messages')).toBeTruthy());
+    return document.querySelector('.chat-messages') as HTMLElement;
+  }
+
+  function setMetrics(list: HTMLElement, scrollTop: number) {
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, value: 2000 });
+    Object.defineProperty(list, 'clientHeight', { configurable: true, value: 600 });
+    list.scrollTop = scrollTop;
+  }
+
+  it('shows the jump buttons only when the list is away from that edge', async () => {
+    const list = await openSingleRoomDocument();
+
+    setMetrics(list, 0);
+    await fireEvent.scroll(list);
+    expect(document.querySelector('.chat-scroll-jump--top')).toBeNull();
+    expect(document.querySelector('.chat-scroll-jump--bottom')).toBeTruthy();
+
+    setMetrics(list, 900);
+    await fireEvent.scroll(list);
+    expect(document.querySelector('.chat-scroll-jump--top')).toBeTruthy();
+    expect(document.querySelector('.chat-scroll-jump--bottom')).toBeTruthy();
+
+    setMetrics(list, 1400);
+    await fireEvent.scroll(list);
+    expect(document.querySelector('.chat-scroll-jump--top')).toBeTruthy();
+    expect(document.querySelector('.chat-scroll-jump--bottom')).toBeNull();
+  });
+
+  it('scrolls the message area, not the page, when the buttons are used', async () => {
+    const list = await openSingleRoomDocument();
+    setMetrics(list, 900);
+    await fireEvent.scroll(list);
+    scrollToSpy.mockClear();
+
+    await fireEvent.click(document.querySelector('.chat-scroll-jump--bottom') as HTMLElement);
+    expect(scrollToSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ top: 2000, behavior: 'smooth' }),
+    );
+
+    await fireEvent.click(document.querySelector('.chat-scroll-jump--top') as HTMLElement);
+    expect(scrollToSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ top: 0, behavior: 'smooth' }),
+    );
   });
 });

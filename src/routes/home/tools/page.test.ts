@@ -3,9 +3,12 @@
 import '$lib/i18n';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { locale } from 'svelte-i18n';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ToolsPage from './+page.svelte';
+
+const { openUrlMock } = vi.hoisted(() => ({ openUrlMock: vi.fn() }));
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: openUrlMock }));
 
 function cellLabel(row: number, col: number): string {
   return `Row ${row}, column ${col}`;
@@ -13,6 +16,8 @@ function cellLabel(row: number, col: number): string {
 
 beforeEach(() => {
   locale.set('en');
+  openUrlMock.mockReset();
+  openUrlMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -78,5 +83,25 @@ describe('tools page', () => {
       (_, index) => screen.getByLabelText(cellLabel(Math.floor(index / 7) + 1, (index % 7) + 1)),
     );
     expect(cells).toHaveLength(49);
+  });
+
+  it('offers the toolbox promo and hands the link to the system browser', async () => {
+    render(ToolsPage);
+
+    expect(screen.getByText(/Can’t find the tool you need\? Try/)).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Mistarg Toolbox' });
+    expect(link.getAttribute('href')).toBe('https://www.tool.mistarg.cn/');
+    expect(link.getAttribute('target')).toBe('_blank');
+
+    await fireEvent.click(link);
+    expect(openUrlMock).toHaveBeenCalledWith('https://www.tool.mistarg.cn/');
+  });
+
+  it('keeps the Chinese promo sentence tight around the link', () => {
+    locale.set('zh-CN');
+    render(ToolsPage);
+
+    const link = screen.getByRole('link', { name: '迷雾工具箱' });
+    expect(link.parentElement?.textContent?.trim()).toBe('没有找到对应的工具？试试迷雾工具箱！');
   });
 });
