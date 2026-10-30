@@ -3,7 +3,7 @@ use wasmi::{Config, Engine, Instance, Linker, Module, Store, StoreLimits, StoreL
 const MAX_MODULE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_JSON_BYTES: usize = 1024 * 1024;
 const MAX_MEMORY_BYTES: usize = 16 * 1024 * 1024;
-const MAX_FUEL: u64 = 10_000_000;
+const MAX_FUEL: u64 = 50_000_000;
 const MAX_STACK_BYTES: usize = 512 * 1024;
 
 struct RuntimeState {

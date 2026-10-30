@@ -28,6 +28,9 @@ const MAX_PACKAGE_BYTES: usize = 20 * 1024 * 1024;
 const MAX_EXPANDED_BYTES: u64 = 50 * 1024 * 1024;
 const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_JSON_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_PAGE_STYLES_BYTES: usize = 16 * 1024;
+const MAX_PAGE_STYLE_RULES: usize = 64;
+const MAX_PAGE_STYLE_DECLARATIONS: usize = 16;
 const MAX_FILES: usize = 256;
 
 const ALLOWED_CAPABILITIES: &[&str] = &[
@@ -562,6 +565,8 @@ impl ExtensionStore {
             {
                 return Err("WebAssembly extension returned an unsupported page document".into());
             }
+            validate_extension_page_controls(&document)?;
+            validate_extension_page_styles(&document)?;
             return Ok(document);
         }
         let installation = self
@@ -572,7 +577,11 @@ impl ExtensionStore {
             .join("pages")
             .join(format!("{page}.json"));
         let bytes = fs::read(&path).map_err(|e| format!("Failed to read extension page: {e}"))?;
-        serde_json::from_slice(&bytes).map_err(|e| format!("Invalid extension page: {e}"))
+        let document: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| format!("Invalid extension page: {e}"))?;
+        validate_extension_page_controls(&document)?;
+        validate_extension_page_styles(&document)?;
+        Ok(document)
     }
 
     pub fn execute_module(
@@ -1037,6 +1046,634 @@ fn compiled_trusted_keys() -> BTreeMap<String, VerifyingKey> {
     keys
 }
 
+fn validate_extension_page_styles(page: &serde_json::Value) -> Result<(), String> {
+    let blocks = page
+        .get("blocks")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "Extension page blocks must be an array".to_string())?;
+    let mut plugin_classes = BTreeSet::new();
+    for (index, block) in blocks.iter().enumerate() {
+        let label = format!("Extension page blocks[{index}]");
+        collect_extension_class_names(block.get("class_name"), &label, &mut plugin_classes)?;
+        if let Some(fields) = block.get("fields").and_then(serde_json::Value::as_array) {
+            for (field_index, field) in fields.iter().enumerate() {
+                collect_extension_class_names(
+                    field.get("class_name"),
+                    &format!("{label}.fields[{field_index}]"),
+                    &mut plugin_classes,
+                )?;
+            }
+        }
+        if let Some(actions) = block.get("actions").and_then(serde_json::Value::as_array) {
+            for (action_index, action) in actions.iter().enumerate() {
+                collect_extension_class_names(
+                    action.get("class_name"),
+                    &format!("{label}.actions[{action_index}]"),
+                    &mut plugin_classes,
+                )?;
+            }
+        }
+    }
+
+    let Some(styles) = page.get("styles") else {
+        return Ok(());
+    };
+    let rules = styles
+        .as_array()
+        .ok_or_else(|| "Extension page styles must be an array".to_string())?;
+    if rules.len() > MAX_PAGE_STYLE_RULES {
+        return Err(format!(
+            "Extension page styles exceed the {MAX_PAGE_STYLE_RULES} rule limit"
+        ));
+    }
+    if serde_json::to_vec(styles)
+        .map_err(|error| format!("Failed to encode extension page styles: {error}"))?
+        .len()
+        > MAX_PAGE_STYLES_BYTES
+    {
+        return Err("Extension page styles exceed the 16 KiB limit".into());
+    }
+
+    for (index, rule) in rules.iter().enumerate() {
+        let label = format!("Extension page styles[{index}]");
+        let selector = rule
+            .get("selector")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("{label}.selector must be a string"))?;
+        if selector.len() > 256 || !validate_extension_style_selector(selector, &plugin_classes) {
+            return Err(format!("{label} has an unsupported selector"));
+        }
+        if let Some(media) = rule.get("media") {
+            let media = media
+                .as_str()
+                .ok_or_else(|| format!("{label}.media must be a string"))?;
+            if !validate_extension_style_media(media) {
+                return Err(format!("{label} has an unsupported media condition"));
+            }
+        }
+        let declarations = rule
+            .get("declarations")
+            .and_then(serde_json::Value::as_object)
+            .ok_or_else(|| format!("{label}.declarations must be an object"))?;
+        if declarations.is_empty() || declarations.len() > MAX_PAGE_STYLE_DECLARATIONS {
+            return Err(format!(
+                "{label} must contain between 1 and {MAX_PAGE_STYLE_DECLARATIONS} declarations"
+            ));
+        }
+        for (property, value) in declarations {
+            let value = value
+                .as_str()
+                .ok_or_else(|| format!("{label}.{property} must be a string"))?;
+            if !validate_extension_style_declaration(property, value) {
+                return Err(format!(
+                    "{label}.{property} contains a disallowed CSS property or value"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), String> {
+    let blocks = page
+        .get("blocks")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "Extension page blocks must be an array".to_string())?;
+    let mut tab_groups = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut forms = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut results = BTreeSet::new();
+
+    for (index, block) in blocks.iter().enumerate() {
+        let label = format!("Extension page blocks[{index}]");
+        match block.get("type").and_then(serde_json::Value::as_str) {
+            Some("tabs") => {
+                if tab_groups.len() > 0 {
+                    return Err("Extension pages support at most one tabs group".into());
+                }
+                let id = block
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| format!("{label}.id must be a string"))?;
+                validate_entry_id(id)?;
+                if block
+                    .get("label")
+                    .and_then(serde_json::Value::as_str)
+                    .is_none_or(str::is_empty)
+                {
+                    return Err(format!("{label}.label must be a non-empty string"));
+                }
+                let tabs = block
+                    .get("tabs")
+                    .and_then(serde_json::Value::as_array)
+                    .filter(|tabs| !tabs.is_empty())
+                    .ok_or_else(|| format!("{label}.tabs must be a non-empty array"))?;
+                let mut tab_ids = BTreeSet::new();
+                for (tab_index, tab) in tabs.iter().enumerate() {
+                    let tab_label = format!("{label}.tabs[{tab_index}]");
+                    let tab_id = tab
+                        .get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .ok_or_else(|| format!("{tab_label}.id must be a string"))?;
+                    validate_entry_id(tab_id)?;
+                    if tab
+                        .get("label")
+                        .and_then(serde_json::Value::as_str)
+                        .is_none_or(str::is_empty)
+                    {
+                        return Err(format!("{tab_label}.label must be a non-empty string"));
+                    }
+                    if !tab_ids.insert(tab_id.to_string()) {
+                        return Err(format!("{tab_label}.id is duplicated"));
+                    }
+                }
+                if block
+                    .get("default_tab")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|default_tab| !tab_ids.contains(default_tab))
+                {
+                    return Err(format!("{label}.default_tab is not a declared tab"));
+                }
+                tab_groups.insert(id.to_string(), tab_ids);
+            }
+            Some("form") => {
+                let id = block
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|id| !id.is_empty())
+                    .ok_or_else(|| format!("{label}.id must be a non-empty string"))?;
+                let fields = block
+                    .get("fields")
+                    .and_then(serde_json::Value::as_array)
+                    .ok_or_else(|| format!("{label}.fields must be an array"))?;
+                let mut field_ids = BTreeSet::new();
+                for (field_index, field) in fields.iter().enumerate() {
+                    let field_label = format!("{label}.fields[{field_index}]");
+                    let field_id = field
+                        .get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|field_id| !field_id.is_empty())
+                        .ok_or_else(|| format!("{field_label}.id must be a non-empty string"))?;
+                    let field_type = field
+                        .get("type")
+                        .and_then(serde_json::Value::as_str)
+                        .ok_or_else(|| format!("{field_label}.type must be a string"))?;
+                    if !matches!(
+                        field_type,
+                        "text" | "textarea" | "digit" | "number" | "toggle" | "select"
+                    ) {
+                        return Err(format!("{field_label}.type is unsupported"));
+                    }
+                    if !field_ids.insert(field_id.to_string()) {
+                        return Err(format!("{field_label}.id is duplicated"));
+                    }
+                }
+                if forms.insert(id.to_string(), field_ids).is_some() {
+                    return Err(format!("{label}.id is duplicated"));
+                }
+            }
+            Some("result") => {
+                let id = block
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| format!("{label}.id must be a string"))?;
+                validate_entry_id(id)?;
+                if block
+                    .get("label")
+                    .and_then(serde_json::Value::as_str)
+                    .is_none_or(str::is_empty)
+                    || block
+                        .get("copy_label")
+                        .and_then(serde_json::Value::as_str)
+                        .is_none_or(str::is_empty)
+                {
+                    return Err(format!("{label} requires label and copy_label"));
+                }
+                if !results.insert(id.to_string()) {
+                    return Err(format!("{label}.id is duplicated"));
+                }
+            }
+            Some("actions") => {
+                let actions = block
+                    .get("actions")
+                    .and_then(serde_json::Value::as_array)
+                    .ok_or_else(|| format!("{label}.actions must be an array"))?;
+                for (action_index, action) in actions.iter().enumerate() {
+                    let action_label = format!("{label}.actions[{action_index}]");
+                    let kind = action
+                        .get("kind")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("workflow");
+                    match kind {
+                        "workflow" => {
+                            if action
+                                .get("workflow")
+                                .and_then(serde_json::Value::as_str)
+                                .is_none_or(str::is_empty)
+                            {
+                                return Err(format!("{action_label}.workflow must be a string"));
+                            }
+                        }
+                        "clear" => {
+                            if action
+                                .get("form_id")
+                                .and_then(serde_json::Value::as_str)
+                                .is_none_or(str::is_empty)
+                                || action
+                                    .get("field_ids")
+                                    .and_then(serde_json::Value::as_array)
+                                    .is_none_or(Vec::is_empty)
+                            {
+                                return Err(format!(
+                                    "{action_label} requires form_id and field_ids"
+                                ));
+                            }
+                        }
+                        _ => return Err(format!("{action_label}.kind is unsupported")),
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    for (index, block) in blocks.iter().enumerate() {
+        let label = format!("Extension page blocks[{index}]");
+        if let Some(tab) = block.get("tab") {
+            let group = tab
+                .get("group")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| format!("{label}.tab.group must be a string"))?;
+            let tab_id = tab
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| format!("{label}.tab.id must be a string"))?;
+            if !tab_groups
+                .get(group)
+                .is_some_and(|declared_tabs| declared_tabs.contains(tab_id))
+            {
+                return Err(format!("{label}.tab references an undeclared tab"));
+            }
+        }
+        if block.get("type").and_then(serde_json::Value::as_str) != Some("actions") {
+            continue;
+        }
+        if let Some(actions) = block.get("actions").and_then(serde_json::Value::as_array) {
+            for (action_index, action) in actions.iter().enumerate() {
+                let action_label = format!("{label}.actions[{action_index}]");
+                if let Some(result_id) = action.get("result_id") {
+                    let result_id = result_id.as_str().ok_or_else(|| {
+                        format!("{action_label}.result_id must be a string")
+                    })?;
+                    if !results.contains(result_id) {
+                        return Err(format!(
+                            "{action_label}.result_id references an undeclared result"
+                        ));
+                    }
+                }
+                if action.get("kind").and_then(serde_json::Value::as_str) == Some("clear") {
+                    let form_id = action["form_id"].as_str().unwrap_or_default();
+                    let field_ids = action["field_ids"].as_array().ok_or_else(|| {
+                        format!("{action_label}.field_ids must be an array")
+                    })?;
+                    let declared_fields = forms.get(form_id).ok_or_else(|| {
+                        format!("{action_label} references an undeclared form")
+                    })?;
+                    for field_id in field_ids {
+                        let field_id = field_id.as_str().ok_or_else(|| {
+                            format!("{action_label}.field_ids must contain strings")
+                        })?;
+                        if !declared_fields.contains(field_id) {
+                            return Err(format!(
+                                "{action_label} references an undeclared form field"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn collect_extension_class_names(
+    value: Option<&serde_json::Value>,
+    label: &str,
+    output: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let value = value
+        .as_str()
+        .ok_or_else(|| format!("{label}.class_name must be a string"))?;
+    if value.len() > 512 {
+        return Err(format!("{label}.class_name is too long"));
+    }
+    let classes = value.split_whitespace().collect::<Vec<_>>();
+    if classes.is_empty() || classes.len() > 8 {
+        return Err(format!(
+            "{label}.class_name must contain up to eight plugin-* class names"
+        ));
+    }
+    let mut unique = BTreeSet::new();
+    for class_name in classes {
+        if !is_extension_plugin_class_name(class_name) || !unique.insert(class_name) {
+            return Err(format!(
+                "{label}.class_name must contain unique plugin-* class names"
+            ));
+        }
+        output.insert(class_name.to_string());
+    }
+    Ok(())
+}
+
+fn is_extension_plugin_class_name(value: &str) -> bool {
+    let Some(suffix) = value.strip_prefix("plugin-") else {
+        return false;
+    };
+    value.len() <= 62
+        && suffix
+            .chars()
+            .next()
+            .is_some_and(|first| first.is_ascii_lowercase())
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_-".contains(&byte))
+}
+
+fn is_extension_host_style_class(value: &str) -> bool {
+    matches!(
+        value,
+        "extension-page"
+            | "extension-grid"
+            | "extension-block"
+            | "extension-block--text"
+            | "extension-block--status_card"
+            | "extension-block--alert"
+            | "extension-block--progress"
+            | "extension-block--list"
+            | "extension-block--table"
+            | "extension-block--empty_state"
+            | "extension-block--form"
+            | "extension-block--actions"
+                | "extension-tab"
+                | "extension-tab--active"
+                | "extension-card"
+            | "extension-wide"
+            | "extension-form-field"
+            | "extension-control"
+            | "extension-actions"
+            | "extension-button"
+    )
+}
+
+fn validate_extension_style_selector(selector: &str, plugin_classes: &BTreeSet<String>) -> bool {
+    let normalized = selector.replace('>', " > ");
+    let mut seen_class = false;
+    let mut pending_child = false;
+    for token in normalized.split_whitespace() {
+        if token == ">" {
+            if !seen_class || pending_child {
+                return false;
+            }
+            pending_child = true;
+            continue;
+        }
+        let Some(class_selector) = token.strip_prefix('.') else {
+            return false;
+        };
+        let (class_name, pseudo) = match class_selector.split_once(':') {
+            Some((class_name, pseudo)) if !pseudo.contains(':') => (class_name, Some(pseudo)),
+            Some(_) => return false,
+            None => (class_selector, None),
+        };
+        if !is_extension_plugin_class_name(class_name) && !is_extension_host_style_class(class_name)
+        {
+            return false;
+        }
+        if pseudo.is_some_and(|value| {
+            !matches!(
+                value,
+                "hover" | "focus" | "focus-visible" | "active" | "disabled" | "checked"
+            )
+        }) {
+            return false;
+        }
+        if is_extension_plugin_class_name(class_name) && !plugin_classes.contains(class_name) {
+            return false;
+        }
+        seen_class = true;
+        pending_child = false;
+    }
+    seen_class && !pending_child
+}
+
+fn validate_extension_style_media(value: &str) -> bool {
+    let Some(value) = value
+        .strip_prefix('(')
+        .and_then(|value| value.strip_suffix(')'))
+    else {
+        return false;
+    };
+    let Some((axis, width)) = value.split_once(':') else {
+        return false;
+    };
+    if !matches!(axis.trim(), "max-width" | "min-width") {
+        return false;
+    }
+    let width = width.trim();
+    let Some(number) = ["px", "rem", "em"]
+        .iter()
+        .find_map(|unit| width.strip_suffix(unit))
+    else {
+        return false;
+    };
+    let mut pieces = number.split('.');
+    let whole = pieces.next().unwrap_or_default();
+    let fraction = pieces.next();
+    whole.len() <= 4
+        && !whole.is_empty()
+        && whole.bytes().all(|byte| byte.is_ascii_digit())
+        && fraction.is_none_or(|part| {
+            !part.is_empty() && part.len() <= 2 && part.bytes().all(|byte| byte.is_ascii_digit())
+        })
+        && pieces.next().is_none()
+}
+
+fn validate_extension_style_declaration(property: &str, value: &str) -> bool {
+    const PROPERTIES: &[&str] = &[
+        "align-items",
+        "background-color",
+        "border",
+        "border-color",
+        "border-radius",
+        "border-style",
+        "border-width",
+        "box-sizing",
+        "color",
+        "column-gap",
+        "display",
+        "flex",
+        "flex-basis",
+        "flex-direction",
+        "flex-grow",
+        "flex-shrink",
+        "flex-wrap",
+        "font-family",
+        "font-size",
+        "font-style",
+        "font-weight",
+        "gap",
+        "grid-column",
+        "grid-template-columns",
+        "height",
+        "justify-content",
+        "letter-spacing",
+        "line-height",
+        "margin",
+        "margin-block",
+        "margin-inline",
+        "max-height",
+        "max-width",
+        "min-height",
+        "min-width",
+        "overflow",
+        "overflow-x",
+        "overflow-y",
+        "padding",
+        "padding-block",
+        "padding-inline",
+        "resize",
+        "row-gap",
+        "text-align",
+        "text-decoration",
+        "text-overflow",
+        "vertical-align",
+        "white-space",
+        "width",
+    ];
+    const SAFE_FUNCTIONS: &[&str] = &[
+        "calc", "clamp", "hsl", "hsla", "max", "min", "minmax", "repeat", "rgb", "rgba", "var",
+    ];
+    if !PROPERTIES.contains(&property)
+        || value.is_empty()
+        || value.len() > 256
+        || value.trim() != value
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"#(),.% _-/+".contains(&byte))
+        || (property != "grid-column" && value.contains('/'))
+    {
+        return false;
+    }
+
+    let mut depth = 0_i32;
+    for byte in value.bytes() {
+        if byte == b'(' {
+            depth += 1;
+        } else if byte == b')' {
+            depth -= 1;
+            if depth < 0 {
+                return false;
+            }
+        }
+    }
+    if depth != 0 {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte != b'(' {
+            continue;
+        }
+        let mut start = index;
+        while start > 0 && (bytes[start - 1].is_ascii_alphabetic() || bytes[start - 1] == b'-') {
+            start -= 1;
+        }
+        if start == index {
+            return false;
+        }
+        let function = value[start..index].to_ascii_lowercase();
+        if !SAFE_FUNCTIONS.contains(&function.as_str()) {
+            return false;
+        }
+    }
+
+    let lower = value.to_ascii_lowercase();
+    let enum_values: Option<&[&str]> = match property {
+        "align-items" => Some(&[
+            "baseline",
+            "center",
+            "end",
+            "flex-end",
+            "flex-start",
+            "normal",
+            "start",
+            "stretch",
+        ]),
+        "box-sizing" => Some(&["border-box", "content-box"]),
+        "display" => Some(&[
+            "block",
+            "flex",
+            "grid",
+            "inline",
+            "inline-flex",
+            "inline-grid",
+        ]),
+        "flex-direction" => Some(&["column", "column-reverse", "row", "row-reverse"]),
+        "flex-wrap" => Some(&["nowrap", "wrap", "wrap-reverse"]),
+        "font-style" => Some(&["italic", "normal", "oblique"]),
+        "font-weight" => Some(&[
+            "bold", "normal", "100", "200", "300", "400", "500", "600", "700", "800", "900",
+        ]),
+        "justify-content" => Some(&[
+            "center",
+            "end",
+            "flex-end",
+            "flex-start",
+            "left",
+            "normal",
+            "right",
+            "space-around",
+            "space-between",
+            "space-evenly",
+            "start",
+            "stretch",
+        ]),
+        "overflow" | "overflow-x" | "overflow-y" => Some(&["auto", "scroll", "visible"]),
+        "resize" => Some(&["both", "horizontal", "none", "vertical"]),
+        "text-align" => Some(&["center", "end", "justify", "left", "right", "start"]),
+        "text-decoration" => Some(&["line-through", "none", "overline", "underline"]),
+        "text-overflow" => Some(&["clip", "ellipsis"]),
+        "white-space" => Some(&["break-spaces", "normal", "nowrap", "pre-line", "pre-wrap"]),
+        _ => None,
+    };
+    if enum_values.is_some_and(|allowed| !allowed.contains(&lower.as_str())) {
+        return false;
+    }
+    if property == "grid-column" {
+        let mut lines = value.split('/');
+        let valid_line = |line: &str| {
+            let line = line.trim();
+            line == "auto"
+                || line.strip_prefix("span ").is_some_and(|digits| {
+                    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+                })
+                || {
+                    let digits = line.strip_prefix('-').unwrap_or(line);
+                    !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+                }
+        };
+        if !valid_line(lines.next().unwrap_or_default())
+            || lines.next().is_some_and(|line| !valid_line(line))
+            || lines.next().is_some()
+        {
+            return false;
+        }
+    }
+    true
+}
+
 fn validate_file_index(files: &BTreeMap<String, Vec<u8>>, index: &FileIndex) -> Result<(), String> {
     let indexed_paths = index
         .files
@@ -1318,6 +1955,90 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey};
     use rusqlite::Connection;
     use std::io::Write;
+
+    #[test]
+    fn extension_styles_are_scoped_and_reject_global_or_external_css() {
+        let mut page = serde_json::json!({
+            "schema_version": 1,
+            "title": "Styled",
+            "blocks": [{
+                "type": "form",
+                "class_name": "plugin-tool-form",
+                "fields": [{
+                    "id": "input",
+                    "label": "Input",
+                    "type": "text",
+                    "class_name": "plugin-input"
+                }]
+            }],
+            "styles": [{
+                "selector": ".plugin-tool-form .extension-control",
+                "media": "(max-width: 700px)",
+                "declarations": {
+                    "width": "100%",
+                    "color": "var(--colorNeutralForeground1)"
+                }
+            }]
+        });
+        validate_extension_page_styles(&page).unwrap();
+
+        page["styles"][0]["selector"] = serde_json::json!("body");
+        assert!(validate_extension_page_styles(&page).is_err());
+        page["styles"][0]["selector"] = serde_json::json!(".plugin-tool-form");
+        page["styles"][0]["declarations"]["background-color"] =
+            serde_json::json!("url(https://example.test/image.png)");
+        assert!(validate_extension_page_styles(&page).is_err());
+    }
+
+    #[test]
+    fn extension_tabs_results_and_clear_actions_require_declared_targets() {
+        let mut page = serde_json::json!({
+            "schema_version": 1,
+            "title": "Tools",
+            "blocks": [
+                {
+                    "type": "tabs",
+                    "id": "tools",
+                    "label": "Tools",
+                    "default_tab": "matrix",
+                    "tabs": [{ "id": "matrix", "label": "Matrix" }]
+                },
+                {
+                    "type": "form",
+                    "id": "cells",
+                    "tab": { "group": "tools", "id": "matrix" },
+                    "fields": [{ "id": "cell-0-0", "label": "Cell", "type": "digit" }]
+                },
+                {
+                    "type": "actions",
+                    "tab": { "group": "tools", "id": "matrix" },
+                    "actions": [{
+                        "id": "clear",
+                        "label": "Clear",
+                        "kind": "clear",
+                        "form_id": "cells",
+                        "field_ids": ["cell-0-0"],
+                        "result_id": "output"
+                    }]
+                },
+                {
+                    "type": "result",
+                    "id": "output",
+                    "label": "Output",
+                    "copy_label": "Copy"
+                }
+            ]
+        });
+        validate_extension_page_controls(&page).unwrap();
+
+        page["blocks"][2]["actions"][0]["field_ids"][0] =
+            serde_json::json!("undeclared");
+        assert!(validate_extension_page_controls(&page).is_err());
+        page["blocks"][2]["actions"][0]["field_ids"][0] =
+            serde_json::json!("cell-0-0");
+        page["blocks"][1]["tab"]["id"] = serde_json::json!("missing");
+        assert!(validate_extension_page_controls(&page).is_err());
+    }
 
     fn store(temp: &tempfile::TempDir, signing: &SigningKey) -> ExtensionStore {
         let db = Connection::open_in_memory().unwrap();

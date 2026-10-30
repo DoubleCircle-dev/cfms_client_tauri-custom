@@ -100,19 +100,68 @@ export interface DeclarativePage {
   schema_version: number;
   title: string;
   description?: string;
+  styles?: DeclarativeStyleRule[];
   blocks: DeclarativeBlock[];
 }
 
+export interface DeclarativeStyleRule {
+  selector: string;
+  media?: string;
+  declarations: Record<string, string>;
+}
+
+type TabScope = { group: string; id: string };
+type StyledBlock = { class_name?: string; tab?: TabScope };
+
+export interface DeclarativeTab {
+  id: string;
+  label: string;
+}
+
+export type DeclarativeAction =
+  | ({
+      id: string;
+      label: string;
+      kind?: 'workflow';
+      workflow: string;
+      result_id?: string;
+      tone?: 'primary' | 'secondary' | 'danger';
+      class_name?: string;
+    })
+  | ({
+      id: string;
+      label: string;
+      kind: 'clear';
+      form_id: string;
+      field_ids: string[];
+      result_id?: string;
+      tone?: 'primary' | 'secondary' | 'danger';
+      class_name?: string;
+    });
+
 export type DeclarativeBlock =
-  | { type: 'text'; text: string; style?: 'body' | 'caption' | 'heading' }
-  | { type: 'status_card'; title: string; value: string; description?: string; tone?: 'default' | 'success' | 'warning' | 'danger' }
-  | { type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' }
-  | { type: 'progress'; label: string; value: number; max?: number }
-  | { type: 'list'; title?: string; items: Array<{ title: string; description?: string; value?: string }> }
-  | { type: 'table'; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> }
-  | { type: 'empty_state'; title: string; description?: string }
-  | { type: 'form'; id: string; fields: Array<{ id: string; label: string; type: 'text' | 'number' | 'toggle' | 'select'; options?: string[]; default?: unknown }> }
-  | { type: 'actions'; actions: Array<{ id: string; label: string; workflow: string; tone?: 'primary' | 'secondary' | 'danger' }> };
+  | ({ type: 'tabs'; id: string; label: string; tabs: DeclarativeTab[]; default_tab?: string } & StyledBlock)
+  | ({ type: 'result'; id: string; label: string; copy_label: string } & StyledBlock)
+  | ({ type: 'text'; text: string; style?: 'body' | 'caption' | 'heading' } & StyledBlock)
+  | ({ type: 'status_card'; title: string; value: string; description?: string; tone?: 'default' | 'success' | 'warning' | 'danger' } & StyledBlock)
+  | ({ type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' } & StyledBlock)
+  | ({ type: 'progress'; label: string; value: number; max?: number } & StyledBlock)
+  | ({ type: 'list'; title?: string; items: Array<{ title: string; description?: string; value?: string }> } & StyledBlock)
+  | ({ type: 'table'; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> } & StyledBlock)
+  | ({ type: 'empty_state'; title: string; description?: string } & StyledBlock)
+  | ({
+      type: 'form';
+      id: string;
+      fields: Array<{
+        id: string;
+        label: string;
+        type: 'text' | 'textarea' | 'digit' | 'number' | 'toggle' | 'select';
+        options?: string[];
+        default?: unknown;
+        class_name?: string;
+      }>;
+    } & StyledBlock)
+  | ({ type: 'actions'; actions: DeclarativeAction[] } & StyledBlock);
 
 export interface DeclarativeWorkflow {
   schema_version: number;
