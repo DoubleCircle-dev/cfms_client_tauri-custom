@@ -1052,9 +1052,14 @@ fn validate_extension_page_styles(page: &serde_json::Value) -> Result<(), String
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| "Extension page blocks must be an array".to_string())?;
     let mut plugin_classes = BTreeSet::new();
+    let mut css_rules = Vec::new();
+    let mut css_source_bytes = 0;
     for (index, block) in blocks.iter().enumerate() {
         let label = format!("Extension page blocks[{index}]");
-        collect_extension_class_names(block.get("class_name"), &label, &mut plugin_classes)?;
+        let is_css_block = block.get("type").and_then(serde_json::Value::as_str) == Some("css");
+        if !is_css_block {
+            collect_extension_class_names(block.get("class_name"), &label, &mut plugin_classes)?;
+        }
         if let Some(fields) = block.get("fields").and_then(serde_json::Value::as_array) {
             for (field_index, field) in fields.iter().enumerate() {
                 collect_extension_class_names(
@@ -1073,22 +1078,40 @@ fn validate_extension_page_styles(page: &serde_json::Value) -> Result<(), String
                 )?;
             }
         }
+        if is_css_block {
+            let css = block
+                .get("css")
+                .and_then(serde_json::Value::as_str)
+                .filter(|css| !css.trim().is_empty())
+                .ok_or_else(|| format!("{label}.css must be non-empty CSS text"))?;
+            css_source_bytes += css.len();
+            if css_source_bytes > MAX_PAGE_STYLES_BYTES {
+                return Err("Extension page styles exceed the 16 KiB limit".into());
+            }
+            css_rules.extend(parse_extension_css_block(css, &label)?);
+        }
     }
 
-    let Some(styles) = page.get("styles") else {
-        return Ok(());
+    let mut rules = match page.get("styles") {
+        Some(styles) => styles
+            .as_array()
+            .cloned()
+            .ok_or_else(|| "Extension page styles must be an array".to_string())?,
+        None => Vec::new(),
     };
-    let rules = styles
-        .as_array()
-        .ok_or_else(|| "Extension page styles must be an array".to_string())?;
+    rules.extend(css_rules);
+    if rules.is_empty() && css_source_bytes == 0 {
+        return Ok(());
+    }
     if rules.len() > MAX_PAGE_STYLE_RULES {
         return Err(format!(
             "Extension page styles exceed the {MAX_PAGE_STYLE_RULES} rule limit"
         ));
     }
-    if serde_json::to_vec(styles)
+    if serde_json::to_vec(&rules)
         .map_err(|error| format!("Failed to encode extension page styles: {error}"))?
         .len()
+        + css_source_bytes
         > MAX_PAGE_STYLES_BYTES
     {
         return Err("Extension page styles exceed the 16 KiB limit".into());
@@ -1132,6 +1155,116 @@ fn validate_extension_page_styles(page: &serde_json::Value) -> Result<(), String
         }
     }
     Ok(())
+}
+
+fn parse_extension_css_block(css: &str, label: &str) -> Result<Vec<serde_json::Value>, String> {
+    if css.len() > MAX_PAGE_STYLES_BYTES {
+        return Err(format!("{label}.css exceeds the 16 KiB limit"));
+    }
+    if css.contains("/*") || css.contains("*/") {
+        return Err(format!("{label}.css does not allow comments"));
+    }
+
+    fn parse_rules(
+        css: &str,
+        cursor: &mut usize,
+        media: Option<&str>,
+        rules: &mut Vec<serde_json::Value>,
+        label: &str,
+    ) -> Result<(), String> {
+        let bytes = css.as_bytes();
+        while *cursor < bytes.len() {
+            while bytes
+                .get(*cursor)
+                .is_some_and(|byte| byte.is_ascii_whitespace())
+            {
+                *cursor += 1;
+            }
+            if bytes.get(*cursor) == Some(&b'}') {
+                if media.is_none() {
+                    return Err(format!("{label}.css contains an unexpected closing brace"));
+                }
+                *cursor += 1;
+                return Ok(());
+            }
+            if *cursor >= bytes.len() {
+                break;
+            }
+
+            let open = css[*cursor..]
+                .find('{')
+                .map(|offset| *cursor + offset)
+                .ok_or_else(|| format!("{label}.css contains an incomplete rule"))?;
+            let header = css[*cursor..open].trim();
+            *cursor = open + 1;
+            if let Some(condition) = header.strip_prefix("@media") {
+                let condition = condition.trim();
+                if media.is_some() || !validate_extension_style_media(condition) {
+                    return Err(format!("{label}.css has an unsupported media rule"));
+                }
+                parse_rules(css, cursor, Some(condition), rules, label)?;
+                continue;
+            }
+
+            let close = css[*cursor..]
+                .find('}')
+                .map(|offset| *cursor + offset)
+                .ok_or_else(|| format!("{label}.css contains an invalid declaration block"))?;
+            if css[*cursor..close].contains('{') {
+                return Err(format!("{label}.css contains an invalid declaration block"));
+            }
+
+            let mut declarations = serde_json::Map::new();
+            for declaration in css[*cursor..close].split(';') {
+                let declaration = declaration.trim();
+                if declaration.is_empty() {
+                    continue;
+                }
+                let (property, value) = declaration
+                    .split_once(':')
+                    .ok_or_else(|| format!("{label}.css contains an invalid declaration"))?;
+                let property = property.trim();
+                if declarations.contains_key(property) {
+                    return Err(format!("{label}.css contains a duplicate CSS property"));
+                }
+                declarations.insert(
+                    property.to_string(),
+                    serde_json::Value::String(value.trim().to_string()),
+                );
+            }
+            let mut rule = serde_json::Map::new();
+            rule.insert(
+                "selector".into(),
+                serde_json::Value::String(header.to_string()),
+            );
+            if let Some(media) = media {
+                rule.insert("media".into(), serde_json::Value::String(media.to_string()));
+            }
+            rule.insert(
+                "declarations".into(),
+                serde_json::Value::Object(declarations),
+            );
+            rules.push(serde_json::Value::Object(rule));
+            if rules.len() > MAX_PAGE_STYLE_RULES {
+                return Err(format!(
+                    "{label}.css exceeds the {MAX_PAGE_STYLE_RULES} rule limit"
+                ));
+            }
+            *cursor = close + 1;
+        }
+        if media.is_some() {
+            return Err(format!("{label}.css contains an unclosed media rule"));
+        }
+        Ok(())
+    }
+
+    let mut rules = Vec::new();
+    let mut cursor = 0;
+    parse_rules(css, &mut cursor, None, &mut rules, label)?;
+    if rules.is_empty() {
+        return Err(format!("{label}.css must contain at least one style rule"));
+    }
+    Ok(rules)
 }
 
 fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), String> {
@@ -1241,12 +1374,18 @@ fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), Stri
                     .get("label")
                     .and_then(serde_json::Value::as_str)
                     .is_none_or(str::is_empty)
-                    || block
-                        .get("copy_label")
-                        .and_then(serde_json::Value::as_str)
-                        .is_none_or(str::is_empty)
                 {
-                    return Err(format!("{label} requires label and copy_label"));
+                    return Err(format!("{label} requires label"));
+                }
+                if let Some(copy_label) = block.get("copy_label")
+                    && copy_label.as_str().is_none_or(str::is_empty)
+                {
+                    return Err(format!("{label}.copy_label must be a non-empty string"));
+                }
+                if let Some(variant) = block.get("variant")
+                    && !matches!(variant.as_str(), Some("textarea" | "banner"))
+                {
+                    return Err(format!("{label}.variant must be textarea or banner"));
                 }
                 if !results.insert(id.to_string()) {
                     return Err(format!("{label}.id is duplicated"));
@@ -1286,6 +1425,15 @@ fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), Stri
                                 return Err(format!(
                                     "{action_label} requires form_id and field_ids"
                                 ));
+                            }
+                        }
+                        "copy" => {
+                            if action
+                                .get("result_id")
+                                .and_then(serde_json::Value::as_str)
+                                .is_none_or(str::is_empty)
+                            {
+                                return Err(format!("{action_label} requires result_id"));
                             }
                         }
                         _ => return Err(format!("{action_label}.kind is unsupported")),
@@ -1405,6 +1553,9 @@ fn is_extension_host_style_class(value: &str) -> bool {
     matches!(
         value,
         "extension-page"
+            | "extension-page-header"
+            | "extension-page-title"
+            | "extension-page-description"
             | "extension-grid"
             | "extension-block"
             | "extension-block--text"
@@ -1416,14 +1567,30 @@ fn is_extension_host_style_class(value: &str) -> bool {
             | "extension-block--empty_state"
             | "extension-block--form"
             | "extension-block--actions"
-                | "extension-tab"
-                | "extension-tab--active"
-                | "extension-card"
+            | "extension-tab"
+            | "extension-tab-list"
+            | "extension-tab--active"
+            | "extension-card"
             | "extension-wide"
             | "extension-form-field"
+            | "extension-form-label"
             | "extension-control"
             | "extension-actions"
             | "extension-button"
+            | "extension-heading"
+            | "extension-caption"
+            | "extension-result-heading"
+            | "extension-result-banner"
+            | "extension-result-banner--success"
+            | "extension-result-banner--danger"
+            | "extension-block--result"
+            | "tone-default"
+            | "tone-info"
+            | "tone-success"
+            | "tone-warning"
+            | "tone-danger"
+            | "extension-muted"
+            | "extension-error-message"
     )
 }
 
@@ -1498,6 +1665,7 @@ fn validate_extension_style_media(value: &str) -> bool {
             !part.is_empty() && part.len() <= 2 && part.bytes().all(|byte| byte.is_ascii_digit())
         })
         && pieces.next().is_none()
+        && number.parse::<f64>().is_ok_and(|value| value <= 4096.0)
 }
 
 fn validate_extension_style_declaration(property: &str, value: &str) -> bool {
@@ -1991,6 +2159,28 @@ mod tests {
     }
 
     #[test]
+    fn extension_css_blocks_are_parsed_and_validated_as_scoped_rules() {
+        let mut page = serde_json::json!({
+            "schema_version": 1,
+            "title": "CSS blocks",
+            "blocks": [
+                { "type": "text", "text": "Ready", "class_name": "plugin-status" },
+                {
+                    "type": "css",
+                    "css": ".plugin-status { color: red; }\n.extension-page-title { font-size: 28px; }\n.extension-form-label { font-weight: 600; }\n.extension-result-banner--success { color: var(--colorStatusSuccessForeground1); }\n@media (max-width: 700px) { .plugin-status { display: block; } }"
+                }
+            ]
+        });
+        validate_extension_page_styles(&page).unwrap();
+
+        page["blocks"][1]["css"] = serde_json::json!("body { color: red; }");
+        assert!(validate_extension_page_styles(&page).is_err());
+        page["blocks"][1]["css"] =
+            serde_json::json!(".plugin-status { background-color: url(https://example.test/a); }");
+        assert!(validate_extension_page_styles(&page).is_err());
+    }
+
+    #[test]
     fn extension_tabs_results_and_clear_actions_require_declared_targets() {
         let mut page = serde_json::json!({
             "schema_version": 1,
@@ -2037,6 +2227,45 @@ mod tests {
         page["blocks"][2]["actions"][0]["field_ids"][0] =
             serde_json::json!("cell-0-0");
         page["blocks"][1]["tab"]["id"] = serde_json::json!("missing");
+        assert!(validate_extension_page_controls(&page).is_err());
+    }
+
+    #[test]
+    fn extension_result_variants_and_copy_actions_are_optional_and_validated() {
+        let mut page = serde_json::json!({
+            "schema_version": 1,
+            "title": "Tools",
+            "blocks": [
+                {
+                    "type": "actions",
+                    "actions": [{
+                        "id": "copy",
+                        "label": "Copy",
+                        "kind": "copy",
+                        "result_id": "output"
+                    }]
+                },
+                { "type": "result", "id": "output", "label": "Output", "variant": "banner" }
+            ]
+        });
+        validate_extension_page_controls(&page).unwrap();
+
+        page["blocks"][1]["copy_label"] = serde_json::json!("Copy");
+        validate_extension_page_controls(&page).unwrap();
+        page["blocks"][1]["copy_label"] = serde_json::json!("");
+        assert!(validate_extension_page_controls(&page).is_err());
+
+        page["blocks"][1]["copy_label"] = serde_json::json!("Copy");
+        page["blocks"][1]["variant"] = serde_json::json!("textarea");
+        validate_extension_page_controls(&page).unwrap();
+        page["blocks"][1]["variant"] = serde_json::json!("panel");
+        assert!(validate_extension_page_controls(&page).is_err());
+
+        page["blocks"][1]["variant"] = serde_json::json!("banner");
+        page["blocks"][0]["actions"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("result_id");
         assert!(validate_extension_page_controls(&page).is_err());
     }
 

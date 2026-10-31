@@ -58,6 +58,8 @@ describe('ExtensionPageRenderer', () => {
     const root = container.querySelector<HTMLElement>('.extension-page');
     const scope = root?.dataset.extensionStyleScope;
     expect(root?.classList.contains('plugin-page')).toBe(true);
+    expect(root?.querySelector('.extension-page-header .extension-page-title')?.textContent)
+      .toBe('Styled tools');
     expect(root?.querySelector('.plugin-status')).toBeTruthy();
     expect(screen.getByLabelText('Input').closest('.plugin-input')).toBeTruthy();
     expect(document.head.querySelector('style')?.textContent)
@@ -80,5 +82,27 @@ describe('ExtensionPageRenderer', () => {
     });
     await screen.findByRole('alert');
     expect(document.head.querySelector('style[data-extension-style-scope]')).toBeNull();
+  });
+
+  it('renders CSS blocks invisibly and applies their scoped rules', async () => {
+    vi.mocked(readExtensionPage).mockResolvedValue({
+      schema_version: 1,
+      title: 'CSS blocks',
+      blocks: [
+        { type: 'text', text: 'Visible content', class_name: 'plugin-content' },
+        { type: 'css', css: '.plugin-content { color: red; }' },
+      ],
+    });
+
+    const { container } = render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.tools', pageId: 'overview' },
+    });
+
+    await screen.findByText('Visible content');
+    await waitFor(() => {
+      expect(document.head.querySelector('style[data-extension-style-scope]')?.textContent)
+        .toContain('.plugin-content{color:red}');
+    });
+    expect(container.querySelectorAll('.extension-grid > *')).toHaveLength(1);
   });
 });

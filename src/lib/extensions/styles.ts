@@ -1,4 +1,4 @@
-import type { DeclarativePage, DeclarativeStyleRule } from '$lib/api/extensions';
+﻿import type { DeclarativePage, DeclarativeStyleRule } from '$lib/api/extensions';
 
 const MAX_STYLES_BYTES = 16 * 1024;
 const MAX_STYLE_RULES = 64;
@@ -6,6 +6,9 @@ const MAX_STYLE_DECLARATIONS = 16;
 
 const HOST_STYLE_CLASSES = new Set([
   'extension-page',
+  'extension-page-header',
+  'extension-page-title',
+  'extension-page-description',
   'extension-grid',
   'extension-block',
   'extension-block--text',
@@ -17,15 +20,31 @@ const HOST_STYLE_CLASSES = new Set([
   'extension-block--empty_state',
   'extension-block--form',
   'extension-block--actions',
+  'extension-tab',
+  'extension-tab-list',
+  'extension-tab--active',
   'extension-heading',
   'extension-caption',
   'extension-card',
   'extension-alert',
   'extension-wide',
   'extension-form-field',
+  'extension-form-label',
   'extension-control',
   'extension-actions',
   'extension-button',
+  'extension-result-heading',
+  'extension-result-banner',
+  'extension-result-banner--success',
+  'extension-result-banner--danger',
+  'extension-block--result',
+  'tone-default',
+  'tone-info',
+  'tone-success',
+  'tone-warning',
+  'tone-danger',
+  'extension-muted',
+  'extension-error-message',
 ]);
 
 const STYLE_PROPERTIES = new Set([
@@ -107,7 +126,7 @@ const SELECTOR_PATTERN = new RegExp(
 const CLASS_NAME_PATTERN = /^plugin-[a-z][a-z0-9_-]{0,54}$/;
 const VALUE_CHARACTERS = /^[a-zA-Z0-9#(),.%\s_+/-]+$/;
 const MEDIA_PATTERN = /^\((?:max|min)-width:\s*\d{1,4}(?:\.\d{1,2})?(?:px|rem|em)\)$/;
-const HOST_THEME_VARIABLE = /^--(?:color(?:Brand|Neutral)[A-Za-z0-9]*|explorer[A-Za-z0-9-]*)$/;
+const HOST_THEME_VARIABLE = /^--(?:color(?:Brand|Neutral|Status)[A-Za-z0-9]*|explorer[A-Za-z0-9-]*)$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -192,13 +211,12 @@ function validateCssValue(property: string, value: unknown, label: string): asse
   }
 }
 
-function validateRules(page: DeclarativePage, pluginClasses: Set<string>) {
-  const rules = page.styles;
-  if (rules === undefined) return [];
+function validateRules(page: DeclarativePage, pluginClasses: Set<string>, cssSourceBytes: number) {
+  const rules = page.styles ?? [];
   if (!Array.isArray(rules) || rules.length > MAX_STYLE_RULES) {
     throw new Error(`Extension page styles must contain at most ${MAX_STYLE_RULES} rules`);
   }
-  if (new TextEncoder().encode(JSON.stringify(rules)).length > MAX_STYLES_BYTES) {
+  if (new TextEncoder().encode(JSON.stringify(rules)).length + cssSourceBytes > MAX_STYLES_BYTES) {
     throw new Error('Extension page styles exceed the 16 KiB limit');
   }
 
@@ -244,6 +262,85 @@ function validateRules(page: DeclarativePage, pluginClasses: Set<string>) {
   });
 }
 
+function parseCssBlock(css: string): DeclarativeStyleRule[] {
+  const label = 'Extension CSS block';
+  if (typeof css !== 'string' || css.length === 0) {
+    throw new Error(`${label} must contain CSS text`);
+  }
+  if (new TextEncoder().encode(css).length > MAX_STYLES_BYTES) {
+    throw new Error(`${label} exceeds the 16 KiB limit`);
+  }
+  if (css.includes('/*') || css.includes('*/')) {
+    throw new Error(`${label} does not allow comments`);
+  }
+
+  const rules: DeclarativeStyleRule[] = [];
+  let cursor = 0;
+
+  function parseRules(media?: string): void {
+    while (cursor < css.length) {
+      while (/\s/.test(css[cursor] ?? '')) cursor += 1;
+      if (css[cursor] === '}') {
+        if (!media) throw new Error(`${label} contains an unexpected closing brace`);
+        cursor += 1;
+        return;
+      }
+      if (cursor >= css.length) break;
+
+      const open = css.indexOf('{', cursor);
+      if (open < 0) throw new Error(`${label} contains an incomplete rule`);
+      const header = css.slice(cursor, open).trim();
+      cursor = open + 1;
+
+      if (header.startsWith('@media')) {
+        const match = /^@media\s+(\((?:max|min)-width:\s*\d{1,4}(?:\.\d{1,2})?(?:px|rem|em)\))$/.exec(header);
+        if (!match || media || Number(match[1].match(/\d+(?:\.\d+)?/)?.[0] ?? 0) > 4096) {
+          throw new Error(`${label} has an unsupported media rule`);
+        }
+        parseRules(match[1]);
+        continue;
+      }
+
+      const close = css.indexOf('}', cursor);
+      const nestedOpen = css.indexOf('{', cursor);
+      if (close < 0 || (nestedOpen >= 0 && nestedOpen < close)) {
+        throw new Error(`${label} contains an invalid declaration block`);
+      }
+      const declarations: Record<string, string> = {};
+      for (const declaration of css.slice(cursor, close).split(';')) {
+        const trimmed = declaration.trim();
+        if (!trimmed) continue;
+        const colon = trimmed.indexOf(':');
+        if (colon < 1) throw new Error(`${label} contains an invalid declaration`);
+        const property = trimmed.slice(0, colon).trim();
+        const value = trimmed.slice(colon + 1).trim();
+        if (!STYLE_PROPERTIES.has(property)) {
+          throw new Error(`${label} uses a disallowed CSS property: ${property}`);
+        }
+        if (Object.prototype.hasOwnProperty.call(declarations, property)) {
+          throw new Error(`${label} contains a duplicate CSS property`);
+        }
+        declarations[property] = value;
+      }
+      rules.push({
+        selector: header,
+        ...(media ? { media } : {}),
+        declarations,
+      });
+      if (rules.length > MAX_STYLE_RULES) {
+        throw new Error(`Extension page styles must contain at most ${MAX_STYLE_RULES} rules`);
+      }
+      cursor = close + 1;
+    }
+
+    if (media) throw new Error(`${label} contains an unclosed media rule`);
+  }
+
+  parseRules();
+  if (rules.length === 0) throw new Error(`${label} must contain at least one style rule`);
+  return rules;
+}
+
 export function createExtensionStylesheet(page: DeclarativePage, scopeId: string): string {
   if (!Array.isArray(page.blocks)) throw new Error('Extension page blocks must be an array');
   if (!/^extension-[a-zA-Z0-9_-]{1,128}$/.test(scopeId)) {
@@ -254,7 +351,9 @@ export function createExtensionStylesheet(page: DeclarativePage, scopeId: string
   validateClassName(page.class_name, 'Extension page class_name', pluginClasses);
   for (const [index, block] of page.blocks.entries()) {
     if (!isRecord(block)) continue;
-    validateClassName(block.class_name, `Extension page blocks[${index}].class_name`, pluginClasses);
+    if (block.type !== 'css') {
+      validateClassName(block.class_name, `Extension page blocks[${index}].class_name`, pluginClasses);
+    }
     if (block.type === 'form' && Array.isArray(block.fields)) {
       for (const [fieldIndex, field] of block.fields.entries()) {
         if (isRecord(field)) {
@@ -279,7 +378,21 @@ export function createExtensionStylesheet(page: DeclarativePage, scopeId: string
     }
   }
 
-  const rules = validateRules(page, pluginClasses);
+  const cssBlocks = page.blocks.filter((block) => block.type === 'css');
+  const cssSourceBytes = cssBlocks.reduce(
+    (total, block) => total + new TextEncoder().encode(block.css).length,
+    0,
+  );
+  if (page.styles !== undefined && !Array.isArray(page.styles)) {
+    throw new Error(`Extension page styles must contain at most ${MAX_STYLE_RULES} rules`);
+  }
+  const rules = validateRules({
+    ...page,
+    styles: [
+      ...(page.styles ?? []),
+      ...cssBlocks.flatMap((block) => parseCssBlock(block.css)),
+    ],
+  }, pluginClasses, cssSourceBytes);
   return rules
     .map((rule) => {
       const declarations = Object.entries(rule.declarations)

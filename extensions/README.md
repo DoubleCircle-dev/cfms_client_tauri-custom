@@ -46,6 +46,17 @@ the output pointer in the high 32 bits and the output byte length in the low 32 
 entrypoint must return a declarative page with `schema_version: 1` and a `blocks` array. The client
 renders it using its own trusted UI components. A workflow invocation may return any JSON value.
 
+Pages may group blocks under one `tabs` block using each block's `tab: { group, id }` reference.
+Forms support `textarea` and single-digit `digit` controls in addition to text, number, toggle, and
+select fields; every field renders its label above the control. A workflow action can name a
+`result_id`; its `result` block displays a returned
+`{ "ok": true, "output": "...", "form_values": { ... } }` value inline and applies `form_values` to
+the named form. `variant: "banner"` renders the value as a success/danger banner instead of a
+readonly textarea. Updates are applied only to fields declared by that page, with select, toggle,
+number, and digit values checked against their field types. A `kind: "clear"` action clears only
+its declared form fields and linked result; a `kind: "copy"` action copies the linked result to the
+clipboard and is disabled until that result has content.
+
 The initial ABI provides no imports, WASI, filesystem, network, or native access. Modules cannot
 run a start function. A declarative workflow can invoke the module with a JSON `wasm` node; its
 `input` is passed to the same ABI and the returned JSON is stored at the node's `result` key.
@@ -57,12 +68,22 @@ host-call results by receiving the workflow context as a later `wasm` node's inp
 
 Declarative pages returned by v1 JSON or the v2 renderer may declare `class_name` on the page,
 blocks, form fields, and actions, plus a page-level `styles` array of selector/declaration rules.
+They may also include a non-visual CSS block such as
+`{ "type": "css", "css": ".plugin-form { gap: 1rem; }" }`; its text is parsed into the same
+controlled rules and is never inserted as raw CSS.
+The host provides no default layout or decorative styling for extension page content. Plugins
+describe those styles themselves; the host retains styling only for loading/error states and its
+trusted controls.
 Rules are scoped to that extension page and accept only declared `plugin-*` classes and renderer
-`extension-*` classes. The renderer applies an allowlist of layout, spacing, typography, border,
+`extension-*` classes, including page title/header, tabs, controls, and result-heading hooks. A
+page-level `class_name` is rendered but is not registered for selectors, so style rules must target
+declared block, field, action, or renderer classes instead.
+The renderer applies an allowlist of layout, spacing, typography, border,
 and color properties; selectors are limited to class-based descendant/child relationships and
-small-width media conditions. Global selectors, arbitrary CSS, external resources, `display: none`,
-positioning, and script-bearing values are rejected. CSS customizes the layout and appearance of
-the host-rendered controls; it cannot add arbitrary HTML.
+bounded `min-width`/`max-width` media conditions. Global selectors, comments, unknown at-rules,
+external resources, `display: none`, positioning, and script-bearing values are rejected. CSS
+customizes the layout and appearance of the host-rendered controls; it cannot add arbitrary HTML.
+The page-wide limit is 64 rules and 16 KiB across CSS blocks and `styles`.
 
 Example workflow node that sends submitted form values to the module:
 

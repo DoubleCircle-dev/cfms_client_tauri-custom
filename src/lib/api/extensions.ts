@@ -111,9 +111,46 @@ export interface DeclarativeStyleRule {
   declarations: Record<string, string>;
 }
 
-type StyledBlock = { class_name?: string };
+type TabScope = { group: string; id: string };
+type StyledBlock = { class_name?: string; tab?: TabScope };
+
+export interface DeclarativeTab {
+  id: string;
+  label: string;
+}
+
+export type DeclarativeAction =
+  | ({
+      id: string;
+      label: string;
+      kind?: 'workflow';
+      workflow: string;
+      result_id?: string;
+      tone?: 'primary' | 'secondary' | 'danger';
+      class_name?: string;
+    })
+  | ({
+      id: string;
+      label: string;
+      kind: 'clear';
+      form_id: string;
+      field_ids: string[];
+      result_id?: string;
+      tone?: 'primary' | 'secondary' | 'danger';
+      class_name?: string;
+    })
+  | ({
+      id: string;
+      label: string;
+      kind: 'copy';
+      result_id: string;
+      tone?: 'primary' | 'secondary' | 'danger';
+      class_name?: string;
+    });
 
 export type DeclarativeBlock =
+  | ({ type: 'tabs'; id: string; label: string; tabs: DeclarativeTab[]; default_tab?: string } & StyledBlock)
+  | ({ type: 'result'; id: string; label: string; copy_label?: string; variant?: 'textarea' | 'banner' } & StyledBlock)
   | ({ type: 'text'; text: string; style?: 'body' | 'caption' | 'heading' } & StyledBlock)
   | ({ type: 'status_card'; title: string; value: string; description?: string; tone?: 'default' | 'success' | 'warning' | 'danger' } & StyledBlock)
   | ({ type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' } & StyledBlock)
@@ -127,22 +164,14 @@ export type DeclarativeBlock =
       fields: Array<{
         id: string;
         label: string;
-        type: 'text' | 'number' | 'toggle' | 'select';
+        type: 'text' | 'textarea' | 'digit' | 'number' | 'toggle' | 'select';
         options?: string[];
         default?: unknown;
         class_name?: string;
       }>;
     } & StyledBlock)
-  | ({
-      type: 'actions';
-      actions: Array<{
-        id: string;
-        label: string;
-        workflow: string;
-        tone?: 'primary' | 'secondary' | 'danger';
-        class_name?: string;
-      }>;
-    } & StyledBlock);
+  | ({ type: 'actions'; actions: DeclarativeAction[] } & StyledBlock)
+  | { type: 'css'; css: string };
 
 export interface DeclarativeWorkflow {
   schema_version: number;

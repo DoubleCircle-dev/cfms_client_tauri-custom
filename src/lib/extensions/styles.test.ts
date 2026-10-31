@@ -40,6 +40,48 @@ describe('extension page styles', () => {
     expect(css).not.toContain('body');
   });
 
+  it('allows plugins to style exposed page structure classes', () => {
+    const css = createExtensionStylesheet(page({
+      styles: [
+        { selector: '.extension-page-title', declarations: { 'font-size': '28px' } },
+        { selector: '.extension-tab-list', declarations: { display: 'flex', gap: '4px' } },
+        { selector: '.extension-result-heading', declarations: { 'justify-content': 'space-between' } },
+      ],
+    }), 'extension-test-1');
+
+    expect(css).toContain('.extension-page-title{font-size:28px}');
+    expect(css).toContain('.extension-tab-list{display:flex;gap:4px}');
+    expect(css).toContain('.extension-result-heading{justify-content:space-between}');
+  });
+
+  it('parses CSS blocks and scopes their rules without rendering raw CSS', () => {
+    const css = createExtensionStylesheet(page({
+      styles: [],
+      blocks: [
+        { type: 'text', text: 'Ready', class_name: 'plugin-status' },
+        { type: 'css', css: '.plugin-status { color: red; }\n@media (max-width: 700px) { .plugin-status { display: block; } }' },
+      ],
+    }), 'extension-test-1');
+
+    expect(css).toContain('[data-extension-style-scope="extension-test-1"] .plugin-status{color:red}');
+    expect(css).toContain('@media (max-width: 700px)');
+    expect(css).toContain('display:block');
+  });
+
+  it.each([
+    ['global selector', 'body { color: red; }'],
+    ['undeclared class', '.plugin-missing { color: red; }'],
+    ['external resource', '.plugin-input { background-color: url(https://example.test/a); }'],
+    ['unknown at-rule', '@import "https://example.test/a.css";'],
+    ['comments', '.plugin-input { color: red; /* comment */ }'],
+    ['unclosed rule', '.plugin-input { color: red;'],
+  ])('rejects unsafe CSS block: %s', (_label, css) => {
+    expect(() => createExtensionStylesheet(page({
+      styles: [],
+      blocks: [{ type: 'css', css }],
+    }), 'extension-test-1')).toThrow();
+  });
+
   it.each([
     ['global selector', { selector: 'body', declarations: { color: 'red' } }],
     ['undeclared plugin class', { selector: '.plugin-missing', declarations: { color: 'red' } }],
