@@ -1,0 +1,6 @@
+# The Fluent generators write LF and `pnpm check:fluent` compares bytes, so the
+# committed artifacts must stay LF in the working tree even when core.autocrlf
+# is enabled. Without this, a fresh checkout on Windows makes the check report
+# them "stale" for line-ending reasons alone.
+src/lib/fluent/icons.generated.ts text eol=lf
+src/lib/fluent/theme.css text eol=lf
