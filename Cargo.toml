@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.57.0-custom-0.2"
+version = "0.57.0-custom-0.3"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/cfms-dev/cfms_client_tauri"
@@ -31,6 +31,7 @@ cfms-service = { path = "crates/service" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
+wasmi = { version = "2", default-features = false, features = ["stable", "std", "validate", "auto-dispatch"] }
 
 # ---------------------------------------------------------------------------
 # Error handling

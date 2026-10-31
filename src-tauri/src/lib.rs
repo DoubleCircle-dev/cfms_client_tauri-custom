@@ -723,6 +723,7 @@ pub fn run() {
             commands::set_extension_enabled,
             commands::read_extension_page,
             commands::read_extension_workflow,
+            commands::execute_extension_module,
             commands::execute_extension_host_call,
             commands::send_developer_request,
             commands::get_locale,

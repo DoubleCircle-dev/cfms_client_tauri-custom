@@ -2060,7 +2060,8 @@ export const en = {
     },
     extensions: {
       title: 'Extensions',
-      description: 'Install and manage signed CFMS feature extensions',
+      description: 'Preview signed CFMS extensions with bounded WebAssembly support',
+      previewNotice: 'Preview feature. Extension modules run without direct filesystem, network, or native API access. Declared client capabilities remain permission-gated.',
       import: 'Import package',
       installedTitle: 'Installed extensions',
       installedHint: 'Packages are installed for this device and enabled separately for each account.',
@@ -2085,7 +2086,8 @@ export const en = {
       revoked: 'This version has been revoked.',
       noTrustKey: 'Official extension key is not configured',
       noTrustKeyHint: 'This build can inspect installed metadata but cannot import or download packages until a release signing public key is supplied.',
-      mobileUnavailable: 'Installable extensions are currently available on desktop only. Built-in optional modules remain available on mobile.',
+      mobileCatalogOnly: 'On Android, install signed extensions from the catalog. Local package import is available on desktop.',
+      iosUnavailable: 'Installable extensions are not available on iOS.',
       capabilities: {
         files_metadata_read: 'Read file metadata',
         files_list: 'List server folders',

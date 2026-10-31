@@ -1,5 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 
+export const DECLARATIVE_HOST_API_VERSION = '1.0.0';
+export const WASM_HOST_API_VERSION = 'api-custom-v2';
+
 export type ExtensionCapability =
   | 'files.metadata.read'
   | 'files.list'
@@ -46,6 +49,7 @@ export interface ExtensionManifest {
   requested_capabilities: ExtensionCapability[];
   background_triggers: ExtensionBackgroundTrigger[];
   content_hashes: Record<string, string>;
+  runtime?: { kind: 'wasm'; module: string };
 }
 
 export interface ExtensionInstallation {
@@ -89,25 +93,85 @@ export interface ExtensionOverview {
   catalog: ExtensionCatalog | null;
   trustedKeysConfigured: boolean;
   hostApiVersion: string;
+  supportedHostApiVersions: string[];
 }
 
 export interface DeclarativePage {
   schema_version: number;
   title: string;
   description?: string;
+  class_name?: string;
+  styles?: DeclarativeStyleRule[];
   blocks: DeclarativeBlock[];
 }
 
+export interface DeclarativeStyleRule {
+  selector: string;
+  media?: string;
+  declarations: Record<string, string>;
+}
+
+type TabScope = { group: string; id: string };
+type StyledBlock = { class_name?: string; tab?: TabScope };
+
+export interface DeclarativeTab {
+  id: string;
+  label: string;
+}
+
+export type DeclarativeAction =
+  | ({
+      id: string;
+      label: string;
+      kind?: 'workflow';
+      workflow: string;
+      result_id?: string;
+      tone?: 'primary' | 'secondary' | 'danger';
+      class_name?: string;
+    })
+  | ({
+      id: string;
+      label: string;
+      kind: 'clear';
+      form_id: string;
+      field_ids: string[];
+      result_id?: string;
+      tone?: 'primary' | 'secondary' | 'danger';
+      class_name?: string;
+    })
+  | ({
+      id: string;
+      label: string;
+      kind: 'copy';
+      result_id: string;
+      tone?: 'primary' | 'secondary' | 'danger';
+      class_name?: string;
+    });
+
 export type DeclarativeBlock =
-  | { type: 'text'; text: string; style?: 'body' | 'caption' | 'heading' }
-  | { type: 'status_card'; title: string; value: string; description?: string; tone?: 'default' | 'success' | 'warning' | 'danger' }
-  | { type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' }
-  | { type: 'progress'; label: string; value: number; max?: number }
-  | { type: 'list'; title?: string; items: Array<{ title: string; description?: string; value?: string }> }
-  | { type: 'table'; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> }
-  | { type: 'empty_state'; title: string; description?: string }
-  | { type: 'form'; id: string; fields: Array<{ id: string; label: string; type: 'text' | 'number' | 'toggle' | 'select'; options?: string[]; default?: unknown }> }
-  | { type: 'actions'; actions: Array<{ id: string; label: string; workflow: string; tone?: 'primary' | 'secondary' | 'danger' }> };
+  | ({ type: 'tabs'; id: string; label: string; tabs: DeclarativeTab[]; default_tab?: string } & StyledBlock)
+  | ({ type: 'result'; id: string; label: string; copy_label?: string; variant?: 'textarea' | 'banner' } & StyledBlock)
+  | ({ type: 'text'; text: string; style?: 'body' | 'caption' | 'heading' } & StyledBlock)
+  | ({ type: 'status_card'; title: string; value: string; description?: string; tone?: 'default' | 'success' | 'warning' | 'danger' } & StyledBlock)
+  | ({ type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' } & StyledBlock)
+  | ({ type: 'progress'; label: string; value: number; max?: number } & StyledBlock)
+  | ({ type: 'list'; title?: string; items: Array<{ title: string; description?: string; value?: string }> } & StyledBlock)
+  | ({ type: 'table'; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> } & StyledBlock)
+  | ({ type: 'empty_state'; title: string; description?: string } & StyledBlock)
+  | ({
+      type: 'form';
+      id: string;
+      fields: Array<{
+        id: string;
+        label: string;
+        type: 'text' | 'textarea' | 'digit' | 'number' | 'toggle' | 'select';
+        options?: string[];
+        default?: unknown;
+        class_name?: string;
+      }>;
+    } & StyledBlock)
+  | ({ type: 'actions'; actions: DeclarativeAction[] } & StyledBlock)
+  | { type: 'css'; css: string };
 
 export interface DeclarativeWorkflow {
   schema_version: number;
@@ -153,6 +217,13 @@ export function readExtensionPage(extensionId: string, page: string): Promise<De
 
 export function readExtensionWorkflow(extensionId: string, workflow: string): Promise<DeclarativeWorkflow> {
   return invoke('read_extension_workflow', { extensionId, workflow });
+}
+
+export function executeExtensionModule<T = unknown>(
+  extensionId: string,
+  input: unknown,
+): Promise<T> {
+  return invoke('execute_extension_module', { extensionId, input });
 }
 
 export function executeExtensionHostCall<T = unknown>(
