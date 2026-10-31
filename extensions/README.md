@@ -46,31 +46,23 @@ the output pointer in the high 32 bits and the output byte length in the low 32 
 entrypoint must return a declarative page with `schema_version: 1` and a `blocks` array. The client
 renders it using its own trusted UI components. A workflow invocation may return any JSON value.
 
-Pages may group blocks under one `tabs` block using each block's `tab: { group, id }` reference.
-Forms support `textarea` and single-digit `digit` controls in addition to text, number, toggle, and
-select fields. A workflow action can name a `result_id`; its `result` block displays a returned
-`{ "ok": true, "output": "...", "form_values": { ... } }` value inline. Updates are applied only to
-fields declared by that page, with select, toggle, number, and digit values checked against their
-field types. A `kind: "clear"` action clears only its declared form fields and linked result.
-
-Pages may include an optional `styles` array. Style rules target only class selectors attached to
-that page's blocks, fields, and actions; every rule is automatically scoped to its extension page.
-Custom classes must use the `plugin-` prefix. Selectors support descendant/child relationships and
-the `hover`, `focus`, `focus-visible`, `active`, `disabled`, and `checked` states. Optional media
-conditions are limited to a single `min-width` or `max-width` pixel/rem/em query.
-
-Styles are constrained to at most 64 rules and 16 KiB, with up to 16 declarations per rule. Only
-layout, spacing, sizing, borders, colors, and typography properties are accepted. Positioning,
-stacking, visibility, arbitrary selectors, at-rules, custom-property declarations, animations, and
-external resources are rejected. CSS values are validated by the client before rendering;
-unsupported values fail page loading instead of being silently ignored.
-
 The initial ABI provides no imports, WASI, filesystem, network, or native access. Modules cannot
 run a start function. A declarative workflow can invoke the module with a JSON `wasm` node; its
 `input` is passed to the same ABI and the returned JSON is stored at the node's `result` key.
 Workflow `host_call` nodes remain the way to request client capabilities, and each capability is
 still checked by the client; sensitive operations retain user confirmation. A module can process
 host-call results by receiving the workflow context as a later `wasm` node's input.
+
+### Controlled page styling
+
+Declarative pages returned by v1 JSON or the v2 renderer may declare `class_name` on the page,
+blocks, form fields, and actions, plus a page-level `styles` array of selector/declaration rules.
+Rules are scoped to that extension page and accept only declared `plugin-*` classes and renderer
+`extension-*` classes. The renderer applies an allowlist of layout, spacing, typography, border,
+and color properties; selectors are limited to class-based descendant/child relationships and
+small-width media conditions. Global selectors, arbitrary CSS, external resources, `display: none`,
+positioning, and script-bearing values are rejected. CSS customizes the layout and appearance of
+the host-rendered controls; it cannot add arbitrary HTML.
 
 Example workflow node that sends submitted form values to the module:
 

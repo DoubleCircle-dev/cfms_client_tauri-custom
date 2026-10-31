@@ -3,6 +3,7 @@ import type { DeclarativePage, DeclarativeStyleRule } from '$lib/api/extensions'
 const MAX_STYLES_BYTES = 16 * 1024;
 const MAX_STYLE_RULES = 64;
 const MAX_STYLE_DECLARATIONS = 16;
+
 const HOST_STYLE_CLASSES = new Set([
   'extension-page',
   'extension-grid',
@@ -16,15 +17,17 @@ const HOST_STYLE_CLASSES = new Set([
   'extension-block--empty_state',
   'extension-block--form',
   'extension-block--actions',
-  'extension-tab',
-  'extension-tab--active',
+  'extension-heading',
+  'extension-caption',
   'extension-card',
+  'extension-alert',
   'extension-wide',
   'extension-form-field',
   'extension-control',
   'extension-actions',
   'extension-button',
 ]);
+
 const STYLE_PROPERTIES = new Set([
   'align-items',
   'background-color',
@@ -48,8 +51,10 @@ const STYLE_PROPERTIES = new Set([
   'font-style',
   'font-weight',
   'gap',
+  'grid-auto-flow',
   'grid-column',
   'grid-template-columns',
+  'grid-template-rows',
   'height',
   'justify-content',
   'letter-spacing',
@@ -61,6 +66,11 @@ const STYLE_PROPERTIES = new Set([
   'max-width',
   'min-height',
   'min-width',
+  'outline',
+  'outline-color',
+  'outline-offset',
+  'outline-style',
+  'outline-width',
   'overflow',
   'overflow-x',
   'overflow-y',
@@ -76,6 +86,7 @@ const STYLE_PROPERTIES = new Set([
   'white-space',
   'width',
 ]);
+
 const SAFE_FUNCTIONS = new Set([
   'calc',
   'clamp',
@@ -89,13 +100,14 @@ const SAFE_FUNCTIONS = new Set([
   'rgba',
   'var',
 ]);
-const SELECTOR_CLASS = String.raw`\.[a-z][a-z0-9_-]{0,63}(?::(?:hover|focus|focus-visible|active|disabled|checked))?`;
+const SELECTOR_CLASS = String.raw`\.(?:plugin-[a-z][a-z0-9_-]{0,54}|extension-[a-z0-9_-]{1,63})(?::(?:hover|focus|focus-visible|active|disabled|checked))?`;
 const SELECTOR_PATTERN = new RegExp(
   `^${SELECTOR_CLASS}(?:(?:\\s+|\\s*>\\s*)${SELECTOR_CLASS})*$`,
 );
 const CLASS_NAME_PATTERN = /^plugin-[a-z][a-z0-9_-]{0,54}$/;
 const VALUE_CHARACTERS = /^[a-zA-Z0-9#(),.%\s_+/-]+$/;
 const MEDIA_PATTERN = /^\((?:max|min)-width:\s*\d{1,4}(?:\.\d{1,2})?(?:px|rem|em)\)$/;
+const HOST_THEME_VARIABLE = /^--(?:color(?:Brand|Neutral)[A-Za-z0-9]*|explorer[A-Za-z0-9-]*)$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -143,6 +155,12 @@ function validateCssValue(property: string, value: unknown, label: string): asse
     }
   }
 
+  for (const match of value.matchAll(/var\(\s*(--[a-zA-Z0-9_-]+)/g)) {
+    if (!HOST_THEME_VARIABLE.test(match[1])) {
+      throw new Error(`${label} references a disallowed theme variable`);
+    }
+  }
+
   const enumValues: Record<string, string[]> = {
     'align-items': ['baseline', 'center', 'end', 'flex-end', 'flex-start', 'normal', 'start', 'stretch'],
     'box-sizing': ['border-box', 'content-box'],
@@ -151,7 +169,9 @@ function validateCssValue(property: string, value: unknown, label: string): asse
     'flex-wrap': ['nowrap', 'wrap', 'wrap-reverse'],
     'font-style': ['italic', 'normal', 'oblique'],
     'font-weight': ['bold', 'normal', '100', '200', '300', '400', '500', '600', '700', '800', '900'],
+    'grid-auto-flow': ['column', 'column dense', 'dense', 'row', 'row dense'],
     'justify-content': ['center', 'end', 'flex-end', 'flex-start', 'left', 'normal', 'right', 'space-around', 'space-between', 'space-evenly', 'start', 'stretch'],
+    'outline-style': ['dashed', 'dotted', 'double', 'groove', 'none', 'solid'],
     overflow: ['auto', 'scroll', 'visible'],
     'overflow-x': ['auto', 'scroll', 'visible'],
     'overflow-y': ['auto', 'scroll', 'visible'],
@@ -163,6 +183,9 @@ function validateCssValue(property: string, value: unknown, label: string): asse
   };
   if (enumValues[property] && !enumValues[property].includes(value.toLowerCase())) {
     throw new Error(`${label} has an unsupported value for ${property}`);
+  }
+  if (property === 'display' && value.toLowerCase() === 'none') {
+    throw new Error(`${label} cannot hide page content`);
   }
   if (property === 'grid-column' && !/^(?:auto|-?\d+|span \d+)(?:\s*\/\s*(?:auto|-?\d+|span \d+))?$/i.test(value)) {
     throw new Error(`${label} has an unsupported grid-column value`);
@@ -194,7 +217,8 @@ function validateRules(page: DeclarativePage, pluginClasses: Set<string>) {
 
     if (
       rule.media !== undefined
-      && (typeof rule.media !== 'string' || !MEDIA_PATTERN.test(rule.media))
+      && (typeof rule.media !== 'string' || !MEDIA_PATTERN.test(rule.media)
+        || Number(rule.media.match(/\d+(?:\.\d+)?/)?.[0] ?? 0) > 4096)
     ) {
       throw new Error(`${label} has an unsupported media condition`);
     }
@@ -222,7 +246,12 @@ function validateRules(page: DeclarativePage, pluginClasses: Set<string>) {
 
 export function createExtensionStylesheet(page: DeclarativePage, scopeId: string): string {
   if (!Array.isArray(page.blocks)) throw new Error('Extension page blocks must be an array');
+  if (!/^extension-[a-zA-Z0-9_-]{1,128}$/.test(scopeId)) {
+    throw new Error('Invalid extension style scope');
+  }
+
   const pluginClasses = new Set<string>();
+  validateClassName(page.class_name, 'Extension page class_name', pluginClasses);
   for (const [index, block] of page.blocks.entries()) {
     if (!isRecord(block)) continue;
     validateClassName(block.class_name, `Extension page blocks[${index}].class_name`, pluginClasses);
@@ -251,17 +280,13 @@ export function createExtensionStylesheet(page: DeclarativePage, scopeId: string
   }
 
   const rules = validateRules(page, pluginClasses);
-  if (rules.length === 0) return '';
-  if (!/^extension-[a-z0-9_-]{1,128}$/.test(scopeId)) {
-    throw new Error('Invalid extension style scope');
-  }
-
   return rules
     .map((rule) => {
       const declarations = Object.entries(rule.declarations)
         .map(([property, value]) => `${property}:${value}`)
         .join(';');
-      const scopedRule = `[data-extension-style-scope="${scopeId}"] ${rule.selector}{${declarations}}`;
+      const scope = `[data-extension-style-scope="${scopeId}"]`;
+      const scopedRule = `${scope}${rule.selector},${scope} ${rule.selector}{${declarations}}`;
       return rule.media ? `@media ${rule.media}{${scopedRule}}` : scopedRule;
     })
     .join('\n');

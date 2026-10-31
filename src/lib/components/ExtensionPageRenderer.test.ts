@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DeclarativePage } from '$lib/api/extensions';
@@ -13,7 +13,6 @@ vi.mock('$lib/extension-workflows', () => ({
 }));
 
 import { readExtensionPage } from '$lib/api/extensions';
-import { runExtensionWorkflow } from '$lib/extension-workflows';
 import ExtensionPageRenderer from './ExtensionPageRenderer.svelte';
 
 afterEach(() => {
@@ -21,84 +20,65 @@ afterEach(() => {
   document.head.querySelectorAll('style[data-extension-style-scope]').forEach((style) => style.remove());
 });
 
-describe('extension page styles', () => {
-  it('renders scoped tabs, multiline fields, action results, and page CSS', async () => {
+describe('ExtensionPageRenderer', () => {
+  it('adds scoped plugin styles and removes them when the page unmounts', async () => {
     const page: DeclarativePage = {
       schema_version: 1,
       title: 'Styled tools',
+      class_name: 'plugin-page',
       blocks: [
-        {
-          type: 'tabs',
-          id: 'tools',
-          label: 'Tools',
-          tabs: [{ id: 'first', label: 'First' }, { id: 'second', label: 'Second' }],
-          default_tab: 'first',
-          class_name: 'plugin-tool-tabs',
-        },
+        { type: 'text', text: 'Ready', class_name: 'plugin-status' },
         {
           type: 'form',
           id: 'tool',
-          class_name: 'plugin-tool-form',
-          tab: { group: 'tools', id: 'first' },
-          fields: [{
-            id: 'input',
-            label: 'Input',
-            type: 'textarea',
-            class_name: 'plugin-tool-input',
-          }],
-        },
-        {
-          type: 'actions',
-          tab: { group: 'tools', id: 'first' },
-          actions: [
-            { id: 'run', label: 'Run', workflow: 'run', result_id: 'output' },
-            { id: 'clear', label: 'Clear', kind: 'clear', form_id: 'tool', field_ids: ['input'], result_id: 'output' },
-          ],
-        },
-        {
-          type: 'result',
-          id: 'output',
-          label: 'Output',
-          copy_label: 'Copy result',
-          tab: { group: 'tools', id: 'first' },
+          fields: [{ id: 'input', label: 'Input', type: 'text', class_name: 'plugin-input' }],
         },
       ],
-      styles: [{
-        selector: '.plugin-tool-form .extension-control',
-        declarations: { width: '100%' },
-      }],
+      styles: [
+        {
+          selector: '.plugin-status',
+          declarations: { color: 'var(--colorBrandForeground1)' },
+        },
+        {
+          selector: '.plugin-input .extension-control',
+          declarations: { width: '100%' },
+        },
+      ],
     };
     vi.mocked(readExtensionPage).mockResolvedValue(page);
-    vi.mocked(runExtensionWorkflow).mockResolvedValue({ ok: true, output: 'result text' });
-    const { container } = render(ExtensionPageRenderer, {
+    const { container, unmount } = render(ExtensionPageRenderer, {
       props: { extensionId: 'org.example.tools', pageId: 'overview' },
     });
 
-    await screen.findByLabelText('Input');
+    await screen.findByText('Ready');
     await waitFor(() => {
       expect(document.head.querySelector('style[data-extension-style-scope]')).toBeTruthy();
     });
 
     const root = container.querySelector<HTMLElement>('.extension-page');
-    expect(root?.classList.contains('plugin-tool-form')).toBe(false);
-    expect(root?.querySelector('.plugin-tool-form .plugin-tool-input')).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'First' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Second' }).getAttribute('aria-selected')).toBe('false');
     const scope = root?.dataset.extensionStyleScope;
-    const styleText = document.head.querySelector('style[data-extension-style-scope]')?.textContent;
-    expect(styleText).toContain(`[data-extension-style-scope="${scope}"] .plugin-tool-form .extension-control`);
-    expect(styleText).not.toContain('body');
+    expect(root?.classList.contains('plugin-page')).toBe(true);
+    expect(root?.querySelector('.plugin-status')).toBeTruthy();
+    expect(screen.getByLabelText('Input').closest('.plugin-input')).toBeTruthy();
+    expect(document.head.querySelector('style')?.textContent)
+      .toContain(`[data-extension-style-scope="${scope}"] .plugin-status{color:var(--colorBrandForeground1)}`);
 
-    const input = screen.getByLabelText('Input') as HTMLTextAreaElement;
-    await fireEvent.input(input, { target: { value: 'hello' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Run' }));
-    await waitFor(() => expect((screen.getByLabelText('Output') as HTMLTextAreaElement).value).toBe('result text'));
-    await fireEvent.click(screen.getByRole('tab', { name: 'Second' }));
-    expect(screen.queryByLabelText('Input')).toBeNull();
-    await fireEvent.click(screen.getByRole('tab', { name: 'First' }));
-    expect((screen.getByLabelText('Input') as HTMLTextAreaElement).value).toBe('hello');
-    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-    expect((screen.getByLabelText('Input') as HTMLTextAreaElement).value).toBe('');
-    expect((screen.getByLabelText('Output') as HTMLTextAreaElement).value).toBe('');
+    unmount();
+    expect(document.head.querySelector('style[data-extension-style-scope]')).toBeNull();
+  });
+
+  it('shows an error instead of injecting invalid styles', async () => {
+    vi.mocked(readExtensionPage).mockResolvedValue({
+      schema_version: 1,
+      title: 'Invalid styles',
+      blocks: [{ type: 'text', text: 'Content', class_name: 'plugin-content' }],
+      styles: [{ selector: 'body', declarations: { color: 'red' } }],
+    });
+
+    render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.tools', pageId: 'overview' },
+    });
+    await screen.findByRole('alert');
+    expect(document.head.querySelector('style[data-extension-style-scope]')).toBeNull();
   });
 });
