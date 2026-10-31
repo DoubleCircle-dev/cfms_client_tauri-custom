@@ -20,9 +20,8 @@
   import { _ as t } from "svelte-i18n";
   import { onBackButtonPress } from "@tauri-apps/api/app";
   import { initEventListeners } from "$lib/events";
-  import { initFileAutoCheck, disposeFileAutoCheck } from "$lib/file-auto-check-events";
-  import { initDesktopShell } from "$lib/desktop-shell";
   import { initI18n } from "$lib/i18n";
+  import { disposeCustomModules, runCustomStartup } from "$lib/injection/registry";
   import { initNavigationHistory, navigateUp, parentRouteFor } from "$lib/navigation";
   import { isAccountProfileRoute, isPublicUtilityRoute as isPublicHomeRoute } from '$lib/public-utility-navigation';
   import { appUpdateState } from "$lib/app-update-state.svelte";
@@ -51,7 +50,7 @@
   import { appLockStore } from "$lib/app-lock.svelte";
   import { extensionsStore } from "$lib/extensions.svelte";
   import { USER_EXTENSIONS_ENABLED } from "$lib/feature-flags";
-  import { clearAuthSession, getLocalDataResetStatus, getServiceStatus, getAuthStatus, getServerState, getLocalIpAddresses } from "$lib/api";
+  import { clearAuthSession, getLocalDataResetStatus, getServiceStatus, getAuthStatus, getServerState } from "$lib/api";
   import AppLockOverlay from "$lib/components/AppLockOverlay.svelte";
   import LockdownBanner from "$lib/components/LockdownBanner.svelte";
   import DialogHost from "$lib/components/DialogHost.svelte";
@@ -308,37 +307,9 @@
     // Start listening for backend events.
     await initEventListeners();
 
-    // Follow the Rust background file-update checker (schedule + reports). Its
-    // interval keeps running while the app is backgrounded, so the UI only has
-    // to mirror what it publishes.
-    await initFileAutoCheck();
-
-    // Desktop shell: close-button prompt and localized tray menu.
-    await initDesktopShell();
-
-    // Diagnostic: log the local host IP addresses to the DevTools console.
-    try {
-      const localIps = await getLocalIpAddresses();
-      if (localIps.length > 0) {
-        console.info(`[cfms] Local IP address(es): ${localIps.join(", ")}`);
-      } else {
-        console.warn("[cfms] Unable to determine local IP address(es)");
-      }
-    } catch (err) {
-      console.warn("[cfms] Failed to query local IP address(es)", err);
-    }
-
-    // Diagnostic: log the local host IP addresses to the DevTools console.
-    try {
-      const localIps = await getLocalIpAddresses();
-      if (localIps.length > 0) {
-        console.info(`[cfms] Local IP address(es): ${localIps.join(", ")}`);
-      } else {
-        console.warn("[cfms] Unable to determine local IP address(es)");
-      }
-    } catch (err) {
-      console.warn("[cfms] Failed to query local IP address(es)", err);
-    }
+    // Fork services: background file-update checks, the desktop shell, and
+    // start-up diagnostics. Each fork module owns its own lifetime.
+    await runCustomStartup();
 
     // Resolve the device update policy, then run or schedule this session's automatic check.
     void appUpdateState.initializeAutomaticChecks();
@@ -366,7 +337,7 @@
 
   onMount(() => () => {
     appUpdateState.disposeAutomaticChecks();
-    disposeFileAutoCheck();
+    disposeCustomModules();
   });
 
   $effect(() => {

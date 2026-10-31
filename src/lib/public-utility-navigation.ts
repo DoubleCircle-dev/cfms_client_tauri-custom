@@ -1,4 +1,10 @@
-const PUBLIC_UTILITY_ROUTES = ['/home/about', '/home/settings', '/home/tools'] as const;
+import { getCustomPublicUtilityRoutes } from '$lib/injection/registry';
+
+const PUBLIC_UTILITY_ROUTES: readonly string[] = [
+  '/home/about',
+  '/home/settings',
+  ...getCustomPublicUtilityRoutes(),
+];
 
 export function isAccountProfileRoute(pathname: string): boolean {
   return pathname === '/home/settings/account' || pathname.startsWith('/home/settings/account/');

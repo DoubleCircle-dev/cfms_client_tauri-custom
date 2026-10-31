@@ -1,4 +1,8 @@
 // Semantic names remain stable across the client and extension manifests.
+// The explicit `.ts` extension keeps this file importable from the icon
+// generator, which runs under Node without Vite's path aliases.
+import { CUSTOM_ICON_MAP } from '../injection/icon-map.ts';
+
 export const ICON_MAP = {
   "connect": "plug_connected",
   "home": "home",
@@ -139,17 +143,9 @@ export const ICON_MAP = {
   "personPasskey": "person_passkey",
   "laptopBriefcase": "laptop_briefcase",
   "passwordReset": "password_reset",
-  "tools": "toolbox",
-  "chat": "chat",
-  "attachment": "attach",
-  "gridOn": "grid",
-  // Desktop shell: window chrome and the close-button prompt.
-  "window": "window",
-  "minimizeToTray": "arrow_minimize",
-  "quit": "power",
   "pushPin": "pin",
   "contactCard": "contact_card",
   "personKey": "person_key",
-  // Update mirror indicator.
-  "mirrorDownload": "cloud_arrow_down",
+  // Fork icons live in `$lib/injection/icon-map`; regenerate with `pnpm assets:fluent`.
+  ...CUSTOM_ICON_MAP,
 } as const;

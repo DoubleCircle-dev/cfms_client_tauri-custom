@@ -1,5 +1,6 @@
 import type { IconName } from '$lib/icons';
 import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
+import { mergeSettingsEntries } from '$lib/injection/registry';
 import { isMobilePlatform } from '$lib/platform';
 
 type SettingsPlatformScope = 'all' | 'mobile' | 'desktop';
@@ -44,7 +45,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'maintenance', labelKey: 'settings.overview.groups.maintenance' },
 ];
 
-export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
+export const SETTINGS_ENTRIES: readonly SettingsEntry[] = mergeSettingsEntries([
   {
     labelKey: 'settings.language.title',
     descriptionKey: 'settings.language.description',
@@ -67,26 +68,6 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: 'personalization',
     requiresAuth: true,
     platformScope: 'mobile',
-  },
-  {
-    // Desktop keep-alive: the close button and the tray icon. Device-scoped, so
-    // it is reachable before signing in and never synced with the account.
-    labelKey: 'settings.window.title',
-    descriptionKey: 'settings.window.description',
-    icon: 'window',
-    href: '/home/settings/window',
-    group: 'personalization',
-    requiresAuth: false,
-    platformScope: 'desktop',
-  },
-  {
-    labelKey: 'settings.fileSync.title',
-    descriptionKey: 'settings.fileSync.description',
-    icon: 'update',
-    href: '/home/settings/file-sync',
-    group: 'dataOperations',
-    scopeKey: 'settings.overview.scope.accountDevice',
-    requiresAuth: true,
   },
   {
     labelKey: 'settings.connection.title',
@@ -189,7 +170,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: 'maintenance',
     scopeKey: 'settings.overview.scope.device',
   },
-];
+]);
 
 export function getVisibleSettingsEntries(
   context: SettingsEntryVisibilityContext,

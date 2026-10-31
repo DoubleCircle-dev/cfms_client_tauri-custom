@@ -1,6 +1,7 @@
 import { addMessages, init, locale, waitLocale } from 'svelte-i18n';
 import { browser } from '$app/environment';
 import { getLocale, setLocale as setBackendLocale } from './api';
+import { mergeCustomMessages } from './injection/registry';
 import { en } from './i18n/messages/en';
 import { zh_CN } from './i18n/messages/zh-CN';
 
@@ -38,8 +39,9 @@ function storeLocale(value: AppLocale): void {
 function configureI18n(initial: AppLocale = getStoredLocale()): void {
   if (initialized) return;
 
-  addMessages('en', en);
-  addMessages('zh-CN', zh_CN);
+  // The base catalogs stay upstream files; fork strings are layered on top.
+  addMessages('en', mergeCustomMessages('en', en));
+  addMessages('zh-CN', mergeCustomMessages('zh_CN', zh_CN));
 
   init({
     fallbackLocale: toFrontendLocale(fallbackLocale),

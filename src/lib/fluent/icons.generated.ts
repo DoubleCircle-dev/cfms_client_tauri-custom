@@ -477,46 +477,46 @@ import svg474 from '@fluentui/svg-icons/icons/laptop_briefcase_20_regular.svg?ra
 import svg475 from '@fluentui/svg-icons/icons/laptop_briefcase_20_filled.svg?raw';
 import svg476 from '@fluentui/svg-icons/icons/password_reset_48_regular.svg?raw';
 import svg477 from '@fluentui/svg-icons/icons/password_reset_48_filled.svg?raw';
-import svg478 from '@fluentui/svg-icons/icons/toolbox_24_regular.svg?raw';
-import svg479 from '@fluentui/svg-icons/icons/toolbox_24_filled.svg?raw';
-import svg480 from '@fluentui/svg-icons/icons/toolbox_20_regular.svg?raw';
-import svg481 from '@fluentui/svg-icons/icons/toolbox_20_filled.svg?raw';
-import svg482 from '@fluentui/svg-icons/icons/chat_24_regular.svg?raw';
-import svg483 from '@fluentui/svg-icons/icons/chat_24_filled.svg?raw';
-import svg484 from '@fluentui/svg-icons/icons/chat_20_regular.svg?raw';
-import svg485 from '@fluentui/svg-icons/icons/chat_20_filled.svg?raw';
-import svg486 from '@fluentui/svg-icons/icons/attach_24_regular.svg?raw';
-import svg487 from '@fluentui/svg-icons/icons/attach_24_filled.svg?raw';
-import svg488 from '@fluentui/svg-icons/icons/attach_20_regular.svg?raw';
-import svg489 from '@fluentui/svg-icons/icons/attach_20_filled.svg?raw';
-import svg490 from '@fluentui/svg-icons/icons/grid_24_regular.svg?raw';
-import svg491 from '@fluentui/svg-icons/icons/grid_24_filled.svg?raw';
-import svg492 from '@fluentui/svg-icons/icons/grid_20_regular.svg?raw';
-import svg493 from '@fluentui/svg-icons/icons/grid_20_filled.svg?raw';
-import svg494 from '@fluentui/svg-icons/icons/window_24_regular.svg?raw';
-import svg495 from '@fluentui/svg-icons/icons/window_24_filled.svg?raw';
-import svg496 from '@fluentui/svg-icons/icons/window_20_regular.svg?raw';
-import svg497 from '@fluentui/svg-icons/icons/window_20_filled.svg?raw';
-import svg498 from '@fluentui/svg-icons/icons/arrow_minimize_24_regular.svg?raw';
-import svg499 from '@fluentui/svg-icons/icons/arrow_minimize_24_filled.svg?raw';
-import svg500 from '@fluentui/svg-icons/icons/arrow_minimize_20_regular.svg?raw';
-import svg501 from '@fluentui/svg-icons/icons/arrow_minimize_20_filled.svg?raw';
-import svg502 from '@fluentui/svg-icons/icons/power_24_regular.svg?raw';
-import svg503 from '@fluentui/svg-icons/icons/power_24_filled.svg?raw';
-import svg504 from '@fluentui/svg-icons/icons/power_20_regular.svg?raw';
-import svg505 from '@fluentui/svg-icons/icons/power_20_filled.svg?raw';
-import svg506 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
-import svg507 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
-import svg508 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
-import svg509 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
-import svg510 from '@fluentui/svg-icons/icons/contact_card_24_regular.svg?raw';
-import svg511 from '@fluentui/svg-icons/icons/contact_card_24_filled.svg?raw';
-import svg512 from '@fluentui/svg-icons/icons/contact_card_20_regular.svg?raw';
-import svg513 from '@fluentui/svg-icons/icons/contact_card_20_filled.svg?raw';
-import svg514 from '@fluentui/svg-icons/icons/person_key_24_regular.svg?raw';
-import svg515 from '@fluentui/svg-icons/icons/person_key_24_filled.svg?raw';
-import svg516 from '@fluentui/svg-icons/icons/person_key_20_regular.svg?raw';
-import svg517 from '@fluentui/svg-icons/icons/person_key_20_filled.svg?raw';
+import svg478 from '@fluentui/svg-icons/icons/pin_24_regular.svg?raw';
+import svg479 from '@fluentui/svg-icons/icons/pin_24_filled.svg?raw';
+import svg480 from '@fluentui/svg-icons/icons/pin_20_regular.svg?raw';
+import svg481 from '@fluentui/svg-icons/icons/pin_20_filled.svg?raw';
+import svg482 from '@fluentui/svg-icons/icons/contact_card_24_regular.svg?raw';
+import svg483 from '@fluentui/svg-icons/icons/contact_card_24_filled.svg?raw';
+import svg484 from '@fluentui/svg-icons/icons/contact_card_20_regular.svg?raw';
+import svg485 from '@fluentui/svg-icons/icons/contact_card_20_filled.svg?raw';
+import svg486 from '@fluentui/svg-icons/icons/person_key_24_regular.svg?raw';
+import svg487 from '@fluentui/svg-icons/icons/person_key_24_filled.svg?raw';
+import svg488 from '@fluentui/svg-icons/icons/person_key_20_regular.svg?raw';
+import svg489 from '@fluentui/svg-icons/icons/person_key_20_filled.svg?raw';
+import svg490 from '@fluentui/svg-icons/icons/toolbox_24_regular.svg?raw';
+import svg491 from '@fluentui/svg-icons/icons/toolbox_24_filled.svg?raw';
+import svg492 from '@fluentui/svg-icons/icons/toolbox_20_regular.svg?raw';
+import svg493 from '@fluentui/svg-icons/icons/toolbox_20_filled.svg?raw';
+import svg494 from '@fluentui/svg-icons/icons/chat_24_regular.svg?raw';
+import svg495 from '@fluentui/svg-icons/icons/chat_24_filled.svg?raw';
+import svg496 from '@fluentui/svg-icons/icons/chat_20_regular.svg?raw';
+import svg497 from '@fluentui/svg-icons/icons/chat_20_filled.svg?raw';
+import svg498 from '@fluentui/svg-icons/icons/attach_24_regular.svg?raw';
+import svg499 from '@fluentui/svg-icons/icons/attach_24_filled.svg?raw';
+import svg500 from '@fluentui/svg-icons/icons/attach_20_regular.svg?raw';
+import svg501 from '@fluentui/svg-icons/icons/attach_20_filled.svg?raw';
+import svg502 from '@fluentui/svg-icons/icons/grid_24_regular.svg?raw';
+import svg503 from '@fluentui/svg-icons/icons/grid_24_filled.svg?raw';
+import svg504 from '@fluentui/svg-icons/icons/grid_20_regular.svg?raw';
+import svg505 from '@fluentui/svg-icons/icons/grid_20_filled.svg?raw';
+import svg506 from '@fluentui/svg-icons/icons/window_24_regular.svg?raw';
+import svg507 from '@fluentui/svg-icons/icons/window_24_filled.svg?raw';
+import svg508 from '@fluentui/svg-icons/icons/window_20_regular.svg?raw';
+import svg509 from '@fluentui/svg-icons/icons/window_20_filled.svg?raw';
+import svg510 from '@fluentui/svg-icons/icons/arrow_minimize_24_regular.svg?raw';
+import svg511 from '@fluentui/svg-icons/icons/arrow_minimize_24_filled.svg?raw';
+import svg512 from '@fluentui/svg-icons/icons/arrow_minimize_20_regular.svg?raw';
+import svg513 from '@fluentui/svg-icons/icons/arrow_minimize_20_filled.svg?raw';
+import svg514 from '@fluentui/svg-icons/icons/power_24_regular.svg?raw';
+import svg515 from '@fluentui/svg-icons/icons/power_24_filled.svg?raw';
+import svg516 from '@fluentui/svg-icons/icons/power_20_regular.svg?raw';
+import svg517 from '@fluentui/svg-icons/icons/power_20_filled.svg?raw';
 import svg518 from '@fluentui/svg-icons/icons/cloud_arrow_down_24_regular.svg?raw';
 import svg519 from '@fluentui/svg-icons/icons/cloud_arrow_down_24_filled.svg?raw';
 import svg520 from '@fluentui/svg-icons/icons/cloud_arrow_down_20_regular.svg?raw';
@@ -676,15 +676,15 @@ export const ICON_VARIANTS = {
   personPasskey: { regular: svg468, filled: svg469, small: svg470, smallFilled: svg471 },
   laptopBriefcase: { regular: svg472, filled: svg473, small: svg474, smallFilled: svg475 },
   passwordReset: { regular: svg476, filled: svg477, small: svg476, smallFilled: svg477, duotone: duotone12, smallDuotone: duotone13, primaryTone: 'neutral' },
-  tools: { regular: svg478, filled: svg479, small: svg480, smallFilled: svg481 },
-  chat: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
-  attachment: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
-  gridOn: { regular: svg490, filled: svg491, small: svg492, smallFilled: svg493 },
-  window: { regular: svg494, filled: svg495, small: svg496, smallFilled: svg497 },
-  minimizeToTray: { regular: svg498, filled: svg499, small: svg500, smallFilled: svg501 },
-  quit: { regular: svg502, filled: svg503, small: svg504, smallFilled: svg505 },
-  pushPin: { regular: svg506, filled: svg507, small: svg508, smallFilled: svg509 },
-  contactCard: { regular: svg510, filled: svg511, small: svg512, smallFilled: svg513 },
-  personKey: { regular: svg514, filled: svg515, small: svg516, smallFilled: svg517 },
+  pushPin: { regular: svg478, filled: svg479, small: svg480, smallFilled: svg481 },
+  contactCard: { regular: svg482, filled: svg483, small: svg484, smallFilled: svg485 },
+  personKey: { regular: svg486, filled: svg487, small: svg488, smallFilled: svg489 },
+  tools: { regular: svg490, filled: svg491, small: svg492, smallFilled: svg493 },
+  chat: { regular: svg494, filled: svg495, small: svg496, smallFilled: svg497 },
+  attachment: { regular: svg498, filled: svg499, small: svg500, smallFilled: svg501 },
+  gridOn: { regular: svg502, filled: svg503, small: svg504, smallFilled: svg505 },
+  window: { regular: svg506, filled: svg507, small: svg508, smallFilled: svg509 },
+  minimizeToTray: { regular: svg510, filled: svg511, small: svg512, smallFilled: svg513 },
+  quit: { regular: svg514, filled: svg515, small: svg516, smallFilled: svg517 },
   mirrorDownload: { regular: svg518, filled: svg519, small: svg520, smallFilled: svg521 },
 } as const;

@@ -39,6 +39,11 @@
   import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
   import { isIconName } from '$lib/icons';
   import { shouldOfferConnectionReturn } from '$lib/public-utility-navigation';
+  import {
+    getCustomNavigationItems,
+    getCustomRouteTitle,
+    type CustomNavigationItem,
+  } from '$lib/injection/registry';
   import { transitionOutOfSession } from '$lib/session-exit';
   import { formatUserFacingError } from '$lib/user-facing-errors';
 
@@ -90,13 +95,6 @@
   const isSettingsRoute = $derived(
     $page.url.pathname === '/home/settings' || $page.url.pathname.startsWith('/home/settings/'),
   );
-  const isToolsRoute = $derived($page.url.pathname === '/home/tools');
-  const isChatRoute = $derived($page.url.pathname === '/home/chat');
-  const isPublicUtilityRoute = $derived(
-    $page.url.pathname === '/home/about'
-      || $page.url.pathname === '/home/settings'
-      || $page.url.pathname.startsWith('/home/settings/'),
-  );
   const showPublicUtilityClose = $derived(
     shouldOfferConnectionReturn(
       $page.url.pathname,
@@ -105,11 +103,27 @@
     ),
   );
 
+  const customNavigation = $derived.by(() => {
+    const toNavItem = (item: CustomNavigationItem): WorkspaceNavItem => ({
+      id: item.id,
+      label: $t(item.labelKey),
+      href: item.href,
+      icon: item.icon,
+      exact: item.exact ?? true,
+    });
+    const visible = getCustomNavigationItems()
+      .filter((item) => !item.requiresAuth || authStore.isLoggedIn);
+    return {
+      top: visible.filter((item) => (item.slot ?? 'top') === 'top').map(toNavItem),
+      belowFavorites: visible.filter((item) => item.slot === 'belowFavorites').map(toNavItem),
+    };
+  });
+
   const primaryNavigation = $derived<WorkspaceNavItem[]>([
     { id: 'home', label: $t('nav.home'), href: '/home/overview', icon: 'home', exact: true },
     { id: 'files', label: $t('workspace.allFiles'), href: '/home/files', icon: 'folder', exact: true },
     { id: 'tasks', label: $t('workspace.transfers'), href: '/home/tasks', icon: 'tasks', badge: activeTaskCount, exact: true },
-    { id: 'notifications', label: $t('notifications.title'), href: '/home/notifications', icon: 'history', exact: true },
+    ...customNavigation.top,
     // Keep dynamic extension navigation implemented while the feature remains
     // intentionally absent from user-reachable surfaces.
     ...(USER_EXTENSIONS_ENABLED
@@ -139,7 +153,7 @@
     { id: 'about', label: $t('workspace.about'), href: '/home/about', icon: 'info' },
   ]);
   const navigationHasActiveItem = $derived(
-    [...primaryNavigation, ...bottomNavigation].some((item) => isActive(item)) || isToolsRoute || isChatRoute,
+    [...primaryNavigation, ...bottomNavigation, ...customNavigation.belowFavorites].some((item) => isActive(item)),
   );
 
   const currentTitle = $derived.by(() => {
@@ -156,9 +170,8 @@
         ?? $t('settings.extensions.title');
     }
     if (path === '/home/trash') return $t('workspace.recycleBin');
-    if (path === '/home/notifications') return $t('notifications.title');
-    if (path === '/home/tools') return $t('tools.title');
-    if (path === '/home/chat') return $t('chat.title');
+    const customTitleKey = getCustomRouteTitle(path);
+    if (customTitleKey) return $t(customTitleKey);
     if (path === '/home/manage') return $t('workspace.administration');
     if (path === '/home/schedules') return $t('workspace.schedules');
     if (path === '/home/diagnostics') return $t('workspace.diagnostics');
@@ -600,31 +613,19 @@
       </nav>
 
       {#if authStore.isLoggedIn}
-        <button
-          data-nav-item
-          type="button"
-          tabindex={isChatRoute ? 0 : -1}
-          class="explorer-nav-item"
-          class:explorer-nav-item--active={isChatRoute}
-          aria-current={isChatRoute ? 'page' : undefined}
-          onclick={() => navigate('/home/chat')}
-        >
-          <Icon name="chat" size="19px" /><span>{$t('chat.title')}</span>
-        </button>
-      {/if}
-
-      {#if authStore.isLoggedIn}
-        <button
-          data-nav-item
-          type="button"
-          tabindex={isToolsRoute ? 0 : -1}
-          class="explorer-nav-item"
-          class:explorer-nav-item--active={isToolsRoute}
-          aria-current={isToolsRoute ? 'page' : undefined}
-          onclick={() => navigate('/home/tools')}
-        >
-          <Icon name="tools" size="19px" /><span>{$t('tools.title')}</span>
-        </button>
+        {#each customNavigation.belowFavorites as item (item.id)}
+          <button
+            data-nav-item
+            type="button"
+            tabindex={isActive(item) ? 0 : -1}
+            class="explorer-nav-item"
+            class:explorer-nav-item--active={isActive(item)}
+            aria-current={isActive(item) ? 'page' : undefined}
+            onclick={() => navigate(item.href)}
+          >
+            <Icon name={item.icon} size="19px" /><span>{item.label}</span>
+          </button>
+        {/each}
       {/if}
 
       {#if showKeyboardShortcutEntry}

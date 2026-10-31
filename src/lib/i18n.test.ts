@@ -1,8 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { get } from 'svelte/store';
 import { addMessages, init, locale, _ as t } from 'svelte-i18n';
+import { mergeCustomMessages } from './injection/registry';
 import { en } from './i18n/messages/en';
 import { zh_CN as zhCN } from './i18n/messages/zh-CN';
+
+/** The catalogs the app actually registers: upstream base plus fork strings. */
+const enCatalog = mergeCustomMessages('en', en);
+const zhCnCatalog = mergeCustomMessages('zh_CN', zhCN);
 
 /**
  * The wording a check produces has to follow the active language and read
@@ -13,8 +18,8 @@ import { zh_CN as zhCN } from './i18n/messages/zh-CN';
  * any count. They are counts now, and this is where they become prose.
  */
 beforeAll(() => {
-  addMessages('en', en);
-  addMessages('zh-CN', zhCN);
+  addMessages('en', enCatalog);
+  addMessages('zh-CN', zhCnCatalog);
   init({ fallbackLocale: 'en', initialLocale: 'en' });
 });
 
@@ -65,8 +70,8 @@ describe('check history wording', () => {
       return Object.entries(value).flatMap(([key, child]) =>
         keys(child, prefix ? `${prefix}.${key}` : key));
     };
-    const enKeys = keys(en).sort();
-    const zhKeys = keys(zhCN).sort();
+    const enKeys = keys(enCatalog).sort();
+    const zhKeys = keys(zhCnCatalog).sort();
 
     expect(zhKeys.filter((key) => !enKeys.includes(key))).toEqual([]);
     expect(enKeys.filter((key) => !zhKeys.includes(key))).toEqual([]);
