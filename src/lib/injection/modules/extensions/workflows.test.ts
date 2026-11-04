@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DeclarativeWorkflow } from '$lib/injection/modules/extensions/api';
 
@@ -17,7 +17,7 @@ vi.mock('$lib/stores.svelte', () => ({
   },
 }));
 
-import { readExtensionWorkflow } from '$lib/injection/modules/extensions/api';
+import { executeExtensionHostCall, readExtensionWorkflow } from '$lib/injection/modules/extensions/api';
 import { runExtensionWorkflow } from './workflows';
 
 const extensionId = 'org.example.scheduler';
@@ -36,6 +36,10 @@ function document(expression: unknown): DeclarativeWorkflow {
 describe('extension workflow expressions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('maps arrays through object templates and evaluates nested if expressions', async () => {
@@ -90,5 +94,39 @@ describe('extension workflow expressions', () => {
     await expect(runExtensionWorkflow(extensionId, 'large', {
       input: { tasks: Array.from({ length: 1_025 }, (_, index) => index) },
     })).rejects.toThrow('cannot process more than 1024 items');
+  });
+
+  it('confirms batch operations that include update schedules', async () => {
+    vi.mocked(readExtensionWorkflow).mockResolvedValue({
+      schema_version: 1,
+      start: 'save',
+      nodes: [
+        {
+          id: 'save',
+          type: 'host_call',
+          capability: 'schedules.manage',
+          arguments: {
+            operation: 'batch',
+            upsert: [{ action: 'update', update_policy: 'mirror' }],
+            deleteTaskIds: [],
+          },
+          result: 'saved',
+          next: 'return',
+        },
+        { id: 'return', type: 'result', value: '$results.saved' },
+      ],
+    });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(executeExtensionHostCall).mockResolvedValue({ tasks: [], deletedTaskIds: [] });
+
+    await runExtensionWorkflow(extensionId, 'save-schedules');
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(executeExtensionHostCall).toHaveBeenCalledWith(
+      extensionId,
+      'schedules.manage',
+      expect.objectContaining({ operation: 'batch' }),
+      true,
+    );
   });
 });

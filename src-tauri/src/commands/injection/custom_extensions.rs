@@ -690,6 +690,73 @@ async fn execute_schedule_host_call(
             changed = true;
             serde_json::json!({ "task": task })
         }
+        "batch" => {
+            let task_values = arguments
+                .get("upsert")
+                .and_then(serde_json::Value::as_array)
+                .ok_or_else(|| "schedules.manage batch requires upsert".to_string())?;
+            if task_values.len() > 32 {
+                return Err("An extension can have at most 32 schedules".into());
+            }
+            let delete_task_ids = arguments
+                .get("deleteTaskIds")
+                .and_then(serde_json::Value::as_array)
+                .ok_or_else(|| "schedules.manage batch requires deleteTaskIds".to_string())?
+                .iter()
+                .map(|value| {
+                    value.as_str().map(str::to_string).ok_or_else(|| {
+                        "schedules.manage batch deleteTaskIds must contain strings".to_string()
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            if delete_task_ids.len() > 32 {
+                return Err("An extension can have at most 32 schedules".into());
+            }
+            let mut inputs = Vec::with_capacity(task_values.len());
+            let mut has_update = false;
+            for value in task_values {
+                let task_id = match value.get("id") {
+                    None | Some(serde_json::Value::Null) => None,
+                    Some(serde_json::Value::String(id)) if id.trim().is_empty() => None,
+                    Some(serde_json::Value::String(id)) => Some(id.clone()),
+                    Some(_) => {
+                        return Err("schedules.manage batch task id must be a string".into());
+                    }
+                };
+                let input = parse_schedule_task_input(value.clone())?;
+                validate_schedule_workflow(state, extension_id, &input)?;
+                if input.action
+                    == cfms_service::injection::extension_schedules::ScheduleAction::Update
+                {
+                    has_update = true;
+                }
+                inputs.push((task_id, input));
+            }
+            if has_update {
+                if user_confirmed != Some(true) {
+                    return Err(
+                        "User confirmation is required before applying update schedules".into(),
+                    );
+                }
+                ensure_extension_enabled(state, extension_id, Some("files.sync.task")).await?;
+            }
+            let has_changes = !inputs.is_empty() || !delete_task_ids.is_empty();
+            let store = schedule_store.clone();
+            let extension_id = extension_id.to_string();
+            let (tasks, deleted_task_ids) = tokio::task::spawn_blocking(move || {
+                store.batch(
+                    &server_hash,
+                    &username,
+                    &extension_id,
+                    inputs,
+                    delete_task_ids,
+                )
+            })
+            .await
+            .map_err(|error| format!("Extension schedule batch task failed: {error}"))??;
+            changed = has_changes;
+            serde_json::json!({ "tasks": tasks, "deletedTaskIds": deleted_task_ids })
+        }
         "delete" => {
             let task_id = required_string(&arguments, "taskId", "schedules.manage delete")?;
             let store = schedule_store.clone();

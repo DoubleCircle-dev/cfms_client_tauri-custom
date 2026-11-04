@@ -97,6 +97,10 @@ export interface ExtensionScheduleTaskInput {
   workflow: string;
 }
 
+export interface ExtensionScheduleTaskUpsert extends ExtensionScheduleTaskInput {
+  id?: string;
+}
+
 export interface ExtensionScheduleTask extends ExtensionScheduleTaskInput {
   id: string;
   created_at: number;
@@ -335,6 +339,21 @@ export function updateExtensionSchedule(
     'schedules.manage',
     { operation: 'update', taskId, task },
   );
+}
+
+export function batchExtensionSchedules(
+  extensionId: string,
+  upsert: ExtensionScheduleTaskUpsert[],
+  deleteTaskIds: string[],
+): Promise<{ tasks: ExtensionScheduleTask[]; deletedTaskIds: string[] }> {
+  return executeExtensionHostCall<{
+    tasks: ExtensionScheduleTask[];
+    deletedTaskIds: string[];
+  }>(extensionId, 'schedules.manage', {
+    operation: 'batch',
+    upsert,
+    deleteTaskIds,
+  });
 }
 
 export function deleteExtensionSchedule(

@@ -141,9 +141,33 @@ execution fuel (10 million units), and JSON input/output (1 MiB).
 The host provides two additional capabilities for extensions that need recurring file checks:
 
 - `schedules.manage` stores up to 32 tasks per extension and account. Use the `list`, `get`,
-  `create`, `update`, and `delete` operations to manage them. Tasks support intervals from 5 to
-  10,080 minutes or local `HH:MM` times on selected ISO weekdays. Folder tasks use a server path
-  beginning with `root/`.
+  `create`, `update`, `delete`, and `batch` operations to manage them. `batch` accepts an `upsert`
+  array of task inputs (include `id` to update an existing task) and an explicit `deleteTaskIds`
+  array. It validates the full change set and writes it once; omitting an existing task from
+  `upsert` does not delete it. Updates preserve the task ID, creation time, and last-run state.
+  Tasks support intervals from 5 to 10,080 minutes or local `HH:MM` times on selected ISO
+  weekdays. Folder tasks use a server path beginning with `root/`.
+
+  Example batch arguments:
+
+  ```json
+  {
+    "operation": "batch",
+    "upsert": [
+      { "id": "sched_0123456789abcdef", "name": "Daily check", "kind": "fixed_time",
+        "interval_minutes": null, "time_of_day": "09:00", "days": [1, 2, 3, 4, 5],
+        "scope": "all", "folder_path": null, "action": "check",
+        "update_policy": "download_only", "notify": "problems_only",
+        "catch_up": true, "enabled": true, "workflow": "check-updates" },
+      { "name": "New check", "kind": "interval", "interval_minutes": 60,
+        "time_of_day": null, "days": [1, 2, 3, 4, 5, 6, 7], "scope": "all",
+        "folder_path": null, "action": "check", "update_policy": "download_only",
+        "notify": "problems_only", "catch_up": true, "enabled": true,
+        "workflow": "check-updates" }
+    ],
+    "deleteTaskIds": ["sched_fedcba9876543210"]
+  }
+  ```
 - `files.updates.check` accepts optional `folderPath`, `quiet` and `taskId` arguments. `quiet: true`
   returns the report without updating the client's automatic-check state or emitting its check
   event; instead the host writes a standardized history record (below) to the check history.

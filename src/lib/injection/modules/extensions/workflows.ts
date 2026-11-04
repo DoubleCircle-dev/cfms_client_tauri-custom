@@ -80,18 +80,27 @@ async function runWorkflowDocument(
           const scheduleArguments = (args && typeof args === 'object' ? args : {}) as {
             operation?: unknown;
             task?: { action?: unknown; update_policy?: unknown };
+            upsert?: Array<{ action?: unknown; update_policy?: unknown }>;
           };
-          if (
-            (scheduleArguments.operation === 'create' || scheduleArguments.operation === 'update')
-            && scheduleArguments.task?.action === 'update'
-          ) {
+          const upsertTasks = Array.isArray(scheduleArguments.upsert)
+            ? scheduleArguments.upsert.filter(
+                (task): task is { action?: unknown; update_policy?: unknown } =>
+                  typeof task === 'object' && task !== null,
+              )
+            : [];
+          const createsUpdate = scheduleArguments.operation === 'batch'
+            ? upsertTasks.some((task) => task.action === 'update')
+            : (scheduleArguments.operation === 'create' || scheduleArguments.operation === 'update')
+              && scheduleArguments.task?.action === 'update';
+          if (createsUpdate) {
             if (options.background) {
               throw new Error('Background workflows cannot create or change update schedules');
             }
-            const mayDelete = scheduleArguments.task.update_policy === 'mirror';
+            const mayDelete = scheduleArguments.task?.update_policy === 'mirror'
+              || upsertTasks.some((task) => task.update_policy === 'mirror');
             const prompt = mayDelete
-              ? `Allow extension ${extensionId} to create a scheduled file update that may delete local files missing from the server?`
-              : `Allow extension ${extensionId} to create a scheduled file update?`;
+              ? `Allow extension ${extensionId} to save scheduled file updates that may delete local files missing from the server?`
+              : `Allow extension ${extensionId} to save scheduled file updates?`;
             userConfirmed = window.confirm(prompt);
             if (!userConfirmed) throw new Error('Scheduled file update cancelled');
           }

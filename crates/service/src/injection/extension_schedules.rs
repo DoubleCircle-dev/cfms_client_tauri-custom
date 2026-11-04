@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -299,6 +300,104 @@ impl ExtensionScheduleStore {
         }
         self.write_tasks(server_hash, username, extension_id, &tasks)?;
         Ok(true)
+    }
+
+    /// Apply multiple schedule changes in one write.
+    ///
+    /// Existing IDs are updated in place, new entries are created, and only
+    /// explicitly listed IDs are deleted.
+    pub fn batch(
+        &self,
+        server_hash: &str,
+        username: &str,
+        extension_id: &str,
+        inputs: Vec<(Option<String>, ScheduleTaskInput)>,
+        delete_task_ids: Vec<String>,
+    ) -> Result<(Vec<ScheduleTask>, Vec<String>), String> {
+        if inputs.len() > MAX_SCHEDULES_PER_EXTENSION
+            || delete_task_ids.len() > MAX_SCHEDULES_PER_EXTENSION
+        {
+            return Err("An extension can have at most 32 schedules".into());
+        }
+        let mut upsert_ids = BTreeSet::new();
+        for (id, input) in &inputs {
+            input.validate()?;
+            if let Some(id) = id {
+                if id.is_empty() || !upsert_ids.insert(id.clone()) {
+                    return Err("Schedule upsert IDs must be non-empty and unique".into());
+                }
+            }
+        }
+        let mut delete_ids = BTreeSet::new();
+        for id in &delete_task_ids {
+            if id.is_empty() || !delete_ids.insert(id.clone()) {
+                return Err("Schedule delete IDs must be non-empty and unique".into());
+            }
+            if upsert_ids.contains(id) {
+                return Err(format!(
+                    "Schedule task {id} cannot be both updated and deleted"
+                ));
+            }
+        }
+        let _guard = STORE_LOCK
+            .lock()
+            .map_err(|_| "Extension schedule store lock poisoned")?;
+        let mut tasks = self.read_tasks(server_hash, username, extension_id)?;
+        for id in &delete_task_ids {
+            let index = tasks
+                .iter()
+                .position(|task| task.id == *id)
+                .ok_or_else(|| format!("Schedule task {id} was not found"))?;
+            tasks.remove(index);
+        }
+        for (id, input) in inputs {
+            match id {
+                Some(id) => {
+                    let task = tasks
+                        .iter_mut()
+                        .find(|task| task.id == id)
+                        .ok_or_else(|| format!("Schedule task {id} was not found"))?;
+                    task.name = input.name.trim().to_string();
+                    task.kind = input.kind;
+                    task.interval_minutes = input.interval_minutes;
+                    task.time_of_day = input.time_of_day;
+                    task.days = input.days;
+                    task.scope = input.scope;
+                    task.folder_path = input.folder_path;
+                    task.action = input.action;
+                    task.update_policy = input.update_policy;
+                    task.notify = input.notify;
+                    task.catch_up = input.catch_up;
+                    task.enabled = input.enabled;
+                    task.workflow = input.workflow;
+                }
+                None => tasks.push(ScheduleTask {
+                    id: new_task_id(),
+                    name: input.name.trim().to_string(),
+                    kind: input.kind,
+                    interval_minutes: input.interval_minutes,
+                    time_of_day: input.time_of_day,
+                    days: input.days,
+                    scope: input.scope,
+                    folder_path: input.folder_path,
+                    action: input.action,
+                    update_policy: input.update_policy,
+                    notify: input.notify,
+                    catch_up: input.catch_up,
+                    enabled: input.enabled,
+                    workflow: input.workflow,
+                    created_at: now_ms(),
+                    last_run_at: None,
+                    last_status: "never".into(),
+                    last_summary: None,
+                }),
+            }
+        }
+        if tasks.len() > MAX_SCHEDULES_PER_EXTENSION {
+            return Err("An extension can have at most 32 schedules".into());
+        }
+        self.write_tasks(server_hash, username, extension_id, &tasks)?;
+        Ok((tasks, delete_task_ids))
     }
 
     pub fn delete_extension(&self, extension_id: &str) -> Result<(), String> {
@@ -630,6 +729,123 @@ mod tests {
                 .list("server-b", "user-b", "sample-extension")
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn batch_updates_preserves_metadata_and_applies_explicit_deletes() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ExtensionScheduleStore::new(directory.path());
+        let first = store
+            .create("server", "user", "sample-extension", valid_task())
+            .unwrap();
+        let second = store
+            .create("server", "user", "sample-extension", valid_task())
+            .unwrap();
+        let first = store
+            .record_run(
+                "server",
+                "user",
+                "sample-extension",
+                &first.id,
+                "success",
+                Some("Completed".into()),
+            )
+            .unwrap();
+
+        let mut changed = valid_task();
+        changed.name = "Renamed".into();
+        let (tasks, deleted_ids) = store
+            .batch(
+                "server",
+                "user",
+                "sample-extension",
+                vec![(Some(first.id.clone()), changed), (None, valid_task())],
+                vec![second.id.clone()],
+            )
+            .unwrap();
+
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(deleted_ids, vec![second.id.clone()]);
+        assert_eq!(tasks[0].id, first.id);
+        assert_eq!(tasks[0].name, "Renamed");
+        assert_eq!(tasks[0].created_at, first.created_at);
+        assert_eq!(tasks[0].last_run_at, first.last_run_at);
+        assert_eq!(tasks[0].last_status, "success");
+        assert_eq!(tasks[0].last_summary.as_deref(), Some("Completed"));
+        assert_ne!(tasks[1].id, second.id);
+        assert_eq!(tasks[1].last_status, "never");
+        assert!(
+            store
+                .list("server", "user", "sample-extension")
+                .unwrap()
+                .iter()
+                .all(|task| task.id != second.id)
+        );
+    }
+
+    #[test]
+    fn batch_validation_failure_does_not_write_partial_changes() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ExtensionScheduleStore::new(directory.path());
+        let existing = store
+            .create("server", "user", "sample-extension", valid_task())
+            .unwrap();
+
+        assert!(
+            store
+                .batch(
+                    "server",
+                    "user",
+                    "sample-extension",
+                    vec![(None, valid_task())],
+                    vec!["missing-task".into()],
+                )
+                .is_err()
+        );
+
+        assert_eq!(
+            store.list("server", "user", "sample-extension").unwrap(),
+            vec![existing]
+        );
+    }
+
+    #[test]
+    fn batch_rejects_duplicate_and_overlapping_ids() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ExtensionScheduleStore::new(directory.path());
+        let existing = store
+            .create("server", "user", "sample-extension", valid_task())
+            .unwrap();
+
+        assert!(
+            store
+                .batch(
+                    "server",
+                    "user",
+                    "sample-extension",
+                    vec![
+                        (Some(existing.id.clone()), valid_task()),
+                        (Some(existing.id.clone()), valid_task()),
+                    ],
+                    Vec::new(),
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .batch(
+                    "server",
+                    "user",
+                    "sample-extension",
+                    vec![(Some(existing.id.clone()), valid_task())],
+                    vec![existing.id.clone()],
+                )
+                .is_err()
+        );
+        assert_eq!(
+            store.list("server", "user", "sample-extension").unwrap(),
+            vec![existing]
         );
     }
 }
