@@ -9,18 +9,15 @@
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod background;
 mod commands;
-mod file_auto_check;
-mod desktop_shell;
+mod custom;
 mod github_credentials;
 mod local_data_reset;
 mod localization;
 mod preference_keys;
 mod public_key_auth;
 mod secure_store;
-mod mobile_keepalive;
 mod window_backdrop;
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex,
@@ -35,7 +32,6 @@ use tauri_plugin_log::{Target, TargetKind};
 use tokio::sync::watch;
 
 use cfms_service::db::settings::SettingsStore;
-use cfms_service::injection::extensions_system::ExtensionStore;
 use cfms_service::service::manager::ServiceManager;
 use cfms_service::services::download_queue::{ActiveRegistry, QueueState};
 use cfms_service::services::upload_queue::UploadQueueState;
@@ -149,8 +145,8 @@ pub struct AppHandleState {
     /// User settings (key-value, SQLite-backed).
     pub settings: SettingsStore,
 
-    /// Device-global signed extension packages and catalog metadata.
-    pub extensions: ExtensionStore,
+    /// State owned by the fork's feature modules (src/custom).
+    pub custom: custom::CustomState,
 
     /// Registry of active downloads (cancellation flags).
     pub active_downloads: ActiveRegistry,
@@ -173,9 +169,6 @@ pub struct AppHandleState {
 
     /// Application data directory (for persistence file paths).
     pub app_data_dir: PathBuf,
-
-    /// Automatic file-update check scheduler shared with its service.
-    pub file_auto_check: Arc<file_auto_check::FileAutoCheckRuntime>,
 
     /// Background service manager.  Wrapped in Arc+Mutex so it can be
     /// activated on the async runtime and later shut down.
@@ -220,52 +213,6 @@ pub struct AndroidUpdateNotification<R: Runtime> {
 #[cfg(target_os = "android")]
 pub struct AndroidGithubCredentialPlugin<R: Runtime> {
     pub handle: tauri::plugin::PluginHandle<R>,
-}
-
-// ---------------------------------------------------------------------------
-// Local IP diagnostics
-// ---------------------------------------------------------------------------
-
-/// Best-effort detection of the local host addresses that would be used to
-/// reach an external peer (the "egress" addresses), for IPv4 and IPv6.
-///
-/// Uses the well-known UDP socket trick: binding a UDP socket to the
-/// unspecified address and "connecting" it to a public address makes the
-/// kernel pick a source address without sending any packet. This is
-/// dependency-free, works on every target platform (desktop and mobile), and
-/// performs no actual network I/O. Returns a de-duplicated list of local IPs.
-pub(crate) fn local_ip_addresses() -> Vec<std::net::IpAddr> {
-    // Probe addresses (Google DNS / Cloudflare DNS / 114 DNS). Only the
-    // routing decision matters; no packet is ever transmitted.
-    const PROBES: &[&str] = &[
-        "8.8.8.8:80",
-        "1.1.1.1:80",
-        "114.114.114.114:80",
-        "[2001:4860:4860::8888]:80",
-    ];
-
-    let mut seen = HashSet::new();
-    let mut addresses = Vec::new();
-    for probe in PROBES {
-        let bind_addr = if probe.starts_with('[') {
-            "[::]:0"
-        } else {
-            "0.0.0.0:0"
-        };
-        let Ok(socket) = std::net::UdpSocket::bind(bind_addr) else {
-            continue;
-        };
-        if socket.connect(probe).is_err() {
-            continue;
-        }
-        if let Ok(local) = socket.local_addr() {
-            let ip = local.ip();
-            if !ip.is_loopback() && seen.insert(ip) {
-                addresses.push(ip);
-            }
-        }
-    }
-    addresses
 }
 
 // ---------------------------------------------------------------------------
@@ -369,8 +316,6 @@ pub fn run() {
 
             let state = AppState::new();
             let settings = SettingsStore::new(db);
-            let extensions =
-                ExtensionStore::new(settings.clone(), &app_data_dir, env!("CARGO_PKG_VERSION"));
             let initial_locale = settings
                 .get("language")
                 .ok()
@@ -437,13 +382,7 @@ pub fn run() {
                     }
                 });
 
-                // Automatic file-update checks. Owned here (rather than by the
-                // Webview) so the interval keeps running while the app is
-                // backgrounded on mobile; see `file_auto_check`.
-                let check_app = app.handle().clone();
-                service_manager.register("file_auto_check", move |rx| async move {
-                    crate::file_auto_check::run(check_app, rx).await;
-                });
+                custom::register_services(&mut service_manager, app.handle());
             }
 
             // --- Wrap service manager in Arc<Mutex<Option<...>>> ---
@@ -488,8 +427,8 @@ pub fn run() {
                 inner: state,
                 tasks,
                 upload_tasks,
+                custom: custom::CustomState::new(settings.clone(), &app_data_dir),
                 settings,
-                extensions,
                 active_downloads,
                 active_uploads,
                 connect_attempts: ConnectAttemptRegistry::default(),
@@ -498,7 +437,6 @@ pub fn run() {
                 #[cfg(target_os = "android")]
                 pending_mobile_update,
                 app_data_dir: app_data_dir.clone(),
-                file_auto_check: Arc::new(file_auto_check::FileAutoCheckRuntime::new()),
                 service_manager: sm,
             });
 
@@ -515,73 +453,24 @@ pub fn run() {
                 .find(|config| config.label == "main")
                 .cloned()
                 .ok_or_else(|| std::io::Error::other("Main window configuration is missing"))?;
-            // Dev builds: make the window obviously non-production by suffixing
-            // the title with "-dev".
-            #[cfg(debug_assertions)]
-            {
-                main_window_config.title.push_str("-dev");
-            }
-
+            custom::prepare_window_config(&mut main_window_config);
             let main_window =
                 tauri::WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?;
             #[cfg(target_os = "windows")]
             let main_window = main_window.transparent(true);
             main_window.build()?;
-
-            // Desktop shell: keep the app reachable from the tray. Labels are
-            // replaced by the Webview's localized strings once it boots.
-            #[cfg(desktop)]
-            if let Err(error) = desktop_shell::init_tray(
-                app.handle(),
-                desktop_shell::TrayLabels::default(),
-            ) {
-                tracing::warn!("Unable to create the system tray icon: {error}");
-            }
-
-            // Dev mode: auto-open the vulnerability testing tool in a separate window.
-            #[cfg(all(debug_assertions, not(any(target_os = "android", target_os = "ios"))))]
-            {
-                let _ = tauri::WebviewWindowBuilder::new(
-                    app.handle(),
-                    "dev-tools",
-                    tauri::WebviewUrl::App("/dev/server-vuln-test".into()),
-                )
-                .title("CFMS 漏洞测试工具")
-                .inner_size(960.0, 720.0)
-                .min_inner_size(640.0, 480.0)
-                .resizable(true)
-                .center()
-                .build();
-            }
+            custom::after_window_built(app.handle());
 
             tracing::info!("CFMS Client initialized successfully");
-
-            // Diagnostic: log the local host IP addresses once at startup.
-            let local_ips = local_ip_addresses();
-            if local_ips.is_empty() {
-                tracing::warn!("Unable to determine local IP address(es)");
-            } else {
-                let joined = local_ips
-                    .iter()
-                    .map(std::net::IpAddr::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                tracing::info!("Local IP address(es): {joined}");
-            }
-
+            custom::log_local_addresses();
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(custom::invoke_handler![
             window_backdrop::set_window_backdrop,
-            commands::get_close_behavior,
-            commands::set_close_behavior,
-            commands::resolve_close_request,
-            commands::sync_desktop_shell_labels,
             commands::greet,
             commands::ping,
             commands::protocol_version,
             commands::crypto_info,
-            commands::local_ip_addresses,
             commands::get_service_status,
             commands::validate_file_shortcuts,
             commands::android_passkey_availability,
@@ -619,40 +508,15 @@ pub fn run() {
             commands::list_directory_page,
             commands::resolve_node_path,
             commands::get_document,
-            commands::check_downloads_exist,
-            commands::compute_local_sha256,
-            commands::delete_download_file,
-            commands::delete_download_directory_if_empty,
-            commands::move_download_file,
-            commands::create_download_placeholder,
-            commands::list_download_files,
             commands::ensure_download_subdirectory,
-            commands::download_git_present,
-            commands::download_git_init,
-            commands::download_git_commit,
             commands::get_setting,
             commands::set_setting,
-            commands::get_file_auto_check_state,
-            commands::rebase_file_auto_check_schedule,
-            commands::get_extension_overview,
-            commands::import_extension_package,
-            commands::refresh_extension_catalog,
-            commands::install_extension_from_catalog,
-            commands::rollback_extension,
-            commands::uninstall_extension,
-            commands::set_extension_enabled,
-            commands::read_extension_page,
-            commands::read_extension_workflow,
-            commands::execute_extension_module,
-            commands::execute_extension_host_call,
             commands::send_developer_request,
             commands::get_locale,
             commands::set_locale,
             commands::translate_backend,
             commands::get_connection_settings,
             commands::set_connection_settings,
-            commands::get_protocol_version_settings,
-            commands::set_protocol_version_override,
             commands::get_ca_certificate_status,
             commands::update_ca_certificates,
             commands::login,
@@ -697,10 +561,6 @@ pub fn run() {
             commands::unlock_auth_lockouts,
             commands::delete_download,
             commands::open_downloaded_file,
-            commands::read_server_document,
-            commands::scan_local_chatbox,
-            commands::open_local_path,
-            commands::open_downloaded_document,
             commands::create_directory,
             commands::delete_directory,
             commands::delete_document,
@@ -722,7 +582,6 @@ pub fn run() {
             commands::delete_revision,
             commands::upload_new_revision,
             commands::upload_document_file,
-            commands::upload_chat_record,
             commands::inspect_upload_directory_conflicts,
             commands::upload_directory,
             commands::select_upload_directory,
@@ -782,23 +641,8 @@ pub fn run() {
             commands::get_local_data_reset_status,
             commands::reset_local_data,
             commands::retry_local_data_reset,
-            commands::save_credentials,
-            commands::load_credentials,
-            commands::list_credentials,
-            commands::delete_credential,
-            commands::clear_credentials,
-            commands::has_saved_credentials,
-            commands::send_raw_request,
-            commands::fetch_server_page,
-            commands::open_dev_tools_window,
         ])
-        .on_window_event(|window, event| {
-            // Close-button policy: quit, hide to the tray, or ask the Webview.
-            #[cfg(desktop)]
-            desktop_shell::handle_window_event(window, event);
-            #[cfg(not(desktop))]
-            let _ = (window, event);
-        })
+        .on_window_event(custom::on_window_event)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

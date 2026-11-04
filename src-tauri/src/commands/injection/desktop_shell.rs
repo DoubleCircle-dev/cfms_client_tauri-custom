@@ -7,17 +7,17 @@
 #[tauri::command]
 pub fn get_close_behavior<R: Runtime>(
     app: tauri::AppHandle<R>,
-) -> crate::desktop_shell::CloseBehavior {
-    crate::desktop_shell::read_behavior(&app)
+) -> crate::custom::desktop_shell::CloseBehavior {
+    crate::custom::desktop_shell::read_behavior(&app)
 }
 
 /// Persist the close-button policy chosen in the settings page.
 #[tauri::command]
 pub fn set_close_behavior<R: Runtime>(
     app: tauri::AppHandle<R>,
-    behavior: crate::desktop_shell::CloseBehavior,
+    behavior: crate::custom::desktop_shell::CloseBehavior,
 ) -> Result<(), String> {
-    crate::desktop_shell::write_behavior(&app, behavior)
+    crate::custom::desktop_shell::write_behavior(&app, behavior)
 }
 
 /// Apply the answer to a pending "quit or minimize?" prompt.
@@ -27,10 +27,10 @@ pub fn set_close_behavior<R: Runtime>(
 #[tauri::command]
 pub fn resolve_close_request<R: Runtime>(
     app: tauri::AppHandle<R>,
-    action: crate::desktop_shell::CloseBehavior,
+    action: crate::custom::desktop_shell::CloseBehavior,
     remember: bool,
 ) -> Result<(), String> {
-    use crate::desktop_shell::{
+    use crate::custom::desktop_shell::{
         CloseBehavior, clear_pending_ask, minimize_to_tray, quit, write_behavior,
     };
 
@@ -56,11 +56,11 @@ pub fn resolve_close_request<R: Runtime>(
 #[tauri::command]
 pub fn sync_desktop_shell_labels<R: Runtime>(
     app: tauri::AppHandle<R>,
-    labels: crate::desktop_shell::TrayLabels,
+    labels: crate::custom::desktop_shell::TrayLabels,
 ) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        crate::desktop_shell::sync_labels(&app, labels)
+        crate::custom::desktop_shell::sync_labels(&app, labels)
     }
     #[cfg(not(desktop))]
     {

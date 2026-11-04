@@ -25,7 +25,7 @@ pub struct ExtensionOverviewDto {
 pub async fn get_extension_overview(
     state: tauri::State<'_, AppHandleState>,
 ) -> Result<ExtensionOverviewDto, String> {
-    let store = state.extensions.clone();
+    let store = state.custom.extensions.clone();
     let installed = tokio::task::spawn_blocking(move || store.list_installed())
         .await
         .map_err(|e| format!("Extension list task failed: {e}"))??;
@@ -37,7 +37,7 @@ pub async fn get_extension_overview(
                 .as_ref()
                 .and_then(|preferences| preferences.get(&installation.manifest.id));
             let revoked = state
-                .extensions
+                .custom.extensions
                 .revocation_reason(&installation.manifest.id, &installation.manifest.version)
                 .ok()
                 .flatten()
@@ -71,7 +71,7 @@ pub async fn get_extension_overview(
         })
         .collect();
     let catalog = state
-        .extensions
+        .custom.extensions
         .cached_catalog(cfms_service::injection::extensions_system::DEFAULT_CATALOG_URL)
         .unwrap_or(None);
 
@@ -79,7 +79,7 @@ pub async fn get_extension_overview(
         installed,
         account_states,
         catalog,
-        trusted_keys_configured: state.extensions.has_trusted_keys(),
+        trusted_keys_configured: state.custom.extensions.has_trusted_keys(),
         host_api_version: cfms_service::injection::extensions_system::HOST_API_VERSION,
         supported_host_api_versions: [
             cfms_service::injection::extensions_system::HOST_API_VERSION,
@@ -111,7 +111,7 @@ pub async fn import_extension_package(
         let package = tokio::fs::read(&package_path)
             .await
             .map_err(|e| format!("Failed to read extension package: {e}"))?;
-        let store = state.extensions.clone();
+        let store = state.custom.extensions.clone();
         tokio::task::spawn_blocking(move || store.install_package(&package))
             .await
             .map_err(|e| format!("Extension installation task failed: {e}"))?
@@ -141,7 +141,7 @@ pub async fn install_extension_from_catalog(
     #[cfg(not(target_os = "ios"))]
     {
         let catalog = match state
-            .extensions
+            .custom.extensions
             .cached_catalog(cfms_service::injection::extensions_system::DEFAULT_CATALOG_URL)?
         {
             Some(catalog) => catalog,
@@ -183,7 +183,7 @@ pub async fn install_extension_from_catalog(
             .bytes()
             .await
             .map_err(|e| format!("Failed to receive extension package: {e}"))?;
-        let store = state.extensions.clone();
+        let store = state.custom.extensions.clone();
         tokio::task::spawn_blocking(move || store.install_catalog_package(&package, &entry))
             .await
             .map_err(|e| format!("Extension installation task failed: {e}"))?
@@ -195,7 +195,7 @@ pub async fn rollback_extension(
     state: tauri::State<'_, AppHandleState>,
     extension_id: String,
 ) -> Result<cfms_service::injection::extensions_system::ExtensionInstallation, String> {
-    let store = state.extensions.clone();
+    let store = state.custom.extensions.clone();
     tokio::task::spawn_blocking(move || store.rollback(&extension_id))
         .await
         .map_err(|e| format!("Extension rollback task failed: {e}"))?
@@ -206,7 +206,7 @@ pub async fn uninstall_extension(
     state: tauri::State<'_, AppHandleState>,
     extension_id: String,
 ) -> Result<(), String> {
-    let store = state.extensions.clone();
+    let store = state.custom.extensions.clone();
     tokio::task::spawn_blocking(move || store.uninstall(&extension_id))
         .await
         .map_err(|e| format!("Extension uninstall task failed: {e}"))?
@@ -220,12 +220,12 @@ pub async fn set_extension_enabled(
     granted_capabilities: Vec<String>,
 ) -> Result<(), String> {
     let installation = state
-        .extensions
+        .custom.extensions
         .get_installed(&extension_id)?
         .ok_or_else(|| "Extension is not installed".to_string())?;
     if enabled
         && let Some(reason) = state
-            .extensions
+            .custom.extensions
             .revocation_reason(&installation.manifest.id, &installation.manifest.version)?
     {
         return Err(reason);
@@ -279,7 +279,7 @@ pub async fn read_extension_page(
     page: String,
 ) -> Result<serde_json::Value, String> {
     ensure_extension_enabled(&state, &extension_id, None).await?;
-    let store = state.extensions.clone();
+    let store = state.custom.extensions.clone();
     tokio::task::spawn_blocking(move || store.read_page(&extension_id, &page))
         .await
         .map_err(|e| format!("Extension page task failed: {e}"))?
@@ -292,7 +292,7 @@ pub async fn read_extension_workflow(
     workflow: String,
 ) -> Result<serde_json::Value, String> {
     ensure_extension_enabled(&state, &extension_id, None).await?;
-    let store = state.extensions.clone();
+    let store = state.custom.extensions.clone();
     tokio::task::spawn_blocking(move || store.read_workflow(&extension_id, &workflow))
         .await
         .map_err(|e| format!("Extension workflow task failed: {e}"))?
@@ -305,7 +305,7 @@ pub async fn execute_extension_module(
     input: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     ensure_extension_enabled(&state, &extension_id, None).await?;
-    let store = state.extensions.clone();
+    let store = state.custom.extensions.clone();
     tokio::task::spawn_blocking(move || store.execute_module(&extension_id, input))
         .await
         .map_err(|e| format!("Extension module task failed: {e}"))?
@@ -376,7 +376,7 @@ pub async fn execute_extension_host_call(
             .await
         }
         "files.updates.check" => {
-            let report = crate::file_auto_check::check_for_extension(&app_handle, false).await?;
+            let report = crate::custom::file_auto_check::check_for_extension(&app_handle, false).await?;
             serde_json::to_value(report)
                 .map_err(|e| format!("Failed to serialize file update check: {e}"))
         }
@@ -384,7 +384,7 @@ pub async fn execute_extension_host_call(
             if user_confirmed != Some(true) {
                 return Err("User confirmation is required before synchronizing files".into());
             }
-            let report = crate::file_auto_check::check_for_extension(&app_handle, true).await?;
+            let report = crate::custom::file_auto_check::check_for_extension(&app_handle, true).await?;
             serde_json::to_value(report)
                 .map_err(|e| format!("Failed to serialize file synchronization: {e}"))
         }
@@ -452,7 +452,7 @@ pub async fn execute_extension_host_call(
 async fn fetch_and_cache_extension_catalog(
     state: &tauri::State<'_, AppHandleState>,
 ) -> Result<cfms_service::injection::extensions_system::CatalogDocument, String> {
-    if !state.extensions.has_trusted_keys() {
+    if !state.custom.extensions.has_trusted_keys() {
         return Err("No official extension signing public key is configured for this build".into());
     }
     let catalog_url = cfms_service::injection::extensions_system::DEFAULT_CATALOG_URL;
@@ -485,10 +485,10 @@ async fn fetch_and_cache_extension_catalog(
         .await
         .map_err(|e| format!("Failed to read extension catalog signature: {e}"))?;
     let verified = state
-        .extensions
+        .custom.extensions
         .verify_catalog(catalog.as_bytes(), &signature)?;
     state
-        .extensions
+        .custom.extensions
         .cache_catalog(catalog_url, etag.as_deref(), &catalog, &signature)?;
     Ok(verified)
 }
@@ -585,11 +585,11 @@ async fn ensure_extension_enabled(
     capability: Option<&str>,
 ) -> Result<(), String> {
     let installation = state
-        .extensions
+        .custom.extensions
         .get_installed(extension_id)?
         .ok_or_else(|| "Extension is not installed".to_string())?;
     if let Some(reason) = state
-        .extensions
+        .custom.extensions
         .revocation_reason(&installation.manifest.id, &installation.manifest.version)?
     {
         return Err(reason);

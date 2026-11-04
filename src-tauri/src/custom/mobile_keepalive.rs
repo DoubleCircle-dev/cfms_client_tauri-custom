@@ -1,6 +1,6 @@
 //! Mobile keep-alive bridge for the background file-update check.
 //!
-//! [`crate::file_auto_check`] owns the schedule, but on Android the OS freezes
+//! [`crate::custom::file_auto_check`] owns the schedule, but on Android the OS freezes
 //! (and eventually reclaims) any process that has no foreground service, so a
 //! timer alone would not survive the app being backgrounded. This module turns
 //! the "automatic checks are enabled and a session is active" state into the

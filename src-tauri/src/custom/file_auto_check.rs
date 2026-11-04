@@ -5,7 +5,7 @@
 //! platform throttles (or freezes outright) as soon as the app leaves the
 //! foreground. Moving the schedule and the tree walk into a Tokio service makes
 //! the feature independent of the Webview: the process keeps its service lock on
-//! Android for as long as [`crate::mobile_keepalive`] holds the foreground
+//! Android for as long as [`crate::custom::mobile_keepalive`] holds the foreground
 //! service, and the walk talks to the server through the same
 //! `list_directory` / `get_document_info` / `get_document` backend paths the
 //! interactive UI uses.
@@ -343,7 +343,7 @@ pub async fn run(app: AppHandle, mut shutdown: watch::Receiver<bool>) {
             }
             continue;
         }
-        let runtime = Arc::clone(&app.state::<AppHandleState>().file_auto_check);
+        let runtime = Arc::clone(&app.state::<AppHandleState>().custom.file_auto_check);
 
         let now = now_ms();
         if settings.is_none() || now - settings_read_at >= 60_000 {
@@ -355,9 +355,9 @@ pub async fn run(app: AppHandle, mut shutdown: watch::Receiver<bool>) {
 
         if active != keepalive_running {
             if active {
-                crate::mobile_keepalive::start(&app).await;
+                crate::custom::mobile_keepalive::start(&app).await;
             } else {
-                crate::mobile_keepalive::stop(&app).await;
+                crate::custom::mobile_keepalive::stop(&app).await;
                 // Signed out or the feature switched off: the schedule and the
                 // report belong to a session that no longer exists.
                 next_check_at = None;
@@ -442,7 +442,7 @@ pub async fn run(app: AppHandle, mut shutdown: watch::Receiver<bool>) {
         settings_read_at = now_ms();
     }
 
-    crate::mobile_keepalive::stop(&app).await;
+    crate::custom::mobile_keepalive::stop(&app).await;
     tracing::info!("Automatic file-update check service stopped");
 }
 
@@ -471,7 +471,7 @@ pub async fn check_for_extension(
     report.checked_at = finished_at;
     report.next_check_at = next_check_at;
 
-    let runtime = Arc::clone(&app.state::<AppHandleState>().file_auto_check);
+    let runtime = Arc::clone(&app.state::<AppHandleState>().custom.file_auto_check);
     runtime.store_report(report.clone());
     runtime.set_schedule(finished_at, next_check_at);
     runtime.request_rebase();
@@ -486,7 +486,7 @@ async fn perform_check(
     settings: &AutoCheckSettings,
     update_local_files: bool,
 ) -> Result<FileAutoCheckReport, String> {
-    let runtime = Arc::clone(&app.state::<AppHandleState>().file_auto_check);
+    let runtime = Arc::clone(&app.state::<AppHandleState>().custom.file_auto_check);
     let _check_guard = runtime.check_lock.lock().await;
     let download_root = {
         let state = app.state::<AppHandleState>();

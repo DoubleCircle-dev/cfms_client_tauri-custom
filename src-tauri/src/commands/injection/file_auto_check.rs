@@ -10,7 +10,7 @@
 pub fn get_file_auto_check_state(
     state: tauri::State<'_, AppHandleState>,
 ) -> Result<serde_json::Value, String> {
-    serde_json::to_value(state.file_auto_check.state())
+    serde_json::to_value(state.custom.file_auto_check.state())
         .map_err(|e| format!("Failed to serialize automatic check state: {e}"))
 }
 
@@ -23,6 +23,6 @@ pub fn get_file_auto_check_state(
 pub fn rebase_file_auto_check_schedule(
     state: tauri::State<'_, AppHandleState>,
 ) -> Result<(), String> {
-    state.file_auto_check.request_rebase();
+    state.custom.file_auto_check.request_rebase();
     Ok(())
 }
