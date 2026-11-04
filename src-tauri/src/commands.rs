@@ -66,6 +66,7 @@ include!("commands/schedules.rs");
 include!("commands/browsing.rs");
 include!("commands/settings.rs");
 include!("commands/custom_extensions.rs");
+include!("commands/download_root.rs");
 include!("commands/developer.rs");
 include!("commands/auth_connection.rs");
 include!("commands/authentication.rs");

@@ -262,6 +262,16 @@
     });
   });
 
+  $effect(() => {
+    const rowKeys = new Set([
+      ...folders.map((folder) => `folder:${folder.id}`),
+      ...documents.map((document) => `document:${document.id}`),
+    ]);
+    untrack(() => {
+      if (!activeRowKey || !rowKeys.has(activeRowKey)) activeRowKey = rowKeys.values().next().value ?? null;
+    });
+  });
+
   function getRowAt(index: number): FileTableRow {
     if (index < folders.length) return { kind: 'folder', folder: folders[index] };
     return { kind: 'document', document: documents[index - folders.length] };
@@ -1037,16 +1047,13 @@
                             : undownloadedDocumentIds.has(row.document.id)
                               ? '未下载到本地'
                               : undefined)}
-                  >
-                    {row.document.title}
-                    {#if rowTransfer(row.document.id)}
+                  >{row.document.title}{#if rowTransfer(row.document.id)}
                       <span
                         class="file-table-row-cancel"
                         title={rowTransferCancelLabel(row.document.id)}
                         onclick={(event) => cancelRowTransfer(event, row.document.id)}
                       >✕</span>
-                    {/if}
-                  </span>
+                  {/if}</span>
                   <span class="file-table-modified">{formatDate(row.document.last_modified)}</span>
                   <span class="file-table-type">{documentTypeLabel(row.document.title)}</span>
                   <span class="file-table-size">{formatBytes(row.document.size)}</span>

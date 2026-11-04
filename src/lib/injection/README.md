@@ -34,6 +34,15 @@ src/lib/injection/
 | `startup` / `dispose` | `src/routes/+layout.svelte` — `runCustomStartup` / `disposeCustomModules` | hook |
 | icon slugs | `scripts/generate-fluent-icons.mjs` — merges `icon-map.ts` into `$lib/fluent/icon-map.ts` | `slug` map |
 
+## Merging an upstream release
+
+```sh
+git merge <upstream-ref>        # version fields and the changelog merge on their own
+# resolve whatever is left, then:
+pnpm merge:prepare              # regenerates Fluent artifacts and re-stamps the Custom version
+git commit
+```
+
 ## Adding a feature
 
 1. Create `modules/<feature>.ts` exporting a `CustomModule`.
@@ -57,7 +66,7 @@ files read them while they evaluate their own module body. Behaviour goes in
   running `pnpm assets:fluent`.
 - `Cargo.toml`, `Cargo.lock`, `package.json`, `tauri.conf.json`, the iOS
   `Info.plist` and `CHANGELOG.md` are covered by the Git merge drivers in
-  `.gitattributes`; after the merge, restore the Custom version with
-  `pnpm app:version custom <upstream-base>`.
+  `.gitattributes`; `pnpm merge:prepare` re-stamps the Custom version and the
+  generated Fluent artifacts.
 - Remaining fork hunks in upstream files should only be the seam lines above
   and `SettingsPlatformScope`'s `'desktop'` value.

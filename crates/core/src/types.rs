@@ -283,6 +283,18 @@ pub struct UploadTaskDto {
     pub retry_count: u32,
     pub max_retries: u32,
     pub source_available: bool,
+    #[serde(default)]
+    pub batch_id: Option<String>,
+    #[serde(default)]
+    pub batch_name: Option<String>,
+    #[serde(default)]
+    pub batch_created_at: Option<i64>,
+    #[serde(default)]
+    pub batch_index: u32,
+    #[serde(default)]
+    pub queue_order: u64,
+    #[serde(default)]
+    pub revision: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -681,7 +693,7 @@ pub struct UserPreference {
 
     /// Per-account activation, grants, and private settings for installed extensions.
     #[serde(default)]
-    pub extensions: std::collections::BTreeMap<String, ExtensionPreference>,
+    pub extensions: std::collections::BTreeMap<String, crate::extension_types::ExtensionPreference>,
 }
 
 impl Default for UserPreference {
@@ -707,19 +719,6 @@ impl Default for UserPreference {
             extensions: std::collections::BTreeMap::new(),
         }
     }
-}
-
-/// Account-scoped state for one device-global extension installation.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-pub struct ExtensionPreference {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default)]
-    pub install_epoch: String,
-    #[serde(default)]
-    pub granted_capabilities: Vec<String>,
-    #[serde(default)]
-    pub settings: serde_json::Value,
 }
 
 fn default_record_recent_visits() -> bool {

@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.57.0-custom-0.3"
+version = "0.58.0-custom-0.1"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/cfms-dev/cfms_client_tauri"
@@ -49,6 +49,7 @@ rand = "0.10"
 zeroize = { version = "1", features = ["derive"] }
 base64ct = { version = "1", features = ["alloc"] }
 ed25519-dalek = "3"
+# Extension packaging (.cfmsext) reads and writes ZIP archives.
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
 # ---------------------------------------------------------------------------

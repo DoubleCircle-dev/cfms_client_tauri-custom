@@ -1,4 +1,4 @@
-// Semantic names remain stable across the client and extension manifests.
+// Stable semantic icon names used across the client.
 export const ICON_MAP = {
   "connect": "plug_connected",
   "home": "home",
@@ -142,4 +142,9 @@ export const ICON_MAP = {
   "pushPin": "pin",
   "contactCard": "contact_card",
   "personKey": "person_key",
+  "stopTransfer": "stop",
+  "removeTransferRecord": "document_dismiss",
+  "clearTransferRecords": "broom",
+  "stopAndClearTransfers": "text_bullet_list_dismiss",
+  "cancelledTransfer": "dismiss_circle",
 } as const;

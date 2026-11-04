@@ -11,18 +11,20 @@ use sha2::{Digest, Sha256};
 
 pub mod constants;
 pub mod error;
+pub mod extension_types;
 pub mod types;
 
 // Re-export the most commonly used items so downstream crates can write
 // `cfms_core::Error` instead of `cfms_core::error::Error`.
 pub use error::{Error, Result};
+pub use extension_types::ExtensionPreference;
 pub use types::{
     AppearancePreference, ColorSchemePreference, CursorPage, DEFAULT_TASK_CONCURRENCY,
     DownloadFailureKind, DownloadPhase, DownloadProgress, DownloadTaskDto, DownloadTaskStatus,
-    ExtensionPreference, Favourites, FileEntry, FileMetadata, ListDirectoryResponse,
-    MAX_TASK_CONCURRENCY, MIN_TASK_CONCURRENCY, NodeLookupResponse, PRIVACY_PREFERENCE_VERSION,
-    PermissionEntry, PrivacyPreference, ReduceMotionPreference, Response, Schedule,
-    ScheduleTrigger, ScheduledTaskType, ServerDiagnosticDatabase, ServerDiagnosticExtension,
+    Favourites, FileEntry, FileMetadata, ListDirectoryResponse, MAX_TASK_CONCURRENCY,
+    MIN_TASK_CONCURRENCY, NodeLookupResponse, PRIVACY_PREFERENCE_VERSION, PermissionEntry,
+    PrivacyPreference, ReduceMotionPreference, Response, Schedule, ScheduleTrigger,
+    ScheduledTaskType, ServerDiagnosticDatabase, ServerDiagnosticExtension,
     ServerDiagnosticIdentity, ServerDiagnosticLockdown, ServerDiagnosticProviders,
     ServerDiagnosticRuntime, ServerDiagnosticScheduling, ServerDiagnostics, ServerDirectoryEntry,
     ServerDocumentEntry, ServerInfo, ServerListingItem, ServiceEvent, ServiceStatusInfo,

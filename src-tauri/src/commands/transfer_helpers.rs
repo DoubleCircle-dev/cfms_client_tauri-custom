@@ -27,7 +27,7 @@ async fn get_connection_auth(
     Ok((conn, username, token))
 }
 
-fn default_download_root(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+fn download_root(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(app_handle
         .path()
         .resolve("downloads", tauri::path::BaseDirectory::Download)
@@ -39,72 +39,9 @@ fn default_download_root(app_handle: &tauri::AppHandle) -> Result<std::path::Pat
         }))
 }
 
-/// Resolve the download root directory, respecting the user's external storage
-/// preference when configured.
-pub(crate) async fn resolve_download_root(
-    app_handle: &tauri::AppHandle,
-    state: &AppHandleState,
-) -> Result<std::path::PathBuf, String> {
-    // Try to load user preferences to check for external storage setting.
-    if let (Some(server_addr), Some(username), Some(dek)) = (
-        state.inner.server_address.read().await.clone(),
-        state.inner.username.read().await.clone(),
-        state.inner.dek.read().await.clone(),
-    ) {
-        let server_hash = cfms_core::get_server_hash(&server_addr);
-        let app_data = state.app_data_dir.clone();
-        let load_task = tokio::task::spawn_blocking(move || {
-            cfms_service::user_preferences::load(&app_data, &server_hash, &username, Some(&*dek))
-        });
-        let prefs = match load_task.await {
-            Ok(Ok(p)) => p,
-            _ => return default_download_root(app_handle),
-        };
-        if prefs.use_external_storage && !prefs.external_storage_path.trim().is_empty() {
-            let path = std::path::PathBuf::from(&prefs.external_storage_path);
-            if path.is_absolute() {
-                let root = path.join("downloads");
-                // Persist the resolved path as an unencrypted hint so that
-                // the local-data-reset codepath (which runs before the DEK is
-                // available) can locate and clean the download directory.
-                let _ = write_download_root_hint(&state.app_data_dir, &root);
-                return Ok(root);
-            }
-        }
-    }
-
-    // Clear any stale external-storage hint when falling back to the default.
-    let _ = clear_download_root_hint(&state.app_data_dir);
-    default_download_root(app_handle)
-}
-
-const DOWNLOAD_ROOT_HINT_NAME: &str = ".cfms-download-root";
-
-fn download_root_hint_path(app_data: &std::path::Path) -> std::path::PathBuf {
-    app_data.join(DOWNLOAD_ROOT_HINT_NAME)
-}
-
-fn write_download_root_hint(app_data: &std::path::Path, root: &std::path::Path) -> Result<(), String> {
-    let path = download_root_hint_path(app_data);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
-    std::fs::write(&path, root.to_string_lossy().as_bytes())
-        .map_err(|e| format!("Failed to write download-root hint: {e}"))
-}
-
-fn clear_download_root_hint(app_data: &std::path::Path) -> Result<(), String> {
-    let path = download_root_hint_path(app_data);
-    if path.exists() {
-        std::fs::remove_file(&path)
-            .map_err(|e| format!("Failed to remove download-root hint: {e}"))?;
-    }
-    Ok(())
-}
-
 async fn create_transfer_connection(
     state: &cfms_service::state::AppState,
-) -> Result<cfms_transport::Connection, String> {
+) -> cfms_core::Result<cfms_transport::Connection> {
     let (url, ca_dir, disable_ssl, proxy_addr, force_ipv4, client_cert_path, client_key_path) = {
         let addr = state.server_address.read().await;
         let ca = state.ca_dir.read().await;
@@ -124,42 +61,44 @@ async fn create_transfer_connection(
         )
     };
 
-    let url = url.ok_or_else(|| "No server address configured".to_string())?;
-    let ca_dir = ca_dir.ok_or_else(|| "No CA directory configured".to_string())?;
+    let url = url.ok_or_else(|| cfms_core::Error::Other("No server address configured".into()))?;
+    let ca_dir =
+        ca_dir.ok_or_else(|| cfms_core::Error::Other("No CA directory configured".into()))?;
 
     let tls_config = cfms_transport::tls::build_config_with_identity(
         &ca_dir,
         disable_ssl,
         client_cert_path.as_deref(),
         client_key_path.as_deref(),
-    )
-    .map_err(|e| format!("TLS config error: {e}"))?;
+    )?;
 
-    cfms_transport::Connection::connect(&url, tls_config, proxy_addr.as_deref(), force_ipv4)
-        .await
-        .map_err(|e| format!("Transfer connection failed: {e}"))
+    cfms_transport::Connection::connect(&url, tls_config, proxy_addr.as_deref(), force_ipv4).await
 }
 
 struct UploadTransferSession {
     conn: Option<cfms_transport::Connection>,
+    directory_progress: Option<(u64, u64)>,
 }
 
 impl UploadTransferSession {
     fn new() -> Self {
-        Self { conn: None }
+        Self {
+            conn: None,
+            directory_progress: None,
+        }
     }
 
     async fn get(
         &mut self,
         state: &cfms_service::state::AppState,
-    ) -> Result<cfms_transport::Connection, String> {
+    ) -> cfms_core::Result<cfms_transport::Connection> {
         if self
             .conn
             .as_ref()
             .is_some_and(cfms_transport::Connection::is_closed)
             && let Some(conn) = self.conn.take()
         {
-            conn.close().await;
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(5), conn.close()).await;
         }
 
         if self.conn.is_none() {
@@ -175,46 +114,57 @@ impl UploadTransferSession {
 
     async fn discard(&mut self) {
         if let Some(conn) = self.conn.take() {
-            conn.close().await;
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(5), conn.close()).await;
         }
     }
 
     async fn close(&mut self) {
-        self.discard().await;
+        if let Some(conn) = self.conn.take() {
+            tauri::async_runtime::spawn(async move {
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), conn.close()).await;
+            });
+        }
     }
 }
 
-const MAX_UPLOAD_RETRIES: u32 = 3;
+impl Drop for UploadTransferSession {
+    fn drop(&mut self) {
+        if let Some(conn) = self.conn.take() {
+            tauri::async_runtime::spawn(async move {
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), conn.close()).await;
+            });
+        }
+    }
+}
+
+const MAX_UPLOAD_RETRIES: u32 = cfms_service::services::retry::MAX_BACKGROUND_RETRIES as u32;
 
 fn upload_retry_delay(error: &cfms_core::Error, attempt: u32) -> Option<std::time::Duration> {
     if attempt >= MAX_UPLOAD_RETRIES {
         return None;
     }
 
-    let fallback_seconds = 1u64 << attempt.min(3);
-    let seconds = match error {
-        cfms_core::Error::Connection(_) => fallback_seconds,
-        cfms_core::Error::Server {
-            code: 429,
-            retry_after_seconds,
-            ..
-        } => retry_after_seconds.unwrap_or(fallback_seconds),
-        cfms_core::Error::Server { code, .. } if matches!(*code, 500 | 502 | 503 | 504) => {
-            fallback_seconds
-        }
-        _ => return None,
-    };
-    Some(std::time::Duration::from_secs(seconds))
+    if !cfms_service::services::retry::is_transient_error(error) {
+        return None;
+    }
+    Some(cfms_service::services::retry::retry_delay(
+        attempt as usize + 1,
+        cfms_service::services::retry::error_retry_after_seconds(error),
+    ))
 }
 
-async fn wait_for_upload_resume(
+async fn wait_for_upload_resume<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    id: &str,
     control: &mut tokio::sync::watch::Receiver<Option<UploadInterruption>>,
 ) -> Result<(), UploadInterruption> {
     loop {
         match *control.borrow() {
             None => return Ok(()),
             Some(UploadInterruption::Cancelled) => return Err(UploadInterruption::Cancelled),
-            Some(UploadInterruption::Paused) => {}
+            Some(UploadInterruption::Paused) => {
+                app.state::<AppHandleState>().active_uploads.park(id);
+            }
         }
         if control.changed().await.is_err() {
             return Err(UploadInterruption::Cancelled);
@@ -251,13 +201,11 @@ async fn create_server_directory(
         && resp.data.get("type").and_then(|v| v.as_str()) == Some("directory")
         && let Some(id) = resp.data.get("id").and_then(|v| v.as_str())
     {
-        return Ok(CreateServerDirectoryResult {
-            id: id.to_string(),
-        });
+        return Ok(CreateServerDirectoryResult { id: id.to_string() });
     }
 
     if resp.code != 200 {
-        return Err(format!("Server returned {}: {}", resp.code, resp.message));
+        return Err(format_server_response_error(&resp));
     }
 
     let id = resp
@@ -414,9 +362,39 @@ async fn upload_local_file<R: Runtime>(
                 .map(ToOwned::to_owned)
         })
         .ok_or_else(|| "Selected file has no valid name".to_string())?;
-    let mut upload_control = state.active_uploads.register(&upload_id);
+    let source_size = std::fs::metadata(&source).map(|m| m.len()).unwrap_or(0);
+    let directory_progress = transfer_session.directory_progress;
+    let emit_file_progress = move |app: &tauri::AppHandle<R>,
+                                   id: &str,
+                                   task_id: Option<&str>,
+                                   name: &str,
+                                   current: u64,
+                                   total: u64,
+                                   status: &str,
+                                   message: Option<String>| {
+        let (current, total) = if let Some((offset, all)) = directory_progress {
+            (
+                offset.saturating_add(if matches!(status, "completed" | "skipped") {
+                    source_size
+                } else {
+                    current
+                }),
+                all,
+            )
+        } else {
+            (current, total)
+        };
+        emit_upload_progress(app, id, task_id, name, current, total, status, message);
+    };
+    let mut upload_control = state
+        .active_uploads
+        .subscribe(&upload_id)
+        .ok_or_else(|| "Upload must be submitted through the queue".to_string())?;
+    wait_for_upload_resume(app_handle, &upload_id, &mut upload_control)
+        .await
+        .map_err(|reason| upload_interruption_message(reason).to_string())?;
 
-    emit_upload_progress(
+    emit_file_progress(
         app_handle,
         &upload_id,
         None,
@@ -430,7 +408,6 @@ async fn upload_local_file<R: Runtime>(
     let (conn, username, token) = match get_connection_auth(state).await {
         Ok(auth) => auth,
         Err(err) => {
-            state.active_uploads.unregister(&upload_id);
             return Err(err);
         }
     };
@@ -449,7 +426,6 @@ async fn upload_local_file<R: Runtime>(
     {
         Ok(response) => response,
         Err(err) => {
-            state.active_uploads.unregister(&upload_id);
             return Err(err);
         }
     };
@@ -472,7 +448,6 @@ async fn upload_local_file<R: Runtime>(
             {
                 Ok(response) => response,
                 Err(err) => {
-                    state.active_uploads.unregister(&upload_id);
                     return Err(err);
                 }
             };
@@ -497,7 +472,7 @@ async fn upload_local_file<R: Runtime>(
 
         match (conflict_strategy, conflict_type, conflict_id) {
             (UploadConflictStrategy::Skip, _, _) => {
-                emit_upload_progress(
+                emit_file_progress(
                     app_handle,
                     &upload_id,
                     None,
@@ -507,7 +482,6 @@ async fn upload_local_file<R: Runtime>(
                     "skipped",
                     Some("Skipped existing document".to_string()),
                 );
-                state.active_uploads.unregister(&upload_id);
                 return Ok(UploadFileResult {
                     upload_id,
                     task_id: None,
@@ -529,48 +503,33 @@ async fn upload_local_file<R: Runtime>(
                 {
                     Ok(response) => response,
                     Err(err) => {
-                        state.active_uploads.unregister(&upload_id);
                         return Err(err);
                     }
                 };
 
                 if upload_resp.code != 200 {
-                    state.active_uploads.unregister(&upload_id);
-                    return Err(format!(
-                        "Server returned {}: {}",
-                        upload_resp.code, upload_resp.message
-                    ));
+                    return Err(format_server_response_error(&upload_resp));
                 }
 
                 overwritten = true;
                 let task_id = match extract_task_id(&upload_resp.data) {
                     Ok(id) => id,
                     Err(err) => {
-                        state.active_uploads.unregister(&upload_id);
                         return Err(err);
                     }
                 };
                 (task_id, Some(document_id), false)
             }
             _ => {
-                state.active_uploads.unregister(&upload_id);
-                return Err(format!(
-                    "Server returned {}: {}",
-                    create_resp.code, create_resp.message
-                ));
+                return Err(format_server_response_error(&create_resp));
             }
         }
     } else if create_resp.code != 200 {
-        state.active_uploads.unregister(&upload_id);
-        return Err(format!(
-            "Server returned {}: {}",
-            create_resp.code, create_resp.message
-        ));
+        return Err(format_server_response_error(&create_resp));
     } else {
         let task_id = match extract_task_id(&create_resp.data) {
             Ok(id) => id,
             Err(err) => {
-                state.active_uploads.unregister(&upload_id);
                 return Err(err);
             }
         };
@@ -587,8 +546,17 @@ async fn upload_local_file<R: Runtime>(
     let progress_upload_id = upload_id.clone();
     let progress_task_id = task_id.clone();
     let progress_file_name = file_name.clone();
+    let progress_run = state.active_uploads.run_id(&upload_id);
     let progress = move |current: u64, total: u64| {
-        emit_upload_progress(
+        if emit_handle
+            .state::<AppHandleState>()
+            .active_uploads
+            .run_id(&progress_upload_id)
+            != progress_run
+        {
+            return;
+        }
+        emit_file_progress(
             &emit_handle,
             &progress_upload_id,
             Some(&progress_task_id),
@@ -607,10 +575,11 @@ async fn upload_local_file<R: Runtime>(
             transfer_session.discard().await;
             emit_interrupted_upload(app_handle, &upload_id, Some(&task_id), &file_name, reason);
             if reason == UploadInterruption::Cancelled {
-                state.active_uploads.unregister(&upload_id);
                 return Err(upload_interruption_message(reason).to_string());
             }
-            if let Err(cancelled) = wait_for_upload_resume(&mut upload_control).await {
+            if let Err(cancelled) =
+                wait_for_upload_resume(app_handle, &upload_id, &mut upload_control).await
+            {
                 emit_interrupted_upload(
                     app_handle,
                     &upload_id,
@@ -618,11 +587,10 @@ async fn upload_local_file<R: Runtime>(
                     &file_name,
                     cancelled,
                 );
-                state.active_uploads.unregister(&upload_id);
                 return Err(upload_interruption_message(cancelled).to_string());
             }
             retry_attempt = 0;
-            emit_upload_progress(
+            emit_file_progress(
                 app_handle,
                 &upload_id,
                 Some(&task_id),
@@ -636,9 +604,41 @@ async fn upload_local_file<R: Runtime>(
 
         let transfer_conn = match transfer_session.get(&state.inner).await {
             Ok(conn) => conn,
-            Err(err) => {
-                state.active_uploads.unregister(&upload_id);
-                return Err(err);
+            Err(error) => {
+                let Some(delay) = upload_retry_delay(&error, retry_attempt) else {
+                    let message = format_transport_error(&error);
+                    emit_file_progress(
+                        app_handle,
+                        &upload_id,
+                        Some(&task_id),
+                        &file_name,
+                        0,
+                        0,
+                        "failed",
+                        Some(message.clone()),
+                    );
+                    return Err(message);
+                };
+
+                retry_attempt += 1;
+                state.upload_tasks.note_retry(&upload_id, retry_attempt);
+                emit_file_progress(
+                    app_handle,
+                    &upload_id,
+                    Some(&task_id),
+                    &file_name,
+                    0,
+                    0,
+                    "uploading",
+                    Some(format!(
+                        "Server temporarily unavailable; retrying upload (attempt {retry_attempt}/{MAX_UPLOAD_RETRIES})"
+                    )),
+                );
+                tokio::select! {
+                    _ = tokio::time::sleep(delay) => {}
+                    _ = upload_control.changed() => {}
+                }
+                continue;
             }
         };
         state
@@ -670,8 +670,8 @@ async fn upload_local_file<R: Runtime>(
                     continue;
                 }
                 let Some(delay) = upload_retry_delay(&error, retry_attempt) else {
-                    let message = format!("Upload failed: {error}");
-                    emit_upload_progress(
+                    let message = format_transport_error(&error);
+                    emit_file_progress(
                         app_handle,
                         &upload_id,
                         Some(&task_id),
@@ -681,12 +681,12 @@ async fn upload_local_file<R: Runtime>(
                         "failed",
                         Some(message.clone()),
                     );
-                    state.active_uploads.unregister(&upload_id);
                     return Err(message);
                 };
 
                 retry_attempt += 1;
-                emit_upload_progress(
+                state.upload_tasks.note_retry(&upload_id, retry_attempt);
+                emit_file_progress(
                     app_handle,
                     &upload_id,
                     Some(&task_id),
@@ -706,17 +706,16 @@ async fn upload_local_file<R: Runtime>(
         }
     }
 
-    emit_upload_progress(
+    emit_file_progress(
         app_handle,
         &upload_id,
         Some(&task_id),
         &file_name,
-        1,
-        1,
+        std::fs::metadata(&source).map(|m| m.len()).unwrap_or(0),
+        std::fs::metadata(&source).map(|m| m.len()).unwrap_or(0),
         "completed",
         Some("Upload completed".to_string()),
     );
-    state.active_uploads.unregister(&upload_id);
 
     Ok(UploadFileResult {
         upload_id,
@@ -768,14 +767,10 @@ fn emit_upload_progress<R: Runtime>(
     status: &str,
     message: Option<String>,
 ) {
-    let progress = if total_bytes > 0 {
-        current_bytes as f64 / total_bytes as f64
-    } else if status == "completed" {
-        1.0
-    } else {
-        0.0
-    };
-
+    let state = app_handle.state::<AppHandleState>();
+    if state.active_uploads.generation(upload_id) != Some(state.upload_tasks.generation()) {
+        return;
+    }
     let persistent_status = match status {
         "pending" => cfms_core::UploadTaskStatus::Pending,
         "paused" => cfms_core::UploadTaskStatus::Paused,
@@ -786,29 +781,39 @@ fn emit_upload_progress<R: Runtime>(
         "skipped" => cfms_core::UploadTaskStatus::Skipped,
         _ => cfms_core::UploadTaskStatus::Uploading,
     };
-    app_handle.state::<AppHandleState>().upload_tasks.update_progress(
-        upload_id,
-        task_id,
-        file_name,
-        current_bytes,
-        total_bytes,
-        persistent_status,
-        message.clone(),
-    );
-
-    let _ = app_handle.emit(
-        "cfms:upload-progress",
-        UploadProgressEvent {
-            upload_id: upload_id.to_string(),
-            task_id: task_id.map(ToOwned::to_owned),
-            file_name: file_name.to_string(),
+    app_handle
+        .state::<AppHandleState>()
+        .upload_tasks
+        .update_progress(
+            upload_id,
+            task_id,
+            file_name,
             current_bytes,
             total_bytes,
-            progress,
-            status: status.to_string(),
-            message,
-        },
-    );
+            persistent_status,
+            message.clone(),
+        );
+
+    emit_upload_snapshot(app_handle, upload_id);
+    // This event is a notification for mounted file views, not a scheduler callback.
+    if let Some(task) = state.upload_tasks.get(upload_id) {
+        let _ = app_handle.emit(
+            "cfms:upload-progress",
+            UploadProgressEvent {
+                upload_id: task.upload_id,
+                task_id: task.task_id,
+                file_name: task.file_name,
+                current_bytes: task.current_bytes,
+                total_bytes: task.total_bytes,
+                progress: task.progress,
+                status: serde_json::to_value(task.status)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default(),
+                message: task.message,
+            },
+        );
+    }
 }
 
 fn extract_task_id(data: &serde_json::Value) -> Result<String, String> {
@@ -948,7 +953,10 @@ async fn server_action_bool(
 fn suffixed_upload_name(name: &str, suffix: usize) -> String {
     let path = std::path::Path::new(name);
     let extension = path.extension().and_then(|value| value.to_str());
-    let stem = path.file_stem().and_then(|value| value.to_str()).unwrap_or(name);
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(name);
     match extension {
         Some(extension) if !stem.is_empty() => format!("{stem} ({suffix}).{extension}"),
         _ => format!("{name} ({suffix})"),
@@ -1025,8 +1033,9 @@ async fn fetch_all_listing_pages(
             .map(|value| serde_json::Value::String(value.clone()))
             .unwrap_or(serde_json::Value::Null);
 
-        let page: ListingCursorPage = serde_json::from_value(server_action_json(state, action, data.clone()).await?)
-            .map_err(|e| format!("Invalid {action} page response: {e}"))?;
+        let page: ListingCursorPage =
+            serde_json::from_value(server_action_json(state, action, data.clone()).await?)
+                .map_err(|e| format!("Invalid {action} page response: {e}"))?;
         let has_more = page.has_more;
         cursor = page.next_cursor.clone();
         merge_listing_response(&mut combined, page);
@@ -1199,7 +1208,9 @@ mod protocol_v15_tests {
 
     #[test]
     fn relative_upload_paths_use_protocol_separators() {
-        let path = std::path::Path::new("nested").join("reports").join("summary.txt");
+        let path = std::path::Path::new("nested")
+            .join("reports")
+            .join("summary.txt");
         assert_eq!(relative_upload_path(&path), "nested/reports/summary.txt");
     }
 }
@@ -1208,6 +1219,9 @@ async fn clear_auth_state(state: &AppHandleState) {
     state.public_keys.cancel();
     state.inner.clear_auth().await;
     state.tasks.clear();
+    state
+        .active_uploads
+        .interrupt_all(UploadInterruption::Cancelled);
     state.upload_tasks.clear();
 }
 

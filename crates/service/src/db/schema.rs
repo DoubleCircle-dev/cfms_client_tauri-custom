@@ -5,7 +5,7 @@
 //! (see [`crate::services::task_persistence`]).
 
 /// Current schema version.  Increment this when adding new DDL.
-pub const CURRENT_VERSION: u32 = 2;
+pub const CURRENT_VERSION: u32 = 3;
 
 /// DDL for the initial schema (v1).
 ///
@@ -56,4 +56,10 @@ CREATE TABLE IF NOT EXISTS extension_package_versions (
 );
 
 INSERT OR IGNORE INTO schema_version (version) VALUES (2);
+"#;
+
+/// Upstream v3 retires the extension tables; this fork still ships the
+/// extension system, so the step only records the version.
+pub const SCHEMA_V3: &str = r#"
+INSERT OR IGNORE INTO schema_version (version) VALUES (3);
 "#;

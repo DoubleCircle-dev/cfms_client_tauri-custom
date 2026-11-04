@@ -188,21 +188,13 @@ mod tests {
                 settings: serde_json::json!({ "view": "compact" }),
             },
         );
-        save(
-            temp.path(),
-            SERVER_HASH,
-            USERNAME,
-            Some(&dek()),
-            &preferences,
-        )
-        .unwrap();
+        save(temp.path(), SERVER_HASH, USERNAME, Some(&dek()), &preferences).unwrap();
 
         let loaded = load(temp.path(), SERVER_HASH, USERNAME, Some(&dek())).unwrap();
         assert_eq!(loaded.extensions, preferences.extensions);
         let raw = std::fs::read(file_path(temp.path(), SERVER_HASH, USERNAME)).unwrap();
         assert!(!String::from_utf8_lossy(&raw).contains("org.cfms.example"));
     }
-
     #[test]
     fn legacy_screenshot_setting_is_ignored() {
         let preferences: UserPreference = serde_json::from_value(serde_json::json!({

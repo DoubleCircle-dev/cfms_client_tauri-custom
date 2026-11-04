@@ -135,7 +135,7 @@ function main() {
   if (outcome.resolved > 0) {
     process.stderr.write(
       `${name}: kept the Custom version in ${outcome.resolved} version-only conflict(s). ` +
-        "Run `pnpm app:version custom <upstream-base>` after the merge.\n",
+        "Run `pnpm merge:prepare` to re-stamp it on the upstream base.\n",
     );
   }
   if (outcome.unresolved > 0) {

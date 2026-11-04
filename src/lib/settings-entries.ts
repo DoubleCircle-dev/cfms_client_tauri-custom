@@ -30,6 +30,7 @@ export interface SettingsEntry {
   tone?: 'default' | 'danger';
   requiresAuth?: boolean;
   platformScope?: SettingsPlatformScope;
+  /** Fork-only gate: hidden while the extension release gate is off. */
   feature?: 'extensions';
 }
 
@@ -193,8 +194,8 @@ export function isSettingsEntryVisible(
   entry: SettingsEntry,
   context: SettingsEntryVisibilityContext,
 ): boolean {
-  if (entry.feature === 'extensions' && !USER_EXTENSIONS_ENABLED) return false;
   if (entry.requiresAuth && !context.isLoggedIn) return false;
+  if (entry.feature === 'extensions' && !USER_EXTENSIONS_ENABLED) return false;
   const isMobile = context.isMobile ?? isMobilePlatform();
   if (entry.platformScope === 'mobile') return isMobile;
   if (entry.platformScope === 'desktop') return !isMobile;

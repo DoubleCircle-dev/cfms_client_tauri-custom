@@ -1,279 +1,306 @@
-// @vitest-environment jsdom
-
-// Regression guard for the "全部文件 page hangs on loading, then every button
-// is dead" bug.
-//
-// The page used to prune `openingInProgress` / `openingProgress` from an
-// `$effect` that read those maps and then wrote a brand-new Map back into them
-// unconditionally. Svelte 5 tracks that read, so the write re-invalidated the
-// effect, which wrote again — an endless flush loop that never yields the main
-// thread. Mounting the page is therefore the assertion: with the loop in place
-// `render()` never returns, and the timeout below is what fails.
-
-import { cleanup, render, waitFor } from '@testing-library/svelte';
-import { flushSync } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { page } from '$app/state';
-import type { DownloadTaskDto } from '$lib/api/types';
-import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
-import { downloadStore } from '$lib/stores.svelte';
+import '$lib/i18n';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
+import { locale } from 'svelte-i18n';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ListDirectoryPageResponse, UploadTaskDto } from '$lib/api';
+import { authStore, notificationStore, serverStateStore, uploadStore } from '$lib/stores.svelte';
+import { fileManagerNavigationStore } from '$lib/files/file-manager-navigation';
+import SnackBarHost from '$lib/components/SnackBarHost.svelte';
 import FilesPage from './+page.svelte';
 
-// `svelte/motion` builds a module-scope MediaQuery, so `matchMedia` has to exist
-// before any import is evaluated. `vi.hoisted` runs first; jsdom does not
-// implement it.
-vi.hoisted(() => {
-  if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      writable: true,
-      value: (query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-        addListener: () => undefined,
-        removeListener: () => undefined,
-        dispatchEvent: () => false,
-      }),
-    });
-  }
-});
-
 const mocks = vi.hoisted(() => ({
-  listDirectoryPage: vi.fn(),
-  listDirectory: vi.fn(),
-  loadUserPreference: vi.fn(),
-  getDownloadTasks: vi.fn(),
+  listDirectoryPage: vi.fn(), listDirectory: vi.fn(), open: vi.fn(), pickDirectory: vi.fn(),
+  classifyUploadPath: vi.fn(), inspectUploadDirectoryConflicts: vi.fn(), goto: vi.fn(),
+  events: new Map<string, (event: { payload: unknown }) => void>(),
+  drop: null as ((event: { payload: unknown }) => void) | null,
 }));
-
-vi.mock('$lib/api', () => ({
-  listDirectoryPage: mocks.listDirectoryPage,
-  listDirectory: mocks.listDirectory,
-  loadUserPreference: mocks.loadUserPreference,
-  getDownloadTasks: mocks.getDownloadTasks,
-  classifyUploadPath: vi.fn(),
-  getDocument: vi.fn(),
-  openDownloadedDocument: vi.fn(),
-  getRevision: vi.fn(),
-  inspectUploadDirectoryConflicts: vi.fn(),
-  createDirectory: vi.fn(),
-  deleteDirectory: vi.fn(),
-  deleteDocument: vi.fn(),
-  deleteRevision: vi.fn(),
-  ensureDownloadSubdirectory: vi.fn(),
-  getAccessRules: vi.fn(),
-  getDirectoryInfo: vi.fn(),
-  getDocumentInfo: vi.fn(),
-  grantAccess: vi.fn(),
-  listRevisions: vi.fn(),
-  moveDirectory: vi.fn(),
-  moveDocument: vi.fn(),
-  renameDirectory: vi.fn(),
-  renameDocument: vi.fn(),
-  resolveNodePath: vi.fn(),
-  revokeAccess: vi.fn(),
-  setAccessRules: vi.fn(),
-  setCurrentRevision: vi.fn(),
-  setDocumentTags: vi.fn(),
-  searchFiles: vi.fn(),
-  uploadDirectory: vi.fn(),
-  uploadDocumentFile: vi.fn(),
-  uploadNewRevision: vi.fn(),
-  viewAccessEntries: vi.fn(),
-}));
-
-vi.mock('$lib/api/downloads', () => ({
-  cancelDownload: vi.fn(),
-}));
-
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-
-vi.mock('$app/state', () => ({
-  page: { url: new URL('http://localhost/home/files') },
-}));
-
+vi.hoisted(() => {
+  window.matchMedia = vi.fn((media: string) => ({
+    matches: false, media, onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(() => true),
+  }));
+  Element.prototype.getAnimations = () => [];
+});
+vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
+vi.mock('$app/state', () => ({ page: { url: new URL('https://example.test/home/files') } }));
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(() => Promise.resolve(() => undefined)),
-}));
-
-vi.mock('@tauri-apps/api/webview', () => ({
-  getCurrentWebview: () => ({
-    onDragDropEvent: () => Promise.resolve(() => undefined),
+  listen: vi.fn(async (name: string, callback: (event: { payload: unknown }) => void) => {
+    mocks.events.set(name, callback);
+    return () => mocks.events.delete(name);
   }),
 }));
-
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
-
-vi.mock('svelte-i18n', () => ({
-  _: {
-    subscribe(
-      run: (
-        translate: (
-          key: string,
-          options?: { values?: Record<string, string | number> },
-        ) => string,
-      ) => void,
-    ) {
-      run((key, options) =>
-        options?.values
-          ? `${key}:${Object.values(options.values).join(':')}`
-          : key,
-      );
-      return () => undefined;
-    },
-  },
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: async (callback: typeof mocks.drop) => { mocks.drop = callback; return vi.fn(); } }),
 }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mocks.open }));
+vi.mock('$lib/directory-picker', () => ({ pickDirectory: mocks.pickDirectory }));
+vi.mock('$lib/platform', () => ({ isMobilePlatform: () => false, supportsKeyboardShortcuts: () => true }));
+vi.mock('$lib/api', async (original) => ({
+  ...await original<typeof import('$lib/api')>(),
+  listDirectoryPage: mocks.listDirectoryPage, listDirectory: mocks.listDirectory,
+  loadUserPreference: async () => ({}), classifyUploadPath: mocks.classifyUploadPath,
+  inspectUploadDirectoryConflicts: mocks.inspectUploadDirectoryConflicts,
+}));
+
+function page(names: string[], cursor: string | null = null): ListDirectoryPageResponse {
+  return {
+    folders: [], documents: names.map((id, index) => ({ id, title: `${id}.txt`, size: index + 1, last_modified: 1 })),
+    parent_id: null, page_size: 128, next_cursor: cursor, has_more: cursor !== null,
+  };
+}
+
+function deferredPage() {
+  let resolve!: (value: ListDirectoryPageResponse) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<ListDirectoryPageResponse>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+async function openFiles() {
+  const result = render(FilesPage);
+  await screen.findByText('alpha.txt');
+  await tick();
+  return result;
+}
+
+async function uploadCompleted() {
+  mocks.events.get('cfms:upload-task')!({ payload: { status: 'completed', target_parent_id: null } });
+  await new Promise((resolve) => setTimeout(resolve, 280));
+  await tick();
+}
+
+beforeEach(() => {
+  locale.set('en');
+  document.documentElement.dataset.reduceMotion = 'true';
+  authStore.apply({ user_id: 'self', username: 'alice', nickname: 'Alice', has_token: true, token_exp: 1_900_000_000, permissions: [], groups: [] });
+  serverStateStore.updateConnection(true, 'wss://files.test', false);
+  fileManagerNavigationStore.rememberTimeline('wss://files.test', 'alice', { entries: [], cursor: -1 });
+  notificationStore.clear();
+  mocks.events.clear();
+  mocks.drop = null;
+  mocks.listDirectoryPage.mockReset().mockResolvedValue(page(['alpha', 'beta']));
+  mocks.listDirectory.mockReset().mockResolvedValue({ folders: [], documents: [], parent_id: null });
+  mocks.open.mockReset().mockResolvedValue(['C:/uploads/new.txt']);
+  mocks.pickDirectory.mockReset().mockResolvedValue({ path: 'C:/uploads/folder', name: 'folder' });
+  mocks.classifyUploadPath.mockReset().mockResolvedValue('file');
+  mocks.inspectUploadDirectoryConflicts.mockReset().mockResolvedValue(undefined);
+  mocks.goto.mockReset();
+});
 
 afterEach(() => {
   cleanup();
-  Object.defineProperty(page, 'url', {
-    configurable: true,
-    value: new URL('http://localhost/home/files'),
-  });
-  // The store is a module singleton, so a task seeded by one test would
-  // otherwise leak into the next one.
-  downloadStore.setAll([]);
-  vi.clearAllMocks();
+  vi.restoreAllMocks();
+  authStore.clear();
+  serverStateStore.clear();
+  notificationStore.clear();
+  delete document.documentElement.dataset.reduceMotion;
 });
 
-function pageResponse() {
-  return {
-    folders: [
-      {
-        id: 'folder-docs',
-        name: 'documents-folder',
-        parent_id: null,
-        size: 0,
-        last_modified: 0,
-      },
-    ],
-    documents: [
-      {
-        id: 'doc-1',
-        title: 'readme-document',
-        parent_id: null,
-        size: 12,
-        last_modified: 0,
-        sha256: 'a'.repeat(64),
-      },
-    ],
-    parent_id: null,
-    next_cursor: null,
-    has_more: false,
-  };
-}
-
-function downloadTask(overrides: Partial<DownloadTaskDto> = {}): DownloadTaskDto {
-  return {
-    task_id: 'task-1',
-    file_id: 'doc-1',
-    filename: 'readme-document',
-    file_path: 'C:/downloads/readme-document',
-    status: 'downloading',
-    progress: 0,
-    current_bytes: 0,
-    total_bytes: 100,
-    message: null,
-    error: null,
-    created_at: 1,
-    started_at: 1,
-    completed_at: null,
-    priority: 0,
-    retry_count: 0,
-    max_retries: 3,
-    scheduled_time: null,
-    stage: 0,
-    bandwidth_limit: null,
-    pause_position: null,
-    supports_resume: true,
-    ...overrides,
-  };
-}
-
-describe('files page', () => {
-  it('finishes mounting and shows the listing instead of hanging on loading', async () => {
-    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
-    mocks.loadUserPreference.mockResolvedValue(null);
-    mocks.getDownloadTasks.mockResolvedValue([]);
-
-    const { container } = render(FilesPage);
-    flushSync();
-
-    // The reported failure was the spinner never going away, which left every
-    // `!loading`-gated command disabled.
-    await waitFor(() => {
-      expect(container.querySelector('.file-table-loading')).toBeNull();
-    });
-
-    // The server's listing reached the table.
-    expect(container.textContent).toContain('readme-document');
-    expect(container.textContent).toContain('documents-folder');
+describe('upload confirmation', () => {
+  it.each(['file-drop', 'folder-drop', 'file-picker', 'folder-picker'])('silently queues one object for %s', async (source) => {
+    const enqueue = vi.spyOn(uploadStore, 'addBatch').mockResolvedValue({ tasks: [{ upload_id: 'new' } as UploadTaskDto], failed: [] });
+    mocks.classifyUploadPath.mockResolvedValue(source === 'folder-drop' ? 'directory' : 'file');
+    const { container } = await openFiles();
+    render(SnackBarHost);
+    if (source.endsWith('drop')) mocks.drop!({ payload: { type: 'drop', paths: ['C:/uploads/new'] } });
+    else await fireEvent.click(screen.getByRole('button', { name: source === 'file-picker' ? 'Upload files' : 'Upload folder' }));
+    await waitFor(() => expect(enqueue).toHaveBeenCalledOnce());
+    await tick();
+    expect(notificationStore.entries).toHaveLength(0);
+    expect(container.querySelector('.upload-queued-notice')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View transfers' })).toBeNull();
   });
 
-  it('compares a requested child directory against its own snapshot', async () => {
-    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
-    mocks.loadUserPreference.mockResolvedValue(null);
-    mocks.getDownloadTasks.mockResolvedValue([]);
-    Object.defineProperty(page, 'url', {
-      configurable: true,
-      value: new URL('http://localhost/home/files?folder=folder-target&name=Target'),
+  it.each(['drop', 'picker'])('shows one actionable toast and no banner for multiple objects from %s', async (source) => {
+    const enqueue = vi.spyOn(uploadStore, 'addBatch').mockResolvedValue({
+      tasks: [{ upload_id: 'one' }, { upload_id: 'two' }] as UploadTaskDto[], failed: [],
     });
-    const compareSnapshot = vi.spyOn(fileUpdateTracker, 'compareSnapshot');
-
-    const { container } = render(FilesPage);
-    flushSync();
-
-    await waitFor(() => {
-      expect(container.querySelector('.file-table-loading')).toBeNull();
-    });
-
-    expect(compareSnapshot).toHaveBeenCalledWith(
-      'folder-target',
-      expect.any(Array),
-      expect.any(Array),
-    );
-    compareSnapshot.mockRestore();
+    mocks.open.mockResolvedValue(['C:/uploads/one', 'C:/uploads/two']);
+    const { container } = await openFiles();
+    render(SnackBarHost);
+    if (source === 'drop') mocks.drop!({ payload: { type: 'drop', paths: ['C:/uploads/one', 'C:/uploads/two'] } });
+    else await fireEvent.click(screen.getByRole('button', { name: 'Upload files' }));
+    await waitFor(() => expect(enqueue).toHaveBeenCalledOnce());
+    await waitFor(() => expect(notificationStore.entries).toHaveLength(1));
+    expect(notificationStore.entries[0].text).toContain('Added 2 uploads');
+    expect(container.querySelector('.upload-queued-notice')).toBeNull();
+    await fireEvent.click(await screen.findByRole('button', { name: 'View transfers' }));
+    expect(mocks.goto).toHaveBeenCalledExactlyOnceWith('/home/tasks?tab=uploads');
+    expect(notificationStore.entries).toHaveLength(0);
   });
 
-  it('reports a running download on the document row itself', async () => {
-    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
-    mocks.loadUserPreference.mockResolvedValue(null);
-    mocks.getDownloadTasks.mockResolvedValue([]);
-
-    const { container } = render(FilesPage);
-    flushSync();
-    await waitFor(() => {
-      expect(container.querySelector('.file-table-loading')).toBeNull();
-    });
-
-    // Seed after mounting: the page loads the task list on mount and would
-    // otherwise replace whatever the test put in the store.
-    downloadStore.upsert(downloadTask({ file_id: 'doc-1', progress: 0.5 }));
-    flushSync();
-
-    const row = container.querySelector('[data-selection-key="document:doc-1"]');
-    expect(row).not.toBeNull();
-    expect(row!.classList.contains('file-table-row--transferring')).toBe(true);
-    expect(row!.getAttribute('style')).toMatch(/--row-transfer-progress:\s*50%/);
+  it('keeps enqueue errors and does not show success when no tasks were accepted', async () => {
+    vi.spyOn(uploadStore, 'addBatch').mockResolvedValue({ tasks: [], failed: [{ id: 'new', error: 'offline' }] });
+    await openFiles();
+    mocks.drop!({ payload: { type: 'drop', paths: ['C:/uploads/new'] } });
+    await waitFor(() => expect(notificationStore.entries).toHaveLength(1));
+    expect(notificationStore.entries[0].type).toBe('error');
+    expect(notificationStore.entries[0].text).toContain('offline');
+    expect(notificationStore.entries[0].action).toBeUndefined();
   });
 
-  it('leaves settled tasks off the row', async () => {
-    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
-    mocks.loadUserPreference.mockResolvedValue(null);
-    mocks.getDownloadTasks.mockResolvedValue([]);
-
-    const { container } = render(FilesPage);
-    flushSync();
-    await waitFor(() => {
-      expect(container.querySelector('.file-table-loading')).toBeNull();
+  it('only reports errors when a multiple-object selection accepts one task', async () => {
+    vi.spyOn(uploadStore, 'addBatch').mockResolvedValue({
+      tasks: [{ upload_id: 'accepted' } as UploadTaskDto], failed: [{ id: 'failed', error: 'offline' }],
     });
+    await openFiles();
+    mocks.drop!({ payload: { type: 'drop', paths: ['C:/uploads/one', 'C:/uploads/two'] } });
+    await waitFor(() => expect(notificationStore.entries).toHaveLength(1));
+    expect(notificationStore.entries[0].type).toBe('error');
+    expect(notificationStore.entries[0].text).toContain('offline');
+  });
 
-    downloadStore.upsert(downloadTask({ file_id: 'doc-1', status: 'completed', progress: 1 }));
-    flushSync();
+  it('reports the actual accepted count alongside partial enqueue failures for multiple accepted tasks', async () => {
+    vi.spyOn(uploadStore, 'addBatch').mockResolvedValue({
+      tasks: [{ upload_id: 'one' }, { upload_id: 'two' }] as UploadTaskDto[], failed: [{ id: 'failed', error: 'offline' }],
+    });
+    await openFiles();
+    mocks.drop!({ payload: { type: 'drop', paths: ['C:/uploads/one', 'C:/uploads/two', 'C:/uploads/three'] } });
+    await waitFor(() => expect(notificationStore.entries).toHaveLength(2));
+    expect(notificationStore.entries.find((entry) => entry.type === 'success')).toMatchObject({
+      text: 'Added 2 uploads. Manage them in Transfers.', action: { label: 'View transfers' },
+    });
+    expect(notificationStore.entries.find((entry) => entry.type === 'error')?.text).toContain('offline');
+  });
+});
 
-    const row = container.querySelector('[data-selection-key="document:doc-1"]');
-    expect(row!.classList.contains('file-table-row--transferring')).toBe(false);
+describe('background directory updates', () => {
+  it('waits for explicit pagination to finish before refreshing and uses the latest chosen sort', async () => {
+    const foreground = deferredPage();
+    const background = deferredPage();
+    mocks.listDirectoryPage.mockResolvedValueOnce(page(['alpha'], 'next')).mockReturnValueOnce(foreground.promise)
+      .mockReturnValueOnce(background.promise);
+    const { container } = await openFiles();
+    await uploadCompleted();
+    expect(mocks.listDirectoryPage).toHaveBeenCalledTimes(2);
+    foreground.resolve(page(['beta']));
+    await waitFor(() => expect(mocks.listDirectoryPage).toHaveBeenCalledTimes(3));
+    await fireEvent.click(container.querySelector('[data-sort-item]')!);
+    background.resolve(page(['alpha', 'gamma', 'beta']));
+    await screen.findByText('gamma.txt');
+    const names = [...container.querySelectorAll('[data-file-drag-handle]')].map((element) => element.textContent);
+    expect(names).toEqual(['gamma.txt', 'beta.txt', 'alpha.txt']);
+  });
+
+  it('keeps rows, selection, focus and the viewport while collecting pages, then reconciles selection', async () => {
+    const { container } = await openFiles();
+    const alpha = screen.getByText('alpha.txt').closest<HTMLElement>('[data-file-row-index]')!;
+    await fireEvent.click(alpha);
+    alpha.focus();
+    const viewport = container.querySelector<HTMLElement>('.file-table-scroll-viewport')!;
+    viewport.scrollTop = 40;
+    const first = deferredPage();
+    const last = deferredPage();
+    mocks.listDirectoryPage.mockReturnValueOnce(first.promise).mockReturnValueOnce(last.promise);
+    await uploadCompleted();
+    expect(screen.getByText('alpha.txt')).toBeTruthy();
+    expect(alpha.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(alpha);
+    expect(viewport.scrollTop).toBe(40);
+    expect(screen.queryByText('Loading directory…')).toBeNull();
+    first.resolve(page(['alpha', 'gamma'], 'next'));
+    await waitFor(() => expect(mocks.listDirectoryPage).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText('gamma.txt')).toBeNull();
+    last.resolve(page(['delta']));
+    await screen.findByText('gamma.txt');
+    expect(screen.queryByText('beta.txt')).toBeNull();
+    expect(alpha.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(alpha);
+    expect(screen.getByText('alpha.txt').closest('[data-file-row-index]')).toBe(alpha);
+    mocks.listDirectoryPage.mockResolvedValueOnce(page(['gamma']));
+    await uploadCompleted();
+    await waitFor(() => expect(screen.queryByText('alpha.txt')).toBeNull());
+    expect(container.querySelector('[data-file-row-index][aria-pressed="true"]')).toBeNull();
+    expect(container.querySelector('[data-file-row-index][tabindex="0"]')).toBeTruthy();
+  });
+
+  it('retains the old list on failure and offers a background retry', async () => {
+    await openFiles();
+    mocks.listDirectoryPage.mockRejectedValueOnce(new Error('offline'));
+    await uploadCompleted();
+    // The custom build also reports detected server changes as an info toast, so
+    // assert on the warning this test is about.
+    await waitFor(() => expect(notificationStore.entries.filter((entry) => entry.type === 'warning')).toHaveLength(1));
+    expect(screen.getByText('alpha.txt')).toBeTruthy();
+    const warning = notificationStore.entries.find((entry) => entry.type === 'warning')!;
+    expect(warning).toMatchObject({ action: { label: 'Retry' } });
+    const pending = deferredPage();
+    mocks.listDirectoryPage.mockReturnValueOnce(pending.promise);
+    warning.action!.onClick();
+    await tick();
+    expect(screen.getByText('alpha.txt')).toBeTruthy();
+    pending.resolve(page(['retry']));
+    await screen.findByText('retry.txt');
+    // The custom build also reports detected server changes as an info toast.\r
+    expect(notificationStore.entries.filter((entry) => entry.type === 'warning')).toHaveLength(0);
+  });
+
+  it('keeps explicit refresh loading feedback and ignores a late background response', async () => {
+    await openFiles();
+    const background = deferredPage();
+    const explicit = deferredPage();
+    mocks.listDirectoryPage.mockReturnValueOnce(background.promise).mockReturnValueOnce(explicit.promise);
+    await uploadCompleted();
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(screen.queryByText('alpha.txt')).toBeNull();
+    expect(mocks.listDirectoryPage).toHaveBeenCalledTimes(3);
+    explicit.resolve(page(['explicit']));
+    await screen.findByText('explicit.txt');
+    background.resolve(page(['stale']));
+    await tick();
+    await tick();
+    expect(screen.queryByText('stale.txt')).toBeNull();
+    expect(screen.getByText('explicit.txt')).toBeTruthy();
+  });
+
+  it('discards background results after navigating to another directory', async () => {
+    const initial = page(['alpha']);
+    initial.folders = [{ id: 'folder', name: 'Child', created_time: null }];
+    mocks.listDirectoryPage.mockResolvedValueOnce(initial);
+    await openFiles();
+    const background = deferredPage();
+    mocks.listDirectoryPage.mockReturnValueOnce(background.promise).mockResolvedValueOnce(page(['child']));
+    await uploadCompleted();
+    await fireEvent.doubleClick(screen.getByText('Child'));
+    await screen.findByText('child.txt');
+    background.resolve(page(['stale']));
+    await tick();
+    await tick();
+    expect(screen.queryByText('stale.txt')).toBeNull();
+    expect(screen.getByText('child.txt')).toBeTruthy();
+  });
+
+  it('clears the scoped retry notification on navigation and cancels active work on unmount', async () => {
+    const initial = page(['alpha']);
+    initial.folders = [{ id: 'folder', name: 'Child', created_time: null }];
+    mocks.listDirectoryPage.mockResolvedValueOnce(initial);
+    const { unmount } = await openFiles();
+    mocks.listDirectoryPage.mockRejectedValueOnce(new Error('offline'));
+    await uploadCompleted();
+    expect(notificationStore.entries).toHaveLength(1);
+    mocks.listDirectoryPage.mockResolvedValueOnce(page(['child']));
+    await fireEvent.doubleClick(screen.getByText('Child'));
+    await screen.findByText('child.txt');
+    expect(notificationStore.entries).toHaveLength(0);
+    const pending = deferredPage();
+    mocks.listDirectoryPage.mockReturnValueOnce(pending.promise);
+    mocks.events.get('cfms:upload-task')!({ payload: { status: 'completed', target_parent_id: 'folder' } });
+    await new Promise((resolve) => setTimeout(resolve, 280));
+    unmount();
+    pending.reject(new Error('late error'));
+    await tick();
+    await tick();
+    expect(notificationStore.entries).toHaveLength(0);
+  });
+
+  it('uses the access-denied state when background refresh discovers revoked permission', async () => {
+    await openFiles();
+    mocks.listDirectoryPage.mockRejectedValueOnce(new Error('Access denied: permission revoked'));
+    await uploadCompleted();
+    await waitFor(() => expect(screen.queryByText('alpha.txt')).toBeNull());
+    expect(screen.getByText('You do not currently have permission to view the contents of this directory.')).toBeTruthy();
+    // The custom build also reports detected server changes as an info toast.\r
+    expect(notificationStore.entries.filter((entry) => entry.type === 'warning' || entry.type === 'error')).toHaveLength(0);
   });
 });

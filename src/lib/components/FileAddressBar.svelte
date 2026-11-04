@@ -32,7 +32,7 @@
   let editing = $state(false);
   let value = $state('');
   let input = $state<HTMLInputElement | null>(null);
-  let breadcrumbViewport = $state<HTMLDivElement | null>(null);
+  let form = $state<HTMLFormElement | null>(null);
 
   export async function beginEdit() {
     if (!lookupEnabled || editing || busy) return;
@@ -54,7 +54,13 @@
   }
 
   function submit() {
+    if (busy) return;
     onSubmit(value);
+  }
+
+  function clearInput() {
+    value = '';
+    input?.focus();
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -64,7 +70,9 @@
   }
 
   function handleBlankPointer(event: PointerEvent) {
-    if (event.target === event.currentTarget) void beginEdit();
+    if (event.button > 0 || !(event.target instanceof Element)) return;
+    if (event.target.closest('button, [data-breadcrumb-segment], [data-breadcrumb-separator]')) return;
+    void beginEdit();
   }
 
   $effect(() => {
@@ -72,12 +80,13 @@
   });
 
   $effect(() => {
-    // Re-run after navigation and after leaving the editor. Reveal the current
-    // directory while keeping ancestors available through horizontal scrolling.
-    segments;
-    if (!editing) void tick().then(() => {
-      if (breadcrumbViewport) breadcrumbViewport.scrollLeft = breadcrumbViewport.scrollWidth;
-    });
+    if (!editing || !form) return;
+    const editingForm = form;
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      if (editing && !event.composedPath().includes(editingForm)) cancelEdit();
+    };
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
   });
 </script>
 
@@ -88,7 +97,7 @@
   aria-busy={busy}
 >
   {#if editing}
-    <form class="file-address__form cfms-field-surface" aria-label={$t('files.addressLabel')} onsubmit={(event) => { event.preventDefault(); submit(); }}>
+    <form bind:this={form} class="file-address__form cfms-field-surface" aria-label={$t('files.addressLabel')} onsubmit={(event) => { event.preventDefault(); submit(); }}>
       <input
         bind:this={input}
         bind:value
@@ -106,16 +115,15 @@
         placeholder={$t('files.addressPlaceholder')}
         onkeydown={handleKeydown}
       />
-      <button class="file-address__action" type="button" disabled={busy} title={$t('common.cancel')} aria-label={$t('common.cancel')} onclick={cancelEdit}>
-        <Icon name="close" size="18px" />
-      </button>
-      <button class="file-address__action file-address__action--submit" type="submit" disabled={busy} title={$t('files.addressGo')} aria-label={$t('files.addressGo')}>
-        {#if busy}
+      {#if busy}
+        <span class="file-address__progress">
           <ProgressRing size={17} strokeWidth={2.5} label={$t('files.addressResolving')} tone="inherit" />
-        {:else}
-          <Icon name="done" size="18px" />
-        {/if}
-      </button>
+        </span>
+      {:else if value.length > 0}
+        <button class="file-address__action" type="button" title={$t('common.clear')} aria-label={$t('common.clear')} onclick={clearInput}>
+          <Icon name="close" size="18px" />
+        </button>
+      {/if}
     </form>
     <span
       id="file-address-supporting-text"
@@ -127,22 +135,22 @@
       {error ?? $t('files.addressHelp')}
     </span>
   {:else}
-    <div class="file-address__view cfms-field-surface" role="group" aria-label={$t('files.addressLabel')} onpointerup={handleBlankPointer}>
-      <div bind:this={breadcrumbViewport} class="file-address__breadcrumb">
-        <Breadcrumb {segments} {onNavigate} />
+    <div class="file-address__view cfms-field-surface" class:file-address__view--editable={lookupEnabled && !busy} role="group" aria-label={$t('files.addressLabel')} onpointerup={handleBlankPointer}>
+      <div class="file-address__breadcrumb">
+        <Breadcrumb {segments} {onNavigate} collapseOverflow />
       </div>
       {#if lookupEnabled}
         <button
-          class="file-address__action file-address__edit"
+          class="file-address__blank"
           type="button"
           title={$t('files.editAddress')}
           aria-label={$t('files.editAddress')}
           aria-keyshortcuts="Alt+D F4"
           disabled={busy}
           onclick={() => beginEdit()}
-        >
-          <Icon name="edit" size="17px" />
-        </button>
+        ></button>
+      {:else}
+        <span class="file-address__blank" aria-hidden="true"></span>
       {/if}
     </div>
   {/if}
@@ -169,20 +177,15 @@
     background: transparent;
   }
 
-  .file-address__view {
+  .file-address__view--editable {
     cursor: text;
   }
 
   .file-address__breadcrumb {
     min-width: 0;
     flex: 1;
-    overflow-x: auto;
-    padding-inline: 8px 4px;
-    scrollbar-width: none;
-  }
-
-  .file-address__breadcrumb::-webkit-scrollbar {
-    display: none;
+    overflow: hidden;
+    padding-inline: 0 4px;
   }
 
   .file-address__form {
@@ -215,7 +218,8 @@
     opacity: 1;
   }
 
-  .file-address__action {
+  .file-address__action,
+  .file-address__progress {
     display: inline-grid;
     width: calc(var(--file-address-height) - 2px);
     height: calc(var(--file-address-height) - 2px);
@@ -225,6 +229,9 @@
     border-radius: var(--borderRadiusMedium);
     color: var(--explorer-text-muted);
     background: transparent;
+  }
+
+  .file-address__action {
     transition:
       color var(--motion-duration-short4) var(--motion-easing-standard),
       background var(--motion-duration-short4) var(--motion-easing-standard),
@@ -245,17 +252,20 @@
     transform: none;
   }
 
-  .file-address__action:disabled {
-    opacity: 0.55;
+  .file-address__blank {
+    flex: none;
+    align-self: stretch;
+    width: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--borderRadiusMedium);
+    background: transparent;
+    cursor: inherit;
   }
 
-  .file-address__action--submit {
-    color: var(--color-md3-on-primary-container);
-    background: var(--color-md3-primary-container);
-  }
-
-  .file-address__edit {
-    margin-inline-end: 1px;
+  .file-address__blank:focus-visible {
+    outline: 2px solid var(--explorer-accent);
+    outline-offset: -2px;
   }
 
   .file-address__support {
@@ -278,6 +288,8 @@
     .file-address__input {
       font-size: 16px;
     }
+
+    .file-address__blank { width: 44px; }
   }
 
   @media (forced-colors: active) {
@@ -285,6 +297,7 @@
     .file-address__form { color: FieldText; background: Field; border-color: ButtonText; }
     .file-address__form:focus-within { outline: 2px solid Highlight; outline-offset: -2px; box-shadow: none; }
     .file-address__input { color: FieldText; }
+    .file-address__blank:focus-visible { outline-color: Highlight; }
   }
 
   @media (prefers-reduced-motion: reduce) {

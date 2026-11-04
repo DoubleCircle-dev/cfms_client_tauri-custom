@@ -1,11 +1,12 @@
 {
   "name": "cfms-client-tauri",
-  "version": "0.57.0-custom-0.3",
+  "version": "0.58.0-custom-0.1",
   "description": "",
   "type": "module",
   "scripts": {
     "prepare": "node scripts/setup-git-merge-drivers.mjs",
     "setup:git": "node scripts/setup-git-merge-drivers.mjs",
+    "merge:prepare": "node scripts/prepare-upstream-merge.mjs",
     "test:merge-drivers": "node --test scripts/git-merge-version.test.mjs",
     "dev": "vite dev",
     "dev:bridge": "node scripts/dev-ipc-bridge.mjs",

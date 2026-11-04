@@ -244,7 +244,9 @@ async fn download_document_to(
         .await
         .map_err(|error| error.to_string())?;
 
-    let transfer_conn = create_transfer_connection(&state.inner).await?;
+    let transfer_conn = create_transfer_connection(&state.inner)
+        .await
+        .map_err(|error| format_transport_error(&error))?;
     let progress = |_phase: cfms_core::DownloadPhase,
                     _progress: f64,
                     _message: &str,
