@@ -22,8 +22,9 @@ mod wasm_runtime;
 
 pub const HOST_API_VERSION: &str = "1.0.0";
 pub const WASM_HOST_API_VERSION: &str = "api-custom-v2";
+pub const MAINTAINER_EXTENSION_KEY_ID: &str = "cfms-plugin";
 pub const DEFAULT_CATALOG_URL: &str =
-    "https://cfms-dev.github.io/cfms_client_extensions/v1/catalog.json";
+    "https://github.com/DoubleCircle-dev/cfms-plugin/releases/download/plugins/catalog.json";
 const MAX_PACKAGE_BYTES: usize = 20 * 1024 * 1024;
 const MAX_EXPANDED_BYTES: u64 = 50 * 1024 * 1024;
 const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
@@ -124,6 +125,8 @@ pub enum BackgroundTrigger {
 pub struct ExtensionInstallation {
     pub manifest: ExtensionManifest,
     pub package_digest: String,
+    #[serde(default)]
+    pub signing_key_id: Option<String>,
     pub install_epoch: String,
     pub state: String,
     pub installed_at: i64,
@@ -175,6 +178,7 @@ struct ValidatedPackage {
     manifest: ExtensionManifest,
     files: BTreeMap<String, Vec<u8>>,
     package_digest: String,
+    signing_key_id: String,
     expanded_bytes: u64,
 }
 
@@ -247,10 +251,11 @@ impl ExtensionStore {
             let (id, version, digest, epoch, state, installed_at, previous, last_error) =
                 row.map_err(|e| format!("Failed to read extension row: {e}"))?;
             let version_dir = self.package_dir(&id, &version)?;
-            let manifest = self.validate_installed_dir(&version_dir)?;
+            let (manifest, signing_key_id) = self.validate_installed_dir(&version_dir)?;
             result.push(ExtensionInstallation {
                 manifest,
                 package_digest: digest,
+                signing_key_id: Some(signing_key_id),
                 install_epoch: epoch,
                 state,
                 installed_at,
@@ -430,6 +435,7 @@ impl ExtensionStore {
         Ok(ExtensionInstallation {
             manifest: validated.manifest,
             package_digest: validated.package_digest,
+            signing_key_id: Some(validated.signing_key_id),
             install_epoch: epoch,
             state: "installed".into(),
             installed_at: now,
@@ -838,11 +844,15 @@ impl ExtensionStore {
             manifest,
             files,
             package_digest,
+            signing_key_id: signature.key_id,
             expanded_bytes,
         })
     }
 
-    fn validate_installed_dir(&self, version_dir: &Path) -> Result<ExtensionManifest, String> {
+    fn validate_installed_dir(
+        &self,
+        version_dir: &Path,
+    ) -> Result<(ExtensionManifest, String), String> {
         let index_bytes = fs::read(version_dir.join("META-INF/files.json"))
             .map_err(|e| format!("Installed extension is missing its file index: {e}"))?;
         let signature_bytes = fs::read(version_dir.join("META-INF/signature.ed25519"))
@@ -888,7 +898,7 @@ impl ExtensionStore {
         }
         let manifest = read_manifest(version_dir)?;
         self.validate_manifest(&manifest)?;
-        Ok(manifest)
+        Ok((manifest, signature.key_id))
     }
 
     fn validate_manifest(&self, manifest: &ExtensionManifest) -> Result<(), String> {
@@ -1020,6 +1030,7 @@ fn bundled_installations() -> Vec<ExtensionInstallation> {
             runtime: None,
         },
         package_digest: "bundled".into(),
+        signing_key_id: None,
         install_epoch: format!("bundled:{}", env!("CARGO_PKG_VERSION")),
         state: "bundled".into(),
         installed_at: 0,
@@ -2420,6 +2431,16 @@ mod tests {
         let store = store(&temp, &signing);
         let installed = store.install_package(&package(&signing, false)).unwrap();
         assert_eq!(installed.manifest.id, "org.cfms.file-stats");
+        assert_eq!(installed.signing_key_id.as_deref(), Some("test"));
+        assert_eq!(
+            store
+                .list_installed()
+                .unwrap()
+                .iter()
+                .find(|item| item.manifest.id == "org.cfms.file-stats")
+                .and_then(|item| item.signing_key_id.as_deref()),
+            Some("test")
+        );
         assert!(
             store
                 .list_installed()

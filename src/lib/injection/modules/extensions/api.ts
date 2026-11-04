@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export const DECLARATIVE_HOST_API_VERSION = '1.0.0';
 export const WASM_HOST_API_VERSION = 'api-custom-v2';
+export const MAINTAINER_EXTENSION_KEY_ID = 'cfms-plugin';
 
 export type ExtensionCapability =
   | 'files.metadata.read'
@@ -55,6 +56,7 @@ export interface ExtensionManifest {
 export interface ExtensionInstallation {
   manifest: ExtensionManifest;
   package_digest: string;
+  signing_key_id: string | null;
   install_epoch: string;
   state: 'installed' | 'error' | 'suspended' | string;
   installed_at: number;
@@ -191,8 +193,11 @@ export function refreshExtensionCatalog(): Promise<ExtensionCatalog> {
   return invoke('refresh_extension_catalog');
 }
 
-export function installExtensionFromCatalog(extensionId: string): Promise<ExtensionInstallation> {
-  return invoke('install_extension_from_catalog', { extensionId });
+export function installExtensionFromCatalog(
+  extensionId: string,
+  allowThirdParty = false,
+): Promise<ExtensionInstallation> {
+  return invoke('install_extension_from_catalog', { extensionId, allowThirdParty });
 }
 
 export function rollbackExtension(extensionId: string): Promise<ExtensionInstallation> {

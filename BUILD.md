@@ -30,11 +30,13 @@ update source at runtime. Keep the Custom private key separate from upstream key
 
 ### Extension signing key ring
 
-Official `.cfmsext` packages use a separate Ed25519 trust domain from full client updates. Set the
-repository variable `CFMS_EXTENSION_TRUSTED_KEYS` before producing a release. Its format is
-`key-id:64-hex-public-key` with comma-separated entries during key rotation. The release workflow
-injects this public key ring at compile time; builds without it deliberately reject all installable
-packages while keeping bundled optional modules available.
+Custom `.cfmsext` packages use a separate Ed25519 trust domain from full client updates. Set the
+release workflow's built-in `cfms-plugin` key. It trusts the package and catalog signatures
+published by `DoubleCircle-dev/cfms-plugin`. The key ring is injected at compile time. To trust
+additional publishers, set the repository variable `CFMS_EXTENSION_TRUSTED_KEYS` to comma-separated
+`key-id:64-hex-public-key` entries; the workflow appends these to the built-in key. Builds without
+any configured trusted key deliberately reject all installable packages while keeping bundled
+optional modules available.
 
 Keep the corresponding 32-byte private seed only in the protected extension publishing repository
 as `CFMS_EXTENSION_SIGNING_KEY`. Packaging and catalog-signing commands are documented in

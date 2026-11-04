@@ -12,6 +12,7 @@ import { tools } from './tools';
 import { desktopShell } from './desktop-shell';
 import { fileSync } from './file-sync';
 import { runtimeServices } from './runtime-services';
+import { extensions } from './extensions/contribution';
 
 export const CUSTOM_MODULES: readonly CustomModule[] = [
   customMessages,
@@ -21,4 +22,5 @@ export const CUSTOM_MODULES: readonly CustomModule[] = [
   desktopShell,
   fileSync,
   runtimeServices,
+  extensions,
 ];

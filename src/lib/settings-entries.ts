@@ -1,6 +1,5 @@
 import type { IconName } from '$lib/icons';
-import { USER_EXTENSIONS_ENABLED } from '$lib/extensions/feature-flags';
-import { mergeSettingsEntries } from '$lib/injection/registry';
+import { isCustomFeatureEnabled, mergeSettingsEntries } from '$lib/injection/registry';
 import { isMobilePlatform } from '$lib/platform';
 
 type SettingsPlatformScope = 'all' | 'mobile' | 'desktop';
@@ -30,8 +29,8 @@ export interface SettingsEntry {
   tone?: 'default' | 'danger';
   requiresAuth?: boolean;
   platformScope?: SettingsPlatformScope;
-  /** Fork-only gate: hidden while the extension release gate is off. */
-  feature?: 'extensions';
+  /** Custom injection feature gate. */
+  feature?: string;
 }
 
 interface SettingsEntryVisibilityContext {
@@ -147,16 +146,6 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = mergeSettingsEntries([
     tone: 'danger',
   },
   {
-    // Kept in the catalog so the extension settings implementation can be
-    // restored without recreating its navigation metadata.
-    labelKey: 'settings.extensions.title',
-    descriptionKey: 'settings.extensions.description',
-    icon: 'extensions',
-    href: '/home/settings/custom-extensions',
-    group: 'maintenance',
-    feature: 'extensions',
-  },
-  {
     labelKey: 'settings.updates.title',
     descriptionKey: 'settings.updates.description',
     icon: 'browserUpdated',
@@ -195,7 +184,7 @@ export function isSettingsEntryVisible(
   context: SettingsEntryVisibilityContext,
 ): boolean {
   if (entry.requiresAuth && !context.isLoggedIn) return false;
-  if (entry.feature === 'extensions' && !USER_EXTENSIONS_ENABLED) return false;
+  if (entry.feature && !isCustomFeatureEnabled(entry.feature)) return false;
   const isMobile = context.isMobile ?? isMobilePlatform();
   if (entry.platformScope === 'mobile') return isMobile;
   if (entry.platformScope === 'desktop') return !isMobile;

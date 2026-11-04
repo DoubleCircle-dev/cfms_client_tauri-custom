@@ -128,3 +128,39 @@ V2 package source directories may also contain the manifest-declared `wasm/*.was
 The exact bytes of `catalog.json` must be published with the generated `catalog.json.sig`.
 Changing whitespace after signing invalidates the signature. Production clients do not have an
 unsigned-extension bypass.
+
+## Publishing the custom-v2 catalog
+
+The custom client reads the signed catalog from the `plugins` release in
+`DoubleCircle-dev/cfms-plugin`:
+
+`https://github.com/DoubleCircle-dev/cfms-plugin/releases/download/plugins/catalog.json`
+
+Attach `catalog.json`, `catalog.json.sig`, and each `.cfmsext` package as release assets. The
+client fetches the detached signature from the catalog URL with `.sig` appended. Each catalog
+entry's `download_url` must point to its corresponding HTTPS package asset, for example:
+
+`https://github.com/DoubleCircle-dev/cfms-plugin/releases/download/plugins/<extension-id>-<version>.cfmsext`
+
+The catalog itself keeps `schema_version: 1`; a WASM v2 extension selects its runtime with
+`host_api: "api-custom-v2"`.
+
+The custom release workflow trusts the publisher key below at build time:
+
+```powershell
+cfms-plugin:cf721edd3d63a06f07c1be2099e7dfbf407c11a4726ad422415314ce6ab961de
+```
+
+Use `cfms-plugin` as the key ID when signing the packages and catalog. The release workflow also
+appends any additional trusted publisher keys configured in the repository variable
+`CFMS_EXTENSION_TRUSTED_KEYS`, whose format is comma-separated
+`key-id:64-hex-public-key` entries. Keep the private signing key only in the protected publishing
+environment. After changing the catalog, sign its exact final bytes and upload the package assets,
+`catalog.json`, and `catalog.json.sig` to the `plugins` release. Do not edit the catalog after
+signing; that invalidates its signature.
+
+The client identifies a package's source by its verified signing key ID, not by the self-reported
+`manifest.publisher` value. Packages signed by `cfms-plugin` may update automatically when they
+request no new capabilities. Packages signed by any other trusted key require explicit user
+confirmation for each catalog install or update; their updates are never installed in the
+background. Enabling an updated package still requires the account's capability authorization.

@@ -5,7 +5,7 @@ import {
   readExtensionWorkflow,
   type DeclarativeWorkflow,
   type ExtensionCapability,
-} from '$lib/extensions/api';
+} from '$lib/injection/modules/extensions/api';
 import { notificationStore } from '$lib/stores.svelte';
 
 const MAX_STEPS = 100;

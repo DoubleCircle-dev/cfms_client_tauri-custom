@@ -32,7 +32,7 @@ import type {
 import {
   DECLARATIVE_HOST_API_VERSION,
   WASM_HOST_API_VERSION,
-} from '$lib/extensions/api';
+} from '$lib/injection/modules/extensions/api';
 import { authStore, serverStateStore } from '$lib/stores.svelte';
 
 type MockArgs = Record<string, unknown>;

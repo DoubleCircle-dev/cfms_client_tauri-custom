@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { USER_EXTENSIONS_ENABLED } from '$lib/extensions/feature-flags';
+import { isCustomFeatureEnabled } from '$lib/injection/registry';
 import { getVisibleSettingsEntries, getVisibleSettingsGroups } from './settings-entries';
 
 describe('settings entry visibility', () => {
@@ -77,7 +77,7 @@ describe('settings entry visibility', () => {
     const entries = getVisibleSettingsEntries({ isLoggedIn: true, isMobile: false });
     const hasEntry = entries.some((entry) => entry.href === '/home/settings/custom-extensions');
 
-    expect(hasEntry).toBe(USER_EXTENSIONS_ENABLED);
+    expect(hasEntry).toBe(isCustomFeatureEnabled('extensions'));
   });
 
   it('offers window and tray settings on desktop only, signed in or not', () => {

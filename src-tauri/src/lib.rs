@@ -35,7 +35,7 @@ use tauri_plugin_log::{Target, TargetKind};
 use tokio::sync::watch;
 
 use cfms_service::db::settings::SettingsStore;
-use cfms_service::extensions_system::ExtensionStore;
+use cfms_service::injection::extensions_system::ExtensionStore;
 use cfms_service::service::manager::ServiceManager;
 use cfms_service::services::download_queue::{ActiveRegistry, QueueState};
 use cfms_service::services::upload_queue::UploadQueueState;

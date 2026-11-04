@@ -6,6 +6,7 @@ import {
 import { moveAppToBackground, exitAppAfterLauncherTransition } from '$lib/api/mobile';
 import { appLockStore } from '$lib/app-lock.svelte';
 import { authStore } from '$lib/stores.svelte';
+import { getCustomParentRoute } from '$lib/injection/registry';
 
 export type { RootBackButtonBehavior } from '$lib/api/settings';
 
@@ -20,7 +21,6 @@ const HOME_SECONDARY_PARENT_ROUTES = new Map([
   ['/home/manage', '/home/overview'],
   ['/home/settings', '/home/overview'],
   ['/home/trash', '/home/overview'],
-  ['/home/custom-extensions/view', '/home/overview'],
 ]);
 
 const routeHistory: string[] = [];
@@ -70,7 +70,7 @@ export function parentRouteFor(pathname: string): string | null {
     return null;
   }
 
-  const mappedParent = HOME_SECONDARY_PARENT_ROUTES.get(path);
+  const mappedParent = HOME_SECONDARY_PARENT_ROUTES.get(path) ?? getCustomParentRoute(path);
   if (mappedParent) {
     return mappedParent;
   }

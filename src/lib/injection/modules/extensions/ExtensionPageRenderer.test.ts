@@ -3,16 +3,16 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { DeclarativePage } from '$lib/extensions/api';
+import type { DeclarativePage } from '$lib/injection/modules/extensions/api';
 
-vi.mock('$lib/extensions/api', () => ({
+vi.mock('$lib/injection/modules/extensions/api', () => ({
   readExtensionPage: vi.fn(),
 }));
-vi.mock('$lib/extensions/workflows', () => ({
+vi.mock('$lib/injection/modules/extensions/workflows', () => ({
   runExtensionWorkflow: vi.fn(),
 }));
 
-import { readExtensionPage } from '$lib/extensions/api';
+import { readExtensionPage } from '$lib/injection/modules/extensions/api';
 import ExtensionPageRenderer from './ExtensionPageRenderer.svelte';
 
 afterEach(() => {

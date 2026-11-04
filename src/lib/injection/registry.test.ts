@@ -19,9 +19,11 @@ vi.mock('$lib/api', () => ({
 
 import {
   disposeCustomModules,
+  getCustomParentRoute,
   getCustomNavigationItems,
   getCustomPublicUtilityRoutes,
   getCustomRouteTitle,
+  isCustomFeatureEnabled,
   mergeCustomMessages,
   mergeSettingsEntries,
   registerCustomModule,
@@ -55,7 +57,13 @@ describe('built-in contributions', () => {
 
   it('contributes the window and file-sync settings pages', () => {
     expect(mergeSettingsEntries([]).map((item) => item.href))
-      .toEqual(['/home/settings/window', '/home/settings/file-sync']);
+      .toEqual(['/home/settings/window', '/home/settings/file-sync', '/home/settings/custom-extensions']);
+  });
+
+  it('registers extensions through the feature injection', () => {
+    expect(isCustomFeatureEnabled('extensions')).toBe(true);
+    expect(getCustomParentRoute('/home/custom-extensions/view')).toBe('/home/overview');
+    expect(getCustomParentRoute('/home/files')).toBeUndefined();
   });
 
   it('titles only the routes it owns', () => {

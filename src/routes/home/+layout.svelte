@@ -35,8 +35,8 @@
     registerKeyboardCommands,
   } from '$lib/keyboard';
   import { supportsKeyboardShortcuts } from '$lib/platform';
-  import { extensionsStore } from '$lib/extensions/store.svelte';
-  import { USER_EXTENSIONS_ENABLED } from '$lib/extensions/feature-flags';
+  import { extensionsStore } from '$lib/injection/modules/extensions/store.svelte';
+  import { isCustomFeatureEnabled } from '$lib/injection/registry';
   import { isIconName } from '$lib/injection/icons';
   import { shouldOfferConnectionReturn } from '$lib/public-utility-navigation';
   import {
@@ -126,7 +126,7 @@
     ...customNavigation.top,
     // Keep dynamic extension navigation implemented while the feature remains
     // intentionally absent from user-reachable surfaces.
-    ...(USER_EXTENSIONS_ENABLED
+    ...(isCustomFeatureEnabled('extensions')
       ? extensionsStore.enabledInstallations.flatMap((installation) =>
           installation.manifest.entrypoints.navigation.map((entry) => ({
             id: `extension:${installation.manifest.id}:${entry.id}`,
@@ -194,7 +194,7 @@
   });
 
   $effect(() => {
-    if (!USER_EXTENSIONS_ENABLED) return;
+    if (!isCustomFeatureEnabled('extensions')) return;
     const scope = authStore.isLoggedIn && !authStore.postLoginPending && authStore.username
       ? `${serverStateStore.remoteAddress ?? ''}:${authStore.username}`
       : null;

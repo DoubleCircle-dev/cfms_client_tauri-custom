@@ -10,6 +10,7 @@ import { CUSTOM_MODULES } from './modules/index';
 import type {
   CustomModule,
   CustomNavigationItem,
+  CustomParentRoute,
   CustomRouteTitle,
   CustomSettingsEntry,
   MessageCatalog,
@@ -36,6 +37,10 @@ export function getCustomModules(): readonly CustomModule[] {
 
 export function getCustomSettingsEntries(): CustomSettingsEntry[] {
   return modules.flatMap((module) => [...(module.settingsEntries ?? [])]);
+}
+
+export function isCustomFeatureEnabled(feature: string): boolean {
+  return modules.some((module) => module.features?.includes(feature));
 }
 
 /**
@@ -67,6 +72,14 @@ export function getCustomRouteTitle(pathname: string): string | undefined {
   for (const module of modules) {
     const match = module.routeTitles?.find((title) => title.path === pathname);
     if (match) return match.titleKey;
+  }
+  return undefined;
+}
+
+export function getCustomParentRoute(pathname: string): string | undefined {
+  for (const module of modules) {
+    const match = module.parentRoutes?.find((route) => route.path === pathname);
+    if (match) return match.parent;
   }
   return undefined;
 }
@@ -140,6 +153,7 @@ export function disposeCustomModules(): void {
 export type {
   CustomModule,
   CustomNavigationItem,
+  CustomParentRoute,
   CustomRouteTitle,
   CustomSettingsEntry,
   MessageCatalog,

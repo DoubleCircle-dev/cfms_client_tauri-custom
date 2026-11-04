@@ -6,9 +6,9 @@
     type DeclarativeAction,
     type DeclarativeBlock,
     type DeclarativePage,
-  } from '$lib/extensions/api';
-  import { createExtensionStylesheet } from '$lib/extensions/styles';
-  import { runExtensionWorkflow } from '$lib/extensions/workflows';
+  } from '$lib/injection/modules/extensions/api';
+  import { createExtensionStylesheet } from '$lib/injection/modules/extensions/styles';
+  import { runExtensionWorkflow } from '$lib/injection/modules/extensions/workflows';
   import { notificationStore } from '$lib/stores.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
 

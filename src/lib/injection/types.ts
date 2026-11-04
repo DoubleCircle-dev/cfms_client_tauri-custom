@@ -64,16 +64,24 @@ export interface CustomRouteTitle {
   titleKey: string;
 }
 
+export interface CustomParentRoute {
+  path: string;
+  parent: string;
+}
+
 /** One unit of fork functionality. */
 export interface CustomModule {
   /** Unique, stable identifier used for diagnostics and tests. */
   id: string;
   messages?: CustomMessages;
+  /** Feature gates owned by this injection module. */
+  features?: readonly string[];
   settingsEntries?: readonly CustomSettingsEntry[];
   /** Extra paths served by the account-free utility shell. */
   publicUtilityRoutes?: readonly string[];
   navigationItems?: readonly CustomNavigationItem[];
   routeTitles?: readonly CustomRouteTitle[];
+  parentRoutes?: readonly CustomParentRoute[];
   /** Runs once during root-layout start-up, in registration order. */
   startup?: () => void | Promise<void>;
   /** Runs when the root layout unmounts, in reverse registration order. */

@@ -1,4 +1,4 @@
-import type { DeclarativePage, DeclarativeStyleRule } from '$lib/extensions/api';
+import type { DeclarativePage, DeclarativeStyleRule } from '$lib/injection/modules/extensions/api';
 
 const MAX_STYLES_BYTES = 16 * 1024;
 const MAX_STYLE_RULES = 64;

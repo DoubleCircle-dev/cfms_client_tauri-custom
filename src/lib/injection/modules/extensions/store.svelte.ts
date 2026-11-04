@@ -7,8 +7,9 @@ import {
   type ExtensionInstallation,
   type ExtensionCatalog,
   type ExtensionOverview,
-} from '$lib/extensions/api';
-import { runExtensionWorkflow } from '$lib/extensions/workflows';
+} from '$lib/injection/modules/extensions/api';
+import { runExtensionWorkflow } from '$lib/injection/modules/extensions/workflows';
+import { canAutoUpdateExtension } from '$lib/injection/modules/extensions/trust';
 import { notificationStore } from '$lib/stores.svelte';
 
 class ExtensionsStore {
@@ -122,6 +123,7 @@ class ExtensionsStore {
       const candidate = catalog.extensions.find((entry) =>
         entry.manifest.id === installed.manifest.id
         && !entry.revoked
+        && canAutoUpdateExtension(installed.signing_key_id, entry.key_id)
         && compareVersions(entry.manifest.version, installed.manifest.version) > 0,
       );
       if (!candidate) continue;

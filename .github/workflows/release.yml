@@ -21,6 +21,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   NDK_VERSION: "29.0.14206865"
+  CFMS_EXTENSION_TRUSTED_KEYS: "cfms-plugin:cf721edd3d63a06f07c1be2099e7dfbf407c11a4726ad422415314ce6ab961de,${{ vars.CFMS_EXTENSION_TRUSTED_KEYS }}"
 
 jobs:
   # ---------------------------------------------------------------------------
