@@ -80,6 +80,7 @@ macro_rules! invoke_handler {
             commands::read_extension_workflow,
             commands::execute_extension_module,
             commands::execute_extension_host_call,
+            commands::record_extension_schedule_run,
             commands::get_protocol_version_settings,
             commands::set_protocol_version_override,
             commands::read_server_document,

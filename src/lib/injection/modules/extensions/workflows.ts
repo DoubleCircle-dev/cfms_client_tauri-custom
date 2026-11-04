@@ -39,7 +39,9 @@ async function runWorkflowDocument(
   const context: Record<string, unknown> = { input: options.input ?? {}, results: {} };
   const includesFileUpdate = workflow.nodes.some((node) =>
     node.type === 'host_call'
-      && (node.capability === 'files.updates.check' || node.capability === 'files.sync.full'),
+      && (node.capability === 'files.updates.check'
+        || node.capability === 'files.sync.full'
+        || node.capability === 'files.sync.task'),
   );
   const deadline = Date.now() + (includesFileUpdate ? MAX_FILE_UPDATE_DURATION_MS : MAX_DURATION_MS);
   let current: string | undefined = workflow.start;
@@ -72,6 +74,26 @@ async function runWorkflowDocument(
             : `Allow extension ${extensionId} to add this download?`;
           userConfirmed = window.confirm(prompt);
           if (!userConfirmed) throw new Error('Extension file operation cancelled');
+        }
+        if (capability === 'schedules.manage') {
+          const scheduleArguments = (args && typeof args === 'object' ? args : {}) as {
+            operation?: unknown;
+            task?: { action?: unknown; update_policy?: unknown };
+          };
+          if (
+            (scheduleArguments.operation === 'create' || scheduleArguments.operation === 'update')
+            && scheduleArguments.task?.action === 'update'
+          ) {
+            if (options.background) {
+              throw new Error('Background workflows cannot create or change update schedules');
+            }
+            const mayDelete = scheduleArguments.task.update_policy === 'mirror';
+            const prompt = mayDelete
+              ? `Allow extension ${extensionId} to create a scheduled file update that may delete local files missing from the server?`
+              : `Allow extension ${extensionId} to create a scheduled file update?`;
+            userConfirmed = window.confirm(prompt);
+            if (!userConfirmed) throw new Error('Scheduled file update cancelled');
+          }
         }
         const result = await withinExecutionLimit(
           executeExtensionHostCall(extensionId, capability, args, userConfirmed),

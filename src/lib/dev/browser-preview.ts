@@ -197,6 +197,7 @@ const CONNECTION_SETTINGS: ConnectionSettings = {
 const EXTENSION_OVERVIEW: ExtensionOverview = {
   installed: [],
   accountStates: {},
+  schedules: {},
   catalog: null,
   trustedKeysConfigured: false,
   hostApiVersion: APP_VERSION,

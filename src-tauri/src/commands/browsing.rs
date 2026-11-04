@@ -80,6 +80,13 @@ pub async fn resolve_node_path(
     state: tauri::State<'_, AppHandleState>,
     path: String,
 ) -> Result<NodeLookupResponse, String> {
+    resolve_node_path_for_state(&state, path).await
+}
+
+pub(crate) async fn resolve_node_path_for_state(
+    state: &AppHandleState,
+    path: String,
+) -> Result<NodeLookupResponse, String> {
     let has_node_lookup = {
         let extension_flags = state.inner.server_extension_flags.read().await;
         supports_node_lookup(&extension_flags)

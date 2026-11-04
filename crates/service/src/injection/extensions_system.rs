@@ -40,6 +40,8 @@ const ALLOWED_CAPABILITIES: &[&str] = &[
     "files.search",
     "files.updates.check",
     "files.sync.full",
+    "files.sync.task",
+    "schedules.manage",
     "tasks.read",
     "transfers.download.enqueue",
     "account.summary.read",

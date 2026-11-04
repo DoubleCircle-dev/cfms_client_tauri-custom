@@ -15,6 +15,10 @@ pub struct ExtensionAccountStateDto {
 pub struct ExtensionOverviewDto {
     installed: Vec<cfms_service::injection::extensions_system::ExtensionInstallation>,
     account_states: std::collections::BTreeMap<String, ExtensionAccountStateDto>,
+    schedules: std::collections::BTreeMap<
+        String,
+        Vec<cfms_service::injection::extension_schedules::ScheduleTask>,
+    >,
     catalog: Option<cfms_service::injection::extensions_system::CatalogDocument>,
     trusted_keys_configured: bool,
     host_api_version: &'static str,
@@ -29,7 +33,7 @@ pub async fn get_extension_overview(
     let installed = tokio::task::spawn_blocking(move || store.list_installed())
         .await
         .map_err(|e| format!("Extension list task failed: {e}"))??;
-    let account_preferences = load_current_extension_preferences(&state).await?;
+    let (schedule_scope, account_preferences) = load_current_extension_preferences(&state).await?;
     let account_states = installed
         .iter()
         .map(|installation| {
@@ -37,7 +41,8 @@ pub async fn get_extension_overview(
                 .as_ref()
                 .and_then(|preferences| preferences.get(&installation.manifest.id));
             let revoked = state
-                .custom.extensions
+                .custom
+                .extensions
                 .revocation_reason(&installation.manifest.id, &installation.manifest.version)
                 .ok()
                 .flatten()
@@ -71,13 +76,41 @@ pub async fn get_extension_overview(
         })
         .collect();
     let catalog = state
-        .custom.extensions
+        .custom
+        .extensions
         .cached_catalog(cfms_service::injection::extensions_system::DEFAULT_CATALOG_URL)
         .unwrap_or(None);
+    let schedules = if let Some(scope) = schedule_scope {
+        let schedule_store =
+            cfms_service::injection::extension_schedules::ExtensionScheduleStore::new(
+                &state.app_data_dir,
+            );
+        let extension_ids = installed
+            .iter()
+            .map(|installation| installation.manifest.id.clone())
+            .collect::<Vec<_>>();
+        let server_hash = scope.server_hash;
+        let username = scope.username;
+        tokio::task::spawn_blocking(move || {
+            extension_ids
+                .into_iter()
+                .map(|extension_id| {
+                    schedule_store
+                        .list(&server_hash, &username, &extension_id)
+                        .map(|tasks| (extension_id, tasks))
+                })
+                .collect::<Result<std::collections::BTreeMap<_, _>, String>>()
+        })
+        .await
+        .map_err(|error| format!("Extension schedule list task failed: {error}"))??
+    } else {
+        std::collections::BTreeMap::new()
+    };
 
     Ok(ExtensionOverviewDto {
         installed,
         account_states,
+        schedules,
         catalog,
         trusted_keys_configured: state.custom.extensions.has_trusted_keys(),
         host_api_version: cfms_service::injection::extensions_system::HOST_API_VERSION,
@@ -141,7 +174,8 @@ pub async fn install_extension_from_catalog(
     #[cfg(not(target_os = "ios"))]
     {
         let catalog = match state
-            .custom.extensions
+            .custom
+            .extensions
             .cached_catalog(cfms_service::injection::extensions_system::DEFAULT_CATALOG_URL)?
         {
             Some(catalog) => catalog,
@@ -203,29 +237,45 @@ pub async fn rollback_extension(
 
 #[tauri::command]
 pub async fn uninstall_extension(
+    app_handle: tauri::AppHandle,
     state: tauri::State<'_, AppHandleState>,
     extension_id: String,
 ) -> Result<(), String> {
     let store = state.custom.extensions.clone();
-    tokio::task::spawn_blocking(move || store.uninstall(&extension_id))
-        .await
-        .map_err(|e| format!("Extension uninstall task failed: {e}"))?
+    let schedules = cfms_service::injection::extension_schedules::ExtensionScheduleStore::new(
+        &state.app_data_dir,
+    );
+    let uninstall_id = extension_id.clone();
+    tokio::task::spawn_blocking(move || {
+        store.uninstall(&uninstall_id)?;
+        schedules.delete_extension(&uninstall_id)
+    })
+    .await
+    .map_err(|e| format!("Extension uninstall task failed: {e}"))??;
+    let _ = app_handle.emit(
+        "cfms:extension-schedules-changed",
+        serde_json::json!({ "extensionId": extension_id }),
+    );
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn set_extension_enabled(
+    app_handle: tauri::AppHandle,
     state: tauri::State<'_, AppHandleState>,
     extension_id: String,
     enabled: bool,
     granted_capabilities: Vec<String>,
 ) -> Result<(), String> {
     let installation = state
-        .custom.extensions
+        .custom
+        .extensions
         .get_installed(&extension_id)?
         .ok_or_else(|| "Extension is not installed".to_string())?;
     if enabled
         && let Some(reason) = state
-            .custom.extensions
+            .custom
+            .extensions
             .revocation_reason(&installation.manifest.id, &installation.manifest.version)?
     {
         return Err(reason);
@@ -268,6 +318,10 @@ pub async fn set_extension_enabled(
         extension_id,
         enabled,
         "Extension account activation changed"
+    );
+    let _ = app_handle.emit(
+        "cfms:extension-schedules-changed",
+        serde_json::json!({ "extensionId": extension_id }),
     );
     Ok(())
 }
@@ -376,7 +430,28 @@ pub async fn execute_extension_host_call(
             .await
         }
         "files.updates.check" => {
-            let report = crate::custom::file_auto_check::check_for_extension(&app_handle, false).await?;
+            let folder_path = match arguments.get("folderPath") {
+                None | Some(serde_json::Value::Null) => None,
+                Some(serde_json::Value::String(path)) => Some(path.as_str()),
+                Some(_) => return Err("files.updates.check folderPath must be a string".into()),
+            };
+            let scope = match folder_path {
+                Some(path) => Some(resolve_extension_folder_scope(&state, path).await?),
+                None => None,
+            };
+            let quiet = match arguments.get("quiet") {
+                None => false,
+                Some(serde_json::Value::Bool(quiet)) => *quiet,
+                Some(_) => return Err("files.updates.check quiet must be a boolean".into()),
+            };
+            let report = crate::custom::file_auto_check::check_for_extension(
+                &app_handle,
+                false,
+                scope,
+                quiet,
+                false,
+            )
+            .await?;
             serde_json::to_value(report)
                 .map_err(|e| format!("Failed to serialize file update check: {e}"))
         }
@@ -384,9 +459,29 @@ pub async fn execute_extension_host_call(
             if user_confirmed != Some(true) {
                 return Err("User confirmation is required before synchronizing files".into());
             }
-            let report = crate::custom::file_auto_check::check_for_extension(&app_handle, true).await?;
+            let report = crate::custom::file_auto_check::check_for_extension(
+                &app_handle,
+                true,
+                None,
+                false,
+                true,
+            )
+            .await?;
             serde_json::to_value(report)
                 .map_err(|e| format!("Failed to serialize file synchronization: {e}"))
+        }
+        "schedules.manage" => {
+            execute_schedule_host_call(
+                &app_handle,
+                &state,
+                &extension_id,
+                arguments,
+                user_confirmed,
+            )
+            .await
+        }
+        "files.sync.task" => {
+            execute_scheduled_file_sync(&app_handle, &state, &extension_id, arguments).await
         }
         "preferences.read" => {
             let (_, preferences) = load_current_user_preferences(&state).await?;
@@ -449,6 +544,303 @@ pub async fn execute_extension_host_call(
     }
 }
 
+#[tauri::command]
+pub async fn record_extension_schedule_run(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    extension_id: String,
+    task_id: String,
+    status: String,
+    summary: Option<String>,
+) -> Result<cfms_service::injection::extension_schedules::ScheduleTask, String> {
+    ensure_extension_enabled(&state, &extension_id, Some("schedules.manage")).await?;
+    let (scope, _) = load_current_user_preferences(&state).await?;
+    let store = cfms_service::injection::extension_schedules::ExtensionScheduleStore::new(
+        &state.app_data_dir,
+    );
+    let record_extension_id = extension_id.clone();
+    let task = tokio::task::spawn_blocking(move || {
+        store.record_run(
+            &scope.server_hash,
+            &scope.username,
+            &record_extension_id,
+            &task_id,
+            &status,
+            summary,
+        )
+    })
+    .await
+    .map_err(|error| format!("Extension schedule record task failed: {error}"))??;
+    let _ = app_handle.emit(
+        "cfms:extension-schedules-changed",
+        serde_json::json!({ "extensionId": extension_id }),
+    );
+    Ok(task)
+}
+
+async fn execute_schedule_host_call(
+    app_handle: &tauri::AppHandle,
+    state: &AppHandleState,
+    extension_id: &str,
+    arguments: serde_json::Value,
+    user_confirmed: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let operation = arguments
+        .get("operation")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "schedules.manage requires an operation".to_string())?;
+    let (scope, _) = load_current_user_preferences(state).await?;
+    let schedule_store = cfms_service::injection::extension_schedules::ExtensionScheduleStore::new(
+        &state.app_data_dir,
+    );
+    let server_hash = scope.server_hash;
+    let username = scope.username;
+    let mut changed = false;
+    let result = match operation {
+        "list" => {
+            let store = schedule_store.clone();
+            let extension_id = extension_id.to_string();
+            let tasks = tokio::task::spawn_blocking(move || {
+                store.list(&server_hash, &username, &extension_id)
+            })
+            .await
+            .map_err(|error| format!("Extension schedule list task failed: {error}"))??;
+            serde_json::json!({ "tasks": tasks })
+        }
+        "get" => {
+            let task_id = required_string(&arguments, "taskId", "schedules.manage get")?;
+            let store = schedule_store.clone();
+            let extension_id = extension_id.to_string();
+            let tasks = tokio::task::spawn_blocking(move || {
+                store.list(&server_hash, &username, &extension_id)
+            })
+            .await
+            .map_err(|error| format!("Extension schedule get task failed: {error}"))??;
+            let task = tasks
+                .into_iter()
+                .find(|task| task.id == task_id)
+                .ok_or_else(|| "Schedule task was not found".to_string())?;
+            serde_json::json!({ "task": task })
+        }
+        "create" => {
+            let input = parse_schedule_task_input(
+                arguments
+                    .get("task")
+                    .cloned()
+                    .ok_or_else(|| "schedules.manage create requires task".to_string())?,
+            )?;
+            validate_schedule_workflow(state, extension_id, &input)?;
+            if input.action == cfms_service::injection::extension_schedules::ScheduleAction::Update
+            {
+                if user_confirmed != Some(true) {
+                    return Err(
+                        "User confirmation is required before creating an update schedule".into(),
+                    );
+                }
+                ensure_extension_enabled(state, extension_id, Some("files.sync.task")).await?;
+            }
+            let store = schedule_store.clone();
+            let extension_id = extension_id.to_string();
+            let task = tokio::task::spawn_blocking(move || {
+                store.create(&server_hash, &username, &extension_id, input)
+            })
+            .await
+            .map_err(|error| format!("Extension schedule create task failed: {error}"))??;
+            changed = true;
+            serde_json::json!({ "task": task })
+        }
+        "update" => {
+            let task_id = required_string(&arguments, "taskId", "schedules.manage update")?;
+            let input = parse_schedule_task_input(
+                arguments
+                    .get("task")
+                    .cloned()
+                    .ok_or_else(|| "schedules.manage update requires task".to_string())?,
+            )?;
+            validate_schedule_workflow(state, extension_id, &input)?;
+            if input.action == cfms_service::injection::extension_schedules::ScheduleAction::Update
+            {
+                if user_confirmed != Some(true) {
+                    return Err(
+                        "User confirmation is required before updating an update schedule".into(),
+                    );
+                }
+                ensure_extension_enabled(state, extension_id, Some("files.sync.task")).await?;
+            }
+            let store = schedule_store.clone();
+            let extension_id = extension_id.to_string();
+            let task = tokio::task::spawn_blocking(move || {
+                store.update(&server_hash, &username, &extension_id, &task_id, input)
+            })
+            .await
+            .map_err(|error| format!("Extension schedule update task failed: {error}"))??;
+            changed = true;
+            serde_json::json!({ "task": task })
+        }
+        "delete" => {
+            let task_id = required_string(&arguments, "taskId", "schedules.manage delete")?;
+            let store = schedule_store.clone();
+            let extension_id = extension_id.to_string();
+            let deleted = tokio::task::spawn_blocking(move || {
+                store.delete(&server_hash, &username, &extension_id, &task_id)
+            })
+            .await
+            .map_err(|error| format!("Extension schedule delete task failed: {error}"))??;
+            changed = deleted;
+            serde_json::json!({ "deleted": deleted })
+        }
+        _ => {
+            return Err(format!(
+                "Unsupported schedules.manage operation: {operation}"
+            ));
+        }
+    };
+    if changed {
+        let _ = app_handle.emit(
+            "cfms:extension-schedules-changed",
+            serde_json::json!({ "extensionId": extension_id }),
+        );
+    }
+    Ok(result)
+}
+
+async fn execute_scheduled_file_sync(
+    app_handle: &tauri::AppHandle,
+    state: &AppHandleState,
+    extension_id: &str,
+    arguments: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let task_id = required_string(&arguments, "taskId", "files.sync.task")?;
+    let delete_stale_requested = match arguments.get("deleteStale") {
+        None => false,
+        Some(serde_json::Value::Bool(value)) => *value,
+        Some(_) => return Err("files.sync.task deleteStale must be a boolean".into()),
+    };
+    let (scope, _) = load_current_user_preferences(state).await?;
+    let schedule_store = cfms_service::injection::extension_schedules::ExtensionScheduleStore::new(
+        &state.app_data_dir,
+    );
+    let store = schedule_store.clone();
+    let extension_id_owned = extension_id.to_string();
+    let tasks = tokio::task::spawn_blocking(move || {
+        store.list(&scope.server_hash, &scope.username, &extension_id_owned)
+    })
+    .await
+    .map_err(|error| format!("Extension schedule lookup task failed: {error}"))??;
+    let task = tasks
+        .into_iter()
+        .find(|task| task.id == task_id)
+        .ok_or_else(|| "Schedule task was not found".to_string())?;
+    if !task.enabled
+        || task.action != cfms_service::injection::extension_schedules::ScheduleAction::Update
+    {
+        return Err("files.sync.task requires an enabled update schedule".into());
+    }
+    let scope = match task.scope {
+        cfms_service::injection::extension_schedules::ScheduleScope::All => None,
+        cfms_service::injection::extension_schedules::ScheduleScope::Folder => {
+            let path = task
+                .folder_path
+                .as_deref()
+                .ok_or_else(|| "Folder schedule is missing folder_path".to_string())?;
+            Some(resolve_extension_folder_scope(state, path).await?)
+        }
+    };
+    let delete_stale = delete_stale_requested
+        && task.update_policy
+            == cfms_service::injection::extension_schedules::ScheduleUpdatePolicy::Mirror;
+    let report = crate::custom::file_auto_check::check_for_extension(
+        app_handle,
+        true,
+        scope,
+        true,
+        delete_stale,
+    )
+    .await?;
+    serde_json::to_value(report)
+        .map_err(|error| format!("Failed to serialize scheduled file synchronization: {error}"))
+}
+
+fn parse_schedule_task_input(
+    mut value: serde_json::Value,
+) -> Result<cfms_service::injection::extension_schedules::ScheduleTaskInput, String> {
+    for key in [
+        "id",
+        "created_at",
+        "last_run_at",
+        "last_status",
+        "last_summary",
+    ] {
+        if let Some(object) = value.as_object_mut() {
+            object.remove(key);
+        }
+    }
+    serde_json::from_value(value).map_err(|error| format!("Invalid schedule task: {error}"))
+}
+
+fn validate_schedule_workflow(
+    state: &AppHandleState,
+    extension_id: &str,
+    task: &cfms_service::injection::extension_schedules::ScheduleTaskInput,
+) -> Result<(), String> {
+    let installation = state
+        .custom
+        .extensions
+        .get_installed(extension_id)?
+        .ok_or_else(|| "Extension is not installed".to_string())?;
+    if !installation
+        .manifest
+        .entrypoints
+        .workflows
+        .iter()
+        .any(|entry| entry.workflow == task.workflow)
+    {
+        return Err("Schedule workflow is not declared by the extension".into());
+    }
+    task.validate()
+}
+
+fn required_string(
+    arguments: &serde_json::Value,
+    key: &str,
+    operation: &str,
+) -> Result<String, String> {
+    arguments
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| format!("{operation} requires {key}"))
+}
+
+async fn resolve_extension_folder_scope(
+    state: &AppHandleState,
+    path: &str,
+) -> Result<crate::custom::file_auto_check::FileAutoCheckScope, String> {
+    let segments = path.split('/').collect::<Vec<_>>();
+    if segments.first() != Some(&"root")
+        || path.len() > 2048
+        || segments.iter().any(|segment| {
+            segment.is_empty() || *segment == "." || *segment == ".." || segment.contains('\\')
+        })
+    {
+        return Err("folderPath must be an absolute root-relative path".into());
+    }
+    let lookup = crate::commands::resolve_node_path_for_state(state, path.to_string()).await?;
+    if lookup.node_ids.len() != segments.len() {
+        return Err("node_lookup returned a path with an unexpected depth".into());
+    }
+    Ok(crate::custom::file_auto_check::FileAutoCheckScope {
+        folder_id: (segments.len() > 1)
+            .then(|| lookup.node_ids.last().cloned())
+            .flatten(),
+        path_parts: segments[1..]
+            .iter()
+            .map(|segment| (*segment).to_string())
+            .collect(),
+    })
+}
+
 async fn fetch_and_cache_extension_catalog(
     state: &tauri::State<'_, AppHandleState>,
 ) -> Result<cfms_service::injection::extensions_system::CatalogDocument, String> {
@@ -485,10 +877,12 @@ async fn fetch_and_cache_extension_catalog(
         .await
         .map_err(|e| format!("Failed to read extension catalog signature: {e}"))?;
     let verified = state
-        .custom.extensions
+        .custom
+        .extensions
         .verify_catalog(catalog.as_bytes(), &signature)?;
     state
-        .custom.extensions
+        .custom
+        .extensions
         .cache_catalog(catalog_url, etag.as_deref(), &catalog, &signature)?;
     Ok(verified)
 }
@@ -501,12 +895,18 @@ struct CurrentPreferenceScope {
 
 async fn load_current_extension_preferences(
     state: &AppHandleState,
-) -> Result<Option<std::collections::BTreeMap<String, cfms_core::ExtensionPreference>>, String> {
+) -> Result<
+    (
+        Option<CurrentPreferenceScope>,
+        Option<std::collections::BTreeMap<String, cfms_core::ExtensionPreference>>,
+    ),
+    String,
+> {
     if state.inner.username.read().await.is_none() || state.inner.dek.read().await.is_none() {
-        return Ok(None);
+        return Ok((None, None));
     }
-    let (_, preferences) = load_current_user_preferences(state).await?;
-    Ok(Some(preferences.extensions))
+    let (scope, preferences) = load_current_user_preferences(state).await?;
+    Ok((Some(scope), Some(preferences.extensions)))
 }
 
 async fn load_current_user_preferences(
@@ -585,11 +985,13 @@ async fn ensure_extension_enabled(
     capability: Option<&str>,
 ) -> Result<(), String> {
     let installation = state
-        .custom.extensions
+        .custom
+        .extensions
         .get_installed(extension_id)?
         .ok_or_else(|| "Extension is not installed".to_string())?;
     if let Some(reason) = state
-        .custom.extensions
+        .custom
+        .extensions
         .revocation_reason(&installation.manifest.id, &installation.manifest.version)?
     {
         return Err(reason);

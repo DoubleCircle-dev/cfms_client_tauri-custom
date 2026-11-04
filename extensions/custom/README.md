@@ -102,6 +102,24 @@ pass a previous host-call result to a later module invocation.
 Runtime limits are enforced for module size (8 MiB), linear memory (16 MiB), stack (512 KiB),
 execution fuel (10 million units), and JSON input/output (1 MiB).
 
+## Scheduled task APIs
+
+The host provides two additional capabilities for extensions that need recurring file checks:
+
+- `schedules.manage` stores up to 32 tasks per extension and account. Use the `list`, `get`,
+  `create`, `update`, and `delete` operations to manage them. Tasks support intervals from 5 to
+  10,080 minutes or local `HH:MM` times on selected ISO weekdays. Folder tasks use a server path
+  beginning with `root/`.
+- `files.updates.check` accepts optional `folderPath` and `quiet` arguments. `quiet: true` returns
+  the report without updating the client's automatic-check state or emitting its check event.
+- `files.sync.task` only synchronizes an enabled, saved task whose action is `update`; callers
+  cannot supply an arbitrary folder. Stale local files are removed only when that task uses the
+  `mirror` policy and the workflow explicitly requests `deleteStale: true`.
+
+Update tasks require both `schedules.manage` and `files.sync.task` to be authorized. The workflow
+must request user confirmation when creating or changing an update task. Set `update_policy` to
+`download_only` unless local files missing from the server should be removed.
+
 The extension settings page is in preview. Desktop builds can import a signed `.cfmsext` file;
 mobile builds install only through the signed catalog. Builds without a configured trusted key can
 inspect extension metadata but cannot install packages.

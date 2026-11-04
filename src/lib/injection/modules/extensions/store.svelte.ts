@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event';
 import {
   getExtensionOverview,
   installExtensionFromCatalog,
@@ -22,6 +23,7 @@ class ExtensionsStore {
   private controllers = new Map<string, AbortController>();
   private failures = new Map<string, number>();
   private eventListenerReady = false;
+  private scheduleEventListenerReady = false;
   private catalogAttempted = false;
   private catalogTimer: number | null = null;
 
@@ -87,6 +89,14 @@ class ExtensionsStore {
   private ensureEventListener() {
     if (this.eventListenerReady || typeof window === 'undefined') return;
     this.eventListenerReady = true;
+    if (!this.scheduleEventListenerReady) {
+      this.scheduleEventListenerReady = true;
+      void listen<{ extensionId: string }>('cfms:extension-schedules-changed', () => {
+        void this.refresh();
+      }).catch((error: unknown) => {
+        console.warn('[cfms] Could not subscribe to extension schedule changes.', error);
+      });
+    }
     this.catalogTimer = window.setInterval(() => void this.syncCatalog(), 24 * 60 * 60_000);
     window.addEventListener('cfms:extension-event', (event) => {
       const eventName = (event as CustomEvent<string>).detail;

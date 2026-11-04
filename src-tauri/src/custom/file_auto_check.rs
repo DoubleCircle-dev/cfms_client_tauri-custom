@@ -148,6 +148,12 @@ pub struct FileAutoCheckState {
     pub schedule: FileAutoCheckSchedule,
 }
 
+#[derive(Debug, Clone)]
+pub struct FileAutoCheckScope {
+    pub folder_id: Option<String>,
+    pub path_parts: Vec<String>,
+}
+
 /// Live scheduler state shared between the service, the IPC commands and the
 /// preference writer.
 #[derive(Debug)]
@@ -416,7 +422,7 @@ pub async fn run(app: AppHandle, mut shutdown: watch::Receiver<bool>) {
         }
 
         startup_check_done = true;
-        match perform_check(&app, &current, true).await {
+        match perform_check(&app, &current, true, None, true).await {
             Ok(mut report) => {
                 let finished_at = now_ms();
                 let next = finished_at + current.interval_ms();
@@ -455,6 +461,9 @@ fn emit_schedule(app: &AppHandle, runtime: &FileAutoCheckRuntime) {
 pub async fn check_for_extension(
     app: &AppHandle,
     synchronize: bool,
+    scope: Option<FileAutoCheckScope>,
+    quiet: bool,
+    delete_stale: bool,
 ) -> Result<FileAutoCheckReport, String> {
     if !is_logged_in(app).await {
         return Err("Not logged in".into());
@@ -465,11 +474,16 @@ pub async fn check_for_extension(
         .ok_or_else(|| "File update settings are unavailable".to_string())?;
     settings.auto_download = synchronize;
 
-    let mut report = perform_check(app, &settings, synchronize).await?;
+    let mut report =
+        perform_check(app, &settings, synchronize, scope.as_ref(), delete_stale).await?;
     let finished_at = now_ms();
     let next_check_at = finished_at + settings.interval_ms();
     report.checked_at = finished_at;
     report.next_check_at = next_check_at;
+
+    if quiet {
+        return Ok(report);
+    }
 
     let runtime = Arc::clone(&app.state::<AppHandleState>().custom.file_auto_check);
     runtime.store_report(report.clone());
@@ -485,6 +499,8 @@ async fn perform_check(
     app: &AppHandle,
     settings: &AutoCheckSettings,
     update_local_files: bool,
+    scope: Option<&FileAutoCheckScope>,
+    delete_stale: bool,
 ) -> Result<FileAutoCheckReport, String> {
     let runtime = Arc::clone(&app.state::<AppHandleState>().custom.file_auto_check);
     let _check_guard = runtime.check_lock.lock().await;
@@ -504,7 +520,14 @@ async fn perform_check(
     let mut server_paths = HashSet::new();
     let mut walked_dirs = HashSet::new();
     let mut failed_dirs = HashSet::new();
-    let mut pending: Vec<(Option<String>, Vec<String>, usize)> = vec![(None, Vec::new(), 0)];
+    let mut pending: Vec<(Option<String>, Vec<String>, usize)> = vec![(
+        scope.and_then(|scope| scope.folder_id.clone()),
+        scope.map_or_else(Vec::new, |scope| scope.path_parts.clone()),
+        0,
+    )];
+    let scope_prefix = scope
+        .filter(|scope| !scope.path_parts.is_empty())
+        .map(|scope| make_download_path(&scope.path_parts));
     let mut listings = 0usize;
 
     while let Some((folder_id, path_parts, depth)) = pending.pop() {
@@ -590,6 +613,12 @@ async fn perform_check(
 
     report.outdated = report.items.len() as u32;
     for path in local_files {
+        if scope_prefix
+            .as_ref()
+            .is_some_and(|prefix| path != *prefix && !path.starts_with(&format!("{prefix}/")))
+        {
+            continue;
+        }
         if is_sync_metadata_or_backup(&path)
             || is_path_held(&path, &held_folders)
             || server_paths.contains(&path)
@@ -607,7 +636,7 @@ async fn perform_check(
     if update_local_files && settings.auto_download && !report.items.is_empty() {
         apply_downloads(app, &download_root, settings, &mut report).await;
     }
-    if update_local_files && settings.auto_download {
+    if update_local_files && settings.auto_download && delete_stale {
         report.deleted = delete_stale_files(&download_root, &report.deletions)?;
     }
 

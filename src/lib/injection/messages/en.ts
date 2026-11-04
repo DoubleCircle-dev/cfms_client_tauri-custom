@@ -284,6 +284,8 @@ export const customEn = {
         ui_notify: 'Show client notifications',
         files_updates_check: 'Check for file updates',
         files_sync_full: 'Fully synchronize files (may delete local files missing from the server)',
+        files_sync_task: 'Run scheduled file updates (may delete stale local files)',
+        schedules_manage: 'Create and manage scheduled tasks',
       },
       previewNotice: 'Preview feature. Extension modules run without direct filesystem, network, or native API access. Declared client capabilities remain permission-gated.',
       mobileCatalogOnly: 'On Android, install signed extensions from the catalog. Local package import is available on desktop.',

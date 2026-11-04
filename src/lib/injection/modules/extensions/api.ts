@@ -10,6 +10,8 @@ export type ExtensionCapability =
   | 'files.search'
   | 'files.updates.check'
   | 'files.sync.full'
+  | 'files.sync.task'
+  | 'schedules.manage'
   | 'tasks.read'
   | 'transfers.download.enqueue'
   | 'account.summary.read'
@@ -73,6 +75,36 @@ export interface ExtensionAccountState {
   staleInstallation: boolean;
 }
 
+export type ExtensionScheduleKind = 'interval' | 'fixed_time';
+export type ExtensionScheduleScope = 'all' | 'folder';
+export type ExtensionScheduleAction = 'check' | 'update' | 'scan';
+export type ExtensionScheduleUpdatePolicy = 'download_only' | 'mirror';
+export type ExtensionScheduleNotify = 'problems_only' | 'always';
+
+export interface ExtensionScheduleTaskInput {
+  name: string;
+  kind: ExtensionScheduleKind;
+  interval_minutes: number | null;
+  time_of_day: string | null;
+  days: number[];
+  scope: ExtensionScheduleScope;
+  folder_path: string | null;
+  action: ExtensionScheduleAction;
+  update_policy: ExtensionScheduleUpdatePolicy;
+  notify: ExtensionScheduleNotify;
+  catch_up: boolean;
+  enabled: boolean;
+  workflow: string;
+}
+
+export interface ExtensionScheduleTask extends ExtensionScheduleTaskInput {
+  id: string;
+  created_at: number;
+  last_run_at: number | null;
+  last_status: 'never' | 'success' | 'failure' | 'skipped' | string;
+  last_summary: string | null;
+}
+
 export interface CatalogExtension {
   manifest: ExtensionManifest;
   download_url: string;
@@ -92,6 +124,7 @@ export interface ExtensionCatalog {
 export interface ExtensionOverview {
   installed: ExtensionInstallation[];
   accountStates: Record<string, ExtensionAccountState>;
+  schedules: Record<string, ExtensionScheduleTask[]>;
   catalog: ExtensionCatalog | null;
   trustedKeysConfigured: boolean;
   hostApiVersion: string;
@@ -242,5 +275,74 @@ export function executeExtensionHostCall<T = unknown>(
     capability,
     arguments: args,
     userConfirmed,
+  });
+}
+
+export function listExtensionSchedules(
+  extensionId: string,
+): Promise<{ tasks: ExtensionScheduleTask[] }> {
+  return executeExtensionHostCall<{ tasks: ExtensionScheduleTask[] }>(
+    extensionId,
+    'schedules.manage',
+    { operation: 'list' },
+  );
+}
+
+export function getExtensionSchedule(
+  extensionId: string,
+  taskId: string,
+): Promise<{ task: ExtensionScheduleTask }> {
+  return executeExtensionHostCall<{ task: ExtensionScheduleTask }>(
+    extensionId,
+    'schedules.manage',
+    { operation: 'get', taskId },
+  );
+}
+
+export function createExtensionSchedule(
+  extensionId: string,
+  task: ExtensionScheduleTaskInput,
+): Promise<{ task: ExtensionScheduleTask }> {
+  return executeExtensionHostCall<{ task: ExtensionScheduleTask }>(
+    extensionId,
+    'schedules.manage',
+    { operation: 'create', task },
+  );
+}
+
+export function updateExtensionSchedule(
+  extensionId: string,
+  taskId: string,
+  task: ExtensionScheduleTaskInput | ExtensionScheduleTask,
+): Promise<{ task: ExtensionScheduleTask }> {
+  return executeExtensionHostCall<{ task: ExtensionScheduleTask }>(
+    extensionId,
+    'schedules.manage',
+    { operation: 'update', taskId, task },
+  );
+}
+
+export function deleteExtensionSchedule(
+  extensionId: string,
+  taskId: string,
+): Promise<{ deleted: boolean }> {
+  return executeExtensionHostCall<{ deleted: boolean }>(
+    extensionId,
+    'schedules.manage',
+    { operation: 'delete', taskId },
+  );
+}
+
+export function recordExtensionScheduleRun(
+  extensionId: string,
+  taskId: string,
+  status: 'success' | 'failure' | 'skipped',
+  summary: string | null = null,
+): Promise<ExtensionScheduleTask> {
+  return invoke('record_extension_schedule_run', {
+    extensionId,
+    taskId,
+    status,
+    summary,
   });
 }

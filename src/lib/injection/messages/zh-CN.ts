@@ -284,6 +284,8 @@ export const customZhCn = {
         ui_notify: '显示客户端通知',
         files_updates_check: '检查文件更新',
         files_sync_full: '完整同步文件（可能删除服务器上已不存在的本地文件）',
+        files_sync_task: '执行计划文件更新（可能删除过期本地文件）',
+        schedules_manage: '创建和管理定时任务',
       },
       previewNotice: '预览功能。扩展模块不能直接访问文件系统、网络或原生 API；声明的客户端能力仍须经过权限授权。',
       mobileCatalogOnly: 'Android 可从目录安装已签名扩展；本地导入安装包仅支持桌面端。',

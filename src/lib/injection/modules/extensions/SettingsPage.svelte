@@ -34,6 +34,8 @@
     'files.search': 'settings.extensions.capabilities.files_search',
     'files.updates.check': 'settings.extensions.capabilities.files_updates_check',
     'files.sync.full': 'settings.extensions.capabilities.files_sync_full',
+    'files.sync.task': 'settings.extensions.capabilities.files_sync_task',
+    'schedules.manage': 'settings.extensions.capabilities.schedules_manage',
     'tasks.read': 'settings.extensions.capabilities.tasks_read',
     'transfers.download.enqueue': 'settings.extensions.capabilities.transfers_download_enqueue',
     'account.summary.read': 'settings.extensions.capabilities.account_summary_read',
