@@ -62,6 +62,9 @@ files read them while they evaluate their own module body. Behaviour goes in
   `src/lib/icons.ts` should show **no** fork diff. Fork strings live in
   `messages/`, fork icon slugs in `icon-map.ts` and fork icon helpers in
   `icons.ts`, all under `src/lib/injection/`.
+- Upstream also *deletes* strings the fork still renders (v0.58.0 dropped every
+  `settings.extensions.*` entry). Copy them into `messages/{en,zh-CN}.ts`; the
+  `src/lib/i18n-keys.test.ts` coverage test fails until they are there.
 - `src/lib/fluent/icons.generated.ts` is generated: resolve any conflict by
   running `pnpm assets:fluent`.
 - `Cargo.toml`, `Cargo.lock`, `package.json`, `tauri.conf.json`, the iOS
