@@ -45,6 +45,13 @@ pub const CHECK_EVENT: &str = "cfms:file-auto-check";
 /// Emitted with a [`FileAutoCheckSchedule`] when the Rust-side timer moves.
 pub const SCHEDULE_EVENT: &str = "cfms:file-auto-check-schedule";
 
+/// Emitted with an [`ExtensionCheckHistoryRecord`] when an extension-initiated
+/// quiet check finishes, so it can be written to the check history.
+pub const EXTENSION_CHECK_HISTORY_EVENT: &str = "cfms:extension-check-history";
+
+/// Upper bound on the items listed per category in one history record.
+const HISTORY_RECORD_ITEM_MAX: usize = 50;
+
 /// How often the scheduler re-reads its inputs on its own (milliseconds).
 ///
 /// Settings changes and manual checks arrive through [`FileAutoCheckRuntime`]
@@ -94,10 +101,24 @@ pub struct FileAutoCheckItem {
     pub existed_locally: bool,
 }
 
+/// One document the server refused to provide to the current account.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileAutoCheckDeniedItem {
+    pub id: String,
+    pub title: String,
+    /// Download-root-relative path.
+    pub path: String,
+}
+
 /// Result of one background check.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileAutoCheckReport {
+    /// Folder the check was limited to, or `None` for the whole download root.
+    pub scope_path: Option<String>,
+    /// The documents the server refused to hand over.
+    pub denied_items: Vec<FileAutoCheckDeniedItem>,
     /// Account the check ran for, so the UI never attributes it to another user.
     pub account: String,
     /// When the walk finished (Unix milliseconds).
@@ -146,6 +167,124 @@ pub struct FileAutoCheckState {
     pub report: Option<FileAutoCheckReport>,
     /// Current timer state.
     pub schedule: FileAutoCheckSchedule,
+}
+
+/// Who started an extension check, carried into its history record.
+#[derive(Debug, Clone)]
+pub struct ExtensionCheckSource {
+    pub extension_id: String,
+    pub task_id: Option<String>,
+}
+
+/// Standardized check-history record for extension-initiated checks.
+///
+/// This is the contract between the host and the history log: the same shape
+/// is produced for scheduled checks and scheduled synchronizations.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionCheckHistoryRecord {
+    pub schema_version: u32,
+    pub extension_id: String,
+    pub task_id: Option<String>,
+    pub account: String,
+    /// When the check finished (Unix milliseconds).
+    pub checked_at: i64,
+    /// `true` when no document needed an update.
+    pub no_updates: bool,
+    pub scope: ExtensionCheckHistoryScope,
+    pub updates: ExtensionCheckHistoryUpdates,
+    pub denied: ExtensionCheckHistoryDenied,
+    pub dirs: u32,
+    pub docs: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionCheckHistoryScope {
+    /// `all` or `folder`.
+    pub kind: &'static str,
+    pub folder_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionCheckHistoryUpdates {
+    pub count: u32,
+    pub items: Vec<ExtensionCheckHistoryUpdateItem>,
+    /// Updates beyond the listed items.
+    pub hidden: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionCheckHistoryUpdateItem {
+    pub id: String,
+    pub title: String,
+    pub path: String,
+    /// `added` or `modified`.
+    pub kind: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionCheckHistoryDenied {
+    pub count: u32,
+    pub items: Vec<FileAutoCheckDeniedItem>,
+    pub hidden: u32,
+}
+
+impl ExtensionCheckHistoryRecord {
+    fn from_report(source: ExtensionCheckSource, report: &FileAutoCheckReport) -> Self {
+        let update_items: Vec<_> = report
+            .items
+            .iter()
+            .take(HISTORY_RECORD_ITEM_MAX)
+            .map(|item| ExtensionCheckHistoryUpdateItem {
+                id: item.id.clone(),
+                title: item.title.clone(),
+                path: item.path.clone(),
+                kind: if item.existed_locally {
+                    "modified"
+                } else {
+                    "added"
+                },
+            })
+            .collect();
+        let denied_items: Vec<_> = report
+            .denied_items
+            .iter()
+            .take(HISTORY_RECORD_ITEM_MAX)
+            .cloned()
+            .collect();
+        Self {
+            schema_version: 1,
+            extension_id: source.extension_id,
+            task_id: source.task_id,
+            account: report.account.clone(),
+            checked_at: report.checked_at,
+            no_updates: report.outdated == 0,
+            scope: ExtensionCheckHistoryScope {
+                kind: if report.scope_path.is_some() {
+                    "folder"
+                } else {
+                    "all"
+                },
+                folder_path: report.scope_path.clone(),
+            },
+            updates: ExtensionCheckHistoryUpdates {
+                count: report.outdated,
+                hidden: report.items.len().saturating_sub(update_items.len()) as u32,
+                items: update_items,
+            },
+            denied: ExtensionCheckHistoryDenied {
+                count: report.denied,
+                hidden: report.denied_items.len().saturating_sub(denied_items.len()) as u32,
+                items: denied_items,
+            },
+            dirs: report.dirs,
+            docs: report.docs,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -464,6 +603,7 @@ pub async fn check_for_extension(
     scope: Option<FileAutoCheckScope>,
     quiet: bool,
     delete_stale: bool,
+    source: ExtensionCheckSource,
 ) -> Result<FileAutoCheckReport, String> {
     if !is_logged_in(app).await {
         return Err("Not logged in".into());
@@ -482,6 +622,12 @@ pub async fn check_for_extension(
     report.next_check_at = next_check_at;
 
     if quiet {
+        // Quiet checks leave the built-in schedule and report untouched but are
+        // still recorded in the check history.
+        let _ = app.emit(
+            EXTENSION_CHECK_HISTORY_EVENT,
+            ExtensionCheckHistoryRecord::from_report(source, &report),
+        );
         return Ok(report);
     }
 
@@ -512,6 +658,9 @@ async fn perform_check(
     let mut report = FileAutoCheckReport {
         account: settings.username.clone(),
         auto_download: settings.auto_download,
+        scope_path: scope
+            .filter(|scope| !scope.path_parts.is_empty())
+            .map(|scope| scope.path_parts.join("/")),
         ..Default::default()
     };
 
@@ -584,6 +733,11 @@ async fn perform_check(
             if let Err(error) = probe_document_access(app, &document.id).await {
                 if is_document_access_denied(&error) {
                     report.denied += 1;
+                    report.denied_items.push(FileAutoCheckDeniedItem {
+                        id: document.id.clone(),
+                        title: document.title.clone(),
+                        path,
+                    });
                     continue;
                 }
                 tracing::debug!("Access probe for {} failed: {error}", document.title);
@@ -858,6 +1012,11 @@ async fn apply_downloads(
             Err(error) => {
                 if is_document_access_denied(&error) {
                     report.denied += 1;
+                    report.denied_items.push(FileAutoCheckDeniedItem {
+                        id: item.id.clone(),
+                        title: item.title.clone(),
+                        path: item.path.clone(),
+                    });
                 } else {
                     report.download_failed += 1;
                     tracing::warn!("Background download of {} failed: {error}", item.path);
@@ -1031,6 +1190,48 @@ mod tests {
             last_modified: None,
             sha256: sha256.map(ToString::to_string),
         }
+    }
+
+    #[test]
+    fn history_record_flags_no_updates_and_scope() {
+        let source = || ExtensionCheckSource {
+            extension_id: "ext".into(),
+            task_id: Some("t1".into()),
+        };
+        let empty =
+            ExtensionCheckHistoryRecord::from_report(source(), &FileAutoCheckReport::default());
+        assert!(empty.no_updates);
+        assert_eq!(empty.scope.kind, "all");
+        assert_eq!(empty.schema_version, 1);
+
+        let report = FileAutoCheckReport {
+            scope_path: Some("docs".into()),
+            outdated: 60,
+            denied: 1,
+            denied_items: vec![FileAutoCheckDeniedItem {
+                id: "d".into(),
+                title: "x".into(),
+                path: "docs/x".into(),
+            }],
+            items: (0..60)
+                .map(|i| FileAutoCheckItem {
+                    id: i.to_string(),
+                    title: "t".into(),
+                    path: format!("docs/{i}"),
+                    sha256: None,
+                    existed_locally: i % 2 == 0,
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let record = ExtensionCheckHistoryRecord::from_report(source(), &report);
+        assert!(!record.no_updates);
+        assert_eq!(record.scope.kind, "folder");
+        assert_eq!(record.updates.items.len(), HISTORY_RECORD_ITEM_MAX);
+        assert_eq!(record.updates.hidden, 10);
+        assert_eq!(record.updates.items[0].kind, "modified");
+        assert_eq!(record.updates.items[1].kind, "added");
+        assert_eq!(record.denied.items.len(), 1);
     }
 
     #[test]

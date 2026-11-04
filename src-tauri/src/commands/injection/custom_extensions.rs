@@ -444,12 +444,21 @@ pub async fn execute_extension_host_call(
                 Some(serde_json::Value::Bool(quiet)) => *quiet,
                 Some(_) => return Err("files.updates.check quiet must be a boolean".into()),
             };
+            let task_id = match arguments.get("taskId") {
+                None | Some(serde_json::Value::Null) => None,
+                Some(serde_json::Value::String(id)) => Some(id.clone()),
+                Some(_) => return Err("files.updates.check taskId must be a string".into()),
+            };
             let report = crate::custom::file_auto_check::check_for_extension(
                 &app_handle,
                 false,
                 scope,
                 quiet,
                 false,
+                crate::custom::file_auto_check::ExtensionCheckSource {
+                    extension_id: extension_id.clone(),
+                    task_id,
+                },
             )
             .await?;
             serde_json::to_value(report)
@@ -465,6 +474,10 @@ pub async fn execute_extension_host_call(
                 None,
                 false,
                 true,
+                crate::custom::file_auto_check::ExtensionCheckSource {
+                    extension_id: extension_id.clone(),
+                    task_id: None,
+                },
             )
             .await?;
             serde_json::to_value(report)
@@ -755,6 +768,10 @@ async fn execute_scheduled_file_sync(
         scope,
         true,
         delete_stale,
+        crate::custom::file_auto_check::ExtensionCheckSource {
+            extension_id: extension_id.to_string(),
+            task_id: Some(task.id.clone()),
+        },
     )
     .await?;
     serde_json::to_value(report)

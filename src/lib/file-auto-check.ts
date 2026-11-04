@@ -19,6 +19,38 @@ export const FILE_AUTO_CHECK_EVENT = 'cfms:file-auto-check';
 /** Emitted with a {@link FileAutoCheckSchedule} when the timer moves. */
 export const FILE_AUTO_CHECK_SCHEDULE_EVENT = 'cfms:file-auto-check-schedule';
 
+/** Emitted with an {@link ExtensionCheckHistoryRecord} when a quiet extension check finishes. */
+export const EXTENSION_CHECK_HISTORY_EVENT = 'cfms:extension-check-history';
+
+/**
+ * Standardized history record of one extension-initiated (scheduled/quiet) check.
+ * Mirrors the Rust `ExtensionCheckHistoryRecord`; `schemaVersion` guards changes.
+ */
+export interface ExtensionCheckHistoryRecord {
+  schemaVersion: 1;
+  extensionId: string;
+  taskId: string | null;
+  account: string;
+  /** Unix milliseconds. */
+  checkedAt: number;
+  /** `true` when nothing was found outdated. */
+  noUpdates: boolean;
+  scope: { kind: 'all' | 'folder'; folderPath: string | null };
+  updates: {
+    count: number;
+    items: { id: string; title: string; path: string; kind: 'added' | 'modified' }[];
+    hidden: number;
+  };
+  /** Content the server refuses to provide access to. */
+  denied: {
+    count: number;
+    items: { id: string; title: string; path: string }[];
+    hidden: number;
+  };
+  dirs: number;
+  docs: number;
+}
+
 /** One document the background check found to be missing or outdated locally. */
 export interface FileAutoCheckItem {
   id: string;
@@ -38,6 +70,9 @@ export interface FileAutoCheckReport {
   nextCheckAt: number;
   outdated: number;
   denied: number;
+  /** Folder the check was limited to (download-root-relative); absent for a full check. */
+  scopePath?: string | null;
+  deniedItems?: { id: string; title: string; path: string }[];
   dirs: number;
   docs: number;
   items: FileAutoCheckItem[];
@@ -97,13 +132,15 @@ export async function rebaseFileAutoCheckSchedule(): Promise<void> {
 export async function subscribeFileAutoCheck(
   onReport: (report: FileAutoCheckReport) => void,
   onSchedule: (schedule: FileAutoCheckSchedule) => void,
+  onExtensionRecord?: (record: ExtensionCheckHistoryRecord) => void,
 ): Promise<UnlistenFn[] | null> {
   if (!isTauriRuntime()) return null;
   try {
     return await Promise.all([
       listen<FileAutoCheckReport>(FILE_AUTO_CHECK_EVENT, (event) => onReport(event.payload)),
       listen<FileAutoCheckSchedule>(FILE_AUTO_CHECK_SCHEDULE_EVENT, (event) => onSchedule(event.payload)),
-    ]);
+            listen<ExtensionCheckHistoryRecord>(EXTENSION_CHECK_HISTORY_EVENT, (event) => onExtensionRecord?.(event.payload)),
+          ]);
   } catch (error) {
     console.warn('[cfms:check] Could not subscribe to the background checker:', error);
     return null;

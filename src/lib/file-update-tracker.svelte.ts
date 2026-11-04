@@ -11,7 +11,7 @@ import { checkDownloadsExist, deleteDownloadFile, listDownloadFiles } from '$lib
 import { getSetting, setSetting } from '$lib/api/settings';
 import { isDocumentAccessDenied } from '$lib/api/server-errors';
 import { browserPreviewMode, isTauriRuntime } from '$lib/tauri-runtime';
-import { rebaseFileAutoCheckSchedule, type FileAutoCheckReport } from '$lib/file-auto-check';
+import { rebaseFileAutoCheckSchedule, type ExtensionCheckHistoryRecord, type FileAutoCheckReport } from '$lib/file-auto-check';
 import { deniedDocuments } from '$lib/denied-documents.svelte';
 import {
   DENIED_FOLDER_MARKER_FILENAME,
@@ -105,6 +105,12 @@ export interface CheckHistoryEntry {
   /** Access-state transitions, counted independently of the capped item list. */
   revoked: number;
   restored: number;
+  /** Set when the check was started by an extension. */
+  source?: { extensionId: string; taskId: string | null };
+  /** Folder the check was limited to; absent for a full check. */
+  scopePath?: string;
+  /** Explicit "nothing changed" flag; absent on entries written before it existed. */
+  noUpdates?: boolean;
 }
 
 /** Account a piece of per-user state belongs to. */
@@ -117,6 +123,23 @@ interface KnownAccessState {
   status: 'accessible' | 'denied';
   title: string;
   path: string;
+}
+
+/** Optional extension-check fields of a persisted history entry. */
+function parseExtensionMeta(
+  it: Record<string, unknown>,
+): Pick<CheckHistoryEntry, 'source' | 'scopePath' | 'noUpdates'> {
+  const meta: Pick<CheckHistoryEntry, 'source' | 'scopePath' | 'noUpdates'> = {};
+  const source = it.source as { extensionId?: unknown; taskId?: unknown } | null | undefined;
+  if (source && typeof source.extensionId === 'string') {
+    meta.source = {
+      extensionId: source.extensionId,
+      taskId: typeof source.taskId === 'string' ? source.taskId : null,
+    };
+  }
+  if (typeof it.scopePath === 'string' && it.scopePath) meta.scopePath = it.scopePath;
+  if (typeof it.noUpdates === 'boolean') meta.noUpdates = it.noUpdates;
+  return meta;
 }
 
 function usesSharedHistoryStorage(): boolean {
@@ -264,6 +287,34 @@ class FileUpdateTracker {
   /** Whether a background schedule is active. */
   get isPolling(): boolean {
     return this.nextCheckTime > 0;
+  }
+
+  /**
+   * Record a quiet check an extension ran. Unlike {@link applyAutoCheckReport}
+   * it neither touches the pending list nor shows a notification: the
+   * extension owns what happens with the findings.
+   */
+  addExtensionCheckHistory(record: ExtensionCheckHistoryRecord): boolean {
+    if (record.schemaVersion !== 1) return false;
+    if (!this.historyKey || !this.historyKey.endsWith(`:${encodeURIComponent(record.account)}`)) {
+      return false;
+    }
+    this.addCheckHistory({
+      outdated: record.updates.count,
+      denied: record.denied.count,
+      dirs: record.dirs,
+      docs: record.docs,
+      items: [
+        ...record.updates.items.map((item) => ({ ...item })),
+        ...record.denied.items.map((item): CheckHistoryItem => ({ ...item, kind: 'denied' })),
+      ],
+      hidden: record.updates.hidden + record.denied.hidden,
+      source: { extensionId: record.extensionId, taskId: record.taskId },
+      scopePath: record.scope.folderPath ?? undefined,
+      noUpdates: record.noUpdates,
+      time: record.checkedAt,
+    });
+    return true;
   }
 
   /**
@@ -957,12 +1008,16 @@ class FileUpdateTracker {
     hidden: number;
     revoked?: number;
     restored?: number;
+    source?: CheckHistoryEntry['source'];
+    scopePath?: string;
+    noUpdates?: boolean;
+    time?: number;
   }) {
     const { outdated, denied, dirs, docs, items, hidden, revoked = 0, restored = 0 } = result;
     // Counts only: the log is persisted, and a wording frozen at check time
     // would stay in the language the check happened to run in.
     const entry: CheckHistoryEntry = {
-      time: Date.now(),
+      time: result.time ?? Date.now(),
       eventType: 'check',
       changed: outdated,
       dirs,
@@ -972,6 +1027,9 @@ class FileUpdateTracker {
       denied,
       revoked,
       restored,
+      ...(result.source ? { source: result.source } : {}),
+      ...(result.scopePath ? { scopePath: result.scopePath } : {}),
+      ...(result.noUpdates !== undefined ? { noUpdates: result.noUpdates } : {}),
     };
     this.checkHistory = [...this.checkHistory, entry].slice(-this.checkHistoryLimit);
     if (this.historyKey) this.historyByKey.set(this.historyKey, [...this.checkHistory]);
@@ -1238,6 +1296,7 @@ class FileUpdateTracker {
           denied: Number(it.denied ?? 0),
           revoked: Number(it.revoked ?? 0),
           restored: Number(it.restored ?? 0),
+          ...parseExtensionMeta(it),
         }))
         .slice(-MAX_CHECK_HISTORY_LIMIT);
     } catch (error) {

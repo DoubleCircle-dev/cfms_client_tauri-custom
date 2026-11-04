@@ -616,6 +616,12 @@
                   {#if entry.eventType === 'check'}
                     <span class="check-history-meta">
                       {$t('files.checkHistoryScope', { values: { dirs: entry.dirs, docs: entry.docs } })}
+                      {#if entry.scopePath}
+                        · {$t('files.checkHistoryScopePath', { values: { path: entry.scopePath } })}
+                      {/if}
+                      {#if entry.source}
+                        · {$t('files.checkHistorySource', { values: { extension: entry.source.extensionId } })}
+                      {/if}
                     </span>
                   {/if}
                 </span>

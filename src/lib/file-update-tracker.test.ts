@@ -37,7 +37,7 @@ vi.mock('$lib/sync-all.svelte', () => ({
 
 import { deniedDocuments } from './denied-documents.svelte';
 import { fileUpdateTracker } from './file-update-tracker.svelte';
-import type { FileAutoCheckReport } from './file-auto-check';
+import type { ExtensionCheckHistoryRecord, FileAutoCheckReport } from './file-auto-check';
 import { readLocalDocumentStates } from '$lib/sync-all.svelte';
 
 const HISTORY_KEY_PREFIX = 'cfms:file-check-history:v1';
@@ -683,5 +683,69 @@ describe('background check reports', () => {
     expect(fileUpdateTracker.checkHistory).toHaveLength(0);
     expect(fileUpdateTracker.pendingUpdates).toEqual([]);
     expect(fileUpdateTracker.nextCheckTime).toBe(2_000);
+  });
+
+  describe('extension check records', () => {
+    function record(overrides: Partial<ExtensionCheckHistoryRecord> = {}): ExtensionCheckHistoryRecord {
+      return {
+        schemaVersion: 1,
+        extensionId: 'ext.sync',
+        taskId: 'task-1',
+        account: 'alice',
+        checkedAt: 5_000,
+        noUpdates: false,
+        scope: { kind: 'folder', folderPath: 'docs' },
+        updates: {
+          count: 1,
+          items: [{ id: 'd1', title: 'a.txt', path: 'docs/a.txt', kind: 'modified' }],
+          hidden: 0,
+        },
+        denied: {
+          count: 1,
+          items: [{ id: 'd2', title: 'b.txt', path: 'docs/b.txt' }],
+          hidden: 0,
+        },
+        dirs: 1,
+        docs: 2,
+        ...overrides,
+      };
+    }
+
+    it('records updates, denied content, scope and source', () => {
+      expect(fileUpdateTracker.addExtensionCheckHistory(record())).toBe(true);
+
+      const entry = fileUpdateTracker.checkHistory.at(-1)!;
+      expect(entry).toMatchObject({
+        time: 5_000,
+        changed: 1,
+        denied: 1,
+        noUpdates: false,
+        scopePath: 'docs',
+        source: { extensionId: 'ext.sync', taskId: 'task-1' },
+      });
+      expect(entry.items.map((item) => item.kind)).toEqual(['modified', 'denied']);
+      expect(fileUpdateTracker.pendingUpdates).toEqual([]);
+    });
+
+    it('records a no-updates check', () => {
+      fileUpdateTracker.addExtensionCheckHistory(record({
+        noUpdates: true,
+        scope: { kind: 'all', folderPath: null },
+        updates: { count: 0, items: [], hidden: 0 },
+        denied: { count: 0, items: [], hidden: 0 },
+      }));
+
+      const entry = fileUpdateTracker.checkHistory.at(-1)!;
+      expect(entry).toMatchObject({ changed: 0, denied: 0, noUpdates: true });
+      expect(entry.scopePath).toBeUndefined();
+    });
+
+    it('ignores another account or an unknown schema', () => {
+      expect(fileUpdateTracker.addExtensionCheckHistory(record({ account: 'bob' }))).toBe(false);
+      expect(fileUpdateTracker.addExtensionCheckHistory(
+        { ...record(), schemaVersion: 2 } as unknown as ExtensionCheckHistoryRecord,
+      )).toBe(false);
+      expect(fileUpdateTracker.checkHistory).toHaveLength(0);
+    });
   });
 });

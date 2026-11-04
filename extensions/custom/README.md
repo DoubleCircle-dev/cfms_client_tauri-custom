@@ -110,11 +110,29 @@ The host provides two additional capabilities for extensions that need recurring
   `create`, `update`, and `delete` operations to manage them. Tasks support intervals from 5 to
   10,080 minutes or local `HH:MM` times on selected ISO weekdays. Folder tasks use a server path
   beginning with `root/`.
-- `files.updates.check` accepts optional `folderPath` and `quiet` arguments. `quiet: true` returns
-  the report without updating the client's automatic-check state or emitting its check event.
+- `files.updates.check` accepts optional `folderPath`, `quiet` and `taskId` arguments. `quiet: true`
+  returns the report without updating the client's automatic-check state or emitting its check
+  event; instead the host writes a standardized history record (below) to the check history.
 - `files.sync.task` only synchronizes an enabled, saved task whose action is `update`; callers
   cannot supply an arbitrary folder. Stale local files are removed only when that task uses the
-  `mirror` policy and the workflow explicitly requests `deleteStale: true`.
+  `mirror` policy and the workflow explicitly requests `deleteStale: true`. Its checks are
+  recorded in the history with the task's ID.
+
+Quiet extension checks are recorded through the `cfms:extension-check-history` event with this
+contract (`schemaVersion: 1`):
+
+| Field | Meaning |
+| --- | --- |
+| `extensionId`, `taskId` | Originating extension and, when known, scheduled task |
+| `account` | Account the check ran for; other accounts' records are ignored |
+| `checkedAt` | Completion time, Unix milliseconds |
+| `noUpdates` | `true` when nothing was outdated |
+| `scope` | `{ kind: "all" \| "folder", folderPath }` |
+| `updates` | `{ count, items[{ id, title, path, kind: "added" \| "modified" }], hidden }` |
+| `denied` | `{ count, items[{ id, title, path }], hidden }` — content the server refused |
+| `dirs`, `docs` | Folders visited and documents inspected |
+
+Lists hold at most 50 items; `hidden` counts the remainder.
 
 Update tasks require both `schedules.manage` and `files.sync.task` to be authorized. The workflow
 must request user confirmation when creating or changing an update task. Set `update_policy` to

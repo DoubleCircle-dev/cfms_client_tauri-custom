@@ -145,6 +145,8 @@ export const customZhCn = {
     checkHistoryUpdates: '{count} 个文件需要更新',
     checkHistoryNoChanges: '无变化',
     checkHistoryScope: '{dirs} 个子目录，{docs} 个文档',
+    checkHistoryScopePath: '范围：{path}',
+    checkHistorySource: '来自扩展 {extension}',
     checkHistoryBadgeChanges: '{count} 处变化',
     checkHistoryBadgeNone: '无变化',
     checkKindAdded: '新增',

@@ -144,6 +144,8 @@ export const customEn = {
     checkHistoryAccessTransitions: '{revoked} access revoked · {restored} restored',
     checkHistoryUpdates: '{count, plural, one {# file needs update} other {# files need update}}',
     checkHistoryNoChanges: 'No changes',
+    checkHistoryScopePath: 'Scope: {path}',
+    checkHistorySource: 'By extension {extension}',
     checkHistoryScope: '{dirs, plural, one {# folder} other {# folders}}, {docs, plural, one {# document} other {# documents}}',
     checkHistoryBadgeChanges: '{count, plural, one {# change} other {# changes}}',
     checkHistoryBadgeNone: 'No changes',

@@ -29,6 +29,7 @@ export async function initFileAutoCheck(): Promise<void> {
   const unlisten = await subscribeFileAutoCheck(
     (report) => applyReport(report),
     (schedule) => fileUpdateTracker.applySchedule(schedule),
+    (record) => fileUpdateTracker.addExtensionCheckHistory(record),
   );
   unsubscribe = unlisten ? unlisten.map((fn) => () => fn()) : null;
 
