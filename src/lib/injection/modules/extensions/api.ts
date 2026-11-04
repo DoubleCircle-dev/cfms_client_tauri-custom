@@ -191,7 +191,7 @@ export type DeclarativeBlock =
   | ({ type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' } & StyledBlock)
   | ({ type: 'progress'; label: string; value: number; max?: number } & StyledBlock)
   | ({ type: 'list'; title?: string; items: Array<{ title: string; description?: string; value?: string }> } & StyledBlock)
-  | ({ type: 'table'; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> } & StyledBlock)
+  | ({ type: 'table'; id?: string; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> } & StyledBlock)
   | ({ type: 'empty_state'; title: string; description?: string } & StyledBlock)
   | ({
       type: 'form';

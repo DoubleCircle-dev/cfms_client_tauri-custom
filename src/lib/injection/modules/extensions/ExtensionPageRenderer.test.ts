@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DeclarativePage } from '$lib/injection/modules/extensions/api';
@@ -11,8 +11,12 @@ vi.mock('$lib/injection/modules/extensions/api', () => ({
 vi.mock('$lib/injection/modules/extensions/workflows', () => ({
   runExtensionWorkflow: vi.fn(),
 }));
+vi.mock('$lib/stores.svelte', () => ({
+  notificationStore: { error: vi.fn() },
+}));
 
 import { readExtensionPage } from '$lib/injection/modules/extensions/api';
+import { runExtensionWorkflow } from '$lib/injection/modules/extensions/workflows';
 import ExtensionPageRenderer from './ExtensionPageRenderer.svelte';
 
 afterEach(() => {
@@ -104,5 +108,69 @@ describe('ExtensionPageRenderer', () => {
         .toContain('.plugin-content{color:red}');
     });
     expect(container.querySelectorAll('.extension-grid > *')).toHaveLength(1);
+  });
+
+  it('replaces declared table rows from successful workflow results', async () => {
+    vi.mocked(readExtensionPage).mockResolvedValue({
+      schema_version: 1,
+      title: 'Schedules',
+      blocks: [
+        {
+          type: 'table',
+          id: 'task-table',
+          columns: [{ key: 'name', label: 'Name' }],
+          rows: [{ name: 'Initial row' }],
+        },
+        {
+          type: 'actions',
+          actions: [{ id: 'refresh', label: 'Refresh', workflow: 'list-tasks', result_id: 'output' }],
+        },
+      ],
+    });
+    vi.mocked(runExtensionWorkflow).mockResolvedValue({
+      ok: true,
+      table_values: { 'task-table': [{ name: 'New task' }] },
+    });
+
+    render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.scheduler', pageId: 'overview' },
+    });
+    await screen.findByText('Initial row');
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    expect(await screen.findByText('New task')).toBeTruthy();
+    expect(screen.queryByText('Initial row')).toBeNull();
+  });
+
+  it('rejects table row payloads over the row limit without replacing existing rows', async () => {
+    vi.mocked(readExtensionPage).mockResolvedValue({
+      schema_version: 1,
+      title: 'Schedules',
+      blocks: [
+        {
+          type: 'table',
+          id: 'task-table',
+          columns: [{ key: 'name', label: 'Name' }],
+          rows: [{ name: 'Initial row' }],
+        },
+        {
+          type: 'actions',
+          actions: [{ id: 'refresh', label: 'Refresh', workflow: 'list-tasks', result_id: 'output' }],
+        },
+      ],
+    });
+    vi.mocked(runExtensionWorkflow).mockResolvedValue({
+      ok: true,
+      table_values: { 'task-table': Array.from({ length: 65 }, (_, index) => ({ name: `Task ${index}` })) },
+    });
+
+    render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.scheduler', pageId: 'overview' },
+    });
+    await screen.findByText('Initial row');
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    expect(await screen.findByText('Initial row')).toBeTruthy();
+    expect(screen.queryByText('Task 0')).toBeNull();
   });
 });

@@ -21,6 +21,7 @@
   let error = $state<string | null>(null);
   let runningAction = $state<string | null>(null);
   let formValues = $state<Record<string, Record<string, unknown>>>({});
+  let tableRows = $state<Record<string, Record<string, unknown>[]>>({});
   let selectedTabs = $state<Record<string, string>>({});
   let results = $state<Record<string, string>>({});
   let resultErrors = $state<Record<string, string>>({});
@@ -53,6 +54,7 @@
       );
       results = {};
       resultErrors = {};
+      tableRows = {};
       const values: Record<string, Record<string, unknown>> = {};
       for (const block of loadedPage.blocks) {
         if (block.type !== 'form') continue;
@@ -141,6 +143,47 @@
     }
   }
 
+  function applyWorkflowTableValues(value: unknown) {
+    if (!page || value === undefined) return;
+    if (!isRecord(value)) {
+      notificationStore.error('Workflow table_values must be an object');
+      return;
+    }
+
+    const updates: Record<string, Record<string, unknown>[]> = {};
+    for (const [tableId, rows] of Object.entries(value)) {
+      const table = page.blocks.find(
+        (block): block is Extract<DeclarativeBlock, { type: 'table' }> =>
+          block.type === 'table' && block.id === tableId,
+      );
+      if (!table) {
+        notificationStore.error(`Workflow returned undeclared table ${tableId}`);
+        continue;
+      }
+      if (!Array.isArray(rows) || rows.length > 64 || !rows.every(isRecord)) {
+        notificationStore.error(`Workflow table ${tableId} must contain at most 64 object rows`);
+        continue;
+      }
+
+      let serialized: string;
+      try {
+        serialized = JSON.stringify(rows);
+      } catch (cause) {
+        notificationStore.error(cause instanceof Error ? cause.message : String(cause));
+        continue;
+      }
+      if (new TextEncoder().encode(serialized).byteLength > 64 * 1024) {
+        notificationStore.error(`Workflow table ${tableId} exceeds the 64 KiB limit`);
+        continue;
+      }
+      const columns = new Set(table.columns.map((column) => column.key));
+      updates[tableId] = rows.map((row) =>
+        Object.fromEntries(Object.entries(row).filter(([key]) => columns.has(key))),
+      );
+    }
+    tableRows = { ...tableRows, ...updates };
+  }
+
   function clearAction(action: Extract<DeclarativeAction, { kind: 'clear' }>) {
     const form = page?.blocks.find(
       (block): block is Extract<DeclarativeBlock, { type: 'form' }> =>
@@ -203,6 +246,7 @@
             results = nextResults;
           }
           applyWorkflowValues(output.form_values);
+          applyWorkflowTableValues(output.table_values);
         } else if (typeof output.error === 'string') {
           resultErrors = { ...resultErrors, [action.result_id]: output.error };
         }
@@ -315,7 +359,7 @@
             <section class={blockClass(block, 'extension-card extension-wide table-wrap')}>
               {#if block.title}<h2>{block.title}</h2>{/if}
               <table><thead><tr>{#each block.columns as column}<th>{column.label}</th>{/each}</tr></thead>
-                <tbody>{#each block.rows as row}<tr>{#each block.columns as column}<td>{cellValue(row, column.key)}</td>{/each}</tr>{/each}</tbody>
+                <tbody>{#each (block.id ? tableRows[block.id] : undefined) ?? block.rows as row}<tr>{#each block.columns as column}<td>{cellValue(row, column.key)}</td>{/each}</tr>{/each}</tbody>
               </table>
             </section>
           {:else if block.type === 'empty_state'}

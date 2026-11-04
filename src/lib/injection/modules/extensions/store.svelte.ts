@@ -2,14 +2,18 @@ import { listen } from '@tauri-apps/api/event';
 import {
   getExtensionOverview,
   installExtensionFromCatalog,
+  recordExtensionScheduleRun,
   refreshExtensionCatalog,
   setExtensionEnabled,
+  updateExtensionSchedule,
   type ExtensionCapability,
   type ExtensionInstallation,
   type ExtensionCatalog,
   type ExtensionOverview,
+  type ExtensionScheduleTask,
 } from '$lib/injection/modules/extensions/api';
 import { runExtensionWorkflow } from '$lib/injection/modules/extensions/workflows';
+import { getScheduleDueAt, isScheduleOccurrenceMissed } from '$lib/injection/modules/extensions/schedule-timing';
 import { canAutoUpdateExtension } from '$lib/injection/modules/extensions/trust';
 import { notificationStore } from '$lib/stores.svelte';
 
@@ -19,6 +23,13 @@ class ExtensionsStore {
   error = $state<string | null>(null);
   private accountScope: string | null = null;
   private timers = new Map<string, number>();
+  private scheduleTickTimer: number | null = null;
+  private scheduleTickRunning = false;
+  private runningSchedules = new Set<string>();
+  private scheduleControllers = new Map<string, AbortController>();
+  private pendingSchedules = new Set<string>();
+  private scheduleLastRuns = new Map<string, number>();
+  private scheduleFailures = new Map<string, number>();
   private running = new Set<string>();
   private controllers = new Map<string, AbortController>();
   private failures = new Map<string, number>();
@@ -38,9 +49,29 @@ class ExtensionsStore {
     this.error = null;
     try {
       this.overview = await getExtensionOverview();
+      const currentScheduleKeys = new Set(
+        Object.entries(this.overview.schedules).flatMap(([extensionId, tasks]) =>
+          tasks.map((task) => scheduleKey(extensionId, task.id)),
+        ),
+      );
+      for (const key of this.pendingSchedules) {
+        if (!currentScheduleKeys.has(key)) this.pendingSchedules.delete(key);
+      }
+      for (const key of this.scheduleLastRuns.keys()) {
+        if (!currentScheduleKeys.has(key)) this.scheduleLastRuns.delete(key);
+      }
+      for (const key of this.scheduleFailures.keys()) {
+        if (!currentScheduleKeys.has(key)) this.scheduleFailures.delete(key);
+      }
       const enabledIds = new Set(this.enabledInstallations.map((item) => item.manifest.id));
-      for (const key of this.timers.keys()) {
-        const extensionId = key.slice(0, key.indexOf(':'));
+      const managedIds = new Set([
+        ...(this.overview?.installed ?? []).map((item) => item.manifest.id),
+        ...[...this.timers.keys()].map((key) => key.slice(0, key.indexOf(':'))),
+        ...this.scheduleControllers.keys(),
+        ...[...this.pendingSchedules].map((key) => key.split('\0', 1)[0]),
+        ...[...this.scheduleLastRuns.keys()].map((key) => key.split('\0', 1)[0]),
+      ]);
+      for (const extensionId of managedIds) {
         if (!enabledIds.has(extensionId)) this.clearExtensionTimers(extensionId);
       }
       if (this.accountScope) this.scheduleIntervals();
@@ -66,6 +97,7 @@ class ExtensionsStore {
         if (trigger.type === 'on_enable') void this.runBackground(extensionId, trigger.workflow);
       }
       this.scheduleIntervals();
+      void this.runScheduledTasks();
     }
   }
 
@@ -84,6 +116,8 @@ class ExtensionsStore {
       }
     }
     this.scheduleIntervals();
+    this.startScheduleTicker();
+    void this.runScheduledTasks();
   }
 
   private ensureEventListener() {
@@ -96,6 +130,12 @@ class ExtensionsStore {
       }).catch((error: unknown) => {
         console.warn('[cfms] Could not subscribe to extension schedule changes.', error);
       });
+      const refreshSchedules = () => {
+        if (!this.accountScope || document.visibilityState !== 'visible') return;
+        void this.refresh().then(() => this.runScheduledTasks());
+      };
+      document.addEventListener('visibilitychange', refreshSchedules);
+      window.addEventListener('focus', refreshSchedules);
     }
     this.catalogTimer = window.setInterval(() => void this.syncCatalog(), 24 * 60 * 60_000);
     window.addEventListener('cfms:extension-event', (event) => {
@@ -164,6 +204,141 @@ class ExtensionsStore {
     }
   }
 
+  private startScheduleTicker() {
+    if (!this.accountScope || this.scheduleTickTimer !== null) return;
+    this.scheduleTickTimer = window.setInterval(() => {
+      void this.runScheduledTasks();
+    }, 30_000);
+  }
+
+  private async runScheduledTasks() {
+    if (!this.accountScope || !this.overview || this.scheduleTickRunning) return;
+    this.scheduleTickRunning = true;
+    try {
+      const now = Date.now();
+      for (const installation of this.enabledInstallations) {
+        const extensionId = installation.manifest.id;
+        const dueTasks: Array<{ task: ExtensionScheduleTask; key: string }> = [];
+        for (const task of this.overview.schedules[extensionId] ?? []) {
+          if (!task.enabled) continue;
+          const key = scheduleKey(extensionId, task.id);
+          const lastRunAt = this.scheduleLastRuns.get(key);
+          const dueAt = this.pendingSchedules.has(key)
+            ? now
+            : getScheduleDueAt(
+              lastRunAt === undefined ? task : { ...task, last_run_at: lastRunAt },
+              now,
+            );
+          if (dueAt === null) continue;
+
+          if (
+            task.kind === 'fixed_time'
+            && !task.catch_up
+            && isScheduleOccurrenceMissed(dueAt, now)
+          ) {
+            this.pendingSchedules.delete(key);
+            await this.recordScheduleRun(extensionId, task.id, key, 'skipped', 'Missed occurrence was not caught up');
+            continue;
+          }
+          dueTasks.push({ task, key });
+        }
+        if (dueTasks.length === 0) continue;
+
+        const tasksToDefer = this.runningSchedules.has(extensionId)
+          ? dueTasks
+          : dueTasks.slice(1);
+        for (const { task, key } of tasksToDefer) {
+          this.pendingSchedules.add(key);
+          await this.recordScheduleRun(extensionId, task.id, key, 'skipped', 'Deferred while another task was running');
+        }
+        if (this.runningSchedules.has(extensionId)) continue;
+
+        const next = dueTasks[0];
+        this.pendingSchedules.delete(next.key);
+        this.runningSchedules.add(extensionId);
+        const controller = new AbortController();
+        this.scheduleControllers.set(extensionId, controller);
+        try {
+          await this.runScheduledTask(extensionId, next.task, next.key, controller.signal);
+        } finally {
+          this.scheduleControllers.delete(extensionId);
+          this.runningSchedules.delete(extensionId);
+        }
+      }
+    } finally {
+      this.scheduleTickRunning = false;
+    }
+  }
+
+  private async runScheduledTask(
+    extensionId: string,
+    task: ExtensionScheduleTask,
+    key: string,
+    signal: AbortSignal,
+  ) {
+    try {
+      const result = await runExtensionWorkflow(extensionId, task.workflow, {
+        background: true,
+        input: { task },
+        signal,
+      });
+      if (signal.aborted) return;
+      if (isRecord(result) && result.ok === false) {
+        throw new Error(typeof result.error === 'string' ? result.error : 'Scheduled workflow failed');
+      }
+      this.scheduleFailures.delete(key);
+      const summary = isRecord(result) && typeof result.output === 'string'
+        ? result.output.slice(0, 1_000)
+        : null;
+      await this.recordScheduleRun(extensionId, task.id, key, 'success', summary);
+      if (task.notify === 'always') {
+        notificationStore.success(summary ?? `${task.name} completed.`);
+      }
+    } catch (error) {
+      if (signal.aborted) return;
+      const summary = (error instanceof Error ? error.message : String(error)).slice(0, 1_000);
+      const failures = (this.scheduleFailures.get(key) ?? 0) + 1;
+      this.scheduleFailures.set(key, failures);
+      await this.recordScheduleRun(extensionId, task.id, key, 'failure', summary);
+      if (task.notify === 'always' || task.notify === 'problems_only') {
+        notificationStore.error(`${task.name}: ${summary}`);
+      }
+      if (failures >= 5) await this.disableRepeatedlyFailingSchedule(extensionId, task, key);
+    }
+  }
+
+  private async recordScheduleRun(
+    extensionId: string,
+    taskId: string,
+    key: string,
+    status: 'success' | 'failure' | 'skipped',
+    summary: string | null,
+  ) {
+    this.scheduleLastRuns.set(key, Date.now());
+    try {
+      const updated = await recordExtensionScheduleRun(extensionId, taskId, status, summary);
+      if (updated.last_run_at !== null) this.scheduleLastRuns.set(key, updated.last_run_at);
+    } catch (error) {
+      console.error(`[cfms] Could not record extension schedule ${taskId}.`, error);
+      notificationStore.error(`Could not record scheduled task "${taskId}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async disableRepeatedlyFailingSchedule(
+    extensionId: string,
+    task: ExtensionScheduleTask,
+    key: string,
+  ) {
+    try {
+      await updateExtensionSchedule(extensionId, task.id, { ...task, enabled: false });
+      this.scheduleFailures.delete(key);
+      notificationStore.error(`Scheduled task "${task.name}" was disabled after five consecutive failures.`);
+    } catch (error) {
+      console.error(`[cfms] Could not disable repeatedly failing schedule ${task.id}.`, error);
+      notificationStore.error(`Could not disable scheduled task "${task.name}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   private async runBackground(extensionId: string, workflow: string) {
     const key = `${extensionId}:${workflow}`;
     if (this.running.has(key)) return;
@@ -209,11 +384,31 @@ class ExtensionsStore {
         this.controllers.delete(key);
       }
     }
+    this.scheduleControllers.get(extensionId)?.abort();
+    const schedulePrefix = `${extensionId}\0`;
+    for (const key of this.pendingSchedules) {
+      if (key.startsWith(schedulePrefix)) this.pendingSchedules.delete(key);
+    }
+    for (const key of this.scheduleLastRuns.keys()) {
+      if (key.startsWith(schedulePrefix)) this.scheduleLastRuns.delete(key);
+    }
+    for (const key of this.scheduleFailures.keys()) {
+      if (key.startsWith(schedulePrefix)) this.scheduleFailures.delete(key);
+    }
   }
 
   private clearTimers() {
     for (const timer of this.timers.values()) window.clearInterval(timer);
     this.timers.clear();
+    if (this.scheduleTickTimer !== null) {
+      window.clearInterval(this.scheduleTickTimer);
+      this.scheduleTickTimer = null;
+    }
+    this.pendingSchedules.clear();
+    this.scheduleLastRuns.clear();
+    this.scheduleFailures.clear();
+    for (const controller of this.scheduleControllers.values()) controller.abort();
+    this.scheduleControllers.clear();
     for (const controller of this.controllers.values()) controller.abort();
     this.controllers.clear();
   }
@@ -230,4 +425,12 @@ function compareVersions(left: string, right: string): number {
     if (difference !== 0) return difference;
   }
   return 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function scheduleKey(extensionId: string, taskId: string): string {
+  return `${extensionId}\0${taskId}`;
 }

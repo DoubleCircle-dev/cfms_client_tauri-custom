@@ -11,6 +11,7 @@ import { notificationStore } from '$lib/stores.svelte';
 const MAX_STEPS = 100;
 const MAX_DURATION_MS = 30_000;
 const MAX_FILE_UPDATE_DURATION_MS = 10 * 60_000;
+const MAX_MAP_ITEMS = 1_024;
 
 export interface WorkflowRunOptions {
   input?: Record<string, unknown>;
@@ -210,8 +211,28 @@ function evaluateExpression(expression: unknown, context: Record<string, unknown
     return resolveValue(expression, context);
   }
   const item = expression as Record<string, unknown>;
-  const operator = String(item.op ?? 'value');
-  const args = Array.isArray(item.args) ? item.args.map((value) => evaluateExpression(value, context)) : [];
+  if (typeof item.op !== 'string') {
+    return Object.fromEntries(
+      Object.entries(item).map(([key, value]) => [key, evaluateExpression(value, context)]),
+    );
+  }
+  const operator = item.op;
+  const expressionArgs = Array.isArray(item.args) ? item.args : [];
+  if (operator === 'if') {
+    if (expressionArgs.length !== 3) throw new Error('The if operator requires exactly three arguments');
+    const branch = truthy(evaluateExpression(expressionArgs[0], context)) ? 1 : 2;
+    return evaluateExpression(expressionArgs[branch], context);
+  }
+  if (operator === 'map') {
+    if (expressionArgs.length !== 2) throw new Error('The map operator requires exactly two arguments');
+    const values = evaluateExpression(expressionArgs[0], context);
+    if (!Array.isArray(values)) throw new Error('The map operator requires an array as its first argument');
+    if (values.length > MAX_MAP_ITEMS) throw new Error(`The map operator cannot process more than ${MAX_MAP_ITEMS} items`);
+    return values.map((value) =>
+      evaluateExpression(expressionArgs[1], { ...context, item: value }),
+    );
+  }
+  const args = expressionArgs.map((value) => evaluateExpression(value, context));
   switch (operator) {
     case 'value': return resolveValue(item.value, context);
     case 'eq': return args[0] === args[1];
