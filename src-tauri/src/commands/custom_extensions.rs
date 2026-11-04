@@ -13,9 +13,9 @@ pub struct ExtensionAccountStateDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtensionOverviewDto {
-    installed: Vec<cfms_service::extensions::ExtensionInstallation>,
+    installed: Vec<cfms_service::extensions_system::ExtensionInstallation>,
     account_states: std::collections::BTreeMap<String, ExtensionAccountStateDto>,
-    catalog: Option<cfms_service::extensions::CatalogDocument>,
+    catalog: Option<cfms_service::extensions_system::CatalogDocument>,
     trusted_keys_configured: bool,
     host_api_version: &'static str,
     supported_host_api_versions: [&'static str; 2],
@@ -72,7 +72,7 @@ pub async fn get_extension_overview(
         .collect();
     let catalog = state
         .extensions
-        .cached_catalog(cfms_service::extensions::DEFAULT_CATALOG_URL)
+        .cached_catalog(cfms_service::extensions_system::DEFAULT_CATALOG_URL)
         .unwrap_or(None);
 
     Ok(ExtensionOverviewDto {
@@ -80,10 +80,10 @@ pub async fn get_extension_overview(
         account_states,
         catalog,
         trusted_keys_configured: state.extensions.has_trusted_keys(),
-        host_api_version: cfms_service::extensions::HOST_API_VERSION,
+        host_api_version: cfms_service::extensions_system::HOST_API_VERSION,
         supported_host_api_versions: [
-            cfms_service::extensions::HOST_API_VERSION,
-            cfms_service::extensions::WASM_HOST_API_VERSION,
+            cfms_service::extensions_system::HOST_API_VERSION,
+            cfms_service::extensions_system::WASM_HOST_API_VERSION,
         ],
     })
 }
@@ -92,7 +92,7 @@ pub async fn get_extension_overview(
 pub async fn import_extension_package(
     state: tauri::State<'_, AppHandleState>,
     path: String,
-) -> Result<cfms_service::extensions::ExtensionInstallation, String> {
+) -> Result<cfms_service::extensions_system::ExtensionInstallation, String> {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = state;
@@ -121,7 +121,7 @@ pub async fn import_extension_package(
 #[tauri::command]
 pub async fn refresh_extension_catalog(
     state: tauri::State<'_, AppHandleState>,
-) -> Result<cfms_service::extensions::CatalogDocument, String> {
+) -> Result<cfms_service::extensions_system::CatalogDocument, String> {
     fetch_and_cache_extension_catalog(&state).await
 }
 
@@ -129,7 +129,7 @@ pub async fn refresh_extension_catalog(
 pub async fn install_extension_from_catalog(
     state: tauri::State<'_, AppHandleState>,
     extension_id: String,
-) -> Result<cfms_service::extensions::ExtensionInstallation, String> {
+) -> Result<cfms_service::extensions_system::ExtensionInstallation, String> {
     #[cfg(target_os = "ios")]
     {
         let _ = state;
@@ -140,7 +140,7 @@ pub async fn install_extension_from_catalog(
     {
         let catalog = match state
             .extensions
-            .cached_catalog(cfms_service::extensions::DEFAULT_CATALOG_URL)?
+            .cached_catalog(cfms_service::extensions_system::DEFAULT_CATALOG_URL)?
         {
             Some(catalog) => catalog,
             None => fetch_and_cache_extension_catalog(&state).await?,
@@ -184,7 +184,7 @@ pub async fn install_extension_from_catalog(
 pub async fn rollback_extension(
     state: tauri::State<'_, AppHandleState>,
     extension_id: String,
-) -> Result<cfms_service::extensions::ExtensionInstallation, String> {
+) -> Result<cfms_service::extensions_system::ExtensionInstallation, String> {
     let store = state.extensions.clone();
     tokio::task::spawn_blocking(move || store.rollback(&extension_id))
         .await
@@ -441,11 +441,11 @@ pub async fn execute_extension_host_call(
 
 async fn fetch_and_cache_extension_catalog(
     state: &tauri::State<'_, AppHandleState>,
-) -> Result<cfms_service::extensions::CatalogDocument, String> {
+) -> Result<cfms_service::extensions_system::CatalogDocument, String> {
     if !state.extensions.has_trusted_keys() {
         return Err("No official extension signing public key is configured for this build".into());
     }
-    let catalog_url = cfms_service::extensions::DEFAULT_CATALOG_URL;
+    let catalog_url = cfms_service::extensions_system::DEFAULT_CATALOG_URL;
     let signature_url = format!("{catalog_url}.sig");
     let client = update_http_client(updater_proxy_url(state)?.as_ref())?;
     let catalog_response = client

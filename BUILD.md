@@ -38,7 +38,7 @@ packages while keeping bundled optional modules available.
 
 Keep the corresponding 32-byte private seed only in the protected extension publishing repository
 as `CFMS_EXTENSION_SIGNING_KEY`. Packaging and catalog-signing commands are documented in
-`extensions/README.md`.
+`extensions/custom/README.md`.
 
 ### Windows (EV Code Signing)
 

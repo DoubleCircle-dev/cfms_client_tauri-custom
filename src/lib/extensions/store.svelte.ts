@@ -7,8 +7,8 @@ import {
   type ExtensionInstallation,
   type ExtensionCatalog,
   type ExtensionOverview,
-} from '$lib/api/extensions';
-import { runExtensionWorkflow } from '$lib/extension-workflows';
+} from '$lib/extensions/api';
+import { runExtensionWorkflow } from '$lib/extensions/workflows';
 import { notificationStore } from '$lib/stores.svelte';
 
 class ExtensionsStore {

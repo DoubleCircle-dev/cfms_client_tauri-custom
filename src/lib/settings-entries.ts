@@ -1,5 +1,5 @@
 import type { IconName } from '$lib/icons';
-import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
+import { USER_EXTENSIONS_ENABLED } from '$lib/extensions/feature-flags';
 import { mergeSettingsEntries } from '$lib/injection/registry';
 import { isMobilePlatform } from '$lib/platform';
 
@@ -151,7 +151,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = mergeSettingsEntries([
     labelKey: 'settings.extensions.title',
     descriptionKey: 'settings.extensions.description',
     icon: 'extensions',
-    href: '/home/settings/extensions',
+    href: '/home/settings/custom-extensions',
     group: 'maintenance',
     feature: 'extensions',
   },

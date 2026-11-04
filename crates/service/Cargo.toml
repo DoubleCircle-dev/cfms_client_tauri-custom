@@ -6,6 +6,12 @@ license.workspace = true
 repository.workspace = true
 description = "CFMS background services, persistent state, and local filesystem scanning"
 
+# The extension packaging tool lives at a fork-owned path; the binary keeps its
+# upstream name so documented commands keep working.
+[[bin]]
+name = "cfms-extension"
+path = "src/bin/custom-extension.rs"
+
 [dependencies]
 cfms-core.workspace = true
 cfms-crypto.workspace = true

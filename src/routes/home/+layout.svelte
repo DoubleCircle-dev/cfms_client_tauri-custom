@@ -35,8 +35,8 @@
     registerKeyboardCommands,
   } from '$lib/keyboard';
   import { supportsKeyboardShortcuts } from '$lib/platform';
-  import { extensionsStore } from '$lib/extensions.svelte';
-  import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
+  import { extensionsStore } from '$lib/extensions/store.svelte';
+  import { USER_EXTENSIONS_ENABLED } from '$lib/extensions/feature-flags';
   import { isIconName } from '$lib/injection/icons';
   import { shouldOfferConnectionReturn } from '$lib/public-utility-navigation';
   import {
@@ -131,7 +131,7 @@
           installation.manifest.entrypoints.navigation.map((entry) => ({
             id: `extension:${installation.manifest.id}:${entry.id}`,
             label: entry.label,
-            href: `/home/extensions/view?extension=${encodeURIComponent(installation.manifest.id)}&page=${encodeURIComponent(entry.page)}`,
+            href: `/home/custom-extensions/view?extension=${encodeURIComponent(installation.manifest.id)}&page=${encodeURIComponent(entry.page)}`,
             icon: isIconName(entry.icon) ? entry.icon : 'extensions',
             exact: true,
           })),
@@ -161,7 +161,7 @@
     if (path === '/home/overview') return $t('nav.home');
     if (path === '/home/files') return $t('workspace.allFiles');
     if (path === '/home/tasks') return $t('workspace.transfers');
-    if (path === '/home/extensions/view') {
+    if (path === '/home/custom-extensions/view') {
       const extensionId = $page.url.searchParams.get('extension');
       const pageId = $page.url.searchParams.get('page');
       const installation = extensionsStore.enabledInstallations.find((item) => item.manifest.id === extensionId);

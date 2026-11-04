@@ -119,7 +119,7 @@ through `CFMS_EXTENSION_SIGNING_KEY` only in the protected publishing environmen
 ```powershell
 $env:CFMS_EXTENSION_SIGNING_KEY = "<64 hex characters>"
 cargo run -p cfms-service --bin cfms-extension -- public-key
-cargo run -p cfms-service --bin cfms-extension -- pack extensions/examples/file-stats dist/file-stats.cfmsext official-2026
+cargo run -p cfms-service --bin cfms-extension -- pack extensions/custom/examples/file-stats dist/file-stats.cfmsext official-2026
 cargo run -p cfms-service --bin cfms-extension -- sign-catalog catalog.json catalog.json.sig official-2026
 ```
 

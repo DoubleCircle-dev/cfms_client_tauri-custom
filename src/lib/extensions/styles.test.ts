@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DeclarativePage } from '$lib/api/extensions';
+import type { DeclarativePage } from '$lib/extensions/api';
 import { createExtensionStylesheet } from './styles';
 
 function page(overrides: Partial<DeclarativePage> = {}): DeclarativePage {

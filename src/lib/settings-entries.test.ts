@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { USER_EXTENSIONS_ENABLED } from '$lib/extensions/feature-flags';
 import { getVisibleSettingsEntries, getVisibleSettingsGroups } from './settings-entries';
 
 describe('settings entry visibility', () => {
@@ -72,10 +73,11 @@ describe('settings entry visibility', () => {
     expect(github?.requiresAuth).toBeUndefined();
   });
 
-  it('keeps extension settings outside user-reachable settings', () => {
+  it('follows the extension release gate', () => {
     const entries = getVisibleSettingsEntries({ isLoggedIn: true, isMobile: false });
+    const hasEntry = entries.some((entry) => entry.href === '/home/settings/custom-extensions');
 
-    expect(entries.some((entry) => entry.href === '/home/settings/extensions')).toBe(false);
+    expect(hasEntry).toBe(USER_EXTENSIONS_ENABLED);
   });
 
   it('offers window and tray settings on desktop only, signed in or not', () => {

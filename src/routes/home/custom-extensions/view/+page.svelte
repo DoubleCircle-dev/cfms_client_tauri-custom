@@ -2,8 +2,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onMount } from 'svelte';
-  import ExtensionPageRenderer from '$lib/components/ExtensionPageRenderer.svelte';
-  import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
+  import ExtensionPageRenderer from '$lib/extensions/ExtensionPageRenderer.svelte';
+  import { USER_EXTENSIONS_ENABLED } from '$lib/extensions/feature-flags';
 
   const extensionId = $derived(page.url.searchParams.get('extension') ?? '');
   const pageId = $derived(page.url.searchParams.get('page') ?? '');

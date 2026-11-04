@@ -48,8 +48,8 @@
     notificationStore,
   } from "$lib/stores.svelte";
   import { appLockStore } from "$lib/app-lock.svelte";
-  import { extensionsStore } from "$lib/extensions.svelte";
-  import { USER_EXTENSIONS_ENABLED } from "$lib/feature-flags";
+  import { extensionsStore } from "$lib/extensions/store.svelte";
+  import { USER_EXTENSIONS_ENABLED } from "$lib/extensions/feature-flags";
   import { clearAuthSession, getLocalDataResetStatus, getServiceStatus, getAuthStatus, getServerState } from "$lib/api";
   import AppLockOverlay from "$lib/components/AppLockOverlay.svelte";
   import LockdownBanner from "$lib/components/LockdownBanner.svelte";
@@ -162,11 +162,11 @@
 
     // Extension routes remain compiled for ongoing development, but must not
     // be user-reachable until the release gate in feature-flags.ts is enabled.
-    if (!USER_EXTENSIONS_ENABLED && path === "/home/settings/extensions") {
+    if (!USER_EXTENSIONS_ENABLED && path === "/home/settings/custom-extensions") {
       goto("/home/settings", { replaceState: true });
       return;
     }
-    if (!USER_EXTENSIONS_ENABLED && path.startsWith("/home/extensions")) {
+    if (!USER_EXTENSIONS_ENABLED && path.startsWith("/home/custom-extensions")) {
       goto(authStore.isLoggedIn ? "/home/overview" : "/home/settings", { replaceState: true });
       return;
     }
@@ -262,7 +262,7 @@
       return;
     }
 
-    if (USER_EXTENSIONS_ENABLED && authStore.isLoggedIn && path === "/home/extensions/view" && extensionsStore.overview && !extensionsStore.loading) {
+    if (USER_EXTENSIONS_ENABLED && authStore.isLoggedIn && path === "/home/custom-extensions/view" && extensionsStore.overview && !extensionsStore.loading) {
       const extensionId = page.url.searchParams.get("extension");
       if (!extensionId || !extensionsStore.enabledInstallations.some((item) => item.manifest.id === extensionId)) {
         goto("/home/overview", { replaceState: true });

@@ -13,9 +13,9 @@
     uninstallExtension,
     type ExtensionCapability,
     type ExtensionInstallation,
-  } from '$lib/api/extensions';
-  import { extensionsStore } from '$lib/extensions.svelte';
-  import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
+  } from '$lib/extensions/api';
+  import { extensionsStore } from '$lib/extensions/store.svelte';
+  import { USER_EXTENSIONS_ENABLED } from '$lib/extensions/feature-flags';
   import { authStore, notificationStore } from '$lib/stores.svelte';
   import { isAndroidPlatform, isMobilePlatform } from '$lib/platform';
   import Icon from '$lib/components/Icon.svelte';
@@ -96,7 +96,7 @@
         enable,
         installation.manifest.requested_capabilities,
       );
-      if (!enable && location.pathname === '/home/extensions/view') await goto('/home/overview');
+      if (!enable && location.pathname === '/home/custom-extensions/view') await goto('/home/overview');
     } catch (error) { notificationStore.error(formatError(error)); }
     finally { busy = null; }
   }
@@ -175,7 +175,7 @@
               {#if accountState?.enabled && installation.manifest.entrypoints.navigation[0]}
                 <FluentButton data-fluent-owner="routes-home-settings-extensions-page"
                   type="button"
-                  onclick={() => goto(`/home/extensions/view?extension=${encodeURIComponent(installation.manifest.id)}&page=${encodeURIComponent(installation.manifest.entrypoints.navigation[0].page)}`)}
+                  onclick={() => goto(`/home/custom-extensions/view?extension=${encodeURIComponent(installation.manifest.id)}&page=${encodeURIComponent(installation.manifest.entrypoints.navigation[0].page)}`)}
                   appearance="subtle"
                 >{$t('settings.extensions.open')}</FluentButton>
               {/if}

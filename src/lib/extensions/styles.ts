@@ -1,4 +1,4 @@
-﻿import type { DeclarativePage, DeclarativeStyleRule } from '$lib/api/extensions';
+import type { DeclarativePage, DeclarativeStyleRule } from '$lib/extensions/api';
 
 const MAX_STYLES_BYTES = 16 * 1024;
 const MAX_STYLE_RULES = 64;

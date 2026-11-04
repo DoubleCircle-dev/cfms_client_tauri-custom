@@ -16,7 +16,7 @@ export * from './api/mobile';
 export * from './api/avatars';
 export * from './api/preferences';
 export * from './api/server-errors';
-export * from './api/extensions';
+export * from './extensions/api';
 export * from './api/local-data';
 export * from './api/credentials';
 export * from './api/developer';
