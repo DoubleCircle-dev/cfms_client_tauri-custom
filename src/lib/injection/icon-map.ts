@@ -1,9 +1,9 @@
 // CFMS Client — Fluent icon slugs the fork adds.
 //
-// `scripts/generate-fluent-icons.mjs` reads `$lib/fluent/icon-map` (which spreads
-// this map) and writes `icons.generated.ts`. The generated file is therefore a
-// pure artifact: an upstream merge that disagrees with it is resolved by running
-// `pnpm assets:fluent`, not by hand-editing either file.
+// `scripts/generate-fluent-icons.mjs` merges this map into the upstream
+// `$lib/fluent/icon-map` while generating `icons.generated.ts`, so neither of
+// those upstream files carries a fork line. An upstream merge that disagrees
+// with the generated file is resolved by running `pnpm assets:fluent`.
 
 export const CUSTOM_ICON_MAP = {
   tools: 'toolbox',

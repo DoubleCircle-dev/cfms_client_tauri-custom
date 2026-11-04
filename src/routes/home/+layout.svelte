@@ -37,7 +37,7 @@
   import { supportsKeyboardShortcuts } from '$lib/platform';
   import { extensionsStore } from '$lib/extensions.svelte';
   import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
-  import { isIconName } from '$lib/icons';
+  import { isIconName } from '$lib/injection/icons';
   import { shouldOfferConnectionReturn } from '$lib/public-utility-navigation';
   import {
     getCustomNavigationItems,

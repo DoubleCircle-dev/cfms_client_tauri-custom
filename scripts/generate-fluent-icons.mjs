@@ -1,6 +1,22 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ICON_MAP } from '../src/lib/fluent/icon-map.ts';
+import { CUSTOM_ICON_MAP } from '../src/lib/injection/icon-map.ts';
+
+// `fluent/icon-map.ts` is upstream-owned and stays untouched, so a merge never
+// conflicts there; the fork slugs are merged in here instead.
+function combinedIconMap() {
+  const entries = Object.entries(ICON_MAP);
+  const upstreamKeys = new Set(Object.keys(ICON_MAP));
+  for (const [key, slug] of Object.entries(CUSTOM_ICON_MAP)) {
+    if (upstreamKeys.has(key)) {
+      console.warn(`icon-map: upstream now defines "${key}"; keeping its "${ICON_MAP[key]}" slug`);
+      continue;
+    }
+    entries.push([key, slug]);
+  }
+  return entries;
+}
 
 const packageRoot = new URL('../node_modules/@fluentui/svg-icons/icons/', import.meta.url);
 const imports = new Map();
@@ -28,7 +44,7 @@ function asset(slug, size, style) {
   if (!imports.has(file)) imports.set(file, 'svg' + imports.size);
   return imports.get(file);
 }
-const entries = Object.entries(ICON_MAP).map(([key, slug]) =>
+const entries = combinedIconMap().map(([key, slug]) =>
   '  ' + key + ': { regular: ' + asset(slug, 24, 'regular') + ', filled: ' + asset(slug, 24, 'filled')
   + ', small: ' + asset(slug, 20, 'regular') + ', smallFilled: ' + asset(slug, 20, 'filled')
   + (duotoneSlugs.has(slug) ? ', duotone: ' + duotoneAsset(slug, 24) + ', smallDuotone: ' + duotoneAsset(slug, 20)

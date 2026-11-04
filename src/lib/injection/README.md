@@ -18,7 +18,8 @@ src/lib/injection/
 │   ├── tools.ts
 │   └── runtime-services.ts
 ├── messages/{en,zh-CN}.ts  fork strings, layered over the upstream catalogs
-└── icon-map.ts             fork Fluent icon slugs
+├── icon-map.ts             fork Fluent icon slugs, merged in by the generator
+└── icons.ts                fork icon helpers (e.g. `isIconName`)
 ```
 
 ## Contribution points
@@ -31,7 +32,7 @@ src/lib/injection/
 | `navigationItems` | `src/routes/home/+layout.svelte` | `CustomNavigationItem[]` |
 | `routeTitles` | `src/routes/home/+layout.svelte` | `{ path, titleKey }[]` |
 | `startup` / `dispose` | `src/routes/+layout.svelte` — `runCustomStartup` / `disposeCustomModules` | hook |
-| icon slugs | `src/lib/fluent/icon-map.ts` — `...CUSTOM_ICON_MAP` | `slug` map |
+| icon slugs | `scripts/generate-fluent-icons.mjs` — merges `icon-map.ts` into `$lib/fluent/icon-map.ts` | `slug` map |
 
 ## Adding a feature
 
@@ -48,9 +49,15 @@ files read them while they evaluate their own module body. Behaviour goes in
 
 ## Merge checklist for an upstream bump
 
-- `src/lib/i18n/messages/*.ts` should show **no** fork diff; fork strings live
-  in `messages/`.
+- `src/lib/i18n/messages/*.ts`, `src/lib/fluent/icon-map.ts` and
+  `src/lib/icons.ts` should show **no** fork diff. Fork strings live in
+  `messages/`, fork icon slugs in `icon-map.ts` and fork icon helpers in
+  `icons.ts`, all under `src/lib/injection/`.
 - `src/lib/fluent/icons.generated.ts` is generated: resolve any conflict by
   running `pnpm assets:fluent`.
-- Remaining fork hunks in upstream files should only be the seam lines above,
-  the icon-map import, and `SettingsPlatformScope`'s `'desktop'` value.
+- `Cargo.toml`, `Cargo.lock`, `package.json`, `tauri.conf.json`, the iOS
+  `Info.plist` and `CHANGELOG.md` are covered by the Git merge drivers in
+  `.gitattributes`; after the merge, restore the Custom version with
+  `pnpm app:version custom <upstream-base>`.
+- Remaining fork hunks in upstream files should only be the seam lines above
+  and `SettingsPlatformScope`'s `'desktop'` value.
