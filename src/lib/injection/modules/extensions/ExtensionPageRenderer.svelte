@@ -1,16 +1,20 @@
 <script lang="ts">
   import FluentButton from '$lib/components/FluentButton.svelte';
+  import { _ as t } from 'svelte-i18n';
   import {
     readExtensionPage,
     type DeclarativeAction,
     type DeclarativeBlock,
     type DeclarativePage,
+    type DeclarativeTableColumn,
   } from '$lib/injection/modules/extensions/api';
   import { createExtensionStylesheet } from '$lib/injection/modules/extensions/styles';
   import { runExtensionWorkflow } from '$lib/injection/modules/extensions/workflows';
   import { notificationStore } from '$lib/stores.svelte';
   import ProgressRing from '$lib/components/ProgressRing.svelte';
 
+  const MAX_TABLE_ROWS = 64;
+  const MAX_TABLE_BYTES = 64 * 1024;
   let { extensionId, pageId }: { extensionId: string; pageId: string } = $props();
   const formId = $props.id();
   const styleScopeId = `extension-${formId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
@@ -21,6 +25,7 @@
   let runningAction = $state<string | null>(null);
   let formValues = $state<Record<string, Record<string, unknown>>>({});
   let tableRows = $state<Record<string, Record<string, unknown>[]>>({});
+  let tableDeletions = $state<Record<string, Record<string, unknown>[]>>({});
   let selectedTabs = $state<Record<string, string>>({});
   let results = $state<Record<string, string>>({});
   let resultErrors = $state<Record<string, string>>({});
@@ -58,7 +63,14 @@
       );
       results = {};
       resultErrors = {};
-      tableRows = {};
+      const initialTableRows: Record<string, Record<string, unknown>[]> = {};
+      for (const block of loadedPage.blocks) {
+        if (block.type === 'table' && block.editable && block.id) {
+          initialTableRows[block.id] = normalizeEditableTableRows(block, block.rows) ?? [];
+        }
+      }
+      tableRows = initialTableRows;
+      tableDeletions = {};
       const values: Record<string, Record<string, unknown>> = {};
       for (const block of loadedPage.blocks) {
         if (block.type !== 'form') continue;
@@ -169,28 +181,169 @@
         notificationStore.error(`Workflow returned undeclared table ${tableId}`);
         continue;
       }
-      if (!Array.isArray(rows) || rows.length > 64 || !rows.every(isRecord)) {
-        notificationStore.error(`Workflow table ${tableId} must contain at most 64 object rows`);
+      if (!Array.isArray(rows) || rows.length > MAX_TABLE_ROWS || !rows.every(isRecord)) {
+        notificationStore.error(`Workflow table ${tableId} must contain at most ${MAX_TABLE_ROWS} object rows`);
         continue;
       }
 
-      let serialized: string;
-      try {
-        serialized = JSON.stringify(rows);
-      } catch (cause) {
-        notificationStore.error(cause instanceof Error ? cause.message : String(cause));
-        continue;
+      if (table.editable) {
+        const normalized = normalizeEditableTableRows(table, rows);
+        if (!normalized) {
+          notificationStore.error(`Workflow table ${tableId} contains invalid editable values or exceeds the 64 KiB limit`);
+          continue;
+        }
+        updates[tableId] = normalized;
+      } else {
+        if (!tableRowsWithinLimit(rows)) {
+          notificationStore.error(`Workflow table ${tableId} exceeds the 64 KiB limit`);
+          continue;
+        }
+        const columns = new Set(table.columns.map((column) => column.key));
+        updates[tableId] = rows.map((row) =>
+          Object.fromEntries(Object.entries(row).filter(([key]) => columns.has(key))),
+        );
       }
-      if (new TextEncoder().encode(serialized).byteLength > 64 * 1024) {
-        notificationStore.error(`Workflow table ${tableId} exceeds the 64 KiB limit`);
-        continue;
+    }
+    tableRows = { ...tableRows, ...updates };
+    const nextDeletions = { ...tableDeletions };
+    for (const tableId of Object.keys(updates)) delete nextDeletions[tableId];
+    tableDeletions = nextDeletions;
+  }
+
+  function createEditableTableRow(table: Extract<DeclarativeBlock, { type: 'table' }>): Record<string, unknown> {
+    return Object.fromEntries(table.columns.map((column) => [column.key, (column.type === 'checkbox' ? false : column.type === 'select' ? column.options?.[0] ?? '' : '')]));
+  }
+
+
+  function normalizeEditableTableRows(
+    table: Extract<DeclarativeBlock, { type: 'table' }>,
+    rows: unknown,
+  ): Record<string, unknown>[] | null {
+    if (!Array.isArray(rows) || rows.length > MAX_TABLE_ROWS || !rows.every(isRecord)) return null;
+    const normalized: Record<string, unknown>[] = [];
+    for (const row of rows) {
+      const next = createEditableTableRow(table);
+      for (const column of table.columns) {
+        if (!Object.hasOwn(row, column.key)) continue;
+        if (!isValidEditableCell(column, row[column.key])) return null;
+        next[column.key] = row[column.key];
       }
-      const columns = new Set(table.columns.map((column) => column.key));
-      updates[tableId] = rows.map((row) =>
+      normalized.push(next);
+    }
+    return tableRowsWithinLimit(normalized) ? normalized : null;
+  }
+
+  function isValidEditableCell(column: DeclarativeTableColumn, value: unknown): boolean {
+    switch (column.type ?? 'text') {
+      case 'checkbox':
+        return typeof value === 'boolean';
+      case 'number':
+        return value === '' || (typeof value === 'number' && Number.isFinite(value));
+      case 'select':
+        return typeof value === 'string' && (column.options ?? []).includes(value);
+      default:
+        return typeof value === 'string';
+    }
+  }
+
+  function tableRowsWithinLimit(rows: unknown): boolean {
+    try {
+      return new TextEncoder().encode(JSON.stringify(rows)).byteLength <= MAX_TABLE_BYTES;
+    } catch {
+      return false;
+    }
+  }
+
+  function currentTableRows(table: Extract<DeclarativeBlock, { type: 'table' }>) {
+    return table.id && Object.hasOwn(tableRows, table.id) ? tableRows[table.id] : table.rows;
+  }
+
+  function currentTableValues(): Record<string, Record<string, unknown>[]> {
+    if (!page) return {};
+    const values: Record<string, Record<string, unknown>[]> = {};
+    for (const block of page.blocks) {
+      if (block.type !== 'table' || !block.id) continue;
+      const columns = new Set(block.columns.map((column) => column.key));
+      values[block.id] = currentTableRows(block).map((row) =>
         Object.fromEntries(Object.entries(row).filter(([key]) => columns.has(key))),
       );
     }
-    tableRows = { ...tableRows, ...updates };
+    return values;
+  }
+
+  /** Rows removed from an editable table this session, for batch deletes. */
+  function currentTableDeletions(): Record<string, Record<string, unknown>[]> {
+    if (!page) return {};
+    const deletions: Record<string, Record<string, unknown>[]> = {};
+    for (const block of page.blocks) {
+      if (block.type !== 'table' || !block.id || !block.editable) continue;
+      deletions[block.id] = [...(tableDeletions[block.id] ?? [])];
+    }
+    return deletions;
+  }
+
+  function addEditableTableRow(table: Extract<DeclarativeBlock, { type: 'table' }>) {
+    if (!table.editable || !table.id) return;
+    const rows = currentTableRows(table);
+    if (rows.length >= MAX_TABLE_ROWS) return;
+    const nextRows = [...rows, createEditableTableRow(table)];
+    if (!tableRowsWithinLimit(nextRows)) {
+      notificationStore.error('Editable table content exceeds the 64 KiB limit');
+      return;
+    }
+    tableRows = { ...tableRows, [table.id]: nextRows };
+  }
+
+  function removeEditableTableRow(table: Extract<DeclarativeBlock, { type: 'table' }>, rowIndex: number) {
+    if (!table.editable || !table.id) return;
+    const rows = currentTableRows(table);
+    const removed = rows[rowIndex];
+    const nextRows = rows.filter((_, index) => index !== rowIndex);
+    tableRows = { ...tableRows, [table.id]: nextRows };
+    if (removed && typeof removed.id === 'string' && removed.id.trim() !== '') {
+      tableDeletions = {
+        ...tableDeletions,
+        [table.id]: [...(tableDeletions[table.id] ?? []), { ...removed }],
+      };
+    }
+  }
+
+  function updateEditableTableCell(
+    table: Extract<DeclarativeBlock, { type: 'table' }>,
+    rowIndex: number,
+    column: DeclarativeTableColumn,
+    value: unknown,
+    event: Event,
+  ) {
+    if (!table.editable || !table.id) return;
+    const rows = currentTableRows(table);
+    if (rowIndex < 0 || rowIndex >= rows.length) return;
+    if (!isValidEditableCell(column, value)) {
+      restoreEditableTableCell(event, column, rows[rowIndex][column.key]);
+      return;
+    }
+    const nextRows = rows.map((row, index) => index === rowIndex ? { ...row, [column.key]: value } : row);
+    if (!tableRowsWithinLimit(nextRows)) {
+      notificationStore.error('Editable table content exceeds the 64 KiB limit');
+      restoreEditableTableCell(event, column, rows[rowIndex][column.key]);
+      return;
+    }
+    tableRows = { ...tableRows, [table.id]: nextRows };
+  }
+
+  function restoreEditableTableCell(event: Event, column: DeclarativeTableColumn, value: unknown) {
+    const control = event.currentTarget;
+    if (control instanceof HTMLInputElement && column.type === 'checkbox') {
+      control.checked = value === true;
+    } else if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) {
+      control.value = String(value ?? '');
+    }
+  }
+
+  function editableTableInputValue(column: DeclarativeTableColumn, event: Event): unknown {
+    const input = event.currentTarget as HTMLInputElement;
+    if (column.type !== 'number') return input.value;
+    return input.value === '' ? '' : input.valueAsNumber;
   }
 
   function clearAction(action: Extract<DeclarativeAction, { kind: 'clear' }>) {
@@ -241,7 +394,12 @@
     runningAction = action.id;
     try {
       const result = await runExtensionWorkflow(extensionId, action.workflow, {
-        input: { formValues, actionId: action.id },
+        input: {
+          formValues,
+          tableValues: currentTableValues(),
+          tableDeletions: currentTableDeletions(),
+          actionId: action.id,
+        },
       });
       if (action.result_id && typeof result === 'object' && result !== null && !Array.isArray(result)) {
         const output = result as Record<string, unknown>;
@@ -365,10 +523,81 @@
               <ul>{#each block.items as item}<li><span><strong>{item.title}</strong>{#if item.description}<small>{item.description}</small>{/if}</span>{#if item.value}<b>{item.value}</b>{/if}</li>{/each}</ul>
             </section>
           {:else if block.type === 'table'}
-            <section class={blockClass(block, 'extension-card extension-wide table-wrap')}>
-              {#if block.title}<h2>{block.title}</h2>{/if}
-              <table><thead><tr>{#each block.columns as column}<th>{column.label}</th>{/each}</tr></thead>
-                <tbody>{#each (block.id ? tableRows[block.id] : undefined) ?? block.rows as row}<tr>{#each block.columns as column}<td>{cellValue(row, column.key)}</td>{/each}</tr>{/each}</tbody>
+            <section
+              class={blockClass(block, 'extension-card extension-wide table-wrap')}
+              class:table-wrap--editable={block.editable}
+              class:table-wrap--no-horizontal-scroll={block.horizontal_scroll === false}
+            >
+              <div class="table-toolbar">
+                {#if block.title}<h2>{block.title}</h2>{/if}
+                {#if block.editable && block.id}
+                  <FluentButton
+                    data-fluent-owner="lib-components-extension-page-renderer"
+                    type="button"
+                    appearance="outline"
+                    aria-label={$t('common.add')}
+                    disabled={currentTableRows(block).length >= MAX_TABLE_ROWS}
+                    onclick={() => addEditableTableRow(block)}
+                  >{$t('common.add')}</FluentButton>
+                {/if}
+              </div>
+              <table>
+                <thead><tr>{#each block.columns as column}<th scope="col">{column.label}</th>{/each}{#if block.editable}<th scope="col"><span class="extension-visually-hidden">{$t('common.delete')}</span></th>{/if}</tr></thead>
+                <tbody>
+                  {#each currentTableRows(block) as row, rowIndex}
+                    <tr>
+                      {#each block.columns as column}
+                        <td>
+                          {#if block.editable && block.id}
+                            {@const cellType = column.type ?? 'text'}
+                            {#if cellType === 'checkbox'}
+                              <input
+                                class="extension-control table-checkbox"
+                                type="checkbox"
+                                checked={row[column.key] === true}
+                                aria-label={`${column.label} ${rowIndex + 1}`}
+                                onchange={(event) => updateEditableTableCell(block, rowIndex, column, event.currentTarget.checked, event)}
+                              />
+                            {:else if cellType === 'select'}
+                              <select
+                                class="cfms-native-field extension-control table-control"
+                                value={String(row[column.key] ?? '')}
+                                aria-label={`${column.label} ${rowIndex + 1}`}
+                                onchange={(event) => updateEditableTableCell(block, rowIndex, column, event.currentTarget.value, event)}
+                              >
+                                {#each column.options ?? [] as option}<option value={option}>{option}</option>{/each}
+                              </select>
+                            {:else}
+                              <input
+                                class="cfms-native-field extension-control table-control"
+                                type={cellType === 'number' ? 'number' : 'text'}
+                                value={String(row[column.key] ?? '')}
+                                aria-label={`${column.label} ${rowIndex + 1}`}
+                                oninput={(event) => updateEditableTableCell(block, rowIndex, column, editableTableInputValue(column, event), event)}
+                              />
+                            {/if}
+                          {:else if column.type === 'checkbox'}
+                            <input class="extension-control table-checkbox" type="checkbox" checked={row[column.key] === true} aria-label={`${column.label} ${rowIndex + 1}`} disabled />
+                          {:else}
+                            {cellValue(row, column.key)}
+                          {/if}
+                        </td>
+                      {/each}
+                      {#if block.editable && block.id}
+                        <td class="table-row-action">
+                          <FluentButton
+                            data-fluent-owner="lib-components-extension-page-renderer"
+                            type="button"
+                            appearance="subtle"
+                            tone="danger"
+                            aria-label={`${$t('common.delete')} ${rowIndex + 1}`}
+                            onclick={() => removeEditableTableRow(block, rowIndex)}
+                          >{$t('common.delete')}</FluentButton>
+                        </td>
+                      {/if}
+                    </tr>
+                  {/each}
+                </tbody>
               </table>
             </section>
           {:else if block.type === 'empty_state'}
@@ -562,7 +791,8 @@
   .extension-card > ul b { flex: none; color: var(--colorNeutralForeground2); font-weight: 600; }
 
   .table-wrap { display: block; overflow: auto; padding: 0; }
-  .table-wrap > h2 { padding: 16px 16px 0; }
+  .table-toolbar { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; }
+  .table-toolbar:empty { display: none; }
   .table-wrap table { width: 100%; min-width: 32rem; border-spacing: 0; color: var(--colorNeutralForeground1); background: var(--colorNeutralBackground1); font-size: 14px; line-height: 20px; text-align: start; }
   .table-wrap th, .table-wrap td { padding: 10px 12px; border-bottom: 1px solid var(--colorNeutralStroke2); text-align: start; vertical-align: middle; }
   .table-wrap th { color: var(--colorNeutralForeground2); background: var(--colorNeutralBackground2); font-weight: 600; white-space: nowrap; }
@@ -570,6 +800,19 @@
   .table-wrap tbody tr:hover { background: var(--colorNeutralBackground2); }
   .table-wrap tbody tr:last-child td { border-bottom: 0; }
   .table-wrap td { overflow-wrap: anywhere; }
+  .table-wrap--editable table { min-width: 42rem; }
+  .table-wrap--editable td { min-width: 9rem; }
+  .table-wrap--editable .table-control { min-width: 8rem; }
+  .table-wrap--editable .table-checkbox { inline-size: 18px; block-size: 18px; margin: 0; accent-color: var(--colorBrandBackground); }
+  .table-wrap--editable .table-row-action { min-width: 0; white-space: nowrap; }
+  .table-wrap--no-horizontal-scroll { overflow-x: hidden; overflow-y: auto; }
+  .table-wrap--no-horizontal-scroll table { width: 100%; min-width: 0; table-layout: fixed; }
+  .table-wrap--no-horizontal-scroll th { white-space: normal; overflow-wrap: anywhere; }
+  .table-wrap--no-horizontal-scroll td { min-width: 0; overflow-wrap: anywhere; }
+  .table-wrap--no-horizontal-scroll .table-control { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+  .table-wrap--no-horizontal-scroll .table-row-action { white-space: normal; }
+  :global(.extension-page .table-wrap--no-horizontal-scroll .table-row-action fluent-button::part(content)) { white-space: normal; }
+  .extension-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
   .empty { min-height: 120px; align-content: center; justify-items: center; padding: 24px; text-align: center; }
   .empty > strong { color: var(--colorNeutralForeground1); font-weight: 600; }
@@ -597,7 +840,7 @@
   @media (max-width: 600px) {
     .extension-page { gap: 16px; }
     .extension-card { padding: 12px; }
-    .table-wrap > h2 { padding: 12px 12px 0; }
+    .table-toolbar { padding: 12px; }
     .table-wrap th, .table-wrap td { padding: 9px 10px; }
   }
   @media (prefers-reduced-motion: reduce) {

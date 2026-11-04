@@ -32,6 +32,9 @@ const MAX_JSON_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_PAGE_STYLES_BYTES: usize = 16 * 1024;
 const MAX_PAGE_STYLE_RULES: usize = 64;
 const MAX_PAGE_STYLE_DECLARATIONS: usize = 16;
+const MAX_EXTENSION_TABLE_ROWS: usize = 64;
+const MAX_EXTENSION_TABLE_COLUMNS: usize = 32;
+const MAX_EXTENSION_TABLE_BYTES: usize = 64 * 1024;
 const MAX_FILES: usize = 256;
 
 const ALLOWED_CAPABILITIES: &[&str] = &[
@@ -1287,6 +1290,7 @@ fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), Stri
         .ok_or_else(|| "Extension page blocks must be an array".to_string())?;
     let mut tab_groups = BTreeMap::<String, BTreeSet<String>>::new();
     let mut forms = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut tables = BTreeSet::<String>::new();
     let mut results = BTreeSet::new();
 
     for (index, block) in blocks.iter().enumerate() {
@@ -1341,6 +1345,7 @@ fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), Stri
                 }
                 tab_groups.insert(id.to_string(), tab_ids);
             }
+            Some("table") => validate_extension_page_table(block, &label, &mut tables)?,
             Some("form") => {
                 let id = block
                     .get("id")
@@ -1512,6 +1517,162 @@ fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), Stri
                 }
             }
         }
+    }
+    Ok(())
+}
+
+fn validate_extension_page_table(
+    block: &serde_json::Value,
+    label: &str,
+    table_ids: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    if let Some(value) = block.get("horizontal_scroll") {
+        if !value.is_boolean() {
+            return Err(format!("{label}.horizontal_scroll must be a boolean"));
+        }
+    }
+    let editable = match block.get("editable") {
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| format!("{label}.editable must be a boolean"))?,
+        None => false,
+    };
+    let id = block
+        .get("id")
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| format!("{label}.id must be a non-empty string"))
+        })
+        .transpose()?;
+    if editable && id.is_none() {
+        return Err(format!("{label}.id is required for editable tables"));
+    }
+    if let Some(id) = id {
+        if matches!(id, "__proto__" | "constructor" | "prototype") {
+            return Err(format!("{label}.id is a reserved table identifier"));
+        }
+        if editable {
+            validate_entry_id(id)?;
+        }
+        if !table_ids.insert(id.to_string()) {
+            return Err(format!("{label}.id is duplicated"));
+        }
+    }
+    if !editable {
+        return Ok(());
+    }
+    let columns = block
+        .get("columns")
+        .and_then(serde_json::Value::as_array)
+        .filter(|columns| !columns.is_empty() && columns.len() <= MAX_EXTENSION_TABLE_COLUMNS)
+        .ok_or_else(|| {
+            format!(
+                "{label}.columns must contain between 1 and {MAX_EXTENSION_TABLE_COLUMNS} columns"
+            )
+        })?;
+    let rows = block
+        .get("rows")
+        .and_then(serde_json::Value::as_array)
+        .filter(|rows| rows.len() <= MAX_EXTENSION_TABLE_ROWS)
+        .ok_or_else(|| {
+            format!("{label}.rows must contain at most {MAX_EXTENSION_TABLE_ROWS} rows")
+        })?;
+
+    let mut column_types = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+    for (column_index, column) in columns.iter().enumerate() {
+        let column_label = format!("{label}.columns[{column_index}]");
+        let key = column
+            .get("key")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("{column_label}.key must be a string"))?;
+        validate_entry_id(key)?;
+        if column
+            .get("label")
+            .and_then(serde_json::Value::as_str)
+            .is_none_or(str::is_empty)
+        {
+            return Err(format!("{column_label}.label must be a non-empty string"));
+        }
+        let column_type = column
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("text")
+            .to_string();
+        if !matches!(
+            column_type.as_str(),
+            "text" | "number" | "select" | "checkbox"
+        ) {
+            return Err(format!("{column_label}.type is unsupported"));
+        }
+        let mut options = BTreeSet::new();
+        if column_type == "select" {
+            let values = column
+                .get("options")
+                .and_then(serde_json::Value::as_array)
+                .filter(|values| !values.is_empty() && values.len() <= 64)
+                .ok_or_else(|| {
+                    format!("{column_label}.options must contain between 1 and 64 options")
+                })?;
+            for option in values {
+                let option = option
+                    .as_str()
+                    .filter(|option| !option.is_empty())
+                    .ok_or_else(|| {
+                        format!("{column_label}.options must contain non-empty strings")
+                    })?;
+                if !options.insert(option.to_string()) {
+                    return Err(format!("{column_label}.options must be unique"));
+                }
+            }
+        } else if column.get("options").is_some() {
+            return Err(format!(
+                "{column_label}.options is only supported for select columns"
+            ));
+        }
+        if column_types
+            .insert(key.to_string(), (column_type, options))
+            .is_some()
+        {
+            return Err(format!("{column_label}.key is duplicated"));
+        }
+    }
+
+    for (row_index, row) in rows.iter().enumerate() {
+        let row = row
+            .as_object()
+            .ok_or_else(|| format!("{label}.rows[{row_index}] must be an object"))?;
+        for key in row.keys() {
+            if !column_types.contains_key(key) {
+                return Err(format!(
+                    "{label}.rows[{row_index}] has undeclared column {key}"
+                ));
+            }
+        }
+        for (key, value) in row {
+            let (column_type, options) = &column_types[key];
+            let valid = match column_type.as_str() {
+                "checkbox" => value.is_boolean(),
+                "number" => {
+                    value.as_f64().is_some_and(f64::is_finite) || value.as_str() == Some("")
+                }
+                "select" => value.as_str().is_some_and(|value| options.contains(value)),
+                _ => value.is_string(),
+            };
+            if !valid {
+                return Err(format!(
+                    "{label}.rows[{row_index}].{key} has an invalid value for {column_type}"
+                ));
+            }
+        }
+    }
+    if serde_json::to_vec(rows)
+        .map_err(|error| format!("{label}.rows could not be serialized: {error}"))?
+        .len()
+        > MAX_EXTENSION_TABLE_BYTES
+    {
+        return Err(format!("{label}.rows exceeds the 64 KiB table data limit"));
     }
     Ok(())
 }
@@ -2241,6 +2402,73 @@ mod tests {
             serde_json::json!("cell-0-0");
         page["blocks"][1]["tab"]["id"] = serde_json::json!("missing");
         assert!(validate_extension_page_controls(&page).is_err());
+    }
+
+    #[test]
+    fn editable_extension_tables_validate_columns_values_and_limits() {
+        let mut page = serde_json::json!({
+            "schema_version": 1,
+            "title": "Editable records",
+            "blocks": [{
+                "type": "table",
+                "id": "records",
+                "editable": true,
+                "columns": [
+                    { "key": "name", "label": "Name", "type": "text" },
+                    { "key": "count", "label": "Count", "type": "number" },
+                    { "key": "mode", "label": "Mode", "type": "select", "options": ["fast", "slow"] },
+                    { "key": "enabled", "label": "Enabled", "type": "checkbox" }
+                ],
+                "rows": [{
+                    "name": "First",
+                    "count": 2,
+                    "mode": "fast",
+                    "enabled": true
+                }]
+            }]
+        });
+        validate_extension_page_controls(&page).unwrap();
+
+        page["blocks"][0]["horizontal_scroll"] = serde_json::json!(false);
+        validate_extension_page_controls(&page).unwrap();
+        page["blocks"][0]["horizontal_scroll"] = serde_json::json!("false");
+        assert!(validate_extension_page_controls(&page).is_err());
+        page["blocks"][0]["horizontal_scroll"] = serde_json::json!(true);
+
+        page["blocks"][0]["rows"][0]["enabled"] = serde_json::json!("yes");
+        assert!(validate_extension_page_controls(&page).is_err());
+        page["blocks"][0]["rows"][0]["enabled"] = serde_json::json!(true);
+
+        page["blocks"][0]["rows"][0]["mode"] = serde_json::json!("unknown");
+        assert!(validate_extension_page_controls(&page).is_err());
+        page["blocks"][0]["rows"][0]["mode"] = serde_json::json!("fast");
+
+        page["blocks"][0]["columns"][2]["options"] = serde_json::json!([]);
+        assert!(validate_extension_page_controls(&page).is_err());
+        page["blocks"][0]["columns"][2]["options"] = serde_json::json!(["fast", "slow"]);
+
+        page["blocks"][0]["id"] = serde_json::Value::Null;
+        assert!(validate_extension_page_controls(&page).is_err());
+
+        page["blocks"][0]["id"] = serde_json::json!("records");
+        page["blocks"].as_array_mut().unwrap().push(serde_json::json!({
+            "type": "table",
+            "id": "records",
+            "columns": [],
+            "rows": []
+        }));
+        assert!(validate_extension_page_controls(&page).is_err());
+
+        page["blocks"].as_array_mut().unwrap().truncate(1);
+        page["blocks"][0]["id"] = serde_json::json!("__proto__");
+        assert!(validate_extension_page_controls(&page).is_err());
+
+        let legacy_table = serde_json::json!({
+            "schema_version": 1,
+            "title": "Legacy table",
+            "blocks": [{ "type": "table", "columns": [], "rows": [] }]
+        });
+        validate_extension_page_controls(&legacy_table).unwrap();
     }
 
     #[test]

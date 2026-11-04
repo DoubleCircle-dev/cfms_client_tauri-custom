@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { addMessages, init } from 'svelte-i18n';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { DeclarativePage } from '$lib/injection/modules/extensions/api';
 
@@ -18,6 +19,11 @@ vi.mock('$lib/stores.svelte', () => ({
 import { readExtensionPage } from '$lib/injection/modules/extensions/api';
 import { runExtensionWorkflow } from '$lib/injection/modules/extensions/workflows';
 import ExtensionPageRenderer from './ExtensionPageRenderer.svelte';
+
+beforeAll(() => {
+  addMessages('en', { common: { add: 'Add', delete: 'Delete' } });
+  init({ fallbackLocale: 'en', initialLocale: 'en' });
+});
 
 afterEach(() => {
   cleanup();
@@ -194,6 +200,122 @@ describe('ExtensionPageRenderer', () => {
 
     expect(await screen.findByText('New task')).toBeTruthy();
     expect(screen.queryByText('Initial row')).toBeNull();
+  });
+
+  it('lets users edit, add, and delete typed table rows and sends table values to workflows', async () => {
+    vi.mocked(readExtensionPage).mockResolvedValue({
+      schema_version: 1,
+      title: 'Editable table',
+      blocks: [
+        {
+          type: 'table',
+          id: 'records',
+          title: 'Records',
+          editable: true,
+          columns: [
+            { key: 'name', label: 'Name', type: 'text' },
+            { key: 'mode', label: 'Mode', type: 'select', options: ['fast', 'slow'] },
+            { key: 'count', label: 'Count', type: 'number' },
+            { key: 'enabled', label: 'Enabled', type: 'checkbox' },
+          ],
+          rows: [
+            { name: 'Alpha', mode: 'slow', count: 1, enabled: false },
+            { name: 'Remove', mode: 'fast', count: 2, enabled: true },
+          ],
+        },
+        { type: 'actions', actions: [{ id: 'submit', label: 'Submit', workflow: 'submit' }] },
+      ],
+    });
+    vi.mocked(runExtensionWorkflow).mockResolvedValue({ ok: true });
+
+    const { container } = render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.editor', pageId: 'overview' },
+    });
+    await screen.findByRole('textbox', { name: 'Name 1' });
+
+    await fireEvent.click(container.querySelector('.table-toolbar fluent-button')!);
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(3);
+
+    await fireEvent.input(screen.getByRole('textbox', { name: 'Name 1' }), {
+      target: { value: 'Beta' },
+    });
+    await fireEvent.input(screen.getByRole('spinbutton', { name: 'Count 1' }), {
+      target: { value: '5' },
+    });
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Mode 3' }), {
+      target: { value: 'slow' },
+    });
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Enabled 3' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete 2' }));
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    expect(runExtensionWorkflow).toHaveBeenCalledWith('org.example.editor', 'submit', {
+      input: {
+        formValues: {},
+        tableValues: {
+          records: [
+            { name: 'Beta', mode: 'slow', count: 5, enabled: false },
+            { name: '', mode: 'slow', count: '', enabled: true },
+          ],
+        },
+        tableDeletions: { records: [] },
+        actionId: 'submit',
+      },
+    });
+  });
+
+  it('keeps horizontal scrolling enabled by default and supports tables that fit the container', async () => {
+    vi.mocked(readExtensionPage).mockResolvedValue({
+      schema_version: 1,
+      title: 'Responsive tables',
+      blocks: [
+        {
+          type: 'table',
+          columns: [{ key: 'name', label: 'Name' }],
+          rows: [{ name: 'Scrollable by default' }],
+        },
+        {
+          type: 'table',
+          horizontal_scroll: false,
+          columns: [{ key: 'name', label: 'Name' }],
+          rows: [{ name: 'Fits the container' }],
+        },
+      ],
+    });
+
+    const { container } = render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.tables', pageId: 'overview' },
+    });
+    await screen.findByText('Fits the container');
+
+    const tables = container.querySelectorAll('.table-wrap');
+    expect(tables).toHaveLength(2);
+    expect(tables[0].classList.contains('table-wrap--no-horizontal-scroll')).toBe(false);
+    expect(tables[1].classList.contains('table-wrap--no-horizontal-scroll')).toBe(true);
+  });
+
+  it('restores a cell when an edit would exceed the table data limit', async () => {
+    const initialValue = 'x'.repeat(65_500);
+    vi.mocked(readExtensionPage).mockResolvedValue({
+      schema_version: 1,
+      title: 'Bounded table',
+      blocks: [{
+        type: 'table',
+        id: 'bounded',
+        editable: true,
+        columns: [{ key: 'name', label: 'Name', type: 'text' }],
+        rows: [{ name: initialValue }],
+      }],
+    });
+
+    render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.bounded', pageId: 'overview' },
+    });
+    const input = await screen.findByRole('textbox', { name: 'Name 1' });
+    await fireEvent.input(input, { target: { value: `${initialValue}${'y'.repeat(40)}` } });
+
+    expect((input as HTMLInputElement).value).toBe(initialValue);
   });
 
   it('rejects table row payloads over the row limit without replacing existing rows', async () => {

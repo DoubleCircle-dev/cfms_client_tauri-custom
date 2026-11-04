@@ -57,6 +57,39 @@ number, and digit values checked against their field types. A `kind: "clear"` ac
 its declared form fields and linked result; a `kind: "copy"` action copies the linked result to the
 clipboard and is disabled until that result has content.
 
+Tables are read-only by default. Set `editable: true` and provide an `id` to enable row editing,
+adding and deleting. Editable columns support `text`, `number`, `select`, and `checkbox`; select
+columns declare their allowed string `options`. Set `horizontal_scroll: false` to make the table
+fit its container with narrower columns and wrapped content; horizontal scrolling is enabled by
+default. Missing text/number cells start empty, checkboxes start unchecked, and select cells start
+at the first option. For example:
+
+```json
+{
+  "type": "table",
+  "id": "records",
+  "title": "Records",
+  "editable": true,
+  "horizontal_scroll": false,
+  "columns": [
+    { "key": "name", "label": "Name", "type": "text" },
+    { "key": "mode", "label": "Mode", "type": "select", "options": ["fast", "slow"] },
+    { "key": "count", "label": "Count", "type": "number" },
+    { "key": "enabled", "label": "Enabled", "type": "checkbox" }
+  ],
+  "rows": [{ "name": "First", "mode": "fast", "count": 1, "enabled": true }]
+}
+```
+
+When a workflow action runs, its input includes `tableValues`, an object keyed by table ID with
+the current rows from all identified tables (editable and read-only), and `tableDeletions`, an
+object keyed by editable table ID with rows removed during this page visit that had a non-empty
+`id` (for batch deletes). A workflow can read the edited table at
+`input.tableValues.records` in a `wasm` node or use a workflow expression such as
+`$input.tableValues.records`; removed rows are at `$input.tableDeletions.records`. Workflow
+results may continue to update tables through `table_values`; editable table values are checked
+against the declared column types. Tables are limited to 32 columns, 64 rows, and 64 KiB of row
+
 The initial ABI provides no imports, WASI, filesystem, network, or native access. Modules cannot
 run a start function. A declarative workflow can invoke the module with a JSON `wasm` node; its
 `input` is passed to the same ABI and the returned JSON is stored at the node's `result` key.

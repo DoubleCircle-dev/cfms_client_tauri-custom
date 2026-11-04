@@ -154,6 +154,13 @@ export interface DeclarativeTab {
   label: string;
 }
 
+export interface DeclarativeTableColumn {
+  key: string;
+  label: string;
+  type?: 'text' | 'number' | 'select' | 'checkbox';
+  options?: string[];
+}
+
 export type DeclarativeAction =
   | ({
       id: string;
@@ -191,7 +198,15 @@ export type DeclarativeBlock =
   | ({ type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' } & StyledBlock)
   | ({ type: 'progress'; label: string; value: number; max?: number } & StyledBlock)
   | ({ type: 'list'; title?: string; items: Array<{ title: string; description?: string; value?: string }> } & StyledBlock)
-  | ({ type: 'table'; id?: string; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> } & StyledBlock)
+  | ({
+      type: 'table';
+      id?: string;
+      title?: string;
+      editable?: boolean;
+      horizontal_scroll?: boolean;
+      columns: DeclarativeTableColumn[];
+      rows: Array<Record<string, unknown>>;
+    } & StyledBlock)
   | ({ type: 'empty_state'; title: string; description?: string } & StyledBlock)
   | ({
       type: 'form';
