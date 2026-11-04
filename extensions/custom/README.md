@@ -71,9 +71,10 @@ blocks, form fields, and actions, plus a page-level `styles` array of selector/d
 They may also include a non-visual CSS block such as
 `{ "type": "css", "css": ".plugin-form { gap: 1rem; }" }`; its text is parsed into the same
 controlled rules and is never inserted as raw CSS.
-The host provides no default layout or decorative styling for extension page content. Plugins
-describe those styles themselves; the host retains styling only for loading/error states and its
-trusted controls.
+The host provides a Fluent-styled baseline for page layout, cards, status and alert blocks, lists,
+tables, forms, tabs, actions, results, and empty states. Plugins can use the controlled rules to
+customize that baseline; the host retains semantic colors, readable typography, responsive layout,
+and trusted control behavior.
 Rules are scoped to that extension page and accept only declared `plugin-*` classes and renderer
 `extension-*` classes, including page title/header, tabs, controls, and result-heading hooks. A
 page-level `class_name` is rendered but is not registered for selectors, so style rules must target

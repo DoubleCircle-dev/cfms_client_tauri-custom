@@ -50,6 +50,35 @@ describe('ExtensionPageRenderer', () => {
     expect(readExtensionPage).toHaveBeenNthCalledWith(2, 'org.example.second', 'settings');
   });
 
+  it('maps declared action tones to Fluent button appearances', async () => {
+    vi.mocked(readExtensionPage).mockResolvedValue({
+      schema_version: 1,
+      title: 'Actions',
+      blocks: [{
+        type: 'actions',
+        actions: [
+          { id: 'primary', label: 'Save', workflow: 'save', tone: 'primary' },
+          { id: 'secondary', label: 'Cancel', workflow: 'cancel', tone: 'secondary' },
+          { id: 'danger', label: 'Delete', workflow: 'delete', tone: 'danger' },
+        ],
+      }],
+    });
+
+    const { container } = render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.actions', pageId: 'home' },
+    });
+
+    await screen.findByRole('button', { name: 'Save' });
+    const primary = container.querySelector('fluent-button.primary');
+    const secondary = container.querySelector('fluent-button:not(.primary):not(.danger)');
+    const danger = container.querySelector('fluent-button.danger');
+    expect(primary && Reflect.get(primary, 'appearance')).toBe('primary');
+    expect(primary?.getAttribute('data-tone')).toBe('primary');
+    expect(secondary && Reflect.get(secondary, 'appearance')).toBe('subtle');
+    expect(danger && Reflect.get(danger, 'appearance')).toBe('outline');
+    expect(danger?.getAttribute('data-tone')).toBe('danger');
+  });
+
   it('adds scoped plugin styles and removes them when the page unmounts', async () => {
     const page: DeclarativePage = {
       schema_version: 1,

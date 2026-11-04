@@ -410,7 +410,8 @@
                   type="button"
                   disabled={runningAction !== null || (action.kind === 'copy' && !results[action.result_id])}
                   onclick={() => runAction(action)}
-                  appearance="subtle"
+                  appearance={action.tone === 'primary' ? 'primary' : action.tone === 'danger' ? 'outline' : 'subtle'}
+                  tone={action.tone === 'primary' || action.tone === 'danger' ? action.tone : 'neutral'}
                   class={['extension-button', action.class_name, action.tone === 'primary' ? 'primary' : '', action.tone === 'danger' ? 'danger' : ''].filter(Boolean).join(' ')}
                 >{runningAction === action.id ? 'Working…' : action.label}</FluentButton>
               {/each}
@@ -449,4 +450,157 @@
 <style>
   .extension-state { display: grid; min-height: 260px; place-items: center; padding: 2rem; text-align: center; }
   .extension-error { align-content: center; gap: 8px; }
+
+  .extension-page {
+    display: grid;
+    min-width: 0;
+    gap: 20px;
+    color: var(--colorNeutralForeground1);
+    font: 400 14px/20px var(--fontFamilyBase);
+  }
+  .extension-page :where(*) { box-sizing: border-box; }
+  .extension-page-header { display: grid; gap: 4px; }
+  .extension-page-title { margin: 0; color: var(--colorNeutralForeground1); font: 600 24px/32px var(--fontFamilyBase); }
+  .extension-page-description { max-width: 72ch; margin: 0; color: var(--colorNeutralForeground2); }
+
+  .extension-tab-list {
+    display: flex;
+    min-width: 0;
+    align-items: end;
+    gap: 4px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    overscroll-behavior-inline: contain;
+  }
+  .extension-tab {
+    flex: none;
+    min-height: 36px;
+    padding: 7px 12px 6px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: var(--borderRadiusMedium) var(--borderRadiusMedium) 0 0;
+    color: var(--colorNeutralForeground2);
+    background: transparent;
+    font: 500 14px/20px var(--fontFamilyBase);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--durationFaster) var(--curveEasyEase), background-color var(--durationFaster) var(--curveEasyEase), border-color var(--durationFaster) var(--curveEasyEase);
+  }
+  .extension-tab:hover { color: var(--colorNeutralForeground1); background: var(--colorNeutralBackground2); }
+  .extension-tab--active { border-bottom-color: var(--colorBrandStroke1); color: var(--colorBrandForeground1); }
+  .extension-tab:focus-visible { outline: 2px solid var(--colorStrokeFocus2); outline-offset: -2px; }
+
+  .extension-grid {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    align-items: start;
+    gap: 12px;
+  }
+  .extension-grid:focus-visible { outline: 2px solid var(--colorStrokeFocus2); outline-offset: 2px; }
+  .extension-block { min-width: 0; margin: 0; }
+  .extension-wide { grid-column: 1 / -1; }
+  .extension-card {
+    display: grid;
+    min-width: 0;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground1);
+  }
+  .extension-card h2 { margin: 0; color: var(--colorNeutralForeground1); font: 600 16px/22px var(--fontFamilyBase); }
+  .extension-heading { color: var(--colorNeutralForeground1); font: 600 20px/26px var(--fontFamilyBase); }
+  .extension-caption, .extension-muted { color: var(--colorNeutralForeground3); font-size: 12px; line-height: 16px; }
+
+  .status-card { align-content: start; gap: 4px; background: var(--colorNeutralBackground1); }
+  .status-card > span { color: var(--colorNeutralForeground2); font-size: 12px; line-height: 16px; }
+  .status-card > strong { color: var(--colorNeutralForeground1); font-size: 20px; line-height: 26px; font-weight: 600; overflow-wrap: anywhere; }
+  .status-card > small { color: var(--colorNeutralForeground3); font-size: 12px; line-height: 16px; }
+  .tone-success.status-card, .tone-success.extension-alert { border-color: var(--colorStatusSuccessBorder1); background: var(--colorStatusSuccessBackground1); }
+  .tone-success.status-card > strong, .tone-success.extension-alert > strong { color: var(--colorStatusSuccessForeground1); }
+  .tone-warning.status-card, .tone-warning.extension-alert { border-color: var(--colorStatusWarningBorder1); background: var(--colorStatusWarningBackground1); }
+  .tone-warning.status-card > strong, .tone-warning.extension-alert > strong { color: var(--colorStatusWarningForeground1); }
+  .tone-danger.status-card, .tone-danger.extension-alert { border-color: var(--colorStatusDangerBorder1); background: var(--colorStatusDangerBackground1); }
+  .tone-danger.status-card > strong, .tone-danger.extension-alert > strong { color: var(--colorStatusDangerForeground1); }
+  .tone-info.extension-alert { border-color: var(--colorBrandStroke1); background: var(--colorBrandBackground2); }
+  .tone-info.extension-alert > strong { color: var(--colorBrandForeground1); }
+
+  .extension-alert {
+    display: grid;
+    gap: 4px;
+    padding: 12px 16px;
+    border: 1px solid var(--colorBrandStroke1);
+    border-radius: var(--borderRadiusMedium);
+    color: var(--colorNeutralForeground1);
+    background: var(--colorBrandBackground2);
+  }
+  .extension-alert > strong { color: var(--colorBrandForeground1); font-weight: 600; }
+  .extension-alert > p { margin: 0; }
+  .extension-page progress { inline-size: 100%; block-size: 6px; overflow: hidden; border: 0; border-radius: var(--borderRadiusCircular); accent-color: var(--colorBrandBackground); }
+
+  .extension-card > ul {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .extension-card > ul > li {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-block: 10px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+  }
+  .extension-card > ul > li:first-child { border-top: 0; }
+  .extension-card > ul > li > span { display: grid; min-width: 0; gap: 2px; }
+  .extension-card > ul small { color: var(--colorNeutralForeground3); font-size: 12px; line-height: 16px; }
+  .extension-card > ul b { flex: none; color: var(--colorNeutralForeground2); font-weight: 600; }
+
+  .table-wrap { display: block; overflow: auto; padding: 0; }
+  .table-wrap > h2 { padding: 16px 16px 0; }
+  .table-wrap table { width: 100%; min-width: 32rem; border-spacing: 0; color: var(--colorNeutralForeground1); background: var(--colorNeutralBackground1); font-size: 14px; line-height: 20px; text-align: start; }
+  .table-wrap th, .table-wrap td { padding: 10px 12px; border-bottom: 1px solid var(--colorNeutralStroke2); text-align: start; vertical-align: middle; }
+  .table-wrap th { color: var(--colorNeutralForeground2); background: var(--colorNeutralBackground2); font-weight: 600; white-space: nowrap; }
+  .table-wrap tbody tr { transition: background-color var(--durationFaster) var(--curveEasyEase); }
+  .table-wrap tbody tr:hover { background: var(--colorNeutralBackground2); }
+  .table-wrap tbody tr:last-child td { border-bottom: 0; }
+  .table-wrap td { overflow-wrap: anywhere; }
+
+  .empty { min-height: 120px; align-content: center; justify-items: center; padding: 24px; text-align: center; }
+  .empty > strong { color: var(--colorNeutralForeground1); font-weight: 600; }
+  .empty > p { max-width: 56ch; margin: 0; color: var(--colorNeutralForeground2); }
+
+  .form-card { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); align-items: end; }
+  .extension-form-field { display: grid; min-width: 0; gap: 6px; color: var(--colorNeutralForeground1); }
+  .extension-form-field:has(> input[type="checkbox"]) { display: flex; min-height: var(--cfms-control-height-medium); align-items: center; justify-content: space-between; gap: 12px; }
+  .extension-form-label { color: var(--colorNeutralForeground2); font: 500 14px/20px var(--fontFamilyBase); }
+  .extension-page .extension-control:not([type="checkbox"]) { inline-size: 100%; }
+  .extension-page textarea.extension-control { min-height: 96px; resize: vertical; }
+  .extension-page input[type="checkbox"].extension-control { inline-size: 18px; block-size: 18px; margin: 0; accent-color: var(--colorBrandBackground); cursor: pointer; }
+
+  .extension-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .extension-actions > .extension-button { max-width: 100%; }
+  .extension-button { min-height: var(--cfms-control-height-medium); }
+  .extension-result-heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; color: var(--colorNeutralForeground1); font-weight: 600; }
+  .extension-result-heading > label { min-width: 0; overflow-wrap: anywhere; }
+  .plugin-result .extension-control { min-height: 112px; }
+  .extension-error-message { margin: 0; color: var(--colorStatusDangerForeground1); font-size: 12px; line-height: 16px; }
+  .extension-result-banner { padding: 12px 16px; border: 1px solid transparent; border-radius: var(--borderRadiusMedium); overflow-wrap: anywhere; }
+  .extension-result-banner--success { border-color: var(--colorStatusSuccessBorder1); color: var(--colorStatusSuccessForeground1); background: var(--colorStatusSuccessBackground1); }
+  .extension-result-banner--danger { border-color: var(--colorStatusDangerBorder1); color: var(--colorStatusDangerForeground1); background: var(--colorStatusDangerBackground1); }
+
+  @media (max-width: 600px) {
+    .extension-page { gap: 16px; }
+    .extension-card { padding: 12px; }
+    .table-wrap > h2 { padding: 12px 12px 0; }
+    .table-wrap th, .table-wrap td { padding: 9px 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .extension-page :where(*) { scroll-behavior: auto; transition-duration: 0.01ms !important; }
+  }
 </style>
