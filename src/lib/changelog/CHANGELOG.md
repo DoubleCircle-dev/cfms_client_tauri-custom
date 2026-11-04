@@ -4,6 +4,21 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.58.0-custom-0.2
+**Released on:** 2026-11-05
+
+**Title:** Batch schedule updates
+
+### Added
+- Batch schedule updates
+- Add editable plugin tables
+
+### Changed
+- Style extension pages with Fluent
+- Fix extension page switching
+
+---
+
 ## v0.58.0
 **Released on:** 2026-11-01
 
