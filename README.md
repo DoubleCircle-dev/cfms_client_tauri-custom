@@ -1,12 +1,31 @@
 # CFMS Client Custom
 
-[![CI](https://github.com/cfms-dev/cfms_client_tauri/actions/workflows/ci.yml/badge.svg)](https://github.com/cfms-dev/cfms_client_tauri/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/cfms-dev/cfms_client_tauri?display_name=tag)](https://github.com/cfms-dev/cfms_client_tauri/releases)
+[简体中文](README.zh-CN.md)
+
+[![CI](https://github.com/DoubleCircle-dev/cfms_client_tauri-custom/actions/workflows/ci.yml/badge.svg)](https://github.com/DoubleCircle-dev/cfms_client_tauri-custom/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/DoubleCircle-dev/cfms_client_tauri-custom?display_name=tag)](https://github.com/DoubleCircle-dev/cfms_client_tauri-custom/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **CFMS Client** is the cross-platform client for the [Confidential File Management System (CFMS)](https://github.com/cfms-dev). It securely connects to CFMS servers, provides controlled access to confidential documents, and manages file transfers. The application targets a native desktop experience and also supports Android.
 
-This version is customized by DoubleCircle.
+The `custom` branch is DoubleCircle's maintained customization of the [upstream CFMS Client](https://github.com/cfms-dev/cfms_client_tauri). It retains the upstream client as its foundation and adds fork-specific features and integrations.
+
+## About the custom branch
+
+The custom branch follows upstream CFMS Client development while maintaining DoubleCircle-specific functionality. Its current fork modules cover custom messages, notifications, chat, tools, desktop integration, file synchronization, runtime services, and extensions. The upstream client remains the foundation for shared authentication, file operations, transfers, and platform support.
+
+### How custom changes are kept separate
+
+Fork-specific contributions are organized as modules under `src/lib/injection/modules/` and registered in `src/lib/injection/modules/index.ts`. The shared injection registry in `src/lib/injection/registry.ts` exposes module metadata for integration points such as navigation, settings, route titles, parent routes, translations, and lifecycle hooks.
+
+Upstream-owned files use narrow integration seams to read that registry. This keeps most custom feature code out of upstream files, reduces merge conflicts, and makes upstream updates easier to review. When adding a fork feature:
+
+1. Implement it in its own module under `src/lib/injection/modules/`.
+2. Register the module in `src/lib/injection/modules/index.ts`.
+3. Use the existing registry metadata and add only the necessary integration seam where the upstream application consumes it.
+4. Run the relevant checks and tests, then verify the feature alongside the unmodified upstream behavior.
+
+When syncing upstream changes, preserve upstream changes in shared files and re-check the small registry integration seams. Avoid placing fork-specific feature implementation directly in upstream-owned catalogs or components when a module contribution can provide it.
 
 > [!IMPORTANT]
 > This client is intended only for deployed CFMS servers that you are authorized to access. It is not a general-purpose cloud-drive or file-server client.
@@ -34,8 +53,8 @@ On Windows, you will normally also need the Visual Studio **Desktop development 
 ### Install dependencies
 
 ```powershell
-git clone --recurse-submodules https://github.com/cfms-dev/cfms_client_tauri.git
-Set-Location cfms_client_tauri
+git clone --branch custom --recurse-submodules https://github.com/DoubleCircle-dev/cfms_client_tauri-custom.git
+Set-Location cfms_client_tauri-custom
 pnpm install --frozen-lockfile
 ```
 
@@ -136,6 +155,7 @@ The complete disclaimer is shown when the application is first used.
 
 ```text
 src/                    SvelteKit pages, components, stores, and Tauri API wrappers
+src/lib/injection/      Fork module registry and custom feature contributions
 src-tauri/              Tauri entry point, IPC commands, platform config, and bundle resources
 crates/
   core/                 Shared types, constants, and errors
