@@ -4,6 +4,9 @@
   "description": "",
   "type": "module",
   "scripts": {
+    "prepare": "node scripts/setup-git-merge-drivers.mjs",
+    "setup:git": "node scripts/setup-git-merge-drivers.mjs",
+    "test:merge-drivers": "node --test scripts/git-merge-version.test.mjs",
     "dev": "vite dev",
     "dev:bridge": "node scripts/dev-ipc-bridge.mjs",
     "build": "vite build",

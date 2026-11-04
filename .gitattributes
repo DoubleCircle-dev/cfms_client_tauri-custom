@@ -4,3 +4,18 @@
 # them "stale" for line-ending reasons alone.
 src/lib/fluent/icons.generated.ts text eol=lf
 src/lib/fluent/theme.css text eol=lf
+
+# Merge drivers. `.gitattributes` only names them; `pnpm setup:git` (also run by
+# `prepare`) puts the commands into `.git/config`.
+#
+# custom-version: upstream bumps rewrite the version lines this fork also edits,
+# so every release conflicts there. Keep upstream's side and re-stamp the Custom
+# version afterwards with `pnpm app:version custom <upstream-base>`.
+# custom-changelog: upstream and this fork both prepend release sections; keep
+# both, newest (upstream) first.
+Cargo.toml                                  merge=custom-version
+Cargo.lock                                  merge=custom-version
+package.json                                merge=custom-version
+src-tauri/tauri.conf.json                   merge=custom-version
+"src-tauri/gen/ios/CFMS Client/Info.plist"  merge=custom-version
+src/lib/changelog/CHANGELOG.md              merge=custom-changelog
