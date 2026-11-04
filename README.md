@@ -25,6 +25,16 @@ Upstream-owned files use narrow integration seams to read that registry. This ke
 3. Use the existing registry metadata and add only the necessary integration seam where the upstream application consumes it.
 4. Run the relevant checks and tests, then verify the feature alongside the unmodified upstream behavior.
 
+The Rust backend uses the same split. Fork code lives in `src-tauri/src/custom/`: `CustomState` holds the fork's managed state, `wiring.rs` carries start-up, window, and service hooks, `diagnostics.rs` holds local diagnostics, and the `custom::invoke_handler!` macro registers every fork IPC command. Fork command adapters live in `src-tauri/src/commands/injection/`, which `commands.rs` includes once so they keep sharing the upstream `commands` module's private helpers.
+
+When adding a backend feature:
+
+1. Commands: add one line to `custom::invoke_handler!` and put the adapter in `src-tauri/src/commands/injection/`.
+2. State: add one field to `CustomState`.
+3. Start-up or window behavior: add one function to `custom/wiring.rs`.
+
+Upstream `lib.rs` and `commands.rs` keep only the existing seams: one call per start-up concern, one `custom: CustomState` field on `AppHandleState`, the handler-registration line, and the single `commands/injection/mod.rs` include.
+
 When syncing upstream changes, preserve upstream changes in shared files and re-check the small registry integration seams. Avoid placing fork-specific feature implementation directly in upstream-owned catalogs or components when a module contribution can provide it.
 
 > [!IMPORTANT]
@@ -157,6 +167,8 @@ The complete disclaimer is shown when the application is first used.
 src/                    SvelteKit pages, components, stores, and Tauri API wrappers
 src/lib/injection/      Fork module registry and custom feature contributions
 src-tauri/              Tauri entry point, IPC commands, platform config, and bundle resources
+  src/custom/           Fork backend: managed state, start-up wiring, and IPC command registration
+  src/commands/injection/  Fork IPC command adapters, included into the upstream commands module
 crates/
   core/                 Shared types, constants, and errors
   crypto/               Key derivation, data encryption, and key wrapping

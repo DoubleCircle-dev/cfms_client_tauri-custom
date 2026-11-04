@@ -22,6 +22,10 @@ src/lib/injection/
 └── icons.ts                fork icon helpers (e.g. `isIconName`)
 ```
 
+The Rust backend mirrors this split under
+[`src-tauri/src/custom/`](../../../src-tauri/src/custom/); see
+[Backend seams](#backend-seams).
+
 ## Contribution points
 
 | Point | Upstream seam | Shape |
@@ -56,6 +60,32 @@ files read them while they evaluate their own module body. Behaviour goes in
 `import()` inside the hook — that is what keeps `settings-entries.ts` and
 `i18n.ts` free of the fork's Tauri and store graph.
 
+## Backend seams
+
+The Rust side follows the same rule; the module-level contract lives in
+[`src-tauri/src/custom/mod.rs`](../../../src-tauri/src/custom/mod.rs).
+
+- `src-tauri/src/custom/` — fork-owned backend surface: `CustomState` (the one
+  field added to `AppHandleState`), `wiring.rs` (start-up, window, and service
+  hooks), `diagnostics.rs`, and the `invoke_handler!` macro listing every fork
+  IPC command.
+- `src-tauri/src/commands/injection/` — fork command adapters. `commands.rs`
+  includes `commands/injection/mod.rs` once, which splices them into the
+  upstream `commands` module so they keep sharing its private helpers.
+- Upstream seams: `lib.rs` keeps one call per start-up concern, the
+  `custom: CustomState` field, and the `custom::invoke_handler![..]` line;
+  `commands.rs` keeps the single `include!` (plus the fork update-source
+  constants).
+
+Adding a backend feature:
+
+1. IPC command — one line in `custom::invoke_handler!` plus an adapter under
+   `commands/injection/`.
+2. Managed state — one field on `CustomState`.
+3. Start-up or window behaviour — one function in `custom/wiring.rs`.
+
+No other hunks in upstream `lib.rs` / `commands.rs` are expected.
+
 ## Merge checklist for an upstream bump
 
 - `src/lib/i18n/messages/*.ts`, `src/lib/fluent/icon-map.ts` and
@@ -71,5 +101,6 @@ files read them while they evaluate their own module body. Behaviour goes in
   `Info.plist` and `CHANGELOG.md` are covered by the Git merge drivers in
   `.gitattributes`; `pnpm merge:prepare` re-stamps the Custom version and the
   generated Fluent artifacts.
-- Remaining fork hunks in upstream files should only be the seam lines above
-  and `SettingsPlatformScope`'s `'desktop'` value.
+- Remaining fork hunks in upstream files should only be the seam lines above,
+  the backend seams listed under [Backend seams](#backend-seams), and
+  `SettingsPlatformScope`'s `'desktop'` value.

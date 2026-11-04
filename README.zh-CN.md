@@ -25,6 +25,16 @@ custom 分支在跟进 CFMS Client 上游开发的同时，维护 DoubleCircle �
 3. 通过现有注册表元数据接入功能；只有上游应用尚无接入点时，才在相应位置添加必要的接入代码。
 4. 运行相关检查和测试，并确认新增功能没有破坏上游原有行为。
 
+Rust 后端采用同样的拆分：分支代码集中在 `src-tauri/src/custom/`——`CustomState` 保存分支的托管状态，`wiring.rs` 承载启动、窗口与服务接线，`diagnostics.rs` 负责本地诊断，`custom::invoke_handler!` 宏注册所有分支 IPC 命令。分支命令适配器集中在 `src-tauri/src/commands/injection/`，由 `commands.rs` 中的一行 `include!` 并入上游 `commands` 模块，因此仍可共用该模块的私有辅助函数。
+
+新增后端功能时：
+
+1. 命令：在 `custom::invoke_handler!` 中加一行，并在 `src-tauri/src/commands/injection/` 放适配器。
+2. 状态：在 `CustomState` 上加字段。
+3. 启动或窗口逻辑：放进 `custom/wiring.rs`。
+
+上游 `lib.rs` 与 `commands.rs` 只保留既有接缝：每个启动关注点一行调用、`AppHandleState` 上的一个 `custom: CustomState` 字段、一行命令注册，以及唯一的 `commands/injection/mod.rs` include。
+
 同步上游更新时，应保留共享文件中的上游改动，并重新检查少量注册表接入点。如果模块机制能够提供相应能力，应避免把分支专属功能直接写入上游维护的目录、组件或其他文件。
 
 > [!IMPORTANT]
@@ -157,6 +167,8 @@ CFMS 用于处理保密信息。授权文件会在客户端设备本地解密，
 src/                    SvelteKit 页面、组件、状态存储和 Tauri API 封装
 src/lib/injection/      分支模块注册表与定制功能贡献
 src-tauri/              Tauri 入口、IPC 命令、平台配置和打包资源
+  src/custom/           分支后端：托管状态、启动接线与 IPC 命令注册
+  src/commands/injection/  分支 IPC 命令适配器，经单行 include 并入上游 commands 模块
 crates/
   core/                 共享类型、常量和错误
   crypto/               密钥派生、数据加密和密钥包装
