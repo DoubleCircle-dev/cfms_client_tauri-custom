@@ -25,6 +25,31 @@ afterEach(() => {
 });
 
 describe('ExtensionPageRenderer', () => {
+  it('loads the selected extension page when its route parameters change', async () => {
+    vi.mocked(readExtensionPage)
+      .mockResolvedValueOnce({
+        schema_version: 1,
+        title: 'First extension',
+        blocks: [{ type: 'text', text: 'First page' }],
+      })
+      .mockResolvedValueOnce({
+        schema_version: 1,
+        title: 'Second extension',
+        blocks: [{ type: 'text', text: 'Second page' }],
+      });
+
+    const { rerender } = render(ExtensionPageRenderer, {
+      props: { extensionId: 'org.example.first', pageId: 'home' },
+    });
+
+    await screen.findByText('First page');
+    await rerender({ extensionId: 'org.example.second', pageId: 'settings' });
+
+    await screen.findByText('Second page');
+    expect(readExtensionPage).toHaveBeenNthCalledWith(1, 'org.example.first', 'home');
+    expect(readExtensionPage).toHaveBeenNthCalledWith(2, 'org.example.second', 'settings');
+  });
+
   it('adds scoped plugin styles and removes them when the page unmounts', async () => {
     const page: DeclarativePage = {
       schema_version: 1,

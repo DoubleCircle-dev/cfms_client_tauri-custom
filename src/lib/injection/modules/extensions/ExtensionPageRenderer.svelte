@@ -1,6 +1,5 @@
 <script lang="ts">
   import FluentButton from '$lib/components/FluentButton.svelte';
-  import { onMount } from 'svelte';
   import {
     readExtensionPage,
     type DeclarativeAction,
@@ -25,6 +24,7 @@
   let selectedTabs = $state<Record<string, string>>({});
   let results = $state<Record<string, string>>({});
   let resultErrors = $state<Record<string, string>>({});
+  let loadRequestId = 0;
   let tabGroup = $derived(
     page?.blocks.find((block): block is Extract<DeclarativeBlock, { type: 'tabs' }> => block.type === 'tabs'),
   );
@@ -34,15 +34,19 @@
       : '',
   );
 
-  onMount(load);
+  $effect(() => {
+    void load(extensionId, pageId);
+  });
 
-  async function load() {
+  async function load(nextExtensionId: string, nextPageId: string) {
+    const requestId = ++loadRequestId;
     loading = true;
     error = null;
     page = null;
     pageStylesheet = '';
     try {
-      const loadedPage = await readExtensionPage(extensionId, pageId);
+      const loadedPage = await readExtensionPage(nextExtensionId, nextPageId);
+      if (requestId !== loadRequestId) return;
       if (loadedPage.schema_version !== 1 || !Array.isArray(loadedPage.blocks)) {
         throw new Error('Unsupported extension page schema');
       }
@@ -64,10 +68,15 @@
       pageStylesheet = stylesheet;
       page = loadedPage;
     } catch (cause) {
+      if (requestId !== loadRequestId) return;
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
-      loading = false;
+      if (requestId === loadRequestId) loading = false;
     }
+  }
+
+  function retryLoad() {
+    void load(extensionId, pageId);
   }
 
   $effect(() => {
@@ -295,7 +304,7 @@
     <strong>Unable to open extension</strong><p>{error}</p>
     <FluentButton data-fluent-owner="lib-components-extension-page-renderer"
       type="button"
-      onclick={load}
+      onclick={retryLoad}
       appearance="subtle"
     >Try again</FluentButton>
   </div>
