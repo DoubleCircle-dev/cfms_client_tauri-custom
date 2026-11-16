@@ -458,7 +458,15 @@ fn collect_relative_files(
     current: &std::path::Path,
     out: &mut Vec<String>,
 ) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(current)? {
+    let entries = match std::fs::read_dir(current) {
+        Ok(entries) => entries,
+        // The download directory is created lazily, and a child can disappear
+        // while a recursive listing is in progress. Both cases mean no files
+        // remain at that path.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    for entry in entries {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
@@ -484,6 +492,22 @@ fn collect_relative_files(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod download_file_listing_tests {
+    use super::*;
+
+    #[test]
+    fn missing_download_root_is_an_empty_listing() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("downloads");
+        let mut files = Vec::new();
+
+        collect_relative_files(&root, &root, &mut files).unwrap();
+
+        assert!(files.is_empty());
+    }
 }
 
 /// Check whether a git repository exists in the download root.

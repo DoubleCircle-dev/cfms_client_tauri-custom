@@ -11,21 +11,7 @@ pub(crate) async fn resolve_download_root(
     app_handle: &tauri::AppHandle,
     state: &AppHandleState,
 ) -> Result<std::path::PathBuf, String> {
-    // Try to load user preferences to check for external storage setting.
-    if let (Some(server_addr), Some(username), Some(dek)) = (
-        state.inner.server_address.read().await.clone(),
-        state.inner.username.read().await.clone(),
-        state.inner.dek.read().await.clone(),
-    ) {
-        let server_hash = cfms_core::get_server_hash(&server_addr);
-        let app_data = state.app_data_dir.clone();
-        let load_task = tokio::task::spawn_blocking(move || {
-            cfms_service::user_preferences::load(&app_data, &server_hash, &username, Some(&*dek))
-        });
-        let prefs = match load_task.await {
-            Ok(Ok(p)) => p,
-            _ => return download_root(app_handle),
-        };
+    if let Some(prefs) = load_fork_account_preferences(&state.inner, &state.app_data_dir).await? {
         if prefs.use_external_storage && !prefs.external_storage_path.trim().is_empty() {
             let path = std::path::PathBuf::from(&prefs.external_storage_path);
             if path.is_absolute() {
@@ -42,6 +28,28 @@ pub(crate) async fn resolve_download_root(
     // Clear any stale external-storage hint when falling back to the default.
     let _ = clear_download_root_hint(&state.app_data_dir);
     download_root(app_handle)
+}
+
+pub(crate) async fn load_fork_account_preferences(
+    state: &cfms_service::state::AppState,
+    app_data: &std::path::Path,
+) -> Result<Option<cfms_core::UserPreference>, String> {
+    if let (Some(server_addr), Some(user_id), Some(dek)) = (
+        state.server_address.read().await.clone(),
+        state.user_id.read().await.clone(),
+        state.dek.read().await.clone(),
+    ) {
+        let server_hash = cfms_core::get_server_hash(&server_addr);
+        let app_data = app_data.to_path_buf();
+        let prefs = tokio::task::spawn_blocking(move || {
+            cfms_service::user_preferences::load(&app_data, &server_hash, &user_id, Some(&*dek))
+        })
+        .await
+        .map_err(|e| format!("Failed to load account preferences: {e}"))?
+        .map_err(|e| format!("Failed to load account preferences: {e}"))?;
+        return Ok(Some(prefs));
+    }
+    Ok(None)
 }
 
 const DOWNLOAD_ROOT_HINT_NAME: &str = ".cfms-download-root";
@@ -86,4 +94,34 @@ pub(crate) fn resolve_download_subdirectory(
     }
 
     Ok(root)
+}
+
+#[cfg(test)]
+mod fork_account_preferences_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn uses_account_id_for_external_storage_and_auto_check_preferences() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = cfms_service::state::AppState::new();
+        let server = "example.invalid";
+        let user_id = "account-id";
+        let key = [42; cfms_core::constants::KEY_LEN];
+        let mut prefs = cfms_core::UserPreference::default();
+        prefs.use_external_storage = true;
+        prefs.external_storage_path = dir.path().to_string_lossy().into_owned();
+        prefs.file_auto_update_enabled = true;
+        cfms_service::user_preferences::save(
+            dir.path(), &cfms_core::get_server_hash(server), user_id, Some(&key), &prefs,
+        ).unwrap();
+        *state.server_address.write().await = Some(server.into());
+        *state.user_id.write().await = Some(user_id.into());
+        *state.username.write().await = Some("different-name".into());
+        *state.dek.write().await = Some(zeroize::Zeroizing::new(key));
+
+        let loaded = load_fork_account_preferences(&state, dir.path()).await.unwrap().unwrap();
+        assert!(loaded.use_external_storage);
+        assert_eq!(loaded.external_storage_path, prefs.external_storage_path);
+        assert!(loaded.file_auto_update_enabled);
+    }
 }

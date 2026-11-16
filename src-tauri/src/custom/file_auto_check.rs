@@ -407,21 +407,17 @@ impl AutoCheckSettings {
 async fn read_settings(app: &AppHandle) -> Option<AutoCheckSettings> {
     let state = app.state::<AppHandleState>();
     let username = state.inner.username.read().await.clone()?;
-    let server_address = state.inner.server_address.read().await.clone()?;
-    let dek = state.inner.dek.read().await.clone()?;
-    let server_hash = cfms_core::get_server_hash(&server_address);
-    let app_data_dir = state.app_data_dir.clone();
-    let settings_username = username.clone();
-
-    let load = tokio::task::spawn_blocking(move || {
-        cfms_service::user_preferences::load(&app_data_dir, &server_hash, &username, Some(&*dek))
-    })
-    .await
-    .ok()?
-    .ok()?;
+    let load = match crate::commands::load_fork_account_preferences(&state.inner, &state.app_data_dir).await {
+        Ok(Some(preferences)) => preferences,
+        Ok(None) => return None,
+        Err(error) => {
+            tracing::warn!("Failed to load automatic file-check preferences: {error}");
+            return None;
+        }
+    };
 
     Some(AutoCheckSettings {
-        username: settings_username,
+        username,
         enabled: load.file_auto_update_enabled,
         interval_minutes: load.file_auto_update_interval_minutes,
         auto_download: load.file_auto_update_auto_download,
