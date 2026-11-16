@@ -4,6 +4,23 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v0.60.0-custom-0.2
+**Released on:** 2026-11-16
+
+**Title:** Upstream 0.60.0 with Custom extensions and file sync
+
+### Added
+- Merge upstream 0.59.0 and 0.60.0, including server settings management, connection security improvements, and Rust-based download batch processing and app lock.
+- Support source-specific updater signing keys and numeric MSI versions for Custom prereleases.
+
+### Fixed
+- Preserve the Custom extension system and file workspace after the upstream merge.
+- Load external storage and automatic file-check preferences by account ID, and handle missing or unavailable download directories.
+- Restore extension translations and fix file transfer indicators.
+- Fix the Windows release build and order-dependent CI tests.
+
+---
+
 ## v0.60.0-custom-0.1
 **Released on:** 2026-11-16
 
