@@ -460,10 +460,16 @@ fn collect_relative_files(
 ) -> std::io::Result<()> {
     let entries = match std::fs::read_dir(current) {
         Ok(entries) => entries,
-        // The download directory is created lazily, and a child can disappear
-        // while a recursive listing is in progress. Both cases mean no files
-        // remain at that path.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        // The download root is created lazily, but an unavailable parent or a
+        // directory disappearing during traversal must not look like an empty tree.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && current == root => {
+            if let Some(parent) = root.parent() {
+                if parent.metadata()?.is_dir() {
+                    return Ok(());
+                }
+            }
+            return Err(error);
+        }
         Err(error) => return Err(error),
     };
     for entry in entries {
@@ -507,6 +513,33 @@ mod download_file_listing_tests {
         collect_relative_files(&root, &root, &mut files).unwrap();
 
         assert!(files.is_empty());
+    }
+
+    #[test]
+    fn missing_parent_is_not_mistaken_for_an_empty_download_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("unavailable").join("downloads");
+        let mut files = Vec::new();
+
+        assert_eq!(
+            collect_relative_files(&root, &root, &mut files).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
+    }
+
+    #[test]
+    fn missing_child_during_traversal_is_an_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("downloads");
+        std::fs::create_dir(&root).unwrap();
+        let mut files = Vec::new();
+
+        assert_eq!(
+            collect_relative_files(&root, &root.join("missing-child"), &mut files)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::NotFound
+        );
     }
 }
 
