@@ -90,11 +90,13 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: tauri-cli,sccache
+          tool: tauri-cli
 
       - name: Build release installer
         run: cargo tauri build --ci
         env:
+          # sccache expands dependency paths past Windows' command-line limit.
+          RUSTC_WRAPPER: ""
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 

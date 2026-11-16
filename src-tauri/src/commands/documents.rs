@@ -4,7 +4,6 @@ use super::mobile_types::AndroidSelectedUploadDirectory;
 use super::server_actions::server_action_bool;
 use super::server_actions::server_action_json;
 use super::session::get_connection_auth;
-use super::shared_helpers::format_server_response_error;
 use super::shared_helpers::format_transport_error;
 use super::shared_helpers::send_action_request;
 use super::transfer_helpers::UploadTransferSession;
@@ -26,10 +25,10 @@ use super::transfer_types::UploadProgressEvent;
 use super::transfer_types::UploadRevisionProgressEvent;
 use super::upload_tasks::control_upload_task;
 use super::upload_tasks::emit_upload_snapshot;
-use crate::commands::resolve_download_root;
 #[cfg(target_os = "android")]
 use crate::AndroidUploadFileImporter;
 use crate::AppHandleState;
+use crate::commands::resolve_download_root;
 use cfms_core::CursorPage;
 use cfms_core::ServiceEvent;
 use cfms_service::files::SERVER_CURSOR_PAGE_SIZE;
@@ -419,10 +418,8 @@ pub async fn get_revision(
         )
     };
     let download_root = resolve_download_root(&app_handle, &state).await?;
-    let file_path = cfms_service::files::download_paths::prepare_file(
-        &download_root,
-        &local_filename,
-    )?;
+    let file_path =
+        cfms_service::files::download_paths::prepare_file(&download_root, &local_filename)?;
     let local_filename = file_path
         .file_name()
         .unwrap()

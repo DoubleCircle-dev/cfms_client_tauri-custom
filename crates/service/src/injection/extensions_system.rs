@@ -1297,7 +1297,7 @@ fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), Stri
         let label = format!("Extension page blocks[{index}]");
         match block.get("type").and_then(serde_json::Value::as_str) {
             Some("tabs") => {
-                if tab_groups.len() > 0 {
+                if !tab_groups.is_empty() {
                     return Err("Extension pages support at most one tabs group".into());
                 }
                 let id = block
@@ -1487,9 +1487,9 @@ fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), Stri
             for (action_index, action) in actions.iter().enumerate() {
                 let action_label = format!("{label}.actions[{action_index}]");
                 if let Some(result_id) = action.get("result_id") {
-                    let result_id = result_id.as_str().ok_or_else(|| {
-                        format!("{action_label}.result_id must be a string")
-                    })?;
+                    let result_id = result_id
+                        .as_str()
+                        .ok_or_else(|| format!("{action_label}.result_id must be a string"))?;
                     if !results.contains(result_id) {
                         return Err(format!(
                             "{action_label}.result_id references an undeclared result"
@@ -1498,12 +1498,12 @@ fn validate_extension_page_controls(page: &serde_json::Value) -> Result<(), Stri
                 }
                 if action.get("kind").and_then(serde_json::Value::as_str) == Some("clear") {
                     let form_id = action["form_id"].as_str().unwrap_or_default();
-                    let field_ids = action["field_ids"].as_array().ok_or_else(|| {
-                        format!("{action_label}.field_ids must be an array")
-                    })?;
-                    let declared_fields = forms.get(form_id).ok_or_else(|| {
-                        format!("{action_label} references an undeclared form")
-                    })?;
+                    let field_ids = action["field_ids"]
+                        .as_array()
+                        .ok_or_else(|| format!("{action_label}.field_ids must be an array"))?;
+                    let declared_fields = forms
+                        .get(form_id)
+                        .ok_or_else(|| format!("{action_label} references an undeclared form"))?;
                     for field_id in field_ids {
                         let field_id = field_id.as_str().ok_or_else(|| {
                             format!("{action_label}.field_ids must contain strings")
@@ -1526,10 +1526,10 @@ fn validate_extension_page_table(
     label: &str,
     table_ids: &mut BTreeSet<String>,
 ) -> Result<(), String> {
-    if let Some(value) = block.get("horizontal_scroll") {
-        if !value.is_boolean() {
-            return Err(format!("{label}.horizontal_scroll must be a boolean"));
-        }
+    if let Some(value) = block.get("horizontal_scroll")
+        && !value.is_boolean()
+    {
+        return Err(format!("{label}.horizontal_scroll must be a boolean"));
     }
     let editable = match block.get("editable") {
         Some(value) => value
@@ -2395,11 +2395,9 @@ mod tests {
         });
         validate_extension_page_controls(&page).unwrap();
 
-        page["blocks"][2]["actions"][0]["field_ids"][0] =
-            serde_json::json!("undeclared");
+        page["blocks"][2]["actions"][0]["field_ids"][0] = serde_json::json!("undeclared");
         assert!(validate_extension_page_controls(&page).is_err());
-        page["blocks"][2]["actions"][0]["field_ids"][0] =
-            serde_json::json!("cell-0-0");
+        page["blocks"][2]["actions"][0]["field_ids"][0] = serde_json::json!("cell-0-0");
         page["blocks"][1]["tab"]["id"] = serde_json::json!("missing");
         assert!(validate_extension_page_controls(&page).is_err());
     }
@@ -2451,12 +2449,15 @@ mod tests {
         assert!(validate_extension_page_controls(&page).is_err());
 
         page["blocks"][0]["id"] = serde_json::json!("records");
-        page["blocks"].as_array_mut().unwrap().push(serde_json::json!({
-            "type": "table",
-            "id": "records",
-            "columns": [],
-            "rows": []
-        }));
+        page["blocks"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "type": "table",
+                "id": "records",
+                "columns": [],
+                "rows": []
+            }));
         assert!(validate_extension_page_controls(&page).is_err());
 
         page["blocks"].as_array_mut().unwrap().truncate(1);

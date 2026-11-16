@@ -42,6 +42,7 @@ import type { ExtensionCheckHistoryRecord, FileAutoCheckReport } from './file-au
 import { readLocalDocumentStates } from '$lib/sync-all.svelte';
 
 const HISTORY_KEY_PREFIX = 'cfms:file-check-history:v1';
+let testScope = 0;
 
 function scopeFor(serverAddress: string, username: string) {
   return { serverAddress, username };
@@ -71,11 +72,10 @@ function serve(documents: { id: string; title: string; state?: Record<string, un
 }
 
 beforeEach(() => {
-  // Point the tracker at a dummy account first: switching scope always clears
-  // the in-memory log, which gives every test the same empty starting point.
-  fileUpdateTracker.useAccountScope(scopeFor('reset', 'reset'));
   window.localStorage.clear();
-  deniedDocuments.useAccountScope(scopeFor('reset', 'reset'));
+  const scope = scopeFor('reset', `test-${++testScope}`);
+  fileUpdateTracker.useAccountScope(scope);
+  deniedDocuments.useAccountScope(scope);
   deniedDocuments.clearAll();
   files.getDocumentInfo.mockReset();
   files.getDocumentInfo.mockResolvedValue(null);

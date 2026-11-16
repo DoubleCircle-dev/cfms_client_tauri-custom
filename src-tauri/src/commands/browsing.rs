@@ -1,7 +1,7 @@
 use super::server_actions::server_action_json;
 use super::transfer_helpers::non_empty_optional;
-use crate::commands::{resolve_download_root, resolve_download_subdirectory};
 use crate::AppHandleState;
+use crate::commands::{resolve_download_root, resolve_download_subdirectory};
 use cfms_core::CursorPage;
 use cfms_core::FileEntry;
 use cfms_core::ListDirectoryResponse;
@@ -147,7 +147,7 @@ pub(crate) async fn resolve_node_path_for_state(
     }
 
     let raw = server_action_json(
-        &state,
+        state,
         "node_lookup.node.resolve",
         serde_json::json!({ "path": path }),
     )
@@ -357,8 +357,7 @@ pub async fn delete_download_file(
     if !file_path.exists() {
         return Ok(false);
     }
-    std::fs::remove_file(&file_path)
-        .map_err(|e| format!("Failed to delete download file: {e}"))?;
+    std::fs::remove_file(&file_path).map_err(|e| format!("Failed to delete download file: {e}"))?;
     Ok(true)
 }
 
@@ -406,8 +405,7 @@ pub async fn move_download_file(
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create destination directory: {e}"))?;
     }
-    std::fs::rename(&src, &dst)
-        .map_err(|e| format!("Failed to move download file: {e}"))?;
+    std::fs::rename(&src, &dst).map_err(|e| format!("Failed to move download file: {e}"))?;
     Ok(true)
 }
 
@@ -463,10 +461,10 @@ fn collect_relative_files(
         // The download root is created lazily, but an unavailable parent or a
         // directory disappearing during traversal must not look like an empty tree.
         Err(error) if error.kind() == std::io::ErrorKind::NotFound && current == root => {
-            if let Some(parent) = root.parent() {
-                if parent.metadata()?.is_dir() {
-                    return Ok(());
-                }
+            if let Some(parent) = root.parent()
+                && parent.metadata()?.is_dir()
+            {
+                return Ok(());
             }
             return Err(error);
         }
@@ -522,7 +520,9 @@ mod download_file_listing_tests {
         let mut files = Vec::new();
 
         assert_eq!(
-            collect_relative_files(&root, &root, &mut files).unwrap_err().kind(),
+            collect_relative_files(&root, &root, &mut files)
+                .unwrap_err()
+                .kind(),
             std::io::ErrorKind::NotFound
         );
     }
@@ -973,10 +973,7 @@ mod git_placeholder_tests {
 
     #[test]
     fn ensure_gitignored_is_idempotent() {
-        let dir = std::env::temp_dir().join(format!(
-            "cfms-gitignore-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("cfms-gitignore-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -1015,10 +1012,8 @@ mod git_placeholder_tests {
 
     #[test]
     fn remove_gitignore_rule_removes_only_the_matching_line() {
-        let dir = std::env::temp_dir().join(format!(
-            "cfms-gitignore-remove-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("cfms-gitignore-remove-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(".gitignore"), "/big file.bin\n/other.bin\n").unwrap();
@@ -1034,10 +1029,7 @@ mod git_placeholder_tests {
 
     #[test]
     fn collect_large_files_finds_over_threshold_and_skips_git() {
-        let dir = std::env::temp_dir().join(format!(
-            "cfms-large-scan-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("cfms-large-scan-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         std::fs::create_dir_all(dir.join(".git")).unwrap();
@@ -1086,10 +1078,16 @@ mod git_placeholder_tests {
         .unwrap();
 
         let paths = run_git(dir.path(), &["ls-tree", "-r", "--name-only", "HEAD"]).unwrap();
-        assert!(paths.lines().any(|path| path == "archive/.cfms-empty-folder"));
-        assert!(paths
-            .lines()
-            .any(|path| path == "archive/.cfms-no-folder-access"));
+        assert!(
+            paths
+                .lines()
+                .any(|path| path == "archive/.cfms-empty-folder")
+        );
+        assert!(
+            paths
+                .lines()
+                .any(|path| path == "archive/.cfms-no-folder-access")
+        );
         assert!(
             run_git(dir.path(), &["log", "-1", "--format=%s"])
                 .unwrap()
@@ -1101,10 +1099,8 @@ mod git_placeholder_tests {
     #[test]
     #[ignore = "requires git on PATH; run explicitly with: cargo test -- --ignored"]
     fn stage_large_file_placeholders_records_same_named_placeholder() {
-        let dir = std::env::temp_dir().join(format!(
-            "cfms-git-placeholder-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("cfms-git-placeholder-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 

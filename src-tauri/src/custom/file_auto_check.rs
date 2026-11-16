@@ -407,14 +407,17 @@ impl AutoCheckSettings {
 async fn read_settings(app: &AppHandle) -> Option<AutoCheckSettings> {
     let state = app.state::<AppHandleState>();
     let username = state.inner.username.read().await.clone()?;
-    let load = match crate::commands::load_fork_account_preferences(&state.inner, &state.app_data_dir).await {
-        Ok(Some(preferences)) => preferences,
-        Ok(None) => return None,
-        Err(error) => {
-            tracing::warn!("Failed to load automatic file-check preferences: {error}");
-            return None;
-        }
-    };
+    let load =
+        match crate::commands::load_fork_account_preferences(&state.inner, &state.app_data_dir)
+            .await
+        {
+            Ok(Some(preferences)) => preferences,
+            Ok(None) => return None,
+            Err(error) => {
+                tracing::warn!("Failed to load automatic file-check preferences: {error}");
+                return None;
+            }
+        };
 
     Some(AutoCheckSettings {
         username,
@@ -804,10 +807,11 @@ fn collect_download_files(download_root: &Path) -> Result<Vec<String>, String> {
                     continue;
                 }
                 walk(root, &path, files)?;
-            } else if file_type.is_file() && entry.file_name() != ".gitignore" {
-                if let Ok(relative) = path.strip_prefix(root) {
-                    files.push(relative.to_string_lossy().replace('\\', "/"));
-                }
+            } else if file_type.is_file()
+                && entry.file_name() != ".gitignore"
+                && let Ok(relative) = path.strip_prefix(root)
+            {
+                files.push(relative.to_string_lossy().replace('\\', "/"));
             }
         }
         Ok(())

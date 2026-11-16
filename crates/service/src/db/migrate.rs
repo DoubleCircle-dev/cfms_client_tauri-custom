@@ -72,7 +72,6 @@ pub(super) fn migrate(db: &Connection) -> Result<()> {
 mod tests {
     use super::*;
 
-
     fn assert_current_schema(db: &Connection) {
         let version: u32 = db
             .query_row("SELECT MAX(version) FROM schema_version", [], |row| {

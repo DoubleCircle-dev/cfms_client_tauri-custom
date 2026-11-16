@@ -1,8 +1,8 @@
 use super::settings::CA_CERT_API_URL;
+use super::update_types::UpdateSource;
 use super::updates::UPDATE_CHECK_TIMEOUT;
 use super::updates::UPDATE_RELEASES_API;
 use super::updates::UPDATE_USER_AGENT;
-use super::update_types::UpdateSource;
 #[cfg(test)]
 use super::updates::update_api_http_client;
 #[cfg(test)]
@@ -16,15 +16,13 @@ pub(super) enum GithubApiEndpoint {
     CaCertificates,
 }
 
-const OFFICIAL_UPDATE_RELEASES_API: &str =
-    "https://api.github.com/repos/cfms-dev/cfms_client_tauri/releases";
 const CUSTOM_UPDATE_RELEASES_API: &str =
     "https://api.github.com/repos/DoubleCircle-dev/cfms_client_tauri-custom/releases";
 
 impl GithubApiEndpoint {
     const fn url(self) -> &'static str {
         match self {
-            Self::UpdateReleases(UpdateSource::Official) => OFFICIAL_UPDATE_RELEASES_API,
+            Self::UpdateReleases(UpdateSource::Official) => UPDATE_RELEASES_API,
             Self::UpdateReleases(UpdateSource::Custom) => CUSTOM_UPDATE_RELEASES_API,
             Self::CaCertificates => CA_CERT_API_URL,
         }

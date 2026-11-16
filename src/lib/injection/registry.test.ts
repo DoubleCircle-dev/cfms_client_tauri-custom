@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SettingsEntry } from '$lib/features/settings/settings-entries';
 
 const order = vi.hoisted(() => [] as string[]);
@@ -17,18 +17,12 @@ vi.mock('$lib/api', () => ({
   getLocalIpAddresses: async () => ['192.0.2.10'],
 }));
 
-import {
-  disposeCustomModules,
-  getCustomParentRoute,
-  getCustomNavigationItems,
-  getCustomPublicUtilityRoutes,
-  getCustomRouteTitle,
-  isCustomFeatureEnabled,
-  mergeCustomMessages,
-  mergeSettingsEntries,
-  registerCustomModule,
-  runCustomStartup,
-} from './registry';
+let registry: typeof import('./registry');
+
+beforeEach(async () => {
+  vi.resetModules();
+  registry = await import('./registry');
+});
 
 const entry = (href: string): SettingsEntry => ({
   labelKey: `${href}.title`,
@@ -38,15 +32,13 @@ const entry = (href: string): SettingsEntry => ({
   group: 'personalization',
 });
 
-// Runs before any test registers extra modules, so these assertions describe the
-// fork's shipped contributions only.
 describe('built-in contributions', () => {
   it('serves the toolbox from the account-free utility shell', () => {
-    expect(getCustomPublicUtilityRoutes()).toEqual(['/home/tools']);
+    expect(registry.getCustomPublicUtilityRoutes()).toEqual(['/home/tools']);
   });
 
   it('places the notification history below transfers and the rest below the pinned folders', () => {
-    const items = getCustomNavigationItems();
+    const items = registry.getCustomNavigationItems();
     const slotOf = (id: string) => items.find((item) => item.id === id)?.slot ?? 'top';
 
     expect(items.map((item) => item.id)).toEqual(['notifications', 'chat', 'tools']);
@@ -56,22 +48,22 @@ describe('built-in contributions', () => {
   });
 
   it('contributes the window and file-sync settings pages', () => {
-    expect(mergeSettingsEntries([]).map((item) => item.href))
+    expect(registry.mergeSettingsEntries([]).map((item) => item.href))
       .toEqual(['/home/settings/window', '/home/settings/file-sync', '/home/settings/custom-extensions']);
   });
 
   it('registers extensions through the feature injection', () => {
-    expect(isCustomFeatureEnabled('extensions')).toBe(true);
-    expect(getCustomParentRoute('/home/custom-extensions/view')).toBe('/home/overview');
-    expect(getCustomParentRoute('/home/files')).toBeUndefined();
+    expect(registry.isCustomFeatureEnabled('extensions')).toBe(true);
+    expect(registry.getCustomParentRoute('/home/custom-extensions/view')).toBe('/home/overview');
+    expect(registry.getCustomParentRoute('/home/files')).toBeUndefined();
   });
 
   it('titles only the routes it owns', () => {
-    expect(getCustomRouteTitle('/home/notifications')).toBe('notifications.title');
-    expect(getCustomRouteTitle('/home/chat')).toBe('chat.title');
-    expect(getCustomRouteTitle('/home/tools')).toBe('tools.title');
-    expect(getCustomRouteTitle('/home/files')).toBeUndefined();
-    expect(getCustomRouteTitle('/home/chat/thread')).toBeUndefined();
+    expect(registry.getCustomRouteTitle('/home/notifications')).toBe('notifications.title');
+    expect(registry.getCustomRouteTitle('/home/chat')).toBe('chat.title');
+    expect(registry.getCustomRouteTitle('/home/tools')).toBe('tools.title');
+    expect(registry.getCustomRouteTitle('/home/files')).toBeUndefined();
+    expect(registry.getCustomRouteTitle('/home/chat/thread')).toBeUndefined();
   });
 });
 
@@ -79,19 +71,19 @@ describe('mergeSettingsEntries', () => {
   const base = [entry('/a'), entry('/b'), entry('/c')];
 
   it('inserts a contribution directly after its anchor', () => {
-    registerCustomModule({ id: 'test-anchored', settingsEntries: [{ entry: entry('/fork'), after: '/b' }] });
+    registry.registerCustomModule({ id: 'test-anchored', settingsEntries: [{ entry: entry('/fork'), after: '/b' }] });
 
-    const hrefs = mergeSettingsEntries(base).map((item) => item.href);
+    const hrefs = registry.mergeSettingsEntries(base).map((item) => item.href);
 
     expect(hrefs.indexOf('/fork')).toBe(hrefs.indexOf('/b') + 1);
     expect(hrefs.indexOf('/c')).toBeGreaterThan(hrefs.indexOf('/fork'));
   });
 
   it('appends when the anchor is gone, so an entry is never dropped', () => {
-    registerCustomModule({ id: 'test-orphan', settingsEntries: [{ entry: entry('/orphan'), after: '/removed' }] });
-    registerCustomModule({ id: 'test-plain', settingsEntries: [{ entry: entry('/plain') }] });
+    registry.registerCustomModule({ id: 'test-orphan', settingsEntries: [{ entry: entry('/orphan'), after: '/removed' }] });
+    registry.registerCustomModule({ id: 'test-plain', settingsEntries: [{ entry: entry('/plain') }] });
 
-    const hrefs = mergeSettingsEntries(base).map((item) => item.href);
+    const hrefs = registry.mergeSettingsEntries(base).map((item) => item.href);
 
     expect(hrefs).toContain('/orphan');
     expect(hrefs).toContain('/plain');
@@ -100,7 +92,7 @@ describe('mergeSettingsEntries', () => {
   });
 
   it('leaves the caller catalogue untouched', () => {
-    mergeSettingsEntries(base);
+    registry.mergeSettingsEntries(base);
 
     expect(base.map((item) => item.href)).toEqual(['/a', '/b', '/c']);
   });
@@ -120,8 +112,8 @@ describe('mergeCustomMessages', () => {
     retired: { note: 'gone in this fork', keep: 'still here' },
   };
 
-  it('overrides leaves without disturbing their siblings', () => {
-    registerCustomModule({
+  beforeEach(() => {
+    registry.registerCustomModule({
       id: 'test-messages',
       messages: {
         en: { nested: { replace: 'fork' }, added: { title: 'Fork only' } },
@@ -129,8 +121,10 @@ describe('mergeCustomMessages', () => {
         suppress: ['retired.note'],
       },
     });
+  });
 
-    const merged = mergeCustomMessages('en', base);
+  it('overrides leaves without disturbing their siblings', () => {
+    const merged = registry.mergeCustomMessages('en', base);
 
     expect(merged.keep).toBe('upstream');
     expect(merged.nested).toEqual({ keep: 'upstream', replace: 'fork' });
@@ -140,7 +134,7 @@ describe('mergeCustomMessages', () => {
   });
 
   it('drops catalog keys the fork retires', () => {
-    const merged = mergeCustomMessages('zh_CN', base);
+    const merged = registry.mergeCustomMessages('zh_CN', base);
 
     expect(merged.retired).toEqual({ keep: 'still here' });
     expect(merged.nested.replace).toBe('分支');
@@ -149,26 +143,26 @@ describe('mergeCustomMessages', () => {
 
 describe('module lifecycle', () => {
   it('rejects a duplicate module id', () => {
-    registerCustomModule({ id: 'test-duplicate' });
+    registry.registerCustomModule({ id: 'test-duplicate' });
 
-    expect(() => registerCustomModule({ id: 'test-duplicate' })).toThrow(/Duplicate custom module id/);
+    expect(() => registry.registerCustomModule({ id: 'test-duplicate' })).toThrow(/Duplicate custom module id/);
   });
 
   it('starts modules in registration order and disposes them in reverse', async () => {
     order.length = 0;
-    registerCustomModule({
+    registry.registerCustomModule({
       id: 'test-lifecycle-a',
       startup: () => { order.push('start-a'); },
       dispose: () => { order.push('dispose-a'); },
     });
-    registerCustomModule({
+    registry.registerCustomModule({
       id: 'test-lifecycle-b',
       startup: () => { order.push('start-b'); },
       dispose: () => { order.push('dispose-b'); },
     });
 
-    await runCustomStartup();
-    disposeCustomModules();
+    await registry.runCustomStartup();
+    registry.disposeCustomModules();
 
     const lifecycle = order.filter((step) => /^(start|dispose)-[ab]$/.test(step));
     expect(lifecycle).toEqual(['start-a', 'start-b', 'dispose-b', 'dispose-a']);
@@ -177,7 +171,7 @@ describe('module lifecycle', () => {
   it('runs the fork runtime services during start-up, in order', async () => {
     order.length = 0;
 
-    await runCustomStartup();
+    await registry.runCustomStartup();
 
     expect(order.indexOf('file-auto-check')).toBeGreaterThanOrEqual(0);
     expect(order.indexOf('desktop-shell')).toBeGreaterThan(order.indexOf('file-auto-check'));

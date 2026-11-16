@@ -17,6 +17,8 @@ jobs:
     name: Rust tests, Clippy and formatting
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v7
         with:

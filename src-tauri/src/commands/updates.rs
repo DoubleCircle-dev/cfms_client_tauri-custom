@@ -496,7 +496,7 @@ async fn rank_update_download_candidates(
             Err(error) => tracing::warn!("Update mirror probe task failed: {error}"),
         }
     }
-    candidates.sort_by(|left, right| right.bytes_per_second.cmp(&left.bytes_per_second));
+    candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.bytes_per_second));
     candidates
 }
 

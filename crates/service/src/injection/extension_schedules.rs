@@ -322,10 +322,10 @@ impl ExtensionScheduleStore {
         let mut upsert_ids = BTreeSet::new();
         for (id, input) in &inputs {
             input.validate()?;
-            if let Some(id) = id {
-                if id.is_empty() || !upsert_ids.insert(id.clone()) {
-                    return Err("Schedule upsert IDs must be non-empty and unique".into());
-                }
+            if let Some(id) = id
+                && (id.is_empty() || !upsert_ids.insert(id.clone()))
+            {
+                return Err("Schedule upsert IDs must be non-empty and unique".into());
             }
         }
         let mut delete_ids = BTreeSet::new();

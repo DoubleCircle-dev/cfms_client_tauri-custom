@@ -214,10 +214,7 @@ mod tests {
 
     #[test]
     fn override_accepts_only_selectable_versions_below_the_build_target() {
-        assert_eq!(
-            normalize_min_protocol_version_override(Some(25)),
-            Some(25)
-        );
+        assert_eq!(normalize_min_protocol_version_override(Some(25)), Some(25));
         assert_eq!(
             normalize_min_protocol_version_override(Some(PROTOCOL_VERSION)),
             None

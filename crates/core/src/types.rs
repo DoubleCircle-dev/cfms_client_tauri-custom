@@ -1003,11 +1003,26 @@ mod tests {
             serde_json::from_value(serde_json::Value::Object(sent)).unwrap();
         let reloaded = serde_json::to_value(&stored).unwrap();
 
-        assert_eq!(reloaded["file_auto_detect_on_startup"], serde_json::json!(true));
-        assert_eq!(reloaded["file_auto_update_auto_download"], serde_json::json!(true));
-        assert_eq!(reloaded["file_auto_update_interval_minutes"], serde_json::json!(15));
-        assert_eq!(reloaded["sync_git_tracking_enabled"], serde_json::json!(true));
-        assert_eq!(reloaded["sync_overwrite_strategy"], serde_json::json!("skip"));
+        assert_eq!(
+            reloaded["file_auto_detect_on_startup"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            reloaded["file_auto_update_auto_download"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            reloaded["file_auto_update_interval_minutes"],
+            serde_json::json!(15)
+        );
+        assert_eq!(
+            reloaded["sync_git_tracking_enabled"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            reloaded["sync_overwrite_strategy"],
+            serde_json::json!("skip")
+        );
     }
 
     #[test]

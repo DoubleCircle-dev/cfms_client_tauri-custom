@@ -35,10 +35,7 @@ pub struct ProtocolVersionSettingsDto {
 fn read_protocol_version_override(
     settings: &cfms_service::db::settings::SettingsStore,
 ) -> Option<u32> {
-    let raw = settings
-        .get(PROTOCOL_VERSION_OVERRIDE_KEY)
-        .ok()
-        .flatten()?;
+    let raw = settings.get(PROTOCOL_VERSION_OVERRIDE_KEY).ok().flatten()?;
     cfms_core::constants::normalize_min_protocol_version_override(raw.trim().parse::<u32>().ok())
 }
 
@@ -216,12 +213,12 @@ pub async fn set_protocol_version_override(
     if let Some(version) = selected
         && !cfms_core::constants::SELECTABLE_PROTOCOL_VERSIONS.contains(&version)
     {
-        return Err(format!(
-            "Unsupported protocol version override: {version}"
-        ));
+        return Err(format!("Unsupported protocol version override: {version}"));
     }
 
-    let stored = selected.map(|version| version.to_string()).unwrap_or_default();
+    let stored = selected
+        .map(|version| version.to_string())
+        .unwrap_or_default();
     state
         .settings
         .set(PROTOCOL_VERSION_OVERRIDE_KEY, &stored)

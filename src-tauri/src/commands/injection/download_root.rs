@@ -11,17 +11,18 @@ pub(crate) async fn resolve_download_root(
     app_handle: &tauri::AppHandle,
     state: &AppHandleState,
 ) -> Result<std::path::PathBuf, String> {
-    if let Some(prefs) = load_fork_account_preferences(&state.inner, &state.app_data_dir).await? {
-        if prefs.use_external_storage && !prefs.external_storage_path.trim().is_empty() {
-            let path = std::path::PathBuf::from(&prefs.external_storage_path);
-            if path.is_absolute() {
-                let root = path.join("downloads");
-                // Persist the resolved path as an unencrypted hint so that
-                // the local-data-reset codepath (which runs before the DEK is
-                // available) can locate and clean the download directory.
-                let _ = write_download_root_hint(&state.app_data_dir, &root);
-                return Ok(root);
-            }
+    if let Some(prefs) = load_fork_account_preferences(&state.inner, &state.app_data_dir).await?
+        && prefs.use_external_storage
+        && !prefs.external_storage_path.trim().is_empty()
+    {
+        let path = std::path::PathBuf::from(&prefs.external_storage_path);
+        if path.is_absolute() {
+            let root = path.join("downloads");
+            // Persist the resolved path as an unencrypted hint so that
+            // the local-data-reset codepath (which runs before the DEK is
+            // available) can locate and clean the download directory.
+            let _ = write_download_root_hint(&state.app_data_dir, &root);
+            return Ok(root);
         }
     }
 
@@ -58,7 +59,10 @@ fn download_root_hint_path(app_data: &std::path::Path) -> std::path::PathBuf {
     app_data.join(DOWNLOAD_ROOT_HINT_NAME)
 }
 
-fn write_download_root_hint(app_data: &std::path::Path, root: &std::path::Path) -> Result<(), String> {
+fn write_download_root_hint(
+    app_data: &std::path::Path,
+    root: &std::path::Path,
+) -> Result<(), String> {
     let path = download_root_hint_path(app_data);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).ok();
@@ -107,19 +111,29 @@ mod fork_account_preferences_tests {
         let server = "example.invalid";
         let user_id = "account-id";
         let key = [42; cfms_core::constants::KEY_LEN];
-        let mut prefs = cfms_core::UserPreference::default();
-        prefs.use_external_storage = true;
-        prefs.external_storage_path = dir.path().to_string_lossy().into_owned();
-        prefs.file_auto_update_enabled = true;
+        let prefs = cfms_core::UserPreference {
+            use_external_storage: true,
+            external_storage_path: dir.path().to_string_lossy().into_owned(),
+            file_auto_update_enabled: true,
+            ..Default::default()
+        };
         cfms_service::user_preferences::save(
-            dir.path(), &cfms_core::get_server_hash(server), user_id, Some(&key), &prefs,
-        ).unwrap();
+            dir.path(),
+            &cfms_core::get_server_hash(server),
+            user_id,
+            Some(&key),
+            &prefs,
+        )
+        .unwrap();
         *state.server_address.write().await = Some(server.into());
         *state.user_id.write().await = Some(user_id.into());
         *state.username.write().await = Some("different-name".into());
         *state.dek.write().await = Some(zeroize::Zeroizing::new(key));
 
-        let loaded = load_fork_account_preferences(&state, dir.path()).await.unwrap().unwrap();
+        let loaded = load_fork_account_preferences(&state, dir.path())
+            .await
+            .unwrap()
+            .unwrap();
         assert!(loaded.use_external_storage);
         assert_eq!(loaded.external_storage_path, prefs.external_storage_path);
         assert!(loaded.file_auto_update_enabled);

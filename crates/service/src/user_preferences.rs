@@ -537,7 +537,14 @@ mod tests {
                 settings: serde_json::json!({ "view": "compact" }),
             },
         );
-        save(temp.path(), SERVER_HASH, USERNAME, Some(&dek()), &preferences).unwrap();
+        save(
+            temp.path(),
+            SERVER_HASH,
+            USERNAME,
+            Some(&dek()),
+            &preferences,
+        )
+        .unwrap();
 
         let loaded = load(temp.path(), SERVER_HASH, USERNAME, Some(&dek())).unwrap();
         assert_eq!(loaded.extensions, preferences.extensions);

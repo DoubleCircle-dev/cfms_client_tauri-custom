@@ -79,7 +79,10 @@ pub async fn send_raw_request(
         if let serde_json::Value::Object(ref mut map) = value {
             map.insert("username".into(), serde_json::Value::String(username));
             map.insert("token".into(), serde_json::Value::String(token));
-            map.insert("timestamp".into(), serde_json::Value::Number(timestamp.into()));
+            map.insert(
+                "timestamp".into(),
+                serde_json::Value::Number(timestamp.into()),
+            );
             map.insert("nonce".into(), serde_json::Value::String(nonce));
         }
     }
@@ -176,14 +179,13 @@ pub async fn fetch_server_page(
     };
 
     // Add custom headers
-    if let Some(ref hdrs) = headers {
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(hdrs) {
-            if let Some(obj) = parsed.as_object() {
-                for (key, val) in obj {
-                    if let Some(v) = val.as_str() {
-                        request = request.header(key.as_str(), v);
-                    }
-                }
+    if let Some(ref hdrs) = headers
+        && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(hdrs)
+        && let Some(obj) = parsed.as_object()
+    {
+        for (key, val) in obj {
+            if let Some(v) = val.as_str() {
+                request = request.header(key.as_str(), v);
             }
         }
     }
