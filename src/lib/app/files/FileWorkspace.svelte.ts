@@ -123,6 +123,9 @@ import { authStore } from "$lib/features/authentication/auth-state.svelte.ts";
 import { floatingProgressStore } from "$lib/shared/notifications/progress.svelte.ts";
 import { notificationStore } from "$lib/shared/notifications/notifications.svelte.ts";
 import { serverStateStore } from "$lib/features/connection/connection-state.svelte.ts";
+import { cancelDownload } from '$lib/api/downloads';
+import type { DownloadTaskDto, DownloadTaskStatus } from '$lib/api/types';
+import { downloadStore } from '$lib/features/transfers/download-state.svelte.ts';
 import { uploadStore } from "$lib/features/transfers/upload-state.svelte.ts";
 import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
 import { startDirectoryDownload } from '$lib/features/transfers/directory-download-controller';
@@ -593,6 +596,28 @@ export function createFileWorkspace() {
   }
 
   const uploadActiveCount = $derived(uploadStore.activeTasks.length);
+
+  const ACTIVE_DOWNLOAD_STATUSES: ReadonlySet<DownloadTaskStatus> = new Set([
+    'pending',
+    'scheduled',
+    'downloading',
+    'paused',
+    'decrypting',
+    'verifying',
+  ]);
+  const downloadingDocTasks = $derived.by(() => {
+    const tasks = new Map<string, DownloadTaskDto>();
+    for (const task of downloadStore.tasks.values()) {
+      if (!ACTIVE_DOWNLOAD_STATUSES.has(task.status)) continue;
+      const current = tasks.get(task.file_id);
+      if (!current || task.created_at >= current.created_at) tasks.set(task.file_id, task);
+    }
+    return tasks;
+  });
+  const downloadingDocIds = $derived(new Set(downloadingDocTasks.keys()));
+  const downloadingDocProgress = $derived(
+    new Map([...downloadingDocTasks].map(([documentId, task]) => [documentId, task.progress])),
+  );
 
   const parentTargetId = $derived.by<string | null | undefined>(() => {
     if (
@@ -1473,6 +1498,16 @@ export function createFileWorkspace() {
       } else {
         error = String(e);
       }
+    }
+  }
+
+  async function handleCancelDownload(documentId: string) {
+    const task = downloadingDocTasks.get(documentId);
+    if (!task) return;
+    try {
+      await cancelDownload(task.task_id);
+    } catch (cause) {
+      error = formatError(cause);
     }
   }
 
@@ -3793,6 +3828,8 @@ export function createFileWorkspace() {
     set documentAccessDenied(value) { documentAccessDenied = value; },
     get documentTagsDialog() { return documentTagsDialog; },
     set documentTagsDialog(value) { documentTagsDialog = value; },
+    get downloadingDocumentIds() { return downloadingDocIds; },
+    get downloadingDocumentProgress() { return downloadingDocProgress; },
     get documents() { return documents; },
     set documents(value) { documents = value; },
     get dragUploadActive() { return dragUploadActive; },
@@ -3809,6 +3846,7 @@ export function createFileWorkspace() {
     handleAddressSubmit,
     handleBatchMoveToTarget,
     handleBreadcrumbNavigate,
+    handleCancelDownload,
     handleDeleteRevision,
     handleDocumentActivate,
     handleDocumentClick,

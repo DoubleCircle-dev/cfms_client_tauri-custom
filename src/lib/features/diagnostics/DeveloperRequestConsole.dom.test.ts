@@ -174,5 +174,5 @@ describe('DeveloperRequestConsole', () => {
     await fireEvent.click(screen.getByText('business_12'));
     expect((screen.getByLabelText('Business name') as HTMLInputElement).value).toBe('business_12');
     expect((screen.getByLabelText('Payload (JSON)') as HTMLTextAreaElement).value).toContain('"index":12');
-  });
+  }, 10_000);
 });

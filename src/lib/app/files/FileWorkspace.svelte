@@ -32,7 +32,7 @@
   const workspace = createFileWorkspace();
   const emptyItemIds = new Set<string>();
   const emptyProgress = new Map<string, number>();
-  const ignoreTransferCancellation = (_documentId: string) => {};
+  const ignoreOpenCancellation = (_documentId: string) => {};
 </script>
 
 <div
@@ -384,10 +384,10 @@
       outdatedDocumentIds={emptyItemIds}
       openingInProgressDocumentIds={emptyItemIds}
       openingInProgressProgress={emptyProgress}
-      onCancelOpenDocument={ignoreTransferCancellation}
-      downloadingDocumentIds={emptyItemIds}
-      downloadingDocumentProgress={emptyProgress}
-      onCancelDownload={ignoreTransferCancellation}
+      onCancelOpenDocument={ignoreOpenCancellation}
+      downloadingDocumentIds={workspace.downloadingDocumentIds}
+      downloadingDocumentProgress={workspace.downloadingDocumentProgress}
+      onCancelDownload={workspace.handleCancelDownload}
     />
     <ExplorerDetailsPane
       open={workspace.detailsOpen}

@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';

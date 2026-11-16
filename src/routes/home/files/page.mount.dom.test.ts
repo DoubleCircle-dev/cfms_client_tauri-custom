@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 // Regression guard for the "全部文件 page hangs on loading, then every button
 // is dead" bug.
 //
@@ -10,11 +8,12 @@
 // thread. Mounting the page is therefore the assertion: with the loop in place
 // `render()` never returns, and the timeout below is what fails.
 
-import { cleanup, render, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from '$app/state';
 import type { DownloadTaskDto } from '$lib/api/types';
+import { cancelDownload } from '$lib/api/downloads';
 import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
 import { downloadStore } from '$lib/stores.svelte';
 import FilesPage from './+page.svelte';
@@ -257,6 +256,26 @@ describe('files page', () => {
     expect(row).not.toBeNull();
     expect(row!.classList.contains('file-table-row--transferring')).toBe(true);
     expect(row!.getAttribute('style')).toMatch(/--row-transfer-progress:\s*50%/);
+  });
+
+  it('cancels an active download from its document row', async () => {
+    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
+    mocks.loadUserPreference.mockResolvedValue(null);
+    mocks.getDownloadTasks.mockResolvedValue([]);
+
+    const { container } = render(FilesPage);
+    flushSync();
+    await waitFor(() => {
+      expect(container.querySelector('.file-table-loading')).toBeNull();
+    });
+
+    downloadStore.upsert(downloadTask({ file_id: 'doc-1', progress: 0.5 }));
+    flushSync();
+    const cancelButton = container.querySelector('.file-table-row-cancel');
+    expect(cancelButton).not.toBeNull();
+
+    await fireEvent.click(cancelButton!);
+    expect(cancelDownload).toHaveBeenCalledExactlyOnceWith('task-1');
   });
 
   it('leaves settled tasks off the row', async () => {
