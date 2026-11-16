@@ -10,12 +10,13 @@
 
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from '$app/state';
-import type { DownloadTaskDto } from '$lib/api/types';
+import type { DownloadTaskDto, ServerDocumentEntry } from '$lib/api/types';
 import { cancelDownload } from '$lib/api/downloads';
 import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
 import { downloadStore } from '$lib/stores.svelte';
+import type { LocalDocumentState } from '$lib/sync-all.svelte';
 import FilesPage from './+page.svelte';
 
 // `svelte/motion` builds a module-scope MediaQuery, so `matchMedia` has to exist
@@ -44,7 +45,19 @@ const mocks = vi.hoisted(() => ({
   listDirectoryPage: vi.fn(),
   listDirectory: vi.fn(),
   loadUserPreference: vi.fn(),
-  getDownloadTasks: vi.fn(),
+  getDownloadTasks: vi.fn((_status?: string) => Promise.resolve([] as DownloadTaskDto[])),
+  getDocument: vi.fn(async (_documentId: string, _path: string) => ({ task_id: 'task-1' })),
+  openDownloadedDocument: vi.fn(async (_path: string) => true),
+  loadServerDocument: vi.fn(async (_documentId: string, _parentId: string | null) => null),
+  readLocalDocumentState: vi.fn(async (doc: ServerDocumentEntry, pathParts: string[]): Promise<LocalDocumentState> => ({
+    doc,
+    path: [...pathParts, doc.title].join('/'),
+    localHash: null,
+    existsLocally: false,
+    isCurrent: false,
+    mismatched: false,
+  })),
+  readLocalDocumentStates: vi.fn(async (_documents: ServerDocumentEntry[], _pathParts: string[]) => [] as LocalDocumentState[]),
 }));
 
 vi.mock('$lib/api', () => ({
@@ -53,7 +66,7 @@ vi.mock('$lib/api', () => ({
   loadUserPreference: mocks.loadUserPreference,
   getDownloadTasks: mocks.getDownloadTasks,
   classifyUploadPath: vi.fn(),
-  getDocument: vi.fn(),
+  getDocument: mocks.getDocument,
   openDownloadedDocument: vi.fn(),
   getRevision: vi.fn(),
   inspectUploadDirectoryConflicts: vi.fn(),
@@ -85,6 +98,19 @@ vi.mock('$lib/api', () => ({
 
 vi.mock('$lib/api/downloads', () => ({
   cancelDownload: vi.fn(),
+  getDownloadTasks: mocks.getDownloadTasks,
+}));
+
+vi.mock('$lib/api/files', async () => {
+  const actual = await vi.importActual<typeof import('$lib/api/files')>('$lib/api/files');
+  return { ...actual, openDownloadedDocument: mocks.openDownloadedDocument };
+});
+
+vi.mock('$lib/sync-all.svelte', () => ({
+  loadServerDocument: mocks.loadServerDocument,
+  makeDownloadPath: (parts: string[]) => parts.join('/'),
+  readLocalDocumentState: mocks.readLocalDocumentState,
+  readLocalDocumentStates: mocks.readLocalDocumentStates,
 }));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
@@ -124,6 +150,22 @@ vi.mock('svelte-i18n', () => ({
     },
   },
 }));
+
+beforeEach(() => {
+  mocks.getDownloadTasks.mockResolvedValue([]);
+  mocks.getDocument.mockResolvedValue({ task_id: 'task-1' });
+  mocks.openDownloadedDocument.mockResolvedValue(true);
+  mocks.loadServerDocument.mockResolvedValue(null);
+  mocks.readLocalDocumentState.mockImplementation(async (doc, pathParts) => ({
+    doc,
+    path: [...pathParts, doc.title].join('/'),
+    localHash: null,
+    existsLocally: false,
+    isCurrent: false,
+    mismatched: false,
+  }));
+  mocks.readLocalDocumentStates.mockResolvedValue([]);
+});
 
 afterEach(() => {
   cleanup();
@@ -234,6 +276,145 @@ describe('files page', () => {
       expect.any(Array),
     );
     compareSnapshot.mockRestore();
+  });
+
+  it('marks a local copy that differs from the server revision', async () => {
+    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
+    mocks.loadUserPreference.mockResolvedValue(null);
+    mocks.getDownloadTasks.mockResolvedValue([]);
+    mocks.readLocalDocumentStates.mockResolvedValue([
+      {
+        doc: pageResponse().documents[0],
+        path: 'readme-document',
+        localHash: 'b'.repeat(64),
+        existsLocally: true,
+        isCurrent: false,
+        mismatched: true,
+      },
+    ]);
+
+    const { container } = render(FilesPage);
+    flushSync();
+
+    await waitFor(() => {
+      expect(container.querySelector('.file-table-loading')).toBeNull();
+    });
+    await waitFor(() => {
+      const row = container.querySelector('[data-selection-key="document:doc-1"]');
+      expect(row).not.toBeNull();
+      expect(row!.querySelector('[data-outdated]')).not.toBeNull();
+    });
+    const row = container.querySelector('[data-selection-key="document:doc-1"]');
+    expect(row).not.toBeNull();
+    expect(row!.querySelector('[data-not-downloaded]')).toBeNull();
+  });
+
+  it('opens a verified local copy without starting another download', async () => {
+    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
+    mocks.loadUserPreference.mockResolvedValue(null);
+    mocks.getDownloadTasks.mockResolvedValue([]);
+    mocks.readLocalDocumentState.mockResolvedValue({
+      doc: pageResponse().documents[0],
+      path: 'readme-document',
+      localHash: 'a'.repeat(64),
+      existsLocally: true,
+      isCurrent: true,
+      mismatched: false,
+    });
+
+    const { container } = render(FilesPage);
+    flushSync();
+    await waitFor(() => {
+      expect(container.querySelector('.file-table-loading')).toBeNull();
+    });
+
+    await fireEvent.dblClick(container.querySelector('[data-selection-key="document:doc-1"]')!);
+    await waitFor(() => {
+      expect(mocks.openDownloadedDocument).toHaveBeenCalledExactlyOnceWith('readme-document');
+    });
+    expect(mocks.getDocument).not.toHaveBeenCalled();
+  });
+
+  it('verifies a newly downloaded copy before opening it', async () => {
+    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
+    mocks.loadUserPreference.mockResolvedValue(null);
+    mocks.getDownloadTasks.mockResolvedValue([]);
+    mocks.readLocalDocumentState
+      .mockResolvedValueOnce({
+        doc: pageResponse().documents[0],
+        path: 'readme-document',
+        localHash: null,
+        existsLocally: false,
+        isCurrent: false,
+        mismatched: false,
+      })
+      .mockResolvedValueOnce({
+        doc: pageResponse().documents[0],
+        path: 'readme-document',
+        localHash: 'a'.repeat(64),
+        existsLocally: true,
+        isCurrent: true,
+        mismatched: false,
+      });
+    mocks.getDocument.mockImplementationOnce(async (documentId: string, path: string) => {
+      downloadStore.upsert(downloadTask({
+        task_id: 'download-before-open',
+        file_id: documentId,
+        filename: path,
+        file_path: path,
+        status: 'completed',
+        progress: 1,
+      }));
+      return { task_id: 'download-before-open' };
+    });
+
+    const { container } = render(FilesPage);
+    flushSync();
+    await waitFor(() => {
+      expect(container.querySelector('.file-table-loading')).toBeNull();
+    });
+
+    await fireEvent.dblClick(container.querySelector('[data-selection-key="document:doc-1"]')!);
+    await waitFor(() => {
+      expect(mocks.openDownloadedDocument).toHaveBeenCalledExactlyOnceWith('readme-document');
+    });
+    expect(mocks.getDocument).toHaveBeenCalledExactlyOnceWith('doc-1', 'readme-document');
+  });
+
+  it('reuses and cancels an active transfer while opening a document', async () => {
+    mocks.listDirectoryPage.mockResolvedValue(pageResponse());
+    mocks.loadUserPreference.mockResolvedValue(null);
+    mocks.getDownloadTasks.mockResolvedValue([]);
+    mocks.readLocalDocumentState.mockResolvedValue({
+      doc: pageResponse().documents[0],
+      path: 'readme-document',
+      localHash: null,
+      existsLocally: false,
+      isCurrent: false,
+      mismatched: false,
+    });
+
+    const { container } = render(FilesPage);
+    flushSync();
+    await waitFor(() => {
+      expect(container.querySelector('.file-table-loading')).toBeNull();
+    });
+
+    downloadStore.upsert(downloadTask({ progress: 0.25 }));
+    await fireEvent.dblClick(container.querySelector('[data-selection-key="document:doc-1"]')!);
+    const cancelButton = await waitFor(() => {
+      const button = container.querySelector('.file-table-row-cancel');
+      expect(button).not.toBeNull();
+      return button!;
+    });
+    await fireEvent.click(cancelButton);
+    expect(cancelDownload).toHaveBeenCalledExactlyOnceWith('task-1');
+    expect(mocks.getDocument).not.toHaveBeenCalled();
+
+    downloadStore.upsert(downloadTask({ status: 'cancelled', progress: 0.25 }));
+    await waitFor(() => {
+      expect(container.querySelector('.file-table-row-cancel')).toBeNull();
+    });
   });
 
   it('reports a running download on the document row itself', async () => {

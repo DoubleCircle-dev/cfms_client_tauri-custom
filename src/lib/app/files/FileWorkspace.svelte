@@ -30,9 +30,6 @@
   import { authStore } from "$lib/features/authentication/auth-state.svelte.ts";
   import { createFileWorkspace } from './FileWorkspace.svelte.ts';
   const workspace = createFileWorkspace();
-  const emptyItemIds = new Set<string>();
-  const emptyProgress = new Map<string, number>();
-  const ignoreOpenCancellation = (_documentId: string) => {};
 </script>
 
 <div
@@ -379,12 +376,12 @@
       notUpdatedDocumentIds={workspace.notUpdatedDocumentIds}
       notUpdatedFolderIds={workspace.notUpdatedFolderIds}
       notUpdatedTooltip={$t('files.notUpdatedTooltip')}
-      hiddenItemIds={emptyItemIds}
-      undownloadedDocumentIds={emptyItemIds}
-      outdatedDocumentIds={emptyItemIds}
-      openingInProgressDocumentIds={emptyItemIds}
-      openingInProgressProgress={emptyProgress}
-      onCancelOpenDocument={ignoreOpenCancellation}
+      hiddenItemIds={workspace.hiddenItemIds}
+      undownloadedDocumentIds={workspace.undownloadedDocumentIds}
+      outdatedDocumentIds={workspace.outdatedDocumentIds}
+      openingInProgressDocumentIds={workspace.openingInProgressDocumentIds}
+      openingInProgressProgress={workspace.openingInProgressProgress}
+      onCancelOpenDocument={workspace.handleCancelOpenDocument}
       downloadingDocumentIds={workspace.downloadingDocumentIds}
       downloadingDocumentProgress={workspace.downloadingDocumentProgress}
       onCancelDownload={workspace.handleCancelDownload}

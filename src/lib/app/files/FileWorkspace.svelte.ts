@@ -123,11 +123,18 @@ import { authStore } from "$lib/features/authentication/auth-state.svelte.ts";
 import { floatingProgressStore } from "$lib/shared/notifications/progress.svelte.ts";
 import { notificationStore } from "$lib/shared/notifications/notifications.svelte.ts";
 import { serverStateStore } from "$lib/features/connection/connection-state.svelte.ts";
-import { cancelDownload } from '$lib/api/downloads';
+import { cancelDownload, getDownloadTasks } from '$lib/api/downloads';
+import { openDownloadedDocument } from '$lib/api/files';
 import type { DownloadTaskDto, DownloadTaskStatus } from '$lib/api/types';
 import { downloadStore } from '$lib/features/transfers/download-state.svelte.ts';
 import { uploadStore } from "$lib/features/transfers/upload-state.svelte.ts";
 import { fileUpdateTracker } from '$lib/file-update-tracker.svelte';
+import {
+  loadServerDocument,
+  makeDownloadPath,
+  readLocalDocumentState,
+  readLocalDocumentStates,
+} from '$lib/sync-all.svelte';
 import { startDirectoryDownload } from '$lib/features/transfers/directory-download-controller';
 import { fromStore } from 'svelte/store';
 
@@ -199,6 +206,12 @@ export function createFileWorkspace() {
   let error = $state<string | null>(null);
 
   let status = $state<string | null>(null);
+
+  let openingInProgress = $state<Map<string, string>>(new Map());
+
+  let openingProgress = $state<Map<string, number>>(new Map());
+
+  let hiddenItemIds = $state<Set<string>>(new Set());
 
 
 
@@ -597,6 +610,16 @@ export function createFileWorkspace() {
 
   const uploadActiveCount = $derived(uploadStore.activeTasks.length);
 
+  const openingDocumentIds = $derived(new Set(openingInProgress.keys()));
+  const openingDocumentProgress = $derived(
+    new Map(
+      [...openingInProgress].map(([documentId, taskId]) => [
+        documentId,
+        openingProgress.get(taskId) ?? 0,
+      ]),
+    ),
+  );
+
   const ACTIVE_DOWNLOAD_STATUSES: ReadonlySet<DownloadTaskStatus> = new Set([
     'pending',
     'scheduled',
@@ -618,6 +641,82 @@ export function createFileWorkspace() {
   const downloadingDocProgress = $derived(
     new Map([...downloadingDocTasks].map(([documentId, task]) => [documentId, task.progress])),
   );
+
+  let persistedDownloadedIds = $state<Set<string>>(new Set());
+  let persistedDivergedIds = $state<Set<string>>(new Set());
+  let localStateRefreshRequest = 0;
+  const completedDownloadSignature = $derived(
+    [...downloadStore.tasks.values()]
+      .filter((task) => task.status === 'completed')
+      .map((task) => `${task.task_id}:${task.completed_at ?? ''}`)
+      .sort()
+      .join('\0'),
+  );
+  const downloadedFileIds = $derived.by(() => {
+    const ids = new Set(persistedDownloadedIds);
+    for (const task of downloadStore.tasks.values()) {
+      if (task.status === 'completed' && task.file_id) ids.add(task.file_id);
+    }
+    return ids;
+  });
+  const outdatedDocumentIds = $derived(persistedDivergedIds);
+  const undownloadedDocumentIds = $derived.by(() => {
+    const ids = new Set<string>();
+    for (const document of documents) {
+      if (!downloadedFileIds.has(document.id) && !persistedDivergedIds.has(document.id)) {
+        ids.add(document.id);
+      }
+    }
+    return ids;
+  });
+
+  async function refreshDownloadedFileIds() {
+    const request = ++localStateRefreshRequest;
+    const currentDocuments = documents;
+    const currentFolder = currentFolderId;
+    const pathParts = breadcrumbSegments.map((segment) => segment.label);
+    const pathKey = pathParts.join('\0');
+    const ids = new Set<string>();
+    const diverged = new Set<string>();
+    const failures: string[] = [];
+
+    try {
+      for (const task of await getDownloadTasks('completed')) {
+        if (task.file_id) ids.add(task.file_id);
+      }
+    } catch (cause) {
+      failures.push(formatError(cause));
+    }
+
+    if (currentDocuments.length > 0) {
+      try {
+        for (const state of await readLocalDocumentStates(currentDocuments, pathParts)) {
+          if (state.isCurrent) ids.add(state.doc.id);
+          else if (state.existsLocally) diverged.add(state.doc.id);
+        }
+      } catch (cause) {
+        failures.push(formatError(cause));
+      }
+    }
+
+    if (
+      request !== localStateRefreshRequest
+      || currentDocuments !== documents
+      || !sameDirectoryId(currentFolder, currentFolderId)
+      || pathKey !== breadcrumbSegments.map((segment) => segment.label).join('\0')
+    ) return;
+
+    persistedDownloadedIds = ids;
+    persistedDivergedIds = diverged;
+    if (failures.length > 0) error = failures.join('\n');
+  }
+
+  $effect(() => {
+    documents;
+    breadcrumbSegments;
+    completedDownloadSignature;
+    void untrack(() => refreshDownloadedFileIds());
+  });
 
   const parentTargetId = $derived.by<string | null | undefined>(() => {
     if (
@@ -1402,6 +1501,14 @@ export function createFileWorkspace() {
       run: handleDownloadSelected,
     },
     {
+      id: 'open',
+      label: translator.current('files.openLocal'),
+      icon: 'openInNew',
+      compact: true,
+      disabled: batchBusy || totalSelected !== 1 || !selectedDocument,
+      run: handleOpenSelected,
+    },
+    {
       id: 'rename-selected',
       label: translator.current('files.rename'),
       icon: 'edit',
@@ -1488,16 +1595,212 @@ export function createFileWorkspace() {
     void loadSelectionDetails();
   });
 
+  function documentDownloadPath(doc: ServerDocumentEntry) {
+    return makeDownloadPath([...breadcrumbSegments.map((segment) => segment.label), doc.title]);
+  }
+
   async function handleDownload(doc: ServerDocumentEntry) {
     try {
-      await getDocument(doc.id, doc.title);
+      const pathParts = breadcrumbSegments.map((segment) => segment.label);
+      const current = doc.sha256 != null
+        ? doc
+        : await loadServerDocument(doc.id, currentFolderId);
+      const state = current ? await readLocalDocumentState(current, pathParts) : null;
+      if (state?.isCurrent) {
+        status = translator.current('files.fileAlreadyUpToDate');
+      } else {
+        await getDocument(doc.id, makeDownloadPath([...pathParts, doc.title]));
+      }
       await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
-    } catch (e) {
-      if (isAccessDeniedError(e)) {
+      await refreshDownloadedFileIds();
+    } catch (cause) {
+      if (isAccessDeniedError(cause)) {
         documentAccessDenied = { name: doc.title, id: doc.id, accessedAt: Date.now() };
       } else {
-        error = String(e);
+        error = formatError(cause);
       }
+    }
+  }
+
+  function handleOpenSelected() {
+    if (totalSelected !== 1 || !selectedDocument) return;
+    void handleOpenVerified(selectedDocument);
+  }
+
+  const FINISHED_DOWNLOAD_STATUSES: ReadonlySet<DownloadTaskStatus> = new Set([
+    'completed',
+    'failed',
+    'cancelled',
+    'deleted',
+  ]);
+  const OPEN_AFTER_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+  const DOWNLOAD_TASK_ANNOUNCE_GRACE_MS = 30 * 1000;
+
+  function waitForNextPoll(milliseconds: number) {
+    return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+  }
+
+  $effect(() => {
+    const finishedTaskIds = new Set(
+      [...downloadStore.tasks.values()]
+        .filter((task) => FINISHED_DOWNLOAD_STATUSES.has(task.status))
+        .map((task) => task.task_id),
+    );
+    if (finishedTaskIds.size === 0) return;
+
+    const nextOpenings = new Map(openingInProgress);
+    for (const [documentId, taskId] of nextOpenings) {
+      if (finishedTaskIds.has(taskId)) nextOpenings.delete(documentId);
+    }
+    if (nextOpenings.size !== openingInProgress.size) openingInProgress = nextOpenings;
+
+    const nextProgress = new Map(openingProgress);
+    for (const taskId of nextProgress.keys()) {
+      if (finishedTaskIds.has(taskId)) nextProgress.delete(taskId);
+    }
+    if (nextProgress.size !== openingProgress.size) openingProgress = nextProgress;
+  });
+
+  async function waitForDownloadOutcome(
+    taskId: string | undefined,
+    onTick?: (task: DownloadTaskDto) => void,
+  ): Promise<DownloadTaskStatus | null> {
+    if (!taskId) return null;
+    const startedAt = Date.now();
+    const deadline = startedAt + OPEN_AFTER_DOWNLOAD_TIMEOUT_MS;
+    for (;;) {
+      const task = downloadStore.tasks.get(taskId);
+      if (task) onTick?.(task);
+      if (task && FINISHED_DOWNLOAD_STATUSES.has(task.status)) return task.status;
+      if (!task && Date.now() - startedAt > DOWNLOAD_TASK_ANNOUNCE_GRACE_MS) return null;
+      if (Date.now() >= deadline) return null;
+      await waitForNextPoll(250);
+    }
+  }
+
+  function activeTaskForFile(documentId: string) {
+    return [...downloadStore.tasks.values()].find(
+      (task) =>
+        task.file_id === documentId
+        && ['pending', 'scheduled', 'downloading', 'decrypting', 'verifying'].includes(task.status),
+    );
+  }
+
+  async function handleOpenVerified(doc: ServerDocumentEntry) {
+    const pathParts = breadcrumbSegments.map((segment) => segment.label);
+    const path = makeDownloadPath([...pathParts, doc.title]);
+    const viewTransfers = {
+      label: translator.current('files.viewTransfers'),
+      onClick: () => void goto('/home/tasks'),
+    };
+
+    const openLocalCopy = async (fromDownload: boolean): Promise<'opened' | 'missing' | 'failed'> => {
+      try {
+        if (!(await openDownloadedDocument(documentDownloadPath(doc)))) return 'missing';
+      } catch (cause) {
+        if (isAccessDeniedError(cause)) {
+          documentAccessDenied = { name: doc.title, id: doc.id, accessedAt: Date.now() };
+        } else {
+          error = formatError(cause);
+        }
+        return 'failed';
+      }
+      status = translator.current(
+        fromDownload ? 'files.openedAfterDownload' : 'files.openedLocally',
+        { values: { name: doc.title } },
+      );
+      await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
+      return 'opened';
+    };
+
+    try {
+      const current = doc.sha256 != null
+        ? doc
+        : await loadServerDocument(doc.id, currentFolderId);
+      const state = current ? await readLocalDocumentState(current, pathParts) : null;
+
+      if (state?.isCurrent && await openLocalCopy(false) !== 'missing') return;
+
+      if (state?.existsLocally) {
+        const confirmed = await dialogStore.confirm({
+          title: translator.current('files.confirmOpenOverwrite'),
+          message: translator.current('files.openOverwriteConfirmMessage', { values: { name: doc.title } }),
+          confirmLabel: translator.current('common.download'),
+          cancelLabel: translator.current('common.cancel'),
+        });
+        if (!confirmed) return;
+      }
+
+      const existing = activeTaskForFile(doc.id);
+      let taskId = existing?.task_id;
+      if (!taskId) {
+        status = translator.current(
+          state?.existsLocally ? 'files.downloadingBeforeOpenDiffer' : 'files.downloadingBeforeOpenMissing',
+          { values: { name: doc.title } },
+        );
+        taskId = (await getDocument(doc.id, path)).task_id;
+      }
+      if (taskId) {
+        openingInProgress = new Map(openingInProgress).set(doc.id, taskId);
+        openingProgress = new Map(openingProgress).set(
+          taskId,
+          downloadStore.tasks.get(taskId)?.progress ?? 0,
+        );
+      }
+
+      const outcome = await waitForDownloadOutcome(taskId, (task) => {
+        openingProgress = new Map(openingProgress).set(task.task_id, task.progress);
+      });
+      const task = taskId ? downloadStore.tasks.get(taskId) : undefined;
+      if (outcome === 'failed' || outcome === 'cancelled' || outcome === 'deleted') {
+        notificationStore.warning(
+          task?.error?.trim()
+            || translator.current('files.downloadFailedBeforeOpen', { values: { name: doc.title } }),
+          5000,
+          { action: viewTransfers },
+        );
+        return;
+      }
+
+      const verified = current ? await readLocalDocumentState(current, pathParts) : null;
+      if (verified?.isCurrent) {
+        const result = await openLocalCopy(true);
+        if (result === 'missing') {
+          notificationStore.warning(
+            translator.current('files.missingAfterDownload', { values: { name: doc.title } }),
+            5000,
+            { action: viewTransfers },
+          );
+        }
+        await refreshDownloadedFileIds();
+        return;
+      }
+
+      notificationStore.warning(
+        translator.current(
+          outcome === 'completed' ? 'files.cannotOpenAfterDownload' : 'files.downloadStillRunning',
+          { values: { name: doc.title } },
+        ),
+        5000,
+        { action: viewTransfers },
+      );
+      await refreshDownloadedFileIds();
+    } catch (cause) {
+      if (isAccessDeniedError(cause)) {
+        documentAccessDenied = { name: doc.title, id: doc.id, accessedAt: Date.now() };
+      } else {
+        error = formatError(cause);
+      }
+    }
+  }
+
+  async function handleCancelOpenDocument(documentId: string) {
+    const taskId = openingInProgress.get(documentId);
+    if (!taskId) return;
+    try {
+      await cancelDownload(taskId);
+    } catch (cause) {
+      error = formatError(cause);
     }
   }
 
@@ -1512,10 +1815,6 @@ export function createFileWorkspace() {
   }
 
   function handleDocumentClick(event: MouseEvent, doc: ServerDocumentEntry) {
-    if (coarsePointer && !selectMode) {
-      void handleDownload(doc);
-      return;
-    }
     selectRow(event, 'document', doc.id);
   }
 
@@ -1528,7 +1827,7 @@ export function createFileWorkspace() {
   }
 
   function handleDocumentActivate(doc: ServerDocumentEntry) {
-    if (!coarsePointer && !selectMode) void handleDownload(doc);
+    if (!coarsePointer && !selectMode) void handleOpenVerified(doc);
   }
 
   function handleFolderActivate(folder: ServerDirectoryEntry) {
@@ -3841,12 +4140,14 @@ export function createFileWorkspace() {
     set fileTableResetKey(value) { fileTableResetKey = value; },
     get folders() { return folders; },
     set folders(value) { folders = value; },
+    get hiddenItemIds() { return hiddenItemIds; },
     handleAddressBeginEdit,
     handleAddressCancel,
     handleAddressSubmit,
     handleBatchMoveToTarget,
     handleBreadcrumbNavigate,
     handleCancelDownload,
+    handleCancelOpenDocument,
     handleDeleteRevision,
     handleDocumentActivate,
     handleDocumentClick,
@@ -3899,6 +4200,9 @@ export function createFileWorkspace() {
     get recentlyUpdatedFolderIds() { return fileUpdateTracker.recentlyUpdatedFolderIds; },
     get notUpdatedDocumentIds() { return fileUpdateTracker.notUpdatedDocumentIds; },
     get notUpdatedFolderIds() { return fileUpdateTracker.notUpdatedFolderIds; },
+    get openingInProgressDocumentIds() { return openingDocumentIds; },
+    get openingInProgressProgress() { return openingDocumentProgress; },
+    get outdatedDocumentIds() { return outdatedDocumentIds; },
     get revisionRows() { return revisionRows; },
     get revisionsDialog() { return revisionsDialog; },
     set revisionsDialog(value) { revisionsDialog = value; },
@@ -3931,6 +4235,7 @@ export function createFileWorkspace() {
     searchSortLabel,
     get selectMode() { return selectMode; },
     set selectMode(value) { selectMode = value; },
+    get undownloadedDocumentIds() { return undownloadedDocumentIds; },
     get selectedDocumentIds() { return selectedDocumentIds; },
     set selectedDocumentIds(value) { selectedDocumentIds = value; },
     get selectedFolderIds() { return selectedFolderIds; },

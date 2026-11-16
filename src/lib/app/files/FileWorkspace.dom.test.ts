@@ -42,6 +42,14 @@ vi.mock('$lib/api', async (original) => ({
   mutateFilePreferences: async () => ({ recent_visits: [] }),
   inspectUploadDirectoryConflicts: mocks.inspectUploadDirectoryConflicts,
 }));
+vi.mock('$lib/api/downloads', async (original) => ({
+  ...await original<typeof import('$lib/api/downloads')>(),
+  getDownloadTasks: async () => [],
+}));
+vi.mock('$lib/sync-all.svelte', async (original) => ({
+  ...await original<typeof import('$lib/sync-all.svelte')>(),
+  readLocalDocumentStates: async () => [],
+}));
 
 function page(names: string[], cursor: string | null = null): ListDirectoryPageResponse {
   return directoryPage({
