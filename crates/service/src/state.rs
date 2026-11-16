@@ -34,7 +34,12 @@ pub struct AppState {
     pub escalation: RwLock<Option<crate::authentication::IssuedToken>>,
     /// Invalidates in-flight authentication responses when the session is cleared.
     pub auth_generation: AtomicU64,
+    /// Prevent older profile reads from undoing a confirmed name update.
+    pub account_name_revision: AtomicU64,
     pub auth_update: Mutex<()>,
+    pub download_batches: crate::transfers::download_batches::DownloadBatchRegistry,
+    pub access_batches: crate::files::access_batches::Registry,
+    pub app_lock: crate::app_lock::Runtime,
     /// Display name.
     pub nickname: RwLock<Option<String>>,
     /// Server-assigned permission strings.
@@ -60,6 +65,7 @@ pub struct AppState {
     // --- Connection ---
     /// Multiplexed WSS connection to the CFMS server.
     pub conn: RwLock<Option<cfms_transport::Connection>>,
+    pub crl_service: Arc<cfms_transport::crl::CrlService>,
     /// Server address (e.g. `"cfms.example.com:8443"`).
     pub server_address: RwLock<Option<String>>,
     /// Human-readable server name as reported by `server_info`.
@@ -147,7 +153,11 @@ impl AppState {
             pending_auth: RwLock::new(None),
             escalation: RwLock::new(None),
             auth_generation: AtomicU64::new(0),
+            account_name_revision: AtomicU64::new(0),
             auth_update: Mutex::new(()),
+            download_batches: Default::default(),
+            access_batches: Default::default(),
+            app_lock: Default::default(),
             nickname: RwLock::new(None),
             permissions: RwLock::new(Vec::new()),
             groups: RwLock::new(Vec::new()),
@@ -156,6 +166,7 @@ impl AppState {
             preference_dek_local_only: AtomicBool::new(false),
             avatar_path: RwLock::new(None),
             conn: RwLock::new(None),
+            crl_service: Arc::new(cfms_transport::crl::CrlService::new()),
             server_address: RwLock::new(None),
             server_name: RwLock::new(None),
             server_protocol_version: RwLock::new(None),
@@ -210,7 +221,15 @@ impl AppState {
     /// Queue-specific persistence contexts are cleared by the Tauri shell,
     /// which owns those queues.
     pub async fn clear_auth(&self) {
-        let _update = self.auth_update.lock().await;
+        let update = self.auth_update.lock().await;
+        self.clear_auth_locked(&update).await;
+    }
+
+    /// Native adapters may extend this transaction to their owned queues.
+    pub async fn clear_auth_locked(&self, _update: &tokio::sync::MutexGuard<'_, ()>) {
+        self.download_batches.stop_all();
+        self.access_batches.stop_all();
+        self.app_lock.reset();
         self.auth_generation
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut username = self.username.write().await;

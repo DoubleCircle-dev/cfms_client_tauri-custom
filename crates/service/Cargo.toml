@@ -31,6 +31,7 @@ zeroize.workspace = true
 base64ct.workspace = true
 ignore = "0.4"
 tracing.workspace = true
+tempfile.workspace = true
 hex = "0.4.3"
 ssh-key = { version = "=0.7.0-rc.11", features = ["encryption"] }
 signature = "2"
@@ -41,5 +42,9 @@ p521 = { version = "0.14", features = ["ecdsa"] }
 sha2-legacy = { package = "sha2", version = "0.10", features = ["oid"] }
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"
 wat = "1"
+futures-util.workspace = true
+tokio-tungstenite.workspace = true
+rustls.workspace = true

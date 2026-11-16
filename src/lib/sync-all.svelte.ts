@@ -31,7 +31,7 @@ import { isDocumentAccessDenied } from '$lib/api/server-errors';
 import { getSyncGitTrackingEnabled, type SyncOverwriteStrategy } from '$lib/api/settings';
 import type { ServerDirectoryEntry, ServerDocumentEntry } from '$lib/api/types';
 import { deniedDocuments } from '$lib/denied-documents.svelte';
-import { dialogStore } from '$lib/dialogs.svelte';
+import { dialogStore } from '$lib/shared/ui/dialogs.svelte';
 import { downloadStore, notificationStore } from '$lib/stores.svelte';
 
 // ---------------------------------------------------------------------------

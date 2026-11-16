@@ -1,3 +1,60 @@
+use super::connection_config::ConnectionSettingsDto;
+use super::connection_config::normalize_proxy_url;
+use super::connection_config::normalize_recent_connection_addresses;
+use super::connection_config::save_recent_connection_addresses;
+use super::connection_types::CaCertificateStatusDto;
+use super::connection_types::CaCertificateUpdateResultDto;
+use super::connection_types::CaManifest;
+use super::connection_types::GithubContentsEntry;
+use super::github_api::GithubApiEndpoint;
+use super::github_api::github_api_get;
+use super::transfer_helpers::unix_now;
+use super::updates::UPDATE_USER_AGENT;
+use super::updates::update_http_client;
+use super::updates::update_http_client_builder;
+use crate::AppHandleState;
+use tauri::Manager;
+
+include!(concat!(env!("OUT_DIR"), "/bundled_ca.rs"));
+
+const CA_MANIFEST_FILENAME: &str = ".manifest.json";
+
+pub(super) const CA_CERT_API_URL: &str = "https://api.github.com/repos/cfms-dev/ca/contents/";
+
+pub const PROTOCOL_VERSION_OVERRIDE_KEY: &str = "protocol_version_override";
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolVersionSettingsDto {
+    pub client_version: u32,
+    pub min_accepted_version: u32,
+    pub override_version: Option<u32>,
+    pub selectable_versions: Vec<u32>,
+}
+
+fn read_protocol_version_override(
+    settings: &cfms_service::db::settings::SettingsStore,
+) -> Option<u32> {
+    let raw = settings
+        .get(PROTOCOL_VERSION_OVERRIDE_KEY)
+        .ok()
+        .flatten()?;
+    cfms_core::constants::normalize_min_protocol_version_override(raw.trim().parse::<u32>().ok())
+}
+
+impl ProtocolVersionSettingsDto {
+    pub fn load(settings: &cfms_service::db::settings::SettingsStore) -> Self {
+        let override_version = read_protocol_version_override(settings);
+        Self {
+            client_version: cfms_core::constants::PROTOCOL_VERSION,
+            min_accepted_version: override_version
+                .unwrap_or(cfms_core::constants::MIN_SUPPORTED_PROTOCOL_VERSION),
+            override_version,
+            selectable_versions: cfms_core::constants::SELECTABLE_PROTOCOL_VERSIONS.to_vec(),
+        }
+    }
+}
+
 // User settings
 // ---------------------------------------------------------------------------
 
@@ -63,6 +120,12 @@ pub async fn get_connection_settings(
     Ok(ConnectionSettingsDto::load(&state.settings))
 }
 
+/// Wake native CRL monitors after foreground restoration; this never relaxes policy.
+#[tauri::command]
+pub fn refresh_connection_security(state: tauri::State<'_, AppHandleState>) {
+    state.inner.crl_service.refresh_active();
+}
+
 #[tauri::command]
 pub async fn set_connection_settings(
     state: tauri::State<'_, AppHandleState>,
@@ -76,6 +139,16 @@ pub async fn set_connection_settings(
         )?;
     }
     let proxy_setting = settings.proxy_setting_value();
+    let crl_hosts = cfms_transport::crl::normalize_allowed_hosts(&settings.crl_allowed_hosts)
+        .map_err(|_| "crl_invalid_hosts".to_string())?;
+    state
+        .settings
+        .set(
+            "crl_allowed_hosts",
+            &serde_json::to_string(&crl_hosts).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| format!("Failed to write CRL allowed hosts: {e}"))?;
+    state.inner.crl_service.set_allowed_hosts(&crl_hosts)?;
 
     state
         .settings
@@ -200,79 +273,6 @@ pub async fn update_ca_certificates(
     Ok(result)
 }
 
-fn load_recent_connection_addresses(
-    settings: &cfms_service::db::settings::SettingsStore,
-) -> Vec<String> {
-    let Some(raw) = settings.get("recent_connection_addresses").ok().flatten() else {
-        return Vec::new();
-    };
-
-    serde_json::from_str::<Vec<String>>(&raw)
-        .map(normalize_recent_connection_addresses)
-        .unwrap_or_default()
-}
-
-fn save_recent_connection_addresses(
-    settings: &cfms_service::db::settings::SettingsStore,
-    addresses: Vec<String>,
-) -> Result<(), String> {
-    let encoded = serde_json::to_string(&addresses)
-        .map_err(|e| format!("Failed to encode recent server addresses: {e}"))?;
-    settings
-        .set("recent_connection_addresses", &encoded)
-        .map_err(|e| format!("Failed to write recent server addresses: {e}"))
-}
-
-fn normalize_recent_connection_addresses(addresses: Vec<String>) -> Vec<String> {
-    let mut normalized = Vec::new();
-    for address in addresses {
-        let address = normalize_connection_history_address(&address);
-        if address.is_empty() || normalized.contains(&address) {
-            continue;
-        }
-        normalized.push(address);
-        if normalized.len() >= MAX_RECENT_CONNECTION_ADDRESSES {
-            break;
-        }
-    }
-    normalized
-}
-
-fn normalize_connection_history_address(address: &str) -> String {
-    let trimmed = address.trim();
-    let without_scheme = trimmed
-        .strip_prefix("wss://")
-        .or_else(|| trimmed.strip_prefix("ws://"))
-        .unwrap_or(trimmed);
-    without_scheme.trim_matches('/').trim().to_string()
-}
-
-fn remember_successful_connection(
-    settings: &cfms_service::db::settings::SettingsStore,
-    url: &str,
-) -> Result<(), String> {
-    let enabled = settings
-        .get("remember_connection_addresses")
-        .ok()
-        .flatten()
-        .map(|value| value == "true")
-        .unwrap_or(false);
-    if !enabled {
-        return Ok(());
-    }
-
-    let address = normalize_connection_history_address(url);
-    if address.is_empty() {
-        return Ok(());
-    }
-
-    let mut addresses = load_recent_connection_addresses(settings);
-    addresses.retain(|item| item != &address);
-    addresses.insert(0, address);
-    addresses.truncate(MAX_RECENT_CONNECTION_ADDRESSES);
-    save_recent_connection_addresses(settings, addresses)
-}
-
 fn app_ca_dir(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app_handle
         .path()
@@ -280,7 +280,9 @@ fn app_ca_dir(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, Strin
         .map_err(|e| format!("Cannot resolve writable CA directory: {e}"))
 }
 
-fn ensure_writable_ca_dir(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+pub(super) fn ensure_writable_ca_dir(
+    app_handle: &tauri::AppHandle,
+) -> Result<std::path::PathBuf, String> {
     let ca_dir = app_ca_dir(app_handle)?;
     std::fs::create_dir_all(&ca_dir)
         .map_err(|e| format!("Failed to create CA directory {}: {e}", ca_dir.display()))?;
@@ -502,9 +504,9 @@ fn git_blob_sha(content: &[u8]) -> String {
 }
 
 struct Sha1 {
-    state: [u32; 5],
-    length_bits: u64,
-    buffer: Vec<u8>,
+    pub(super) state: [u32; 5],
+    pub(super) length_bits: u64,
+    pub(super) buffer: Vec<u8>,
 }
 
 impl Sha1 {
@@ -542,14 +544,14 @@ impl Sha1 {
         self.buffer
             .extend_from_slice(&self.length_bits.to_be_bytes());
 
-        for chunk in self.buffer.clone().chunks_exact(64) {
+        for chunk in self.buffer.clone().as_chunks::<64>().0 {
             let mut block = [0_u8; 64];
             block.copy_from_slice(chunk);
             self.process_block(&block);
         }
 
         let mut output = [0_u8; 20];
-        for (chunk, word) in output.chunks_exact_mut(4).zip(self.state) {
+        for (chunk, word) in output.as_chunks_mut::<4>().0.iter_mut().zip(self.state) {
             chunk.copy_from_slice(&word.to_be_bytes());
         }
         output
@@ -557,7 +559,7 @@ impl Sha1 {
 
     fn process_block(&mut self, block: &[u8; 64]) {
         let mut w = [0_u32; 80];
-        for (i, chunk) in block.chunks_exact(4).enumerate().take(16) {
+        for (i, chunk) in block.as_chunks::<4>().0.iter().enumerate().take(16) {
             w[i] = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         }
         for i in 16..80 {

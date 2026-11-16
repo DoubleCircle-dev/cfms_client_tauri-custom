@@ -1,7 +1,10 @@
 // CFMS Client - typed Tauri IPC wrappers.
 import { invoke } from '@tauri-apps/api/core';
-import type { CaCertificateStatus, CaCertificateUpdateResult, ConnectionSettings, FileEntry, ProtocolVersionSettings } from './types';
-import { loadUserPreference, saveUserPreference } from './preferences';
+import type { CaCertificateStatus, CaCertificateUpdateResult, ConnectionSettings, ProtocolVersionSettings } from './types/connection';
+import type { FileEntry } from './types/files';
+import { loadUserPreference, updateUserPreferences } from './preferences';
+import type { SyncOverwriteStrategy } from './types/settings';
+export type { SyncOverwriteStrategy } from './types/settings';
 
 export type RootBackButtonBehavior = 'background' | 'exit';
 
@@ -20,8 +23,6 @@ export const DEFAULT_FILE_AUTO_UPDATE_AUTO_DOWNLOAD = false;
 export const DEFAULT_FILE_AUTO_DETECT_ON_STARTUP = false;
 export const DEFAULT_SYNC_GIT_TRACKING_ENABLED = false;
 
-/** How sync handles files whose server revision differs from the local copy. */
-export type SyncOverwriteStrategy = 'force_overwrite' | 'backup_rename' | 'skip';
 export const DEFAULT_SYNC_OVERWRITE_STRATEGY: SyncOverwriteStrategy = 'backup_rename';
 
 export function normalizeSyncOverwriteStrategy(
@@ -44,9 +45,7 @@ export async function getSyncOverwriteStrategy(): Promise<SyncOverwriteStrategy>
 
 /** Persist the overwrite strategy used when sync finds a differing local file. */
 export async function setSyncOverwriteStrategy(strategy: SyncOverwriteStrategy): Promise<void> {
-  const preferences = await loadUserPreference();
-  await saveUserPreference({
-    ...preferences,
+  await updateUserPreferences({
     sync_overwrite_strategy: normalizeSyncOverwriteStrategy(strategy),
   });
 }
@@ -63,9 +62,7 @@ export async function getSyncGitTrackingEnabled(): Promise<boolean> {
 
 /** Persist the git version-tracking toggle. */
 export async function setSyncGitTrackingEnabled(enabled: boolean): Promise<void> {
-  const preferences = await loadUserPreference();
-  await saveUserPreference({
-    ...preferences,
+  await updateUserPreferences({
     sync_git_tracking_enabled: enabled,
   });
 }
@@ -104,9 +101,7 @@ export async function getRootBackButtonBehavior(): Promise<RootBackButtonBehavio
 
 /** Persist the configured behavior for pressing Android back on a root page. */
 export async function setRootBackButtonBehavior(behavior: RootBackButtonBehavior): Promise<void> {
-  const preferences = await loadUserPreference();
-  await saveUserPreference({
-    ...preferences,
+  await updateUserPreferences({
     root_back_button_behavior: behavior,
   });
 }
@@ -150,9 +145,7 @@ export async function getFileAutoUpdateSettings(): Promise<FileAutoUpdateSetting
 export async function setFileAutoUpdateSettings(
   settings: FileAutoUpdateSettings,
 ): Promise<void> {
-  const preferences = await loadUserPreference();
-  await saveUserPreference({
-    ...preferences,
+  await updateUserPreferences({
     file_auto_update_enabled: settings.enabled,
     file_auto_update_interval_minutes: normalizeFileAutoUpdateIntervalMinutes(settings.intervalMinutes),
     file_auto_update_auto_download: settings.autoDownload,
@@ -171,9 +164,7 @@ export async function getFileAutoDetectOnStartup(): Promise<boolean> {
 
 /** Persist whether the program auto-detects once at startup. */
 export async function setFileAutoDetectOnStartup(enabled: boolean): Promise<void> {
-  const preferences = await loadUserPreference();
-  await saveUserPreference({
-    ...preferences,
+  await updateUserPreferences({
     file_auto_detect_on_startup: enabled,
   });
 }
@@ -196,6 +187,10 @@ export async function translateBackend(key: string): Promise<string> {
 /** Load connection settings that are consumed by backend connections. */
 export async function getConnectionSettings(): Promise<ConnectionSettings> {
   return invoke("get_connection_settings");
+}
+
+export function refreshConnectionSecurity(): Promise<void> {
+  return invoke('refresh_connection_security');
 }
 
 /** Save connection settings consumed by backend connections. */

@@ -691,7 +691,7 @@ async fn perform_check(
 
         let listing = {
             let state = app.state::<AppHandleState>();
-            crate::commands::list_directory_full(&state, folder_id.clone()).await
+            crate::commands::browsing::list_directory_full(&state, folder_id.clone()).await
         };
 
         let listing = match listing {
@@ -997,12 +997,12 @@ async fn apply_downloads(
 
         let queued = {
             let state = app.state::<AppHandleState>();
-            crate::commands::enqueue_document_download(
+            crate::commands::browsing::enqueue_document_download(
                 app,
                 &state,
                 &item.id,
                 &item.path,
-                crate::commands::DownloadBatchMeta::default(),
+                crate::commands::browsing::DownloadBatchMeta::default(),
             )
             .await
         };
@@ -1058,7 +1058,7 @@ async fn local_document_hash(download_root: &Path, path: &str) -> Option<String>
     let relative = path.to_string();
     tokio::task::spawn_blocking(move || {
         let absolute = crate::commands::resolve_download_subdirectory(root, &relative).ok()?;
-        crate::commands::file_sha256(&absolute).ok()
+        crate::commands::browsing::file_sha256(&absolute).ok()
     })
     .await
     .ok()?

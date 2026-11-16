@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { SettingsEntry } from '$lib/settings-entries';
+import type { SettingsEntry } from '$lib/features/settings/settings-entries';
 
 const order = vi.hoisted(() => [] as string[]);
 

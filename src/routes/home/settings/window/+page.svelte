@@ -7,11 +7,11 @@
     setCloseButtonBehavior,
     type CloseButtonBehavior,
   } from '$lib/api';
-  import { createAutoSave } from '$lib/settings-autosave.svelte';
+  import { createAutoSave } from '$lib/features/settings/settings-autosave.svelte';
   import { notificationStore } from '$lib/stores.svelte';
-  import Icon from '$lib/components/Icon.svelte';
-  import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
-  import { focusRovingItem } from '$lib/keyboard';
+  import Icon from '$lib/shared/ui/Icon.svelte';
+  import SettingsPageHeader from '$lib/shared/ui/SettingsPageHeader.svelte';
+  import { focusRovingItem } from '$lib/shared/ui/keyboard';
 
   const behaviorOptions: Array<{
     value: CloseButtonBehavior;

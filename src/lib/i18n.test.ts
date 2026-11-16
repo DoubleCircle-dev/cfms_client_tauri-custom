@@ -2,8 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { get } from 'svelte/store';
 import { addMessages, init, locale, _ as t } from 'svelte-i18n';
 import { mergeCustomMessages } from './injection/registry';
-import { en } from './i18n/messages/en';
-import { zh_CN as zhCN } from './i18n/messages/zh-CN';
+import { en } from './shared/i18n/messages/en';
+import { zh_CN as zhCN } from './shared/i18n/messages/zh-CN';
 
 /** The catalogs the app actually registers: upstream base plus fork strings. */
 const enCatalog = mergeCustomMessages('en', en);

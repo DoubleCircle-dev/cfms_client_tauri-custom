@@ -1,9 +1,9 @@
 <script lang="ts">
-  import FluentButton from '$lib/components/FluentButton.svelte';
-  import IconButton from '$lib/components/IconButton.svelte';
+  import FluentButton from '$lib/shared/ui/FluentButton.svelte';
+  import IconButton from '$lib/shared/ui/IconButton.svelte';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open } from '$lib/shared/platform/native-dialog';
   import { _ as t } from 'svelte-i18n';
   import {
     importExtensionPackage,
@@ -19,10 +19,10 @@
   import { classifyExtensionTrust, type ExtensionTrustLevel } from '$lib/injection/modules/extensions/trust';
   import { isCustomFeatureEnabled } from '$lib/injection/registry';
   import { authStore, notificationStore } from '$lib/stores.svelte';
-  import { isAndroidPlatform, isMobilePlatform } from '$lib/platform';
-  import Icon from '$lib/components/Icon.svelte';
-  import ProgressRing from '$lib/components/ProgressRing.svelte';
-  import { formatUserFacingError } from '$lib/user-facing-errors';
+  import { isAndroidPlatform, isMobilePlatform } from '$lib/shared/platform/platform';
+  import Icon from '$lib/shared/ui/Icon.svelte';
+  import ProgressRing from '$lib/shared/ui/ProgressRing.svelte';
+  import { formatUserFacingError } from '$lib/shared/errors/user-facing-errors';
 
   let busy = $state<string | null>(null);
   let catalogBusy = $state(false);

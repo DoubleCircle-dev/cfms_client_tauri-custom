@@ -16,7 +16,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }));
 
-import { installAppUpdate } from './updater';
+import { installAppUpdate } from './api/updates';
 
 describe('installAppUpdate progress', () => {
   beforeEach(() => {

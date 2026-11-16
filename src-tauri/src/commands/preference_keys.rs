@@ -1,21 +1,22 @@
+use super::session::get_connection_auth;
+use super::shared_helpers::decrypt_preference_dek;
+use crate::AppHandleState;
+use crate::UploadInterruption;
+use tauri::Manager;
+use tauri::Runtime;
+
 fn local_encrypted_paths(
     state: &AppHandleState,
     server_hash: &str,
+    user_id: &str,
     username: &str,
 ) -> Vec<std::path::PathBuf> {
-    vec![
-        cfms_service::user_preferences::file_path(&state.app_data_dir, server_hash, username),
-        cfms_service::services::task_persistence::file_path(
-            &state.app_data_dir,
-            server_hash,
-            username,
-        ),
-        cfms_service::services::upload_task_persistence::file_path(
-            &state.app_data_dir,
-            server_hash,
-            username,
-        ),
-    ]
+    cfms_service::account_storage::encrypted_paths(
+        &state.app_data_dir,
+        server_hash,
+        user_id,
+        username,
+    )
 }
 
 fn verify_local_preference_key(
@@ -57,7 +58,12 @@ pub async fn prepare_preference_unlock<R: Runtime>(
         .clone()
         .ok_or("Not connected")?;
     let account = crate::preference_keys::account(&server, &user_id);
-    let paths = local_encrypted_paths(&state, &cfms_core::get_server_hash(&server), &username);
+    let paths = local_encrypted_paths(
+        &state,
+        &cfms_core::get_server_hash(&server),
+        &user_id,
+        &username,
+    );
     let stored = tokio::task::spawn_blocking(move || {
         let vault = app.state::<crate::preference_keys::PreferenceKeys>();
         let _guard = vault.operation.lock().unwrap();
@@ -127,7 +133,12 @@ pub async fn unlock_preference_dek<R: Runtime>(
     let key = decrypt_preference_dek(&encrypted, &password)
         .await
         .map_err(|_| "publicKey.migrationFailed")?;
-    let paths = local_encrypted_paths(&state, &cfms_core::get_server_hash(&server), &username);
+    let paths = local_encrypted_paths(
+        &state,
+        &cfms_core::get_server_hash(&server),
+        &user_id,
+        &username,
+    );
     let account = crate::preference_keys::account(&server, &user_id);
     let key = tokio::task::spawn_blocking(move || {
         let vault = app.state::<crate::preference_keys::PreferenceKeys>();
@@ -160,10 +171,14 @@ fn discard_local_encrypted_data(
 ) -> Result<(), String> {
     cfms_service::user_preferences::discard(app_data, server_hash, username)
         .and_then(|_| {
-            cfms_service::services::task_persistence::discard(app_data, server_hash, username)
+            cfms_service::transfers::task_persistence::discard(app_data, server_hash, username)
         })
         .and_then(|_| {
-            cfms_service::services::upload_task_persistence::discard(app_data, server_hash, username)
+            cfms_service::transfers::upload_task_persistence::discard(
+                app_data,
+                server_hash,
+                username,
+            )
         })
         .map_err(|_| "publicKey.discardFailed".into())
 }
@@ -176,7 +191,7 @@ pub async fn discard_locked_preference_data<R: Runtime>(
     state: tauri::State<'_, AppHandleState>,
 ) -> Result<(), String> {
     let _update = state.inner.auth_update.lock().await;
-    let (_, username, _) = get_connection_auth(&state).await?;
+    let (_, _, _) = get_connection_auth(&state).await?;
     let user_id = state
         .inner
         .user_id
@@ -204,7 +219,8 @@ pub async fn discard_locked_preference_data<R: Runtime>(
         {
             return Err("publicKey.storageUnavailable".into());
         }
-        discard_local_encrypted_data(&app_data, &server_hash, &username)?;
+        cfms_service::account_storage::finish_legacy_import(&app_data, &server_hash, &user_id)?;
+        discard_local_encrypted_data(&app_data, &server_hash, &user_id)?;
         let key = cfms_crypto::generate_dek();
         crate::preference_keys::save(&app, &account, &key, true)?;
         Ok::<_, String>(key)
@@ -212,7 +228,9 @@ pub async fn discard_locked_preference_data<R: Runtime>(
     .await
     .map_err(|_| "publicKey.discardFailed")??;
     state.tasks.clear();
-    state.active_uploads.interrupt_all(UploadInterruption::Cancelled);
+    state
+        .active_uploads
+        .interrupt_all(UploadInterruption::Cancelled);
     state.upload_tasks.clear();
     *state.inner.dek.write().await = Some(key);
     state
@@ -222,7 +240,7 @@ pub async fn discard_locked_preference_data<R: Runtime>(
     Ok(())
 }
 
-async fn cache_current_preference_key<R: Runtime>(
+pub(super) async fn cache_current_preference_key<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &AppHandleState,
 ) -> Result<(), String> {
@@ -265,7 +283,7 @@ async fn cache_current_preference_key<R: Runtime>(
     .map_err(|_| "publicKey.storageUnavailable")?
 }
 
-async fn restore_cached_preference_key<R: Runtime>(
+pub(super) async fn restore_cached_preference_key<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &AppHandleState,
 ) -> Result<bool, String> {
@@ -285,7 +303,12 @@ async fn restore_cached_preference_key<R: Runtime>(
         .clone()
         .ok_or("Not connected")?;
     let account = crate::preference_keys::account(&server, &user_id);
-    let paths = local_encrypted_paths(state, &cfms_core::get_server_hash(&server), &username);
+    let paths = local_encrypted_paths(
+        state,
+        &cfms_core::get_server_hash(&server),
+        &user_id,
+        &username,
+    );
     let app = app.clone();
     let stored = tokio::task::spawn_blocking(move || {
         let vault = app.state::<crate::preference_keys::PreferenceKeys>();
@@ -319,8 +342,12 @@ mod preference_migration_tests {
         let paths_for = |server: &str, user: &str| {
             vec![
                 cfms_service::user_preferences::file_path(root.path(), server, user),
-                cfms_service::services::task_persistence::file_path(root.path(), server, user),
-                cfms_service::services::upload_task_persistence::file_path(root.path(), server, user),
+                cfms_service::transfers::task_persistence::file_path(root.path(), server, user),
+                cfms_service::transfers::upload_task_persistence::file_path(
+                    root.path(),
+                    server,
+                    user,
+                ),
             ]
         };
         let target = paths_for("server-a", "alice");

@@ -5,7 +5,7 @@
 // side effect, so this module can be imported from `settings-entries.ts` or
 // `i18n.ts` during their own module evaluation.
 
-import type { SettingsEntry } from '$lib/settings-entries';
+import type { SettingsEntry } from '$lib/features/settings/settings-entry';
 import { CUSTOM_MODULES } from './modules/index';
 import type {
   CustomModule,

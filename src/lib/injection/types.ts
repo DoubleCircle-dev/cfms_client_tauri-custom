@@ -14,8 +14,8 @@
 //     inert is what lets `settings-entries.ts` and `i18n.ts` depend on the
 //     registry without pulling in the whole fork.
 
-import type { IconName } from '$lib/icons';
-import type { SettingsEntry } from '$lib/settings-entries';
+import type { IconName } from '$lib/shared/ui/icons';
+import type { SettingsEntry } from '$lib/features/settings/settings-entry';
 
 /** Nested translation catalog mirroring the base catalogs' shape. */
 export interface MessageCatalog {

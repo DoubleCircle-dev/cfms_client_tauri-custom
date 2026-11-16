@@ -42,7 +42,7 @@ const dialogs = vi.hoisted(() => ({
 
 vi.mock('$lib/api/files', () => files);
 vi.mock('$lib/api/settings', () => settings);
-vi.mock('$lib/dialogs.svelte', () => ({ dialogStore: dialogs }));
+vi.mock('$lib/shared/ui/dialogs.svelte', () => ({ dialogStore: dialogs }));
 // The engine only needs a formatter. Initialising the real locale in a unit test
 // is noise, and formatting throws while no locale is set.
 vi.mock('svelte-i18n', () => ({

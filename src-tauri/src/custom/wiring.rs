@@ -18,7 +18,7 @@ pub fn prepare_window_config(config: &mut tauri::utils::config::WindowConfig) {
 
 /// Registers the fork's background services, before the manager is activated.
 pub fn register_services(
-    manager: &mut cfms_service::service::manager::ServiceManager,
+    manager: &mut cfms_service::runtime::manager::ServiceManager,
     app: &tauri::AppHandle,
 ) {
     // Automatic file-update checks. Owned by the backend (rather than by the

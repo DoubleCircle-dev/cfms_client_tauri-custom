@@ -7,10 +7,10 @@
 //   * and it pushes our translated tray labels down whenever the locale changes.
 // Everything here is inert outside the Tauri runtime.
 
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen, type UnlistenFn } from '$lib/shared/platform/native-events';
 import { get } from 'svelte/store';
 import { _ as t, locale } from 'svelte-i18n';
-import { dialogStore } from '$lib/dialogs.svelte';
+import { dialogStore } from '$lib/shared/ui/dialogs.svelte';
 import {
   dismissCloseRequest,
   resolveCloseRequest,

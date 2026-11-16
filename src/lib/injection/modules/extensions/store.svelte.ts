@@ -1,4 +1,4 @@
-import { listen } from '@tauri-apps/api/event';
+import { listen } from '$lib/shared/platform/native-events';
 import {
   getExtensionOverview,
   installExtensionFromCatalog,

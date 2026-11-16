@@ -10,7 +10,7 @@ import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
-} from '@tauri-apps/plugin-notification';
+} from '$lib/shared/platform/native-notifications';
 import { get } from 'svelte/store';
 import { _ as t } from 'svelte-i18n';
 import { isTauriRuntime } from './tauri-runtime';

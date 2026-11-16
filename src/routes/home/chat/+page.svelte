@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { _ as t } from 'svelte-i18n';
-  import { open } from '@tauri-apps/plugin-dialog';
-  import { openUrl } from '@tauri-apps/plugin-opener';
+  import { open } from '$lib/shared/platform/native-dialog';
+  import { openUrl } from '$lib/shared/platform/native-opener';
 
-  import FluentButton from '$lib/components/FluentButton.svelte';
-  import Icon from '$lib/components/Icon.svelte';
-  import IconButton from '$lib/components/IconButton.svelte';
+  import FluentButton from '$lib/shared/ui/FluentButton.svelte';
+  import Icon from '$lib/shared/ui/Icon.svelte';
+  import IconButton from '$lib/shared/ui/IconButton.svelte';
   import { DEFAULT_ROOM_NAMES, DEFAULT_USER_NAMES } from '$lib/chatbox/names';
   import { findReplySourceSpan, type ReplySourceSpan } from '$lib/chat/reply-reference';
   import { isScrolledToBottom, isScrolledToTop, SCROLL_EDGE_TOLERANCE } from '$lib/scroll-edges';
@@ -22,7 +22,7 @@
   } from '$lib/api/files';
   import { isAccessDeniedError } from '$lib/api/server-errors';
   import { authStore, notificationStore } from '$lib/stores.svelte';
-  import { formatUserFacingError } from '$lib/user-facing-errors';
+  import { formatUserFacingError } from '$lib/shared/errors/user-facing-errors';
 
   const ROOM_NAMES_KEY = 'cfms:chatbox:roomNames';
   const USER_NAMES_KEY = 'cfms:chatbox:userNames';

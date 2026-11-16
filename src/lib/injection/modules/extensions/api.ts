@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '$lib/shared/platform/native-core';
 
 export const DECLARATIVE_HOST_API_VERSION = '1.0.0';
 export const WASM_HOST_API_VERSION = 'api-custom-v2';

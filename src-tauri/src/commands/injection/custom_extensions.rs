@@ -910,7 +910,8 @@ async fn resolve_extension_folder_scope(
     {
         return Err("folderPath must be an absolute root-relative path".into());
     }
-    let lookup = crate::commands::resolve_node_path_for_state(state, path.to_string()).await?;
+    let lookup =
+        crate::commands::browsing::resolve_node_path_for_state(state, path.to_string()).await?;
     if lookup.node_ids.len() != segments.len() {
         return Err("node_lookup returned a path with an unexpected depth".into());
     }

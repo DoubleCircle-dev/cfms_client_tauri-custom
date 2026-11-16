@@ -1,3 +1,13 @@
+#[cfg(target_os = "android")]
+use crate::AndroidAppLifecycle;
+#[cfg(target_os = "android")]
+use crate::AndroidSecureScreen;
+#[cfg(target_os = "android")]
+use crate::AndroidUpdateNotification;
+#[cfg(target_os = "android")]
+use tauri::Manager;
+use tauri::Runtime;
+
 // Mobile platform helpers
 // ---------------------------------------------------------------------------
 

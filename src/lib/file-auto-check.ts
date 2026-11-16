@@ -9,8 +9,8 @@
 // This module is the typed surface the UI uses to read that state and to follow
 // the events the service publishes.
 
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { invoke } from '$lib/shared/platform/native-core';
+import { listen, type UnlistenFn } from '$lib/shared/platform/native-events';
 import { isTauriRuntime } from '$lib/tauri-runtime';
 
 /** Emitted with a {@link FileAutoCheckReport} when a background check finishes. */

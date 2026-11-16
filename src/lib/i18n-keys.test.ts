@@ -2,8 +2,8 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { mergeCustomMessages } from './injection/registry';
-import { en } from './i18n/messages/en';
-import { zh_CN as zhCN } from './i18n/messages/zh-CN';
+import { en } from './shared/i18n/messages/en';
+import { zh_CN as zhCN } from './shared/i18n/messages/zh-CN';
 
 const catalogs = {
   en: mergeCustomMessages('en', en) as Record<string, unknown>,

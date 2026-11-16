@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke } from '$lib/shared/platform/native-core';
 
   onMount(() => {
     if (!import.meta.env.DEV) {

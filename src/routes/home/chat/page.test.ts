@@ -96,7 +96,7 @@ vi.mock('$lib/stores.svelte', () => ({
   },
 }));
 
-vi.mock('$lib/user-facing-errors', () => ({
+vi.mock('$lib/shared/errors/user-facing-errors', () => ({
   formatUserFacingError: (error: unknown) => String(error),
 }));
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import FluentButton from '$lib/components/FluentButton.svelte';
+  import FluentButton from '$lib/shared/ui/FluentButton.svelte';
   import { _ as t } from 'svelte-i18n';
   import {
     readExtensionPage,
@@ -11,7 +11,7 @@
   import { createExtensionStylesheet } from '$lib/injection/modules/extensions/styles';
   import { runExtensionWorkflow } from '$lib/injection/modules/extensions/workflows';
   import { notificationStore } from '$lib/stores.svelte';
-  import ProgressRing from '$lib/components/ProgressRing.svelte';
+  import ProgressRing from '$lib/shared/ui/ProgressRing.svelte';
 
   const MAX_TABLE_ROWS = 64;
   const MAX_TABLE_BYTES = 64 * 1024;

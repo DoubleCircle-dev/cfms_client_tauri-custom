@@ -13,42 +13,36 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # # ---------------------------------------------------------------------------
-  # # Rust — tests & clippy
-  # # ---------------------------------------------------------------------------
-  # rust-checks:
-  #   name: Rust tests & clippy
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 15
-  #   steps:
-  #     - uses: actions/checkout@v6
-  #       with:
-  #         submodules: recursive
+  rust-checks:
+    name: Rust tests, Clippy and formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
-  #     - name: Install system dependencies
-  #       run: |
-  #         sudo apt-get update
-  #         sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-  #           libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
 
-  #     - uses: dtolnay/rust-toolchain@stable
-  #       with:
-  #         components: clippy,rustfmt
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
 
-  #     - uses: Swatinem/rust-cache@v2
-  #       with:
-  #         workspaces: |
-  #           src-tauri -> target
-  #           crates -> target
+      - uses: Swatinem/rust-cache@v2
 
-  #     - name: Check formatting
-  #       run: cargo fmt --all -- --check
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
 
-  #     - name: Clippy
-  #       run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Clippy
+        # Disable Tauri's custom-protocol feature so Rust checks do not require frontend assets.
+        run: cargo clippy --workspace --all-targets --no-default-features --locked -- -D warnings
 
-  #     - name: Run workspace tests
-  #       run: cargo test --workspace -- --test-threads=4
+      - name: Workspace tests
+        run: cargo test --workspace --no-default-features --locked -- --test-threads=4
 
   # ---------------------------------------------------------------------------
   # Frontend — type-check & build
@@ -58,19 +52,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       
       - uses: pnpm/action-setup@v6
         with:
-          version: 11.11.0
+          version: 12.19.0
 
       - run: pnpm install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Client version metadata check
         run: pnpm app:version:check
@@ -79,13 +75,22 @@ jobs:
         run: pnpm app:release-notes
 
       - name: SvelteKit sync + type-check
-        run: pnpm exec svelte-kit sync; pnpm svelte-check
+        run: pnpm check
 
-      - name: Focus-ring contract
-        run: pnpm check:focus-styles
+      - name: Frontend behavior tests
+        run: pnpm test
 
-      - name: Focus-ring contract tests
-        run: pnpm test:focus-styles
+      - name: Frontend order independence (fixed seed)
+        run: pnpm test:shuffle
+
+      - name: Script behavior tests
+        run: pnpm test:scripts
+
+      - name: Python validator tests
+        run: pnpm test:python
+
+      - name: Translation usage
+        run: pnpm i18n:unused
 
       - name: Production build
         run: pnpm build

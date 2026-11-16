@@ -1,3 +1,17 @@
+use super::authentication::finish_authentication;
+use super::session::clear_auth_state;
+use super::shared_helpers::format_server_error_parts;
+use super::transfer_helpers::unix_now;
+use crate::AppHandleState;
+use cfms_service::authentication::AUTH;
+use cfms_service::authentication::GENERAL;
+#[cfg(target_os = "android")]
+use serde::Deserialize;
+#[cfg(target_os = "android")]
+use tauri::Manager;
+use tauri::Runtime;
+use tauri::ipc::Channel;
+
 #[tauri::command]
 pub async fn pick_auth_private_key<R: Runtime>(
     app: tauri::AppHandle<R>,
@@ -454,9 +468,7 @@ mod public_key_stream_tests {
             assert_eq!(payload, b"following request");
         });
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        let tls = rustls::ClientConfig::builder()
-            .with_root_certificates(rustls::RootCertStore::empty())
-            .with_no_client_auth();
+        let tls = cfms_transport::tls::TlsConfig::plaintext();
         let connection =
             cfms_transport::Connection::connect(&format!("ws://{address}"), tls, None, true)
                 .await

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
-  import { openUrl } from '@tauri-apps/plugin-opener';
+  import { openUrl } from '$lib/shared/platform/native-opener';
 
-  import FluentButton from '$lib/components/FluentButton.svelte';
-  import Icon from '$lib/components/Icon.svelte';
-  import { focusRovingItem } from '$lib/keyboard';
+  import FluentButton from '$lib/shared/ui/FluentButton.svelte';
+  import Icon from '$lib/shared/ui/Icon.svelte';
+  import { focusRovingItem } from '$lib/shared/ui/keyboard';
   import { ToolError } from '$lib/tools/errors';
   import { matrixDecode, matrixEncode, matrixTranspose } from '$lib/tools/matrix';
   import { TOOLS, MATRIX_TOOL_ID, type ToolDefinition, type ToolFunction } from '$lib/tools/registry';

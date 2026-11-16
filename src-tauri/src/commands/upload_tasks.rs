@@ -1,3 +1,21 @@
+use super::documents::upload_directory;
+use super::documents::upload_document_file;
+use super::downloads::retry_download_task;
+use super::transfer_helpers::unix_now;
+use super::transfer_types::BatchActionFailure;
+use super::transfer_types::BatchActionResult;
+use super::transfer_types::TransferControlAction;
+use super::transfer_types::TransferDirection;
+use super::transfer_types::UploadBatchResult;
+use super::transfer_types::UploadEnqueueRequest;
+use crate::AppHandleState;
+use crate::UploadInterruption;
+use cfms_core::ServiceEvent;
+use cfms_service::transfers::download_queue;
+use tauri::Emitter;
+use tauri::Manager;
+use tauri::Runtime;
+
 // Persistent upload task metadata commands.
 
 /// Persist an entire selection before the scheduler can claim its members.
@@ -50,7 +68,7 @@ pub async fn enqueue_upload_batch<R: Runtime>(
             updated_at: now,
             completed_at: None,
             retry_count: 0,
-            max_retries: cfms_service::services::retry::MAX_BACKGROUND_RETRIES as u32,
+            max_retries: cfms_service::transfers::retry::MAX_BACKGROUND_RETRIES as u32,
             source_available: available,
             batch_id: request.batch_id.clone(),
             batch_name: request.batch_name.clone(),
@@ -247,8 +265,43 @@ pub async fn control_transfer_tasks<R: Runtime>(
         TransferControlAction::Cancel | TransferControlAction::CancelAndRemove
     );
     let mut ids: std::collections::HashSet<_> = ids.into_iter().collect();
+    let batch_ids = batch_ids.unwrap_or_default();
+    if matches!(direction, TransferDirection::Download) {
+        let action_name = match action {
+            TransferControlAction::Pause => "pause",
+            TransferControlAction::Resume => "resume",
+            TransferControlAction::Cancel => "cancel",
+            TransferControlAction::CancelAndRemove => "cancel_and_remove",
+            TransferControlAction::Retry => "retry",
+        };
+        state
+            .inner
+            .download_batches
+            .control(&batch_ids, action_name);
+        ids.extend(
+            state
+                .tasks
+                .list(None)
+                .into_iter()
+                .filter(|task| {
+                    task.batch_id
+                        .as_ref()
+                        .is_some_and(|id| batch_ids.contains(id))
+                })
+                .map(|task| task.task_id),
+        );
+        let _ = state
+            .inner
+            .event_tx
+            .send(cfms_core::ServiceEvent::DownloadBatchesChanged);
+    }
     if cancelling && matches!(direction, TransferDirection::Download) {
-        ids.extend(state.tasks.stop_batches(&batch_ids.unwrap_or_default()));
+        ids.extend(state.tasks.stop_batches(&batch_ids));
+        state
+            .inner
+            .download_batches
+            .wait_stopped(&batch_ids)
+            .await?;
     }
     let ids: Vec<_> = ids.into_iter().collect();
     let frozen = if cancelling {
@@ -332,7 +385,9 @@ pub async fn control_transfer_tasks<R: Runtime>(
         .await;
         succeeded = stopped;
         if state.upload_tasks.generation() != generation {
-            return Err("The transfer session changed while stopping tasks. Refresh the task list.".into());
+            return Err(
+                "The transfer session changed while stopping tasks. Refresh the task list.".into(),
+            );
         }
         for id in waiting {
             failed.push(BatchActionFailure { id, error: "Cancellation was not confirmed within 10 seconds. The record was kept; try again.".into() });
@@ -374,7 +429,7 @@ pub async fn control_transfer_tasks<R: Runtime>(
     Ok(BatchActionResult { succeeded, failed })
 }
 
-fn control_upload_task(
+pub(super) fn control_upload_task(
     state: &AppHandleState,
     id: &str,
     action: TransferControlAction,
@@ -423,7 +478,7 @@ fn control_upload_task(
     result.map_err(|error| error.to_string())
 }
 
-fn emit_upload_snapshot<R: Runtime>(app: &tauri::AppHandle<R>, id: &str) {
+pub(super) fn emit_upload_snapshot<R: Runtime>(app: &tauri::AppHandle<R>, id: &str) {
     if let Some(task) = app.state::<AppHandleState>().upload_tasks.get(id) {
         let _ = app.emit("cfms:upload-task", &task);
     }

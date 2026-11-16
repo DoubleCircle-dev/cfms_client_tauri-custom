@@ -2,9 +2,9 @@
   import { goto } from '$app/navigation';
   import { _ as t } from 'svelte-i18n';
 
-  import Icon from '$lib/components/Icon.svelte';
-  import PageHeading from '$lib/components/PageHeading.svelte';
-  import TaskActionButton from '$lib/components/TaskActionButton.svelte';
+  import Icon from '$lib/shared/ui/Icon.svelte';
+  import PageHeading from '$lib/shared/ui/PageHeading.svelte';
+  import TaskActionButton from '$lib/features/transfers/TaskActionButton.svelte';
   import { notificationStore, type NotificationType } from '$lib/stores.svelte';
 
   type HistoryFilter = 'all' | NotificationType;

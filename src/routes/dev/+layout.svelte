@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke } from '$lib/shared/platform/native-core';
 
   let { children }: { children: Snippet } = $props();
 

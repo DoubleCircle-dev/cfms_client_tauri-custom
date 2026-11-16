@@ -67,3 +67,23 @@ fn clear_download_root_hint(app_data: &std::path::Path) -> Result<(), String> {
     }
     Ok(())
 }
+
+pub(crate) fn resolve_download_subdirectory(
+    mut root: std::path::PathBuf,
+    relative_path: &str,
+) -> Result<std::path::PathBuf, String> {
+    for raw_part in relative_path.split(['/', '\\']) {
+        let part = raw_part.trim();
+        if part.is_empty() || part == "." {
+            continue;
+        }
+
+        if part == ".." || part.contains(':') || part.contains('\0') {
+            return Err("Invalid download directory path".to_string());
+        }
+
+        root.push(part);
+    }
+
+    Ok(root)
+}

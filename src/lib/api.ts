@@ -21,3 +21,8 @@ export * from './api/local-data';
 export * from './api/credentials';
 export * from './api/developer';
 export * from './api/schedules';
+
+export * from './api/access-batches';
+export * from './api/app-lock';
+
+export * from './api/server-settings';

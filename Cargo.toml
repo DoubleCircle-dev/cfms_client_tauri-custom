@@ -9,6 +9,23 @@ members = [
 ]
 resolver = "2"
 
+# Keep production KDF parameters in tests while optimizing their hot path.
+# The rest of the workspace retains the normal debuggable test profile.
+[profile.test.package.cfms-crypto]
+opt-level = 2
+
+[profile.test.package.pbkdf2]
+opt-level = 2
+
+[profile.test.package.sha2]
+opt-level = 2
+
+[profile.test.package.hmac]
+opt-level = 2
+
+[profile.test.package.digest]
+opt-level = 2
+
 [workspace.package]
 version = "0.58.0-custom-0.2"
 edition = "2024"
@@ -55,7 +72,7 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 # ---------------------------------------------------------------------------
 # Database
 # ---------------------------------------------------------------------------
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 memmap2 = "0.9"
 tempfile = "3"
 
@@ -68,6 +85,13 @@ tokio-tungstenite = { version = "0.30", default-features = false, features = [
     "rustls-tls-webpki-roots",
 ] }
 rustls = "0.23"
+rustls-webpki = { version = "0.103.16", features = ["aws-lc-rs"] }
+x509-parser = { version = "0.18", features = ["verify-aws"] }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+ipnet = "2"
 webpki-roots = "1"
 tokio-socks = "0.5"
 tokio-rustls = "0.26"

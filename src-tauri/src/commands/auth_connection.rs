@@ -1,4 +1,37 @@
-async fn apply_successful_login_response(
+use super::connection_config::ConnectionSettingsDto;
+use super::connection_config::remember_successful_connection;
+#[cfg(target_os = "android")]
+use super::mobile::exit_app_after_launcher_transition;
+use super::preference_keys::cache_current_preference_key;
+use super::session::clear_auth_state;
+use super::session::clear_connection_state;
+use super::session::close_primary_connection;
+use super::session::get_connection_auth;
+use super::settings::ensure_writable_ca_dir;
+use super::shared_helpers::decrypt_preference_dek;
+use super::shared_helpers::extract_preference_dek_content;
+use super::shared_helpers::format_server_error_parts;
+use super::shared_helpers::format_server_response_error;
+use super::shared_helpers::format_transport_error;
+use super::shared_helpers::remember_server_preference_dek;
+use super::shared_helpers::rewrap_and_upload_preference_dek;
+use super::shared_helpers::send_action_request;
+use super::shared_helpers::upload_and_select_preference_dek;
+use super::transfer_helpers::unix_now;
+use crate::AppHandleState;
+use crate::UploadInterruption;
+use cfms_core::ServerInfo;
+use cfms_service::authentication::ESCALATED;
+use cfms_service::authentication::GENERAL;
+use cfms_service::authentication::IssuedToken;
+use cfms_service::authentication::POST_AUTH;
+use cfms_service::session::build_auth_status;
+use cfms_service::session::build_server_state;
+use rand::RngExt;
+use tauri::Manager;
+use tauri::Runtime;
+
+pub(super) async fn apply_successful_login_response(
     state: &AppHandleState,
     username: &str,
     data: &mut serde_json::Value,
@@ -6,7 +39,9 @@ async fn apply_successful_login_response(
     clear_tasks: bool,
 ) -> Result<(), String> {
     if clear_tasks {
-        state.active_uploads.interrupt_all(UploadInterruption::Cancelled);
+        state
+            .active_uploads
+            .interrupt_all(UploadInterruption::Cancelled);
     }
     let issued = IssuedToken::from_response(data, GENERAL)?;
     let exp = issued.claims.exp.floor() as i64;
@@ -176,24 +211,23 @@ async fn change_password_and_rewrap_preferences(
     )
     .await?;
     if response.code != 200 {
-        if prepared {
-            if let Err(error) = upload_and_select_preference_dek(
+        if prepared
+            && let Err(error) = upload_and_select_preference_dek(
                 conn,
                 original_envelope.as_deref().unwrap(),
                 username,
                 token,
             )
             .await
-            {
-                return Err(format_server_error_parts(
-                    response.code,
-                    &format!(
-                        "{}; additionally failed to restore the previous preference DEK: {error}",
-                        response.message,
-                    ),
-                    &response.data,
-                ));
-            }
+        {
+            return Err(format_server_error_parts(
+                response.code,
+                &format!(
+                    "{}; additionally failed to restore the previous preference DEK: {error}",
+                    response.message,
+                ),
+                &response.data,
+            ));
         }
         return Err(format_server_response_error(&response));
     }
@@ -208,7 +242,7 @@ mod password_change_protocol_tests {
     use tokio_tungstenite::tungstenite::Message;
 
     #[tokio::test]
-    async fn handshake_uses_protocol_twenty_nine_action_without_authentication() {
+    async fn handshake_uses_protocol_thirty_action_without_authentication() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -225,13 +259,11 @@ mod password_change_protocol_tests {
                 id: header.id, kind: FrameKind::Conclusion,
             }, &serde_json::to_vec(&serde_json::json!({
                 "code":200, "message":"", "timestamp":0.0,
-                "data":{"server_name":"protocol-29", "protocol_version":29, "lockdown":false, "lockdown_reason":null, "extension_flags":[]},
+                "data":{"server_name":"protocol-30", "protocol_version":30, "lockdown":false, "lockdown_reason":null, "extension_flags":[]},
             })).unwrap()).into())).await.unwrap();
         });
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        let tls = rustls::ClientConfig::builder()
-            .with_root_certificates(rustls::RootCertStore::empty())
-            .with_no_client_auth();
+        let tls = cfms_transport::tls::TlsConfig::plaintext();
         let connection =
             cfms_transport::Connection::connect(&format!("ws://{address}"), tls, None, true)
                 .await
@@ -243,7 +275,7 @@ mod password_change_protocol_tests {
         .await
         .unwrap()
         .unwrap();
-        assert_eq!(info.protocol_version, 29);
+        assert_eq!(info.protocol_version, 30);
         server.await.unwrap();
         connection.close().await;
     }
@@ -289,8 +321,13 @@ mod password_change_protocol_tests {
                         if *action == "core.user.key.upload" {
                             let content = request["data"]["content"].as_str().unwrap();
                             if index == 0 {
-                                let decoded =
-                                    cfms_crypto::dek::decrypt_dek(content, "new-password").unwrap();
+                                let content = content.to_owned();
+                                let decoded = tokio::task::spawn_blocking(move || {
+                                    cfms_crypto::dek::decrypt_dek(&content, "new-password")
+                                })
+                                .await
+                                .unwrap()
+                                .unwrap();
                                 assert_eq!(*decoded, *expected_key);
                             } else {
                                 assert_eq!(content, expected_original);
@@ -309,15 +346,16 @@ mod password_change_protocol_tests {
                 }
             });
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        let tls = rustls::ClientConfig::builder()
-            .with_root_certificates(rustls::RootCertStore::empty())
-            .with_no_client_auth();
+        let tls = cfms_transport::tls::TlsConfig::plaintext();
         let connection =
             cfms_transport::Connection::connect(&format!("ws://{address}"), tls, None, true)
                 .await
                 .unwrap();
+        // A round trip performs the production one-million-iteration KDF twice.
+        // Debug builds need a CPU budget independent of the transport timeout.
+        const PASSWORD_REWRAP_TEST_BUDGET: std::time::Duration = std::time::Duration::from_secs(60);
         let result = tokio::time::timeout(
-            std::time::Duration::from_secs(10),
+            PASSWORD_REWRAP_TEST_BUDGET,
             change_password_and_rewrap_preferences(
                 &connection,
                 "alice",
@@ -459,7 +497,10 @@ pub async fn recover_preference_dek<R: Runtime>(
         *dek = Some(recovered_dek);
     }
     remember_server_preference_dek(&state.inner, Some(encrypted_for_current_password)).await;
-    state.inner.preference_dek_local_only.store(false, std::sync::atomic::Ordering::SeqCst);
+    state
+        .inner
+        .preference_dek_local_only
+        .store(false, std::sync::atomic::Ordering::SeqCst);
     let _ = cache_current_preference_key(&app, &state).await;
 
     Ok(())
@@ -554,6 +595,18 @@ pub async fn connect(
 ) -> Result<serde_json::Value, String> {
     let (attempt_id, mut cancel_rx) = state.connect_attempts.register();
 
+    if let Ok(directory) = app_handle.path().app_cache_dir() {
+        state
+            .inner
+            .crl_service
+            .set_cache_directory(directory.join("crl"))
+            .await;
+    }
+    state
+        .inner
+        .crl_service
+        .set_allowed_hosts(&ConnectionSettingsDto::load(&state.settings).crl_allowed_hosts)?;
+
     clear_auth_state(&state).await;
     close_primary_connection(&state).await;
     clear_connection_state(&state).await;
@@ -573,6 +626,7 @@ pub async fn connect(
             effective_disable_ssl,
             client_cert_path.as_deref(),
             client_key_path.as_deref(),
+            std::sync::Arc::clone(&state.inner.crl_service),
         )
         .map_err(|e| format!("TLS config error: {e}"))?;
 
@@ -635,12 +689,12 @@ pub async fn connect(
     // empty) because we haven't logged in yet — exactly matching the Python
     // reference which passes `username=None, token=None` in `_request()`.
     let server_info_result = tokio::select! {
-        biased;
-        _ = wait_for_connect_cancellation(&mut cancel_rx) => {
-            Err(CONNECT_CANCELLED_ERROR.to_string())
-        }
-        result = request_server_info(&conn) => result,
-   };
+         biased;
+         _ = wait_for_connect_cancellation(&mut cancel_rx) => {
+             Err(CONNECT_CANCELLED_ERROR.to_string())
+         }
+         result = request_server_info(&conn) => result,
+    };
     let server_info: ServerInfo = match server_info_result {
         Ok(server_info) => server_info,
         Err(error) => {
@@ -657,7 +711,8 @@ pub async fn connect(
     // version may be relaxed by the protocol compatibility override stored on
     // the about page.  The newest accepted version is always the build target.
     let build_min_protocol = cfms_core::constants::MIN_SUPPORTED_PROTOCOL_VERSION;
-    let min_supported_protocol = effective_min_protocol_version(&state.settings);
+    let min_supported_protocol =
+        super::settings::ProtocolVersionSettingsDto::load(&state.settings).min_accepted_version;
     let max_supported_protocol = cfms_core::constants::MAX_SUPPORTED_PROTOCOL_VERSION;
 
     if min_supported_protocol < build_min_protocol {
@@ -697,6 +752,7 @@ pub async fn connect(
     }
 
     // --- Store connection state ---
+    cfms_service::connection::watch_security(&state.inner, &conn);
     {
         let mut c = state.inner.conn.write().await;
         *c = Some(conn);
@@ -812,138 +868,6 @@ mod loopback_url_tests {
         assert!(!is_loopback_wss_url("wss://192.0.2.1:5104"));
         assert!(!is_loopback_wss_url("ws://127.0.0.1:5104"));
         assert!(!is_loopback_wss_url("not a URL"));
-    }
-}
-
-fn trimmed_path(value: &str) -> Option<std::path::PathBuf> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(std::path::PathBuf::from(trimmed))
-    }
-}
-
-fn system_proxy_setting() -> Option<String> {
-    env_proxy_setting().or_else(platform_system_proxy_setting)
-}
-
-fn env_proxy_setting() -> Option<String> {
-    [
-        "CFMS_PROXY",
-        "ALL_PROXY",
-        "all_proxy",
-        "HTTPS_PROXY",
-        "https_proxy",
-    ]
-    .iter()
-    .find_map(|key| std::env::var(key).ok())
-    .map(|value| value.trim().to_string())
-    .filter(|value| !value.is_empty())
-}
-
-#[cfg(windows)]
-fn platform_system_proxy_setting() -> Option<String> {
-    use winreg::RegKey;
-    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
-
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let internet_settings = hkcu
-        .open_subkey_with_flags(
-            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
-            KEY_READ,
-        )
-        .ok()?;
-    let enabled = internet_settings
-        .get_value::<u32, _>("ProxyEnable")
-        .unwrap_or(0);
-    if enabled == 0 {
-        return None;
-    }
-
-    internet_settings
-        .get_value::<String, _>("ProxyServer")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-#[cfg(not(windows))]
-fn platform_system_proxy_setting() -> Option<String> {
-    None
-}
-
-fn normalize_proxy_url(
-    raw: &str,
-    default_scheme: &str,
-    context: &str,
-) -> Result<Option<url::Url>, String> {
-    let selected = select_proxy_rule(raw, &["socks", "https", "http"])
-        .unwrap_or_else(|| raw.trim().to_string());
-    let trimmed = selected.trim().trim_end_matches('/');
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-
-    let proxy_url = if trimmed.contains("://") {
-        url::Url::parse(trimmed).map_err(|e| format!("Invalid proxy URL for {context}: {e}"))?
-    } else {
-        let scheme = proxy_rule_scheme(raw).unwrap_or(default_scheme);
-        url::Url::parse(&format!("{scheme}://{trimmed}"))
-            .map_err(|e| format!("Invalid proxy URL for {context}: {e}"))?
-    };
-
-    match proxy_url.scheme() {
-        "http" | "https" | "socks4" | "socks4a" | "socks5" | "socks5h" => {
-            if proxy_url.host_str().is_none() {
-                return Err(format!("Proxy URL for {context} must include a host."));
-            }
-            if proxy_url.port_or_known_default().is_none() {
-                return Err(format!(
-                    "Proxy URL for {context} must include a port, e.g. socks5h://127.0.0.1:1080.",
-                ));
-            }
-            Ok(Some(proxy_url))
-        }
-        _ => Err(format!(
-            "Only HTTP, HTTPS and SOCKS proxy URLs are supported for {context}.",
-        )),
-    }
-}
-
-fn select_proxy_rule(raw: &str, preferred_keys: &[&str]) -> Option<String> {
-    if !raw.contains('=') {
-        return None;
-    }
-
-    let entries = raw
-        .split(';')
-        .filter_map(|entry| {
-            let (key, value) = entry.split_once('=')?;
-            let key = key.trim().to_ascii_lowercase();
-            let value = value.trim();
-            (!key.is_empty() && !value.is_empty()).then(|| (key, value.to_string()))
-        })
-        .collect::<Vec<_>>();
-
-    preferred_keys.iter().find_map(|preferred| {
-        entries
-            .iter()
-            .find(|(key, _)| key == preferred)
-            .map(|(_, value)| value.clone())
-    })
-}
-
-fn proxy_rule_scheme(raw: &str) -> Option<&'static str> {
-    if !raw.contains('=') {
-        return None;
-    }
-    if select_proxy_rule(raw, &["socks"]).is_some() {
-        Some("socks5h")
-    } else if select_proxy_rule(raw, &["https", "http"]).is_some() {
-        Some("http")
-    } else {
-        None
     }
 }
 

@@ -1,3 +1,12 @@
+use super::browsing::fetch_all_cursor_items;
+use super::server_actions::server_action_bool;
+use super::server_actions::server_action_json;
+use super::transfer_helpers::non_empty_optional;
+use crate::AppHandleState;
+use cfms_core::CursorPage;
+use cfms_core::ServerDiagnostics;
+use cfms_service::files::SERVER_CURSOR_PAGE_SIZE;
+
 // Administration / management operations
 // ---------------------------------------------------------------------------
 
@@ -34,8 +43,7 @@ fn current_user_nickname_update(
     username: &str,
     nickname: Option<&str>,
 ) -> Option<String> {
-    (current_id == Some(user_id))
-        .then(|| nickname.unwrap_or(username).to_string())
+    (current_id == Some(user_id)).then(|| nickname.unwrap_or(username).to_string())
 }
 
 #[tauri::command]
@@ -53,7 +61,10 @@ pub async fn list_users(
             serde_json::json!({ "offset": offset, "count": SERVER_CURSOR_PAGE_SIZE }),
         )
         .await?;
-        total = page.get("total").and_then(|value| value.as_u64()).unwrap_or(total as u64) as u32;
+        total = page
+            .get("total")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(total as u64) as u32;
         let page_users = page
             .get("users")
             .and_then(|value| value.as_array())
@@ -62,7 +73,11 @@ pub async fn list_users(
         let count = page_users.len() as u32;
         users.extend(page_users);
 
-        if !page.get("has_more").and_then(|value| value.as_bool()).unwrap_or(false) {
+        if !page
+            .get("has_more")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+        {
             break;
         }
         if count == 0 {
@@ -104,36 +119,155 @@ pub async fn create_user(
 }
 
 #[tauri::command]
-pub async fn rename_user(
+pub async fn set_user_nickname(
     state: tauri::State<'_, AppHandleState>,
     user_id: String,
     nickname: Option<String>,
 ) -> Result<bool, String> {
     let nickname = normalize_nickname(nickname)?;
-    let renamed = server_action_bool(
+    let identity = cfms_service::rpc::SessionIdentity::capture(&state.inner).await?;
+    super::server_actions::server_action_once(
         &state,
-        "core.user.rename",
-        serde_json::json!({ "user_id": &user_id, "nickname": &nickname }),
+        &identity,
+        "core.user.nickname.set",
+        serde_json::json!({"user_id":user_id,"nickname":nickname}),
     )
     .await?;
-
-    let current_id = state.inner.user_id.read().await.clone();
+    let guard = state.inner.auth_update.lock().await;
+    identity.ensure_current_locked(&state.inner, &guard).await?;
     let current_username = state.inner.username.read().await.clone();
-    if let Some(session_nickname) = current_user_nickname_update(
-        current_id.as_deref(),
+    if let Some(value) = current_user_nickname_update(
+        Some(&identity.user_id),
         &user_id,
         current_username.as_deref().unwrap_or_default(),
         nickname.as_deref(),
     ) {
-        *state.inner.nickname.write().await = Some(session_nickname);
+        *state.inner.nickname.write().await = Some(value);
+        state
+            .inner
+            .account_name_revision
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
+    Ok(true)
+}
 
-    Ok(renamed)
+fn validate_username(username: &str) -> Result<(), String> {
+    if !(1..=64).contains(&username.chars().count()) {
+        return Err("Username must contain 1–64 characters".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_user_username(
+    state: tauri::State<'_, AppHandleState>,
+    user_id: String,
+    username: String,
+) -> Result<serde_json::Value, String> {
+    validate_username(&username)?;
+    let identity = cfms_service::rpc::SessionIdentity::capture(&state.inner).await?;
+    let own = identity.user_id == user_id;
+    {
+        let guard = state.inner.auth_update.lock().await;
+        identity.ensure_current_locked(&state.inner, &guard).await?;
+        if own {
+            super::preferences::ensure_account_storage(&state).await?;
+        }
+    }
+    let nickname = if own {
+        server_action_json(
+            &state,
+            "core.user.info.get",
+            serde_json::json!({"user_id": user_id}),
+        )
+        .await?["nickname"]
+            .as_str()
+            .map(String::from)
+    } else {
+        None
+    };
+    let permission = if own {
+        "set_username"
+    } else {
+        "super_set_username"
+    };
+    cfms_service::rpc::action_once_guarded(
+        &state.inner,
+        &identity,
+        "core.user.username.set",
+        serde_json::json!({"user_id":user_id,"username":username}),
+        || async {
+            let permissions = state.inner.permissions.read().await;
+            if !permissions
+                .iter()
+                .any(|p| p == permission || p == "super_set_username")
+            {
+                return Err(super::shared_helpers::format_server_error_parts(
+                    403,
+                    "Permission denied",
+                    &serde_json::json!({}),
+                ));
+            }
+            let elevation = state.inner.escalation.read().await;
+            if elevation
+                .as_ref()
+                .is_none_or(|token| token.claims.exp <= cfms_service::authentication::unix_now())
+            {
+                return Err(super::shared_helpers::format_server_error_parts(
+                    403,
+                    "Elevation required",
+                    &serde_json::json!({}),
+                ));
+            }
+            Ok(())
+        },
+    )
+    .await
+    .map_err(|error| {
+        if let Some(code) = error.status {
+            super::shared_helpers::format_server_error_parts(code, &error.message, &error.data)
+        } else if error.sent {
+            format!("CFMS_REQUEST_UNCONFIRMED: {}", error.message)
+        } else {
+            error.message
+        }
+    })?;
+    let guard = state.inner.auth_update.lock().await;
+    identity.ensure_current_locked(&state.inner, &guard).await?;
+    if own {
+        let old = state.inner.username.read().await.clone();
+        *state.inner.username.write().await = Some(username.clone());
+        *state.inner.nickname.write().await = Some(nickname.unwrap_or_else(|| username.clone()));
+        state
+            .inner
+            .account_name_revision
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Some(old) = old {
+            super::avatars::update_username_index(
+                &state.app_data_dir,
+                &identity.server,
+                &old,
+                &username,
+                state.inner.avatar_path.read().await.as_deref(),
+            );
+        }
+    }
+    Ok(cfms_service::session::build_auth_status(&state.inner).await)
 }
 
 #[cfg(test)]
 mod nickname_tests {
-    use super::{current_user_nickname_update, normalize_nickname};
+    use super::{current_user_nickname_update, normalize_nickname, validate_username};
+
+    #[test]
+    fn usernames_use_unicode_character_limits_without_normalization() {
+        assert!(validate_username("").is_err());
+        assert!(validate_username(&"界".repeat(64)).is_ok());
+        assert!(validate_username(&"😀".repeat(64)).is_ok());
+        assert!(validate_username(&"界".repeat(65)).is_err());
+        assert!(validate_username(" Alice ").is_ok());
+        assert!(validate_username(" ").is_ok());
+    }
 
     #[test]
     fn nickname_normalization_trims_and_clears_empty_values() {
@@ -187,12 +321,60 @@ pub async fn get_user_info(
     username: Option<String>,
     user_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let identity = cfms_service::rpc::SessionIdentity::capture(&state.inner).await?;
+    let name_revision = state
+        .inner
+        .account_name_revision
+        .load(std::sync::atomic::Ordering::SeqCst);
     let data = match (username, user_id) {
         (Some(username), None) => serde_json::json!({ "username": username }),
         (None, Some(user_id)) => serde_json::json!({ "user_id": user_id }),
         _ => return Err("Provide exactly one of username or user_id".into()),
     };
-    server_action_json(&state, "core.user.info.get", data).await
+    let mut result = server_action_json(&state, "core.user.info.get", data).await?;
+    let guard = state.inner.auth_update.lock().await;
+    identity.ensure_current_locked(&state.inner, &guard).await?;
+    if result["user_id"].as_str() == Some(&identity.user_id) {
+        if let Some(permissions) = result["effective_permissions"].as_array() {
+            *state.inner.permissions.write().await = permissions
+                .iter()
+                .filter_map(|p| p.as_str().map(String::from))
+                .collect();
+        }
+        if name_revision
+            != state
+                .inner
+                .account_name_revision
+                .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            result["username"] = serde_json::json!(state.inner.username.read().await.clone());
+            result["nickname"] = serde_json::json!(state.inner.nickname.read().await.clone());
+        }
+        if let Some(username) = result["username"].as_str() {
+            let nickname = result["nickname"].as_str().unwrap_or(username);
+            let old = state.inner.username.read().await.clone();
+            if old.as_deref() != Some(username)
+                || state.inner.nickname.read().await.as_deref() != Some(nickname)
+            {
+                state
+                    .inner
+                    .account_name_revision
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+            *state.inner.username.write().await = Some(username.into());
+            *state.inner.nickname.write().await = Some(nickname.into());
+            if let Some(old) = old {
+                super::avatars::update_username_index(
+                    &state.app_data_dir,
+                    &identity.server,
+                    &old,
+                    username,
+                    state.inner.avatar_path.read().await.as_deref(),
+                );
+            }
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -534,7 +716,10 @@ mod operation_reason_tests {
 
     #[test]
     fn maps_an_empty_or_missing_reason_to_explicit_null() {
-        assert_eq!(operation_reason_value(Some(String::new())), serde_json::Value::Null);
+        assert_eq!(
+            operation_reason_value(Some(String::new())),
+            serde_json::Value::Null
+        );
         assert_eq!(operation_reason_value(None), serde_json::Value::Null);
     }
 }
@@ -554,7 +739,10 @@ pub async fn list_groups(
             serde_json::json!({ "offset": offset, "count": SERVER_CURSOR_PAGE_SIZE }),
         )
         .await?;
-        total = page.get("total").and_then(|value| value.as_u64()).unwrap_or(total as u64) as u32;
+        total = page
+            .get("total")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(total as u64) as u32;
         let page_groups = page
             .get("groups")
             .and_then(|value| value.as_array())
@@ -563,7 +751,11 @@ pub async fn list_groups(
         let count = page_groups.len() as u32;
         groups.extend(page_groups);
 
-        if !page.get("has_more").and_then(|value| value.as_bool()).unwrap_or(false) {
+        if !page
+            .get("has_more")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+        {
             break;
         }
         if count == 0 {
@@ -687,7 +879,8 @@ pub async fn view_audit_logs(
 pub async fn server_diagnostics(
     state: tauri::State<'_, AppHandleState>,
 ) -> Result<ServerDiagnostics, String> {
-    let raw = server_action_json(&state, "core.server.diagnostics.get", serde_json::json!({})).await?;
+    let raw =
+        server_action_json(&state, "core.server.diagnostics.get", serde_json::json!({})).await?;
     let diagnostics: ServerDiagnostics = serde_json::from_value(raw)
         .map_err(|e| format!("Invalid server diagnostics response: {e}"))?;
     if diagnostics.schema_version != 1 {
@@ -718,7 +911,10 @@ pub async fn list_user_keys(
         }
 
         let page = server_action_json(&state, "core.user.key.list", data).await?;
-        total = page.get("total").and_then(|value| value.as_u64()).unwrap_or(total as u64) as u32;
+        total = page
+            .get("total")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(total as u64) as u32;
         let page_keys = page
             .get("keys")
             .and_then(|value| value.as_array())
@@ -727,7 +923,11 @@ pub async fn list_user_keys(
         let count = page_keys.len() as u32;
         keys.extend(page_keys);
 
-        if !page.get("has_more").and_then(|value| value.as_bool()).unwrap_or(false) {
+        if !page
+            .get("has_more")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+        {
             break;
         }
         if count == 0 {
@@ -759,7 +959,12 @@ pub async fn delete_user_key(
     state: tauri::State<'_, AppHandleState>,
     id: String,
 ) -> Result<bool, String> {
-    server_action_bool(&state, "core.user.key.delete", serde_json::json!({ "id": id })).await
+    server_action_bool(
+        &state,
+        "core.user.key.delete",
+        serde_json::json!({ "id": id }),
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------

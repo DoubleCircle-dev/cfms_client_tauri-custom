@@ -21,16 +21,16 @@
     setSyncOverwriteStrategy,
     type SyncOverwriteStrategy,
   } from '$lib/api';
-  import { createAutoSave } from '$lib/settings-autosave.svelte';
+  import { createAutoSave } from '$lib/features/settings/settings-autosave.svelte';
   import { authStore, notificationStore } from '$lib/stores.svelte';
   import {
     DEFAULT_CHECK_HISTORY_LIMIT,
     MAX_CHECK_HISTORY_LIMIT,
     fileUpdateTracker,
   } from '$lib/file-update-tracker.svelte';
-  import Icon from '$lib/components/Icon.svelte';
-  import MdSwitch from '$lib/components/MdSwitch.svelte';
-  import SettingsPageHeader from '$lib/components/SettingsPageHeader.svelte';
+  import Icon from '$lib/shared/ui/Icon.svelte';
+  import MdSwitch from '$lib/shared/ui/MdSwitch.svelte';
+  import SettingsPageHeader from '$lib/shared/ui/SettingsPageHeader.svelte';
 
   let autoFileDetectOnStartup = $state(DEFAULT_FILE_AUTO_DETECT_ON_STARTUP);
   let autoFileUpdateEnabled = $state(DEFAULT_FILE_AUTO_UPDATE_ENABLED);
